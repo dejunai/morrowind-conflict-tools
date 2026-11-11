@@ -247,3 +247,23 @@ recognised and reported with a confidence score, instead of being "repaired" int
 - Exception: a file whose path (mod folder included) says "normal map(s)" - any case and separator,
   `(?<![a-z])normal[\s_\-.]*maps?(?![a-z])`: Normal Maps, normal_map, Normal-Map, NormalMap, normal.maps - an add-on normal-map pack, which is
   for OpenMW only - moves either way, and the plan notes the pack as not applicable to classic Morrowind.
+
+## mwdialog_luafix.py + mwdialog_lua.py (new): static checker / in-place patcher for MWSE Lua mods
+
+- `mwdialog_lua.py`: pure-Python Lua 5.1/LuaJIT tokenizer (long brackets of any level, nested-level comments,
+  every escape incl. `\z`/`\x`/`\ddd`, LuaJIT number suffixes, BOM, shebang) and a full recursive-descent parser
+  (every statement/expression, goto/labels) with byte spans; text is handled as latin-1 so edits never touch bytes
+  they don't replace. Scope resolution binds each name to its local/param/global.
+- Rules G1-G5, A1, A2, B1, C1, D1, F1, F2, H1-H6 (see the module docstring); only `high` findings are patched by
+  default (`--level medium` adds the rest that have a mechanical fix). Helpers are put at the start of line 1, so
+  no line number moves. A patch is written only when LuaJIT compiles it (the original must compile too), the
+  parser re-reads it, and a second pass would change nothing more.
+- Thresholds shared with mwguard: `MWSE\config\mwguard.json` (its `priorityLimit`, `logBudgetInit`, `logBudget`,
+  `logKeepPatterns`, `logExemptMods`, `enabled`, `logSpamGuard`, v1's `throttleSeconds`; a `"luafix"` section for
+  the rest), then `mwdialog_luafix.json`.
+- Safety: only files under `...\MWSE\mods\` (never core/lib/config/initialize.lua), your own mods skipped unless
+  `--include-own`, plan by default, in-place `r+b` writes (hard links kept) after a backup copy to
+  `mwdialog_backup\luafix\<run>\`, journal + `--undo` (refuses files changed since), per-file results cached in the
+  asset cache (`luafix1:` keys).
+- vortex_tidy: the Lua check runs per staging mod after the moves (plan lists it, `--apply` patches, `--undo`
+  reverts; `--no-lua`, `--lua-only`, `--lua-level`, `--luajit`).
