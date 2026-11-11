@@ -3166,34 +3166,6 @@ def run_repair_sounds(args):
     return 1 if failed else 0
 
 
-def sound_names_under(root):
-    """"sound/<path>" (lowercase, forward slashes) of every file under the Sound folder `root`, like os.walk +
-    relpath gave them, but with one scandir per folder and no per-file path arithmetic: a voice pack can put
-    a million or more files there, and every scan of a --full lists them."""
-    out = []
-    if not os.path.isdir(root):
-        return out
-    stack = [(root, os.path.basename(os.path.normpath(root)).lower() + "/")]
-    while stack:
-        path, prefix = stack.pop()
-        try:
-            it = os.scandir(path)
-        except OSError:
-            continue
-        with it:
-            for e in it:
-                try:
-                    is_dir = e.is_dir()
-                except OSError:
-                    continue
-                if is_dir:
-                    if _real_dir(e):
-                        stack.append((e.path, prefix + e.name.lower() + "/"))
-                else:
-                    out.append(prefix + e.name.lower())
-    return out
-
-
 def collect_sound_files(data_dirs, bsa_paths, tree=None):
     SOUND_ROOTS[:] = [d for d in data_dirs if os.path.isdir(d)]
     files = set()
@@ -3207,7 +3179,10 @@ def collect_sound_files(data_dirs, bsa_paths, tree=None):
             for fn in os.listdir(d) if os.path.isdir(d) else []:
                 if fn.lower() == "sound":
                     root = os.path.join(d, fn)
-        files.update(sound_names_under(root))
+        for dirpath, _dirs, fns in os.walk(root):
+            for fn in fns:
+                rel = os.path.relpath(os.path.join(dirpath, fn), d)
+                files.add(rel.replace("\\", "/").lower())
     for b in bsa_paths:
         try:
             files |= bsa_file_names(b)
@@ -3284,20 +3259,13 @@ def _real_dir(e):
 class DataTree:
     """Every file under one Data Files folder, from a single walk with os.scandir: files is [(top folder
     lowercase - "" for files in Data Files itself -, path relative to Data Files, full path)]. stat() does one
-    os.stat per file and keeps it for the pass. (The size and date in Windows' directory listing can be stale
-    for a hard link changed through its other name - a mod file vortex_tidy repaired - so stat() never uses
-    them.) For the sound and music folders (often a million or more voice files, where one os.stat each takes
-    minutes on Windows) the listing's size and date are kept too, as listed_stamp(i): only good enough to
-    accept a cached "nothing wrong" result; anything else is checked again with os.stat."""
-    LISTED_TOPS = frozenset(("sound", "music"))
+    os.stat per file and keeps it for the pass. (The size and date in Windows' directory listing aren't used:
+    for a hard link changed through its other name - a mod file vortex_tidy repaired - they can be stale.)"""
 
     def __init__(self, root):
-        from array import array
         self.root = os.path.abspath(root)
         self.files = []
         self._st = {}
-        self._lsize = array("q")                    # parallel to files: the listing's size, -1 if not kept
-        self._ltime = array("q")                    # and its date (whole seconds)
         try:
             first = sorted(os.scandir(self.root), key=lambda e: e.name.lower())
         except OSError:
@@ -3312,7 +3280,7 @@ class DataTree:
                 if _real_dir(e):
                     stack.append((e.name.lower(), e.path, e.name))
             else:
-                self._add_file("", e.name, e)
+                self.files.append(("", e.name, e.path))
         stack.reverse()
         while stack:
             top, path, rel = stack.pop()
@@ -3330,29 +3298,8 @@ class DataTree:
                     if _real_dir(e):
                         subdirs.append((top, e.path, rel + os.sep + e.name))
                 else:
-                    self._add_file(top, rel + os.sep + e.name, e)
+                    self.files.append((top, rel + os.sep + e.name, e.path))
             stack.extend(reversed(subdirs))
-
-    def _add_file(self, top, rel, e):
-        self.files.append((top, rel, e.path))
-        size = mtime = -1
-        if top in self.LISTED_TOPS:
-            try:
-                st = e.stat()                       # Windows: from the directory listing, no extra call
-                size, mtime = st.st_size, int(st.st_mtime)
-            except (OSError, OverflowError, ValueError):
-                size = mtime = -1
-        self._lsize.append(size)
-        self._ltime.append(mtime)
-
-    def listed_stamp(self, i):
-        """files[i]'s size and date from the directory listing, as the asset cache stamps them ("size:date"),
-        or None (not a sound/music file, or not listed)."""
-        try:
-            size = self._lsize[i]
-        except IndexError:
-            return None
-        return None if size < 0 else f"{size}:{self._ltime[i]}"
 
     def covers(self, d):
         return os.path.normcase(os.path.abspath(d)) == os.path.normcase(self.root)
@@ -3366,19 +3313,14 @@ class DataTree:
     def asset_files(self, tops):
         """(top, rel, full) under these top folders, in that order, skipping Off and .Orphaned folders inside
         them (what the asset checks look at)."""
-        for _i, top, rel, full in self.asset_entries(tops):
-            yield top, rel, full
-
-    def asset_entries(self, tops):
-        """asset_files() with each file's index in files (for listed_stamp)."""
         for want in tops:
-            for i, (top, rel, full) in enumerate(self.files):
+            for top, rel, full in self.files:
                 if top != want:
                     continue
                 parts = rel.lower().split(os.sep)[1:-1]
                 if ".orphaned" in parts or "off" in parts:
                     continue
-                yield i, top, rel, full
+                yield top, rel, full
 
 
 class ModelAssets:
