@@ -132,3 +132,118 @@ Fix:
 * `run_auto_merge`: objects (MERGE_TAGS) that 2+ inputs change are merged field by field before
   `build_merge` writes them (`object_merges=`), so the AutoMerge itself is right. Off with --no-merge-objects.
 * Tests: tests/test_automerge_objects.py (8).
+
+## Mipmaps only where a world model draws the texture (2026-11-11, branch `mipmaps`)
+Before: vortex_tidy (`check_folder` -> `_examine_dds`) reported "no mipmaps" for EVERY DDS of 64 px+ with one
+level in a mod (except the few `ui_texture` paths) and `--apply` regenerated the chain with texconv (`-m 0`,
+original kept in `Off\textures\`). mwdialog_check's asset pass did the same for every loose DDS in Data Files
+that tidy hadn't already recorded (WARN + a `tex` fix for `--fix`). MCM logos, effect sprites, blood/glow
+sheets, texture packs... all got mipmaps.
+Now:
+* **vortex_tidy**: a texture is reported without mipmaps only when one of the mod's OWN world models names it
+  (`.nif` texture lists from the cached model facts; effect / UI models don't count) and it isn't exempt.
+  Skipped ones are counted ("N texture(s) without mipmaps left alone") and their tidy record keeps
+  `"m": true` + the texture facts (`"t"`), so a later model that starts using one is noticed without
+  re-reading clean files. No cache-key bump (the change only narrows findings).
+* **mwdialog_check --asset-check / --full**: the per-file texture pass no longer judges mipmaps. A new per-pair
+  pass (`mip_pairs`) takes every WINNING model (loose or BSA) that isn't an effect/UI model, resolves each texture
+  it names to the WINNING file (the `.dds` of a `.tga/.bmp` name first) and reports those without mipmaps:
+  loose ones as WARN + a `tex {"mips": true}` fix (merged with any other conversion of the same file; `--fix`,
+  `--dry-run` and the `Off\` backups as before); ones inside a BSA as one INFO line (a BSA can't be changed).
+  This covers texture packs for existing models, including tidy-trusted hard links.
+  Override rules (`WinningFiles`): vanilla Morrowind takes the newest by date - the latest-dated BSA (same
+  date: registered later), then the loose file unless that BSA is newer; Morrowind.ini `TryArchiveFirst=1`
+  prefers the BSA, `-1` loose only.
+  Cache: loose textures `tex2:` (size+date; tidy's `"t"` is used first), textures in BSAs `tex2b:<bsa>|<rel>`
+  (BSA size+date), model texture lists as before (`nif:`, `bsa2:`, tidy `"f"`). Repeat runs read no DDS/NIF.
+* **Exemptions** (`MIP_EXEMPT_DEFAULTS` in mwdialog_assets.py, globs on lowercase backslash paths; user file
+  `mwdialog_mip_exempt.txt` next to Morrowind.ini: `texture:`, `texture-name:`, `mesh:`, `mesh-name:` lines,
+  `!` in front drops a default):
+  - texture paths: `icons\*`, `bookart\*`, `splash\*`, `mwse\*`, `*\mwse\*`, `*\mcm\*`, `textures\{menu,menus,ui,gui,hud,
+    levelup,splash,bookart,birthsign(s),vfx,fx,effects}\*`, `textures\cursor*\*`, `textures\*\vfx\*`, plus the old
+    `ui_texture` set (menu_, tx_menu, tx_cursor, compass, target, scroll... at the top of Textures);
+  - texture names: `menu_*`, `tx_menu*`, `*logo*`, `*splash*`, `cursor*`, `tx_cursor*`, `compass*`, `tx_compass*`,
+    `levelup*`, `vfx_*`, `*_vfx*`, `tx_*fx*`, `fx_*`, `tx_blood*`, `blood_*`, `tx_glow*`, `*_glowsheet*`, `*spritesheet*`;
+  - effect / UI models (their textures don't count): `meshes\e\*`, `meshes\{vfx,fx,mwse,menu,ui}\*`,
+    `meshes\*\vfx\*`, `meshes\*\mwse\*`, names `vfx_*`, `*_vfx*`, `fx_*`. Magic-effect particle textures (MGEF
+    PTEX) are named by no model, so they are never flagged.
+* `ModelAssets.bsa_paths` (one line in mwdialog_check.py) keeps the registered BSA list for the pass.
+* Tests: tests/test_mipmaps.py (8): MCM logo / icon / book art / VFX not flagged, own-model texture flagged,
+  texture pack flagged only by the top-level check, BSA override order + TryArchiveFirst, vanilla BSA model vs
+  loose pack, cached skip re-judged when a model appears, exemption file, cache reuse (no DDS/NIF/BSA reads).
+Not changed: `ModelAssets.mesh_bsa` still keeps the FIRST BSA that has a model (used by the missing-model /
+missing-texture checks); the game uses the newest. DX10 textures are still converted with a full chain.
+
+## Paths too long for Windows / the game's fields (2026-11-11, branch `longpaths`)
+New module `mwdialog_longpaths.py` (loaded by mwdialog_check like mwdialog_assets).
+Limits used (from MWSE's engine headers): full path <= 259 characters (MAX_PATH; Morrowind.exe isn't
+long-path aware; TES3DataHandler keeps Data Files in a MAX_PATH buffer); SOUN FNAM <= 31 (TES3Sound
+filename[32]); MGEF ITEX/PTEX <= 31 (TES3MagicEffect icon[32]/particleTexture[32]; reported, MGEF isn't
+retargeted); MODL/ITEX/BODY/BSGN are heap strings (no record limit); LTEX texturePath[MAX_PATH]. Files in
+a BSA are found by hash: never moved. The CS's 32-character mesh limit is an editor limit only.
+* mwdialog_check --asset-check (also --full): files under Meshes/Textures/Icons/Sound/Splash whose full path
+  in Data Files is over 259 characters (or a sound whose record name is over 31) are planned to move to
+  `<Top>\lp\<name, 16 chars>_<sha1 of old path, 6 hex>.<ext>` (longer hash, then a number, on a clash; the same
+  file always gets the same name; a model's x*.nif/x*.kf twins move with it). Records naming the old path:
+  every .esp record is corrected in place (the existing item-fix path, .bak first); for masters the last
+  master record of each object gets a corrected copy in `mwdialog_check - ESM fixes.esp` (the .esm is never
+  written). Loose models naming a moved texture get the new length-prefixed name (original kept via
+  backup_asset_original, feature "longpaths"). A texture a BSA model names is left alone (WARN). Music,
+  video and book art (named in scripts / book text) are reported only. Near-limit files (>240): one INFO.
+  --fix moves the Data Files file and, for a Vortex hard link, the mod folder's copy; a failed move drops
+  its record fixes. --dry-run shows the plan. Report first by default.
+* `mwdialog_longpaths.json` (next to Morrowind.ini) lists every move (old/new path, files, edited .esp and
+  models, masters corrected through the patch). Files already moved are never shortened again; records
+  still naming an old path (another mod, a master) are pointed at the new one on later runs, and the old
+  name counts as present for the missing-file checks. `--longpaths-undo` moves everything back and
+  restores the paths in plugins and models (the next --fix rebuilds the patch without the copies).
+* vortex_tidy: per mod, files whose path will be too long once deployed are moved inside the mod folder
+  (--apply), the mod's .esp files edited (originals in Off\longpaths\), its models' texture names rewritten,
+  its .esm listed for mwdialog_check's ESM patch; staging paths over 259 that deploy fine: INFO.
+* Tests: tests/test_longpaths.py (8): naming/uniqueness/collisions, .esp edited + .esm via patch, loose model
+  texture + icon (.tga name, .dds file), BSA-named texture left alone, undo + rerun idempotency with x*.kf
+  twins, dry run, tidy per-mod flow then the ESM patch, sound name over the 32-byte field.
+
+## Master mismatch guard (mwdialog_mastercheck.py)
+
+A patch made for a different mod with the same file name, or for another version of its master, is now
+recognised and reported with a confidence score, instead of being "repaired" into place.
+
+- **Primary signal: reference resolution.** For each .esp and each master it lists *or names in its file name*
+  (`X - Y Compatibility Patch.esp` -> `X.esp`, `Y.esp`; tes3cmd-made patches often list no masters), the IDs it
+  overrides or names (inventory, scripts, spells, factions, races/classes/body parts, leveled-list entries,
+  journal/topic/object names in its scripts and result scripts, INFO PNAM/NNAM links, cell references into the
+  master) are checked against the installed master. An ID that isn't defined anywhere but carries one of the
+  master's ID prefixes (e.g. `CS_`) counts as a reference into that master that no longer resolves.
+- **Evidence that survives cleaning.** References an earlier --fix removed (`'X' doesn't exist -> ...`) and master
+  cell references dropped (`in master 'M', which no longer exists there`) are read back from
+  `mwdialog_fixes.log` and `mwdialog_backup\fixes.archive.txt` (stream-parsed: only lines with the key phrases are
+  decoded; the append-only archive is continued from the cached offset, a rotated log is re-read), and misses are
+  kept per (plugin, master) in `mwdialog_mastercheck_cache.json`.
+- **Header size only when it is the original value:** the size recorded the first time a mismatch is seen
+  (`mwdialog_master_sizes.json`, written before --fix syncs it), the oldest `synced the size recorded for 'M'
+  (a -> b)` line in the logs, or - when the header was rewritten (a sync or "added master" in the logs) - the
+  plugin as downloaded: the Vortex download archive named like the mod's staging folder (`--vortex-downloads`,
+  default: Vortex's setting, else `K:\downloads\vortex\morrowind`; .zip natively, .7z/.rar via 7-Zip;
+  `--no-archive-lookup` to skip). The downloaded copy's references are checked too. Archive reads are cached
+  by archive size/date.
+- **Verdicts:** `matches`, `other version` (WARN: a few references gone, the rest lines up; stays enabled, --fix
+  cleans as before) and `different mod` (confidence >= 0.75, `--mismatch-threshold`): WARN, and --fix/--clean
+  do **not** sync the header size or strip the dead references/cell references of that plugin (they are the
+  evidence). `--disable-mismatched` takes such plugins out of `mwdialog_load_order.txt` (logged; add the line back
+  to undo). `--no-master-guard` turns the check off.
+- Camonna Tong case (real data): `OAAB Brother Junipers Twin Lamps - Camonna Tong Compatibility Patch.esp` is
+  for Caeris' Camonna Tong, an older version: its embedded CS_GalynScript is identical to the installed one and
+  CS_CT12 resolves, but its Galyn Arvel carries `CS_FairKey`, which Camonna Tong 2.16 no longer has (an earlier
+  --fix removed it). Verdict: other version, 25% confidence of a different mod; keep it.
+
+## vortex_tidy: orphan normal maps stay in place
+
+- A normal map (`*_n`, `*_nm`, `*_normal`, `*_nrm`) moves to `Off\normal maps\<mod>\` only when its diffuse
+  texture exists: beside it, at the same path under `textures\` (or by name) in any mod in staging, loose in
+  Data Files, or in a BSA there. One with no diffuse anywhere is left where it is - not moved, no stand-in -
+  and listed in the plan ("left in place"); if nothing uses it, mwdialog_check --full's unused-asset purge
+  removes it.
+- Exception: a file whose path (mod folder included) says "normal map(s)" - any case and separator,
+  `(?<![a-z])normal[\s_\-.]*maps?(?![a-z])`: Normal Maps, normal_map, Normal-Map, NormalMap, normal.maps - an add-on normal-map pack, which is
+  for OpenMW only - moves either way, and the plan notes the pack as not applicable to classic Morrowind.

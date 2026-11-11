@@ -4,7 +4,9 @@
 Checks, and what --fix does:
   DDS a DirectX 8 game can't read (DX10/BC7 header) ...... ERROR  converted to DXT (texconv)
   DDS shorter than its header says (truncated) ........... ERROR  report only (reinstall the mod)
-  DDS without mipmaps (64 px and up) ..................... WARN   mipmaps generated (texconv)
+  DDS without mipmaps (64 px and up) that a world model .. WARN   mipmaps generated (texconv)
+    draws (each winning model vs the winning texture, loose or BSA; menu / MCM / icon / book / splash /
+    effect textures and effect models exempt: MIP_EXEMPT_DEFAULTS, mwdialog_mip_exempt.txt)
   DDS uncompressed 32-bit (256 px and up) ................ WARN   compressed to DXT1/DXT5 (texconv)
   DDS not a power of two / DXT not a multiple of 4 ....... WARN   resized to the nearest power of two (texconv)
   NIF/KF that isn't a Morrowind file (not 4.0.0.2) ....... ERROR  report only
@@ -451,6 +453,320 @@ def ui_texture(rel):
     return bool(UI_TEX_RE.search(rel.replace("/", "\\")))
 
 
+# ---------------------------------------------------------------------------------------------------------
+# Mipmaps: only textures a WORLD model draws need them (seen at a distance, shrunk on screen). Pictures drawn
+# at their own size (menus, MCM logos, icons, book art, splash screens, cursors) and effect textures (spell
+# particles, glows, blood sprites, whose look depends on every pixel) are left alone. Patterns are fnmatch
+# globs on the lowercase path with backslashes: "path" ones on the whole path under Data Files
+# (textures\..., meshes\...), "name" ones on the file name alone. "*" also crosses folders.
+# Add or remove your own in mwdialog_mip_exempt.txt next to Morrowind.ini, one per line:
+#     texture: textures\my_hud\*        (another texture path glob)
+#     texture-name: *_sprite*           (another texture file-name glob)
+#     mesh: meshes\my_spells\*          (models whose textures don't count, like the effect models)
+#     mesh-name: *_spell*
+#     !texture-name: *splash*           (a leading ! drops a default pattern)
+# ---------------------------------------------------------------------------------------------------------
+MIP_EXEMPT_RECORD = "mwdialog_mip_exempt.txt"
+MIP_MIN_EDGE = 64                      # smaller textures don't get the "no mipmaps" finding at all
+MIP_EXEMPT_DEFAULTS = {
+    # textures never mip-flagged, whoever uses them
+    "texture": ("icons\\*", "bookart\\*", "splash\\*", "mwse\\*", "*\\mwse\\*", "*\\mcm\\*",
+                "textures\\menu\\*", "textures\\menus\\*", "textures\\ui\\*", "textures\\gui\\*",
+                "textures\\hud\\*", "textures\\levelup\\*", "textures\\splash\\*", "textures\\bookart\\*",
+                "textures\\birthsigns\\*", "textures\\birthsign\\*", "textures\\cursor*\\*",
+                "textures\\vfx\\*", "textures\\fx\\*", "textures\\effects\\*", "textures\\*\\vfx\\*"),
+    "texture-name": ("menu_*", "tx_menu*", "*logo*", "*splash*", "cursor*", "tx_cursor*", "compass*",
+                     "tx_compass*", "levelup*", "vfx_*", "*_vfx*",
+                     "tx_*fx*", "fx_*", "tx_blood*", "blood_*", "tx_glow*", "*_glowsheet*",
+                     "*spritesheet*"),
+    # models that aren't world objects: their textures don't count as "used by a world model"
+    "mesh": ("meshes\\e\\*", "meshes\\vfx\\*", "meshes\\fx\\*", "meshes\\*\\vfx\\*", "meshes\\mwse\\*",
+             "meshes\\*\\mwse\\*", "meshes\\menu\\*", "meshes\\ui\\*"),
+    "mesh-name": ("vfx_*", "*_vfx*", "fx_*"),
+}
+_MIP_RULES = {}
+
+
+def mip_rules(game_dir=None):
+    """{kind: tuple of globs}: the defaults, changed by mwdialog_mip_exempt.txt in game_dir (read once)."""
+    key = os.path.normcase(os.path.abspath(game_dir)) if game_dir else ""
+    if key in _MIP_RULES:
+        return _MIP_RULES[key]
+    rules = {k: list(v) for k, v in MIP_EXEMPT_DEFAULTS.items()}
+    if game_dir:
+        try:
+            with open(os.path.join(game_dir, MIP_EXEMPT_RECORD), encoding="utf-8", errors="replace") as f:
+                lines = f.read().splitlines()
+        except OSError:
+            lines = []
+        for ln in lines:
+            s = ln.strip()
+            if not s or s.startswith(("#", ";")) or ":" not in s:
+                continue
+            drop = s.startswith("!")
+            kind, _sep, pat = s.lstrip("!").partition(":")
+            kind, pat = kind.strip().lower(), pat.strip().lower().replace("/", "\\")
+            if kind not in rules or not pat:
+                continue
+            if drop:
+                rules[kind] = [p for p in rules[kind] if p != pat]
+            elif pat not in rules[kind]:
+                rules[kind].append(pat)
+    out = {k: tuple(v) for k, v in rules.items()}
+    _MIP_RULES[key] = out
+    return out
+
+
+def _dfrel(rel):
+    """A path under Data Files as the rules see it: lowercase, backslashes, no 'data files\\' in front."""
+    p = rel.replace("/", "\\").lower().lstrip("\\")
+    return p[11:] if p.startswith("data files\\") else p
+
+
+def mip_exempt_texture(rel, rules=None):
+    """The pattern that keeps texture `rel` (path under Data Files, with its top folder) from ever needing
+    mipmaps, or None. Only Textures\\ can need them: icons, book art and splash screens never do."""
+    import fnmatch
+    rules = rules or mip_rules()
+    p = _dfrel(rel)
+    if not p.startswith("textures\\"):
+        return p.split("\\", 1)[0] + "\\*"
+    if ui_texture(p):
+        return "ui texture"
+    for pat in rules["texture"]:
+        if fnmatch.fnmatchcase(p, pat):
+            return pat
+    name = os.path.splitext(p.rsplit("\\", 1)[-1])[0]
+    for pat in rules["texture-name"]:
+        if fnmatch.fnmatchcase(name, pat):
+            return pat
+    return None
+
+
+def mip_exempt_mesh(rel, rules=None):
+    """The pattern that makes model `rel` (path under Data Files, 'meshes\\...'; a path under Meshes is taken
+    as one) an effect / UI model whose textures don't count, or None."""
+    import fnmatch
+    rules = rules or mip_rules()
+    p = _dfrel(rel)
+    if not p.startswith("meshes\\"):
+        p = "meshes\\" + p
+    for pat in rules["mesh"]:
+        if fnmatch.fnmatchcase(p, pat):
+            return pat
+    name = os.path.splitext(p.rsplit("\\", 1)[-1])[0]
+    for pat in rules["mesh-name"]:
+        if fnmatch.fnmatchcase(name, pat):
+            return pat
+    return None
+
+
+def tex_stem(name):
+    """A texture name as a model gives it -> its path under Textures without extension (the game swaps in
+    the .dds of a .tga/.bmp name), lowercase, backslashes."""
+    s = name.replace("/", "\\").lower().strip().lstrip("\\")
+    i = s.find("textures\\")
+    if i != -1:
+        s = s[i + 9:]
+    return os.path.splitext(s)[0]
+
+
+def needs_mips(tf):
+    """True for texture facts (texture_facts) of a DDS with one level only and an edge of MIP_MIN_EDGE+."""
+    if not tf or tf[0] != "dds":
+        return False
+    w, h, mips = tf[1][0], tf[1][1], tf[1][2]
+    return mips <= 1 and max(w, h) >= MIP_MIN_EDGE
+
+
+def read_try_archive_first(ini_path):
+    """Morrowind.ini's TryArchiveFirst: 0 (default) the newer of the loose file and the BSA's copy wins,
+    1 the BSA's copy, -1 loose files only."""
+    if not ini_path:
+        return 0
+    try:
+        with open(ini_path, encoding="cp1252", errors="replace") as f:
+            for line in f:
+                k, sep, v = line.partition("=")
+                if sep and k.strip().lower() == "tryarchivefirst":
+                    return int(v.strip().split(";")[0] or 0)
+    except (OSError, ValueError):
+        pass
+    return 0
+
+
+class WinningFiles:
+    """Which copy of a file under one top folder (meshes, textures) the game loads: a loose file in Data
+    Files or one in a registered BSA. Vanilla Morrowind (TryArchiveFirst=0) takes the NEWEST by date: of
+    the BSAs, the latest-dated one (same date: the one registered later); then the loose file wins unless
+    that BSA is newer than it. TryArchiveFirst=1: a BSA copy first; -1: loose only."""
+
+    def __init__(self, top, loose, bsa_paths, try_archive_first=0, stat=os.stat):
+        self.top = top
+        self.loose = loose                       # rel under top (lowercase, backslashes) -> full path
+        self.taf = try_archive_first
+        self.stat = stat
+        self.bsa = {}                            # rel -> (bsa path, offset, size, bsa mtime, order)
+        import mwdialog_check as _m
+        pre = top + "\\"
+        for order, b in enumerate(bsa_paths):
+            try:
+                bt = os.stat(b).st_mtime
+                idx = _m.bsa_index(b)
+            except (OSError, struct.error, getattr(_m, "FormatError", ValueError)):
+                continue
+            for name, (off, size) in idx.items():
+                if not name.startswith(pre):
+                    continue
+                rel = name[len(pre):]
+                old = self.bsa.get(rel)
+                if old is None or (bt, order) >= (old[3], old[4]):
+                    self.bsa[rel] = (b, off, size, bt, order)
+
+    def names(self):
+        return set(self.loose) | (set(self.bsa) if self.taf != -1 else set())
+
+    def winner(self, rel):
+        """("loose", full path) or ("bsa", (bsa path, offset, size)) or None."""
+        lp = self.loose.get(rel)
+        bp = self.bsa.get(rel) if self.taf != -1 else None
+        if lp is None and bp is None:
+            return None
+        if bp is None:
+            return ("loose", lp)
+        if lp is None or self.taf == 1:
+            return ("bsa", bp[:3])
+        try:
+            lt = self.stat(lp).st_mtime
+        except OSError:
+            return ("bsa", bp[:3])
+        return ("bsa", bp[:3]) if int(bp[3]) > int(lt) else ("loose", lp)
+
+
+def texture_facts_cached(cache, key, full, st, m, generated=()):
+    """texture_facts of the loose DDS at Data Files path `key` (norm_rel): vortex_tidy's record of the same
+    file, or this cache's tex2: entry when unchanged, else its header is read (and cached)."""
+    stamp = stamp_of(st)
+    gen = key in generated
+    if not gen and cache is not None:
+        t = cache.tidy_lookup(key, stamp)
+        if t is not None and t.get("t"):
+            return t["t"]
+        tf = cache.get("tex2:" + key, stamp)
+        if tf is not None:
+            return tf
+    try:
+        with open(full, "rb") as f:
+            head = f.read(148)
+    except OSError:
+        return None
+    tf = texture_facts(head, m)
+    if cache is not None and not gen:
+        cache.put("tex2:" + key, stamp, tf)
+    return tf
+
+
+def bsa_texture_facts(cache, bsa, off, size, rel, m):
+    """texture_facts of a DDS inside a BSA, cached while the BSA's size and date are the same."""
+    try:
+        st = os.stat(bsa)
+    except OSError:
+        return None
+    key, stamp = "tex2b:" + os.path.basename(bsa).lower() + "|" + rel, stamp_of(st)
+    tf = cache.get(key, stamp) if cache is not None else None
+    if tf is not None:
+        return tf
+    try:
+        with open(bsa, "rb") as f:
+            f.seek(off)
+            head = f.read(min(148, size))
+    except OSError:
+        return None
+    tf = texture_facts(head, m)
+    if cache is not None:
+        cache.put(key, stamp, tf)
+    return tf
+
+
+def mip_pairs(A, tree, data_dir, m, cache, generated=(), ini_path=None, game_dir=None):
+    """The per-pair check of the whole install: every WINNING model (loose or BSA, by the game's override
+    rules) that is a world model (not an effect / UI model), each texture it names resolved to the winning
+    file (the .dds of a .tga/.bmp name first), and those without mipmaps that aren't exempt. A texture pack
+    for existing models is covered here (tidy only judges a mod's textures by its own models).
+    Returns (loose [(rel under Data Files, full, [models])], in_bsa [(rel, bsa name, [models])], stats)."""
+    rules = mip_rules(game_dir)
+    taf = read_try_archive_first(ini_path)
+    bsas = list(getattr(A, "bsa_paths", ()))
+    st_of = tree.stat if tree is not None else os.stat
+    loose_tex = {}
+    for top, rel, full in (tree.asset_files(("textures",)) if tree is not None else ()):
+        loose_tex.setdefault(norm_rel(rel)[len("textures\\"):], full)
+    meshes = WinningFiles("meshes", dict(A.mesh_loose), bsas, taf, st_of)
+    textures = WinningFiles("textures", loose_tex, bsas, taf, st_of)
+    users = {}                                           # texture rel under Textures -> [models]
+    stats = {"models": 0, "effect_models": 0, "textures": 0, "exempt": 0}
+    for mrel in sorted(meshes.names()):
+        if not mrel.endswith(".nif"):
+            continue
+        if mip_exempt_mesh(mrel, rules):
+            stats["effect_models"] += 1
+            continue
+        win = meshes.winner(mrel)
+        if win is None:
+            continue
+        tn = []
+        if win[0] == "loose":
+            full = win[1]
+            root = os.path.normcase(os.path.abspath(data_dir)) + os.sep
+            if os.path.normcase(os.path.abspath(full)).startswith(root):
+                try:
+                    f = model_facts_cached(cache, norm_rel(os.path.relpath(full, data_dir)), full, st_of(full), m,
+                                           generated, need_tn=True)
+                except OSError:
+                    f = None
+                tn = (f or {}).get("tn", [])
+            else:
+                tn = A.texture_names(mrel)
+        else:
+            tn = A.bsa_facts(win[1][0]).get("tn", {}).get(mrel, [])
+        if not tn:
+            continue
+        stats["models"] += 1
+        for t in tn:
+            stem = tex_stem(t)
+            ext = os.path.splitext(t)[1].lower()
+            for cand in (stem + ".dds",) + ((stem + ext,) if ext and ext != ".dds" else ()):
+                if textures.winner(cand) is not None:
+                    users.setdefault(cand, []).append("Meshes\\" + mrel)
+                    break
+    loose_out, bsa_out = [], []
+    for trel in sorted(users):
+        if not trel.endswith(".dds"):
+            continue
+        stats["textures"] += 1
+        if mip_exempt_texture("textures\\" + trel, rules):
+            stats["exempt"] += 1
+            continue
+        win = textures.winner(trel)
+        if win[0] == "loose":
+            full = win[1]
+            key = "textures\\" + trel
+            if key in generated:
+                continue
+            try:
+                tf = texture_facts_cached(cache, key, full, st_of(full), m, generated)
+            except OSError:
+                continue
+            if needs_mips(tf):
+                loose_out.append((os.path.relpath(full, data_dir), full, users[trel]))
+        else:
+            b, off, size = win[1]
+            tf = bsa_texture_facts(cache, b, off, size, trel, m)
+            if needs_mips(tf):
+                bsa_out.append(("Textures\\" + trel, os.path.basename(b), users[trel]))
+    return loose_out, bsa_out, stats
+
+
 def _pow2(n):
     p = 1
     while p * 2 <= n:
@@ -531,6 +847,17 @@ def rewrite_absolute(data):
     return len(hits), b"".join(out)
 
 
+def sound_job(top, info):
+    """What --fix would do to a sound with header info (channels, rate): {} when nothing."""
+    ch, rate = info
+    job = {}
+    if top == "sound" and ch > 1:
+        job["mono"] = True
+    if rate not in STD_RATES:
+        job["rate"] = 44100
+    return job
+
+
 def check(world, m):
     """Runs the checks for World `world` (module `m` = mwdialog_check). Stores world.asset_health (fix list)."""
     import builtins, time as _time
@@ -551,8 +878,20 @@ def check(world, m):
     if tree is None or not tree.covers(data_dir):
         tree = m.DataTree(data_dir)
     stats = {}                                   # full path -> os.stat: one per file for the whole pass
-    for top, rel, full in tree.asset_files(ASSET_DIRS):
+    listed = getattr(tree, "listed_stamp", None)
+    entries = tree.asset_entries(ASSET_DIRS) if listed else ((None,) + t for t in tree.asset_files(ASSET_DIRS))
+    for i, top, rel, full in entries:
         low = rel.lower()
+        # sounds and music: the directory listing's size and date first (a voice pack can have a million
+        # files, and an os.stat each takes minutes); the sound check below calls os.stat only when the
+        # cache has no "nothing wrong" entry for that stamp. An empty file is always confirmed by os.stat.
+        ls = listed(i) if listed and top in SOUND_DIRS and low.endswith((".wav", ".mp3")) else None
+        if ls is not None and not ls.startswith("0:"):
+            if any(ord(c) > 127 for c in rel):
+                r.add("ERROR", "Data Files", "", "", f"{rel}: the file name has non-ASCII characters; the game "
+                                                     f"can't open it (rename it, and the plugin/model that names it)")
+            snd_files.append((top, rel, full, ls))
+            continue
         try:
             st = stats[full] = tree.stat(full)
         except OSError:
@@ -572,7 +911,7 @@ def check(world, m):
         if top in TEX_DIRS and low.endswith(".dds"):
             tex_files.append((rel, full, size))
         elif top in SOUND_DIRS and low.endswith((".wav", ".mp3")):
-            snd_files.append((top, rel, full))
+            snd_files.append((top, rel, full, None))
         elif top == "meshes" and low.endswith(".nif"):
             nif_files.append((rel, full))
         elif top == "meshes" and low.endswith(".kf"):
@@ -635,9 +974,7 @@ def check(world, m):
                                                  f"placeholder in its place (reinstall the mod for the real one)")
             fixes.append(("broken", full, rel, "truncated"))
             continue
-        job = {}
-        if mips <= 1 and max(w, h) >= 64:
-            job["mips"] = True
+        job = {}                            # mipmaps: judged per model below (mip_pairs), not per file
         if not block and bpp and bpp >= 24 and max(w, h) >= 256:
             job["dxt"] = True
             job["alpha"] = bool(tf[2])
@@ -704,16 +1041,65 @@ def check(world, m):
         if hasattr(A, "bsa_facts"):
             used.update(A.bsa_facts(bsa).get("stems", ()))
     cache.flush()
+    # --- mipmaps, per pair: each winning world model and the winning texture it draws (loose or BSA)
+    print("Asset health: mipmaps of the textures world models use...", file=sys.stderr)
+    try:
+        mip_loose, mip_bsa, mst = mip_pairs(A, tree, data_dir, m, cache, generated,
+                                            getattr(world, "ini_path", None), os.path.dirname(data_dir))
+    except Exception as e:                       # never stop the pass for this check
+        print(f"Asset health: mipmap check skipped ({e})", file=sys.stderr)
+        mip_loose, mip_bsa, mst = [], [], {}
+    tex_jobs = {f[1]: f[3] for f in fixes if f[0] == "tex"}
+    for rel, full, users in mip_loose:
+        more = f" (+{len(users) - 1})" if len(users) > 1 else ""
+        r.add("WARN", "Data Files", "", "", f"{rel}: no mipmaps, and world model {users[0]}{more} draws it "
+                                            f"(shimmers at a distance); --fix generates them (texconv)")
+        if full in tex_jobs:
+            tex_jobs[full]["mips"] = True
+        else:
+            tex_jobs[full] = {"mips": True}
+            fixes.append(("tex", full, rel, tex_jobs[full]))
+    if mip_bsa:
+        r.add("INFO", "Data Files", "", "", f"{len(mip_bsa)} texture(s) inside BSAs have no mipmaps and world models "
+                                            f"draw them (a BSA can't be changed; a loose copy with mipmaps would "
+                                            f"fix it), e.g. {mip_bsa[0][0]} in {mip_bsa[0][1]}")
+    if mst:
+        print(f"Asset health: mipmaps: {mst['models']} world model(s), {mst['textures']} texture(s) they draw "
+              f"({mst['exempt']} exempt), {len(mip_loose)} loose + {len(mip_bsa)} in BSAs without mipmaps; "
+              f"{mst['effect_models']} effect/UI model(s) not counted", file=sys.stderr)
+    cache.flush()
     # --- sounds
     ff = find_ffmpeg()
     print(f"Asset health: sounds ({len(snd_files)})...", file=sys.stderr)
-    for k, (top, rel, full) in enumerate(snd_files, 1):
+    for k, (top, rel, full, ls) in enumerate(snd_files, 1):
         if k % 5000 == 0:
             print(f"Asset health: sounds {k}/{len(snd_files)}...", file=sys.stderr)
-        if tidy_clean(rel, full) or full not in stats:
-            continue
-        skey, sstamp = "snd:" + norm_rel(rel), stamp_of(stats[full])
-        info = None if norm_rel(rel) in generated else cache.get(skey, sstamp)
+        key = norm_rel(rel)
+        skey = "snd:" + key
+        info = None
+        if ls is not None and key not in generated:
+            # the listing's stamp: trusted for tidy's "checked clean" and a cached result that needs nothing;
+            # a cached problem, or no entry, is confirmed with a real os.stat below
+            if cache.tidy_lookup(key, ls) is not None:
+                continue
+            info = cache.get(skey, ls)
+            if info and sound_job(top, info):
+                info = None
+        if info is None:
+            if full not in stats:
+                try:
+                    stats[full] = tree.stat(full)
+                except OSError:
+                    continue
+                if stats[full].st_size == 0:
+                    r.add("ERROR", "Data Files", "", "", f"{rel}: empty file (0 bytes); --fix moves it to "
+                                                         f"Off\\...\\broken\\ and puts a stand-in in its place")
+                    fixes.append(("broken", full, rel, "empty file"))
+                    continue
+            if tidy_clean(rel, full):
+                continue
+            sstamp = stamp_of(stats[full])
+            info = None if key in generated else cache.get(skey, sstamp)
         if info is None:
             try:
                 with open(full, "rb") as f:
@@ -725,11 +1111,7 @@ def check(world, m):
         if not info:
             continue
         ch, rate = info
-        job = {}
-        if top == "sound" and ch > 1:
-            job["mono"] = True
-        if rate not in STD_RATES:
-            job["rate"] = 44100
+        job = sound_job(top, info)
         if job:
             what = ", ".join(x for x, k in (("stereo (3D sounds must be mono)", "mono"), (f"{rate} Hz", "rate"))
                              if k in job)
@@ -807,7 +1189,7 @@ def check(world, m):
                                                 "levelup", "splash"):
             continue
         unused.append((rel, full, size))
-    for top, rel, full in snd_files:
+    for top, rel, full, _ls in snd_files:
         if top != "sound" or rel.lower().split(os.sep)[1:2] == ["vo"]:
             continue                                   # music plays by folder; voices are left alone
         stem = os.path.splitext(os.path.basename(rel))[0].lower()
@@ -834,7 +1216,7 @@ def check(world, m):
     world.asset_health = fixes
     # the pass saw every file: entries for files that are gone (or renamed) go, and what was learnt is written
     # now, not only when the program ends
-    cache.prune(("tex2:", "texh:", "nif:", "snd:", "refs:", "names:", "bsa2:"))
+    cache.prune(("tex2:", "tex2b:", "texh:", "nif:", "snd:", "refs:", "names:", "bsa2:"))
     cache.flush()
 
 
@@ -1034,13 +1416,17 @@ def dx10_has_alpha(head):
     return dxgi not in DXGI_NO_ALPHA
 
 
-def _examine_dds(rel, full, size, m):
-    """[(severity, message)], job or None."""
+def _examine_dds(rel, full, size, m, want_mips=None, out=None):
+    """[(severity, message)], job or None. want_mips(rel) -> bool: whether a missing mipmap chain counts
+    (None: always, the old behaviour). out (a dict) gets "t": the texture facts, and "m": True when the
+    mipmaps were missing but didn't count."""
     try:
         with open(full, "rb") as f:
             head = f.read(148)
     except OSError:
         return [], None
+    if out is not None:
+        out["t"] = texture_facts(head, m)
     if head[:4] != b"DDS ":
         return [("ERROR", "not a DDS file (renamed?); the game can't load it")], "broken"
     if head[84:88] == b"DX10":
@@ -1060,9 +1446,12 @@ def _examine_dds(rel, full, size, m):
     if max(w, h) > m.TEXTURE_MAX_EDGE:
         job["max"] = m.TEXTURE_MAX_EDGE
         why.append(f"{w}x{h} (over {m.TEXTURE_MAX_EDGE})")
-    if mips <= 1 and max(w, h) >= 64:
-        job["mips"] = True
-        why.append("no mipmaps")
+    if mips <= 1 and max(w, h) >= MIP_MIN_EDGE:
+        if want_mips is None or want_mips(rel):
+            job["mips"] = True
+            why.append("no mipmaps")
+        elif out is not None:
+            out["m"] = True
     if not block and bpp and bpp >= 24 and max(w, h) >= 256:
         job["dxt"] = True
         job["alpha"] = bool(struct.unpack_from("<I", head, 80)[0] & 0x1)
@@ -1140,10 +1529,26 @@ def _models_naming(name_b, root):
     return name_b in _MODEL_TEXT[key]
 
 
-def check_folder(root, m, data_dir=None, bsa_meshes=None):
+def check_folder(root, m, data_dir=None, bsa_meshes=None, stats=None):
     """(issues [(severity, rel, message)], fixes [(kind, full, rel, job)]) for one mod folder. data_dir and
-    bsa_meshes (lowercase paths under Meshes in every BSA) let an animation's model be found elsewhere."""
+    bsa_meshes (lowercase paths under Meshes in every BSA) let an animation's model be found elsewhere.
+    Mipmaps: only a texture one of the mod's OWN world models draws is reported without them (not one of
+    the exempt kinds: menu / MCM / icon / effect, see mip_rules); a texture pack for other mods' or the
+    game's models is judged by mwdialog_check's per-pair check of the whole install. stats (a dict) gets
+    "mips_skipped": textures without mipmaps that were left alone."""
     issues, fixes = [], []
+    world_tex = set()                  # stems under Textures the mod's own world models draw
+    game_dir = os.path.dirname(data_dir) if data_dir else os.path.dirname(os.path.abspath(__file__))
+    rules = mip_rules(game_dir)
+
+    def note_model(rel, tn):
+        if rel.lower().endswith(".nif") and tn and not mip_exempt_mesh(rel, rules):
+            world_tex.update(tex_stem(t) for t in tn)
+
+    def want_mips(rel):
+        p = _dfrel(rel)
+        return p.startswith("textures\\") and not mip_exempt_texture(p, rules) \
+            and os.path.splitext(p[9:])[0] in world_tex
     own_text = b""
     try:
         for e in os.listdir(root):
@@ -1167,10 +1572,11 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None):
             # one record per mod file (tidy3:<mod>|<path>, its size + date): the full check of Data Files trusts
             # the same file there (what tidy can't fix, it can't either; tidy's bug report has it) and takes a
             # model's texture list from it. Clean ("c"): not even tidy reads it again.
-            key, stamp, n_issues, n_fixes, facts = pending
+            key, stamp, n_issues, n_fixes, facts = pending[:5]
             rec = {"c": len(issues) == n_issues and len(fixes) == n_fixes}
             if facts is not None:
                 rec["f"] = facts
+            rec.update(pending[5])             # a texture's facts ("t"), mipmaps missing but not needed ("m")
             cache.put(key, stamp, rec)
     for top, rel, full in _walk(root, tops):
         settle()
@@ -1185,8 +1591,21 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None):
         key = mod_key + norm_rel(rel)
         got = cache.get(key, stamp)
         if got is not None and got.get("c"):
-            continue
-        pending = [key, stamp, len(issues), len(fixes), None]
+            if top == "meshes":
+                tn = (got.get("f") or {}).get("tn")
+                if tn is None and low.endswith(".nif"):        # an older record: the model is read once
+                    try:
+                        with open(full, "rb") as f:
+                            tn = m.nif_texture_refs(f.read())
+                    except OSError:
+                        tn = []
+                note_model(rel, tn)
+            # clean, unless its missing mipmaps count now (one of the mod's world models draws it)
+            if not (got.get("m") and top == "textures" and want_mips(rel)):
+                if got.get("m") and stats is not None:
+                    stats["mips_skipped"] = stats.get("mips_skipped", 0) + 1
+                continue
+        pending = [key, stamp, len(issues), len(fixes), None, {}]
         if any(ord(c) > 127 for c in rel):
             new_rel = ascii_name(rel)
             tail = rel.replace("/", "\\").split("\\", 1)[-1]
@@ -1211,7 +1630,9 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None):
             fixes.append(("broken", full, rel, "empty"))
             continue
         if top in TEX_DIRS and low.endswith(".dds"):
-            msgs, job = _examine_dds(rel, full, size, m)
+            msgs, job = _examine_dds(rel, full, size, m, want_mips, pending[5])
+            if pending[5].get("m") and stats is not None:
+                stats["mips_skipped"] = stats.get("mips_skipped", 0) + 1
             if job == "broken":
                 issues += [(s, rel, t + " -> kept in Off\\...\\broken\\, placeholder put there") for s, t in msgs]
                 fixes.append(("broken", full, rel, msgs[0][1] if msgs else "broken"))
@@ -1226,6 +1647,7 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None):
             except OSError:
                 continue
             pending[4] = model_facts(b, m)
+            note_model(rel, pending[4].get("tn"))
             if not b.startswith(NIF_HEAD):
                 first = b[:40].split(b"\n")[0].decode("latin1", "replace")
                 issues.append(("ERROR", rel, f"not a Morrowind file (header '{first}'); the game crashes on it"

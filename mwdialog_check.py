@@ -1782,6 +1782,26 @@ class World:
                                     "drop_record": True,
                                     "msgs": [(dmsg, "remove the deletion, so the object exists for them")]})
 
+    def _master_guard(self):
+        """Patches made for a different master than the installed one (mwdialog_mastercheck): their header
+        size and dead references are not 'repaired' (that would hide the mismatch), only reported."""
+        self.master_verdicts = {}
+        if getattr(self, "args_data_dir", None) is None or getattr(getattr(self, "args", None), "no_master_guard", False):
+            return
+        try:
+            mc = mastercheck_module()
+            self.master_verdicts = mc.check(self, sys.modules[__name__], getattr(self, "args", None))
+            bad = mc.mismatched(self.master_verdicts, getattr(getattr(self, "args", None), "mismatch_threshold", None)
+                                or mc.DIFFERENT_AT)
+        except Exception as e:                 # never let it stop the scan
+            print(f"(master check failed: {e})", file=sys.stderr)
+            return
+        self.mismatched_plugins = bad
+        if bad:
+            self.item_fixes = [f for f in self.item_fixes if str(f.get("plugin", "")).lower() not in bad]
+            self.r.fixes = [f for f in self.r.fixes if not (str(f[0]).lower() in bad
+                                                             and f[2][0] in ("drop_ref", "move_ref", "sync_master"))]
+
     def _check_headers(self):
         """tes3cmd header --synchronize: record counts and master sizes."""
         r = self.r
@@ -1800,6 +1820,11 @@ class World:
             msg = f"master '{master}' has changed size since this plugin was saved; the game warns at startup"
             if not plugin.lower().endswith(FIXABLE_EXT):
                 r.add("INFO", plugin, "", "", msg + " (a master; not changed)")
+            elif getattr(self, "master_verdicts", {}).get((plugin.lower(), master.lower()), {}).get("kind") == "different mod":
+                v = self.master_verdicts[(plugin.lower(), master.lower())]
+                r.add("WARN", plugin, "", "", msg + f"; not synced: it looks made for a different '{master}' "
+                                                   f"(confidence {int(round(v['confidence'] * 100))}%), so the size "
+                                                   f"is the evidence, not the error")
             elif (plugin.lower(), master.lower()) in self.ref_error_masters:
                 # the mismatch may be the only hint that this plugin no longer lines up with its master
                 r.add("WARN", plugin, "", "", msg + "; not synced, because some of its references don't line up "
@@ -2055,6 +2080,7 @@ class World:
             self._check_models()
         self._check_refs()
         self._check_missing_placed()
+        self._master_guard()
         self._check_headers()
         self._check_scripts()
         self._check_placed()
@@ -3029,6 +3055,32 @@ def replace_asset_in_place(path, data):
             pass
 
 
+def mastercheck_module():
+    """mwdialog_mastercheck.py, next to this file (patches made for a different master than the installed one)."""
+    import importlib.util
+    mod = sys.modules.get("mwdialog_mastercheck")
+    if mod is None:
+        here = os.path.dirname(os.path.abspath(__file__))
+        spec = importlib.util.spec_from_file_location("mwdialog_mastercheck", os.path.join(here, "mwdialog_mastercheck.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        sys.modules["mwdialog_mastercheck"] = mod
+    return mod
+
+
+def longpaths_module():
+    """mwdialog_longpaths.py, next to this file (asset paths too long for Windows / the game's fields)."""
+    import importlib.util
+    mod = sys.modules.get("mwdialog_longpaths")
+    if mod is None:
+        here = os.path.dirname(os.path.abspath(__file__))
+        spec = importlib.util.spec_from_file_location("mwdialog_longpaths", os.path.join(here, "mwdialog_longpaths.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        sys.modules["mwdialog_longpaths"] = mod
+    return mod
+
+
 def asset_health_module():
     """mwdialog_assets.py, next to this file (texture/model/sound health checks and repairs)."""
     import importlib.util
@@ -3166,6 +3218,34 @@ def run_repair_sounds(args):
     return 1 if failed else 0
 
 
+def sound_names_under(root):
+    """"sound/<path>" (lowercase, forward slashes) of every file under the Sound folder `root`, like os.walk +
+    relpath gave them, but with one scandir per folder and no per-file path arithmetic: a voice pack can put
+    a million or more files there, and every scan of a --full lists them."""
+    out = []
+    if not os.path.isdir(root):
+        return out
+    stack = [(root, os.path.basename(os.path.normpath(root)).lower() + "/")]
+    while stack:
+        path, prefix = stack.pop()
+        try:
+            it = os.scandir(path)
+        except OSError:
+            continue
+        with it:
+            for e in it:
+                try:
+                    is_dir = e.is_dir()
+                except OSError:
+                    continue
+                if is_dir:
+                    if _real_dir(e):
+                        stack.append((e.path, prefix + e.name.lower() + "/"))
+                else:
+                    out.append(prefix + e.name.lower())
+    return out
+
+
 def collect_sound_files(data_dirs, bsa_paths, tree=None):
     SOUND_ROOTS[:] = [d for d in data_dirs if os.path.isdir(d)]
     files = set()
@@ -3179,10 +3259,7 @@ def collect_sound_files(data_dirs, bsa_paths, tree=None):
             for fn in os.listdir(d) if os.path.isdir(d) else []:
                 if fn.lower() == "sound":
                     root = os.path.join(d, fn)
-        for dirpath, _dirs, fns in os.walk(root):
-            for fn in fns:
-                rel = os.path.relpath(os.path.join(dirpath, fn), d)
-                files.add(rel.replace("\\", "/").lower())
+        files.update(sound_names_under(root))
     for b in bsa_paths:
         try:
             files |= bsa_file_names(b)
@@ -3259,13 +3336,20 @@ def _real_dir(e):
 class DataTree:
     """Every file under one Data Files folder, from a single walk with os.scandir: files is [(top folder
     lowercase - "" for files in Data Files itself -, path relative to Data Files, full path)]. stat() does one
-    os.stat per file and keeps it for the pass. (The size and date in Windows' directory listing aren't used:
-    for a hard link changed through its other name - a mod file vortex_tidy repaired - they can be stale.)"""
+    os.stat per file and keeps it for the pass. (The size and date in Windows' directory listing can be stale
+    for a hard link changed through its other name - a mod file vortex_tidy repaired - so stat() never uses
+    them.) For the sound and music folders (often a million or more voice files, where one os.stat each takes
+    minutes on Windows) the listing's size and date are kept too, as listed_stamp(i): only good enough to
+    accept a cached "nothing wrong" result; anything else is checked again with os.stat."""
+    LISTED_TOPS = frozenset(("sound", "music"))
 
     def __init__(self, root):
+        from array import array
         self.root = os.path.abspath(root)
         self.files = []
         self._st = {}
+        self._lsize = array("q")                    # parallel to files: the listing's size, -1 if not kept
+        self._ltime = array("q")                    # and its date (whole seconds)
         try:
             first = sorted(os.scandir(self.root), key=lambda e: e.name.lower())
         except OSError:
@@ -3280,7 +3364,7 @@ class DataTree:
                 if _real_dir(e):
                     stack.append((e.name.lower(), e.path, e.name))
             else:
-                self.files.append(("", e.name, e.path))
+                self._add_file("", e.name, e)
         stack.reverse()
         while stack:
             top, path, rel = stack.pop()
@@ -3298,8 +3382,29 @@ class DataTree:
                     if _real_dir(e):
                         subdirs.append((top, e.path, rel + os.sep + e.name))
                 else:
-                    self.files.append((top, rel + os.sep + e.name, e.path))
+                    self._add_file(top, rel + os.sep + e.name, e)
             stack.extend(reversed(subdirs))
+
+    def _add_file(self, top, rel, e):
+        self.files.append((top, rel, e.path))
+        size = mtime = -1
+        if top in self.LISTED_TOPS:
+            try:
+                st = e.stat()                       # Windows: from the directory listing, no extra call
+                size, mtime = st.st_size, int(st.st_mtime)
+            except (OSError, OverflowError, ValueError):
+                size = mtime = -1
+        self._lsize.append(size)
+        self._ltime.append(mtime)
+
+    def listed_stamp(self, i):
+        """files[i]'s size and date from the directory listing, as the asset cache stamps them ("size:date"),
+        or None (not a sound/music file, or not listed)."""
+        try:
+            size = self._lsize[i]
+        except IndexError:
+            return None
+        return None if size < 0 else f"{size}:{self._ltime[i]}"
 
     def covers(self, d):
         return os.path.normcase(os.path.abspath(d)) == os.path.normcase(self.root)
@@ -3313,14 +3418,19 @@ class DataTree:
     def asset_files(self, tops):
         """(top, rel, full) under these top folders, in that order, skipping Off and .Orphaned folders inside
         them (what the asset checks look at)."""
+        for _i, top, rel, full in self.asset_entries(tops):
+            yield top, rel, full
+
+    def asset_entries(self, tops):
+        """asset_files() with each file's index in files (for listed_stamp)."""
         for want in tops:
-            for top, rel, full in self.files:
+            for i, (top, rel, full) in enumerate(self.files):
                 if top != want:
                     continue
                 parts = rel.lower().split(os.sep)[1:-1]
                 if ".orphaned" in parts or "off" in parts:
                     continue
-                yield top, rel, full
+                yield i, top, rel, full
 
 
 class ModelAssets:
@@ -3341,6 +3451,7 @@ class ModelAssets:
         self.cache = cache                         # mwdialog_assets' AssetCache: each model's textures
         self.generated = generated or set()        # stand-ins this tool made: never taken from the cache
         self._bsa_facts = {}
+        self.bsa_paths = list(bsa_paths)           # registered BSAs, in Morrowind.ini order
         for d in data_dirs:
             if not os.path.isdir(d):
                 continue
@@ -4821,8 +4932,27 @@ def scan(args, plugins, bsas, data_dirs, report):
         if vroot and os.path.isdir(vroot) and not getattr(args, "no_vortex", False):
             world.vortex = VortexRepo(vroot)
     world.args_data_dir = args.data_dir
+    world.args = args
     world.plugin_paths = [p for _n, p in plugins]
+    if tree is not None:                       # paths too long for Windows (before the missing-file checks)
+        try:
+            longpaths_module().check(world, sys.modules[__name__])
+        except Exception as e:                 # never let it stop the scan
+            print(f"(long-path check failed: {e})", file=sys.stderr)
     world.check(sounds)
+    bad = getattr(world, "mismatched_plugins", None)
+    if bad and getattr(args, "disable_mismatched", False) and not getattr(args, "dry_run", False) \
+            and not getattr(args, "_mismatched_done", False):
+        args._mismatched_done = True
+        try:
+            order = read_load_order(args) or [n for n, _p in plugins]
+            gone = mastercheck_module().disable(os.path.dirname(os.path.abspath(args.data_dir)), order, bad,
+                                                sys.modules[__name__], getattr(args, "fix_log", None))
+            if gone:
+                print(f"Taken out of the load order (made for a different master): {', '.join(gone)} "
+                      f"(put back by adding them to {LOAD_ORDER_FILE})", file=sys.stderr)
+        except (OSError, UnicodeError) as e:
+            print(f"(could not take mismatched plugins out of the load order: {e})", file=sys.stderr)
     return world
 
 
@@ -5182,7 +5312,8 @@ def run_fix(args, plugins, bsas, data_dirs, report, world, only, hidden=frozense
     keyfix = list(getattr(world, "text_key_fixes", [])) if only is None else []
     health = list(getattr(world, "asset_health", [])) if only is None else []
     if not esp_plans and not esm_plans and not placeholders and not placements and not early and not early_placed \
-            and not item_esp and not item_esm and not generated and not shrink and not keyfix and not health:
+            and not item_esp and not item_esm and not generated and not shrink and not keyfix and not health \
+            and not (only is None and getattr(world, "longpath_plan", None)):
         print("  Nothing that can be fixed automatically.")
         return
     total = print_plan("", esp_plans)
@@ -5306,6 +5437,13 @@ def run_fix(args, plugins, bsas, data_dirs, report, world, only, hidden=frozense
             for kind, full, rel, job in [h for h in health if h[0] == k][:5]:
                 print(f"           e.g. {rel}")
         total += len(health)
+    lp_plan = getattr(world, "longpath_plan", []) if only is None else []
+    if lp_plan:
+        print(f"\n  Paths too long for Windows: files to move to a short path ({len(lp_plan)}; the records and "
+              f"models that name them follow; listed in mwdialog_longpaths.json, --longpaths-undo puts them back):")
+        for line in longpaths_module().plan_lines(world)[:15]:
+            print(line)
+        total += len(lp_plan)
     if args.dry_run:
         print("\nDry run: no files were changed.")
         return
@@ -5336,6 +5474,16 @@ def run_fix(args, plugins, bsas, data_dirs, report, world, only, hidden=frozense
         except Exception as e:                       # one plugin's problem never stops the others halfway
             print(f"  {plugin}: NOT changed ({type(e).__name__}: {e})")
 
+    if lp_plan or getattr(world, "longpath_nifs", None):
+        failed = longpaths_module().apply(world, sys.modules[__name__], os.path.abspath(args.data_dir), log)
+        if failed:                                    # a file that didn't move keeps its records' old path
+            for group in (item_esp, item_esm):
+                for pl in list(group):
+                    group[pl] = [fx for fx in group[pl] if fx.get("longpath") not in failed]
+                    if not group[pl]:
+                        del group[pl]
+        print(f"  Data Files: {len(lp_plan) - len(failed)} file(s) moved to a short path"
+              + (f", {len(failed)} could not be" if failed else ""))
     for plugin, fixes in item_esp.items():
         try:
             n = apply_item_fixes(paths[plugin], plugin, fixes, log, backup=plugin not in esp_plans)
@@ -12223,6 +12371,19 @@ def _main(argv=None):
                     help=f"build '{MULTI_PATCH_NAME}' like 'tes3cmd multipatch': merged leveled lists, "
                          f"fog-bugged cells, reverted cell names, plus objects several mods change merged field "
                          f"by field (load it last)")
+    tc.add_argument("--disable-mismatched", action="store_true",
+                    help="take plugins made for a different master than the installed one (mwdialog_mastercheck: "
+                         "references that don't resolve, original header size) out of the load order")
+    tc.add_argument("--mismatch-threshold", type=float, default=None, metavar="0-1",
+                    help="confidence from which a master counts as a different mod (default 0.75)")
+    tc.add_argument("--vortex-downloads", default=None, metavar="DIR",
+                    help="Vortex download folder, to read a plugin's original header from its download archive "
+                         "when --fix has rewritten it (default: Vortex's setting, else K:\\downloads\\vortex\\morrowind)")
+    tc.add_argument("--no-archive-lookup", action="store_true", help="don't open download archives for the master check")
+    tc.add_argument("--no-master-guard", action="store_true", help="skip the master mismatch check")
+    tc.add_argument("--longpaths-undo", action="store_true",
+                    help="put back every file --fix or vortex_tidy moved to a short path (mwdialog_longpaths.json) "
+                         "and the paths in plugins and models; the next --fix rebuilds the ESM patch without them")
     tc.add_argument("--restore-unused", action="store_true",
                     help="put back the unused textures/sounds --asset-check --fix moved to Off\\unused\\")
     tc.add_argument("--repair-sounds", action="store_true",
@@ -12407,6 +12568,9 @@ def _main(argv=None):
         args.play = True
     if args.full:
         return run_full(args)
+    if getattr(args, "longpaths_undo", False):
+        dd = os.path.abspath(args.data_dir)
+        return longpaths_module().undo(os.path.dirname(dd), dd, sys.modules[__name__])
     if getattr(args, "restore_unused", False):
         dd = os.path.abspath(args.data_dir)
         return asset_health_module().restore_unused(os.path.dirname(dd), dd)
