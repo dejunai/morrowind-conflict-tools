@@ -44,6 +44,7 @@ tool reproduces that for the ini and folder-scan modes.
 """
 
 import argparse
+import codecs
 import json
 import math
 import copy
@@ -58,6 +59,11 @@ import subprocess
 import sys
 import time
 from collections import Counter, OrderedDict, defaultdict
+
+# One module, whatever name it runs under: mwdialog_assets.py and vortex_tidy.py import it as
+# "mwdialog_check" and must see this run's settings (--encoding...), not a second fresh copy.
+if sys.modules.get(__name__) is not None:
+    sys.modules.setdefault("mwdialog_check", sys.modules[__name__])
 
 ENC = "cp1252"
 
@@ -111,6 +117,159 @@ class FormatError(Exception):
 
 
 # --------------------------------------------------------------------------
+# Shared helpers: lossless text codec, cached reads, safe in-place writes
+# --------------------------------------------------------------------------
+
+def _mw_bytes_errors(err):
+    """Codec error handler "mw_bytes": a byte the code page doesn't define (cp1252: 0x81, 0x8D, 0x8F, 0x90,
+    0x9D) decodes to the character of the same number, and encodes back to that byte, so IDs and links
+    survive a read/write unchanged in any --encoding. surrogateescape characters encode back to their byte
+    too; anything else the code page can't hold becomes '?' (never an exception)."""
+    if isinstance(err, UnicodeDecodeError):
+        return "".join(chr(b) for b in err.object[err.start:err.end]), err.end
+    out = bytearray()
+    for ch in err.object[err.start:err.end]:
+        o = ord(ch)
+        out.append(o - 0xDC00 if 0xDC80 <= o <= 0xDCFF else o if o < 0x100 else 0x3F)
+    return bytes(out), err.end
+
+
+codecs.register_error("mw_bytes", _mw_bytes_errors)
+MW_ERRORS = "mw_bytes"
+
+
+def dec(b):
+    """Plugin bytes -> str, losslessly (see _mw_bytes_errors)."""
+    return bytes(b).decode(ENC, MW_ERRORS)
+
+
+def enc(s):
+    """str -> plugin bytes; the exact inverse of dec(), and never raises."""
+    return s.encode(ENC, MW_ERRORS)
+
+
+_TAGS = {}
+
+
+def _tag(b4):
+    """A record/subrecord name as str (cached: there are only a few dozen)."""
+    t = _TAGS.get(b4)
+    if t is None:
+        t = _TAGS[b4] = bytes(b4).decode("latin-1")
+    return t
+
+
+_READ_CACHE = OrderedDict()            # normcase path -> (size, mtime_ns, bytes)
+_READ_CACHE_MAX = 256 * 1024 * 1024    # keeps the big masters of one run in memory (Morrowind.esm is ~80 MB)
+
+
+def read_plugin_bytes(path):
+    """The bytes of a plugin, from a small cache when nothing changed it since (size and date, and every
+    write these tools make goes through safe_write_bytes, which drops the cached copy)."""
+    key = os.path.normcase(os.path.abspath(path))
+    st = os.stat(path)
+    hit = _READ_CACHE.get(key)
+    if hit is not None and hit[0] == st.st_size and hit[1] == st.st_mtime_ns:
+        _READ_CACHE.move_to_end(key)
+        return hit[2]
+    with open(path, "rb") as f:
+        data = f.read()
+    _READ_CACHE[key] = (st.st_size, st.st_mtime_ns, data)
+    total = sum(len(v[2]) for v in _READ_CACHE.values())
+    while total > _READ_CACHE_MAX and len(_READ_CACHE) > 1:
+        _k, v = _READ_CACHE.popitem(last=False)
+        total -= len(v[2])
+    return data
+
+
+def forget_cached(path):
+    _READ_CACHE.pop(os.path.normcase(os.path.abspath(path)), None)
+
+
+def validate_plugin_bytes(data):
+    """Raise FormatError unless `data` is a whole TES3 plugin: a TES3 header first and every record and
+    subrecord inside the file."""
+    first = True
+    for _off, tag, _flags, body in iter_records(data):
+        if first:
+            if tag != "TES3":
+                raise FormatError("does not start with a TES3 header")
+            first = False
+        for _s in iter_subs(body):
+            pass
+    if first:
+        raise FormatError("empty file")
+
+
+def safe_write_bytes(path, data, validate=None, keep_times=None):
+    """Write `data` over `path` safely, keeping hard links (Vortex) intact:
+      1. the new contents go to <path>.mwdtmp first, flushed to disk, and are read back and checked
+         (validate(bytes) may raise to stop here, with the original untouched);
+      2. then they are copied over the existing file in place (same file, so its hard links stay) and
+         flushed; a brand-new file is simply moved into place.
+    If step 2 fails, the checked copy is left as <path>.mwdtmp and the error is raised.
+    keep_times: an os.stat_result whose dates are put back afterwards (date-based load order)."""
+    data = bytes(data)
+    tmp = path + ".mwdtmp"
+    with open(tmp, "wb") as f:
+        f.write(data)
+        f.flush()
+        os.fsync(f.fileno())
+    try:
+        with open(tmp, "rb") as f:
+            back = f.read()
+        if back != data:
+            raise OSError(f"{tmp}: read back differently from what was written")
+        if validate is not None:
+            validate(back)
+    except BaseException:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
+    forget_cached(path)
+    if not os.path.exists(path):
+        os.replace(tmp, path)
+    else:
+        with open(path, "r+b") as f:             # in place: no truncation until the new bytes are written
+            f.write(data)
+            f.truncate()
+            f.flush()
+            os.fsync(f.fileno())
+        os.remove(tmp)
+    if keep_times is not None:
+        os.utime(path, ns=(keep_times.st_atime_ns, keep_times.st_mtime_ns))
+    forget_cached(path)
+
+
+def write_plugin_bytes(path, data, keep_times=None):
+    """safe_write_bytes for a plugin: refuses to write anything that isn't a whole TES3 file."""
+    safe_write_bytes(path, data, validate=validate_plugin_bytes, keep_times=keep_times)
+
+
+def set_hedr_count(head, count):
+    """The TES3 record (bytes) with its HEDR record count set to `count`; unchanged when HEDR isn't the
+    first subrecord or is shorter than its 300 bytes (writing there would overwrite the next subrecord)."""
+    head = bytearray(head)
+    if head[:4] == b"TES3" and head.find(b"HEDR") == 16 and len(head) >= 24 + 300 \
+            and struct.unpack_from("<I", head, 20)[0] >= 300:
+        struct.pack_into("<I", head, 16 + 8 + 296, count)
+    return bytes(head)
+
+
+_OURS_LOWER = None
+
+
+def is_our_patch(name):
+    """One of the plugins these tools generate (any case: Windows file names aren't case-sensitive)."""
+    global _OURS_LOWER
+    if _OURS_LOWER is None:
+        _OURS_LOWER = frozenset(x.lower() for x in OUR_PATCHES)
+    return (name or "").lower() in _OURS_LOWER
+
+
+# --------------------------------------------------------------------------
 # Low-level TES3 reading
 # --------------------------------------------------------------------------
 
@@ -118,7 +277,7 @@ def cstr(b):
     i = b.find(b"\0")
     if i >= 0:
         b = b[:i]
-    return b.decode(ENC, "replace")
+    return b.decode(ENC, MW_ERRORS)
 
 
 def iter_records(data):
@@ -127,7 +286,7 @@ def iter_records(data):
     while pos < n:
         if n - pos < 16:
             raise FormatError(f"truncated record header at offset {pos}")
-        tag = data[pos:pos + 4].decode(ENC, "replace")
+        tag = _tag(data[pos:pos + 4])
         size, _unused, flags = struct.unpack_from("<III", data, pos + 4)
         start = pos + 16
         end = start + size
@@ -143,7 +302,7 @@ def iter_subs(body, offset=0):
     while p < end:
         if end - p < 8:
             raise FormatError(f"truncated subrecord at offset {offset + 16 + p}")
-        name = body[p:p + 4].decode(ENC, "replace")
+        name = _tag(body[p:p + 4])
         size = struct.unpack_from("<I", body, p + 4)[0]
         sp = p + 8
         if sp + size > end:
@@ -181,20 +340,38 @@ def has_sub(body, wanted):
     return first_sub(body, wanted) is not None
 
 
-def bsa_file_names(path):
-    """Return lowercase forward-slash paths of every file in a TES3 BSA."""
-    names = set()
+def _bsa_directory(path):
+    """(count, hash table offset, directory block) of a TES3 BSA, or None if it isn't one. A header whose
+    numbers don't fit the file raises FormatError (a damaged or unusual archive), never struct.error."""
     with open(path, "rb") as f:
         head = f.read(12)
         if len(head) < 12:
-            return names
+            return None
         version, hash_off, count = struct.unpack("<III", head)
         if version != 0x100:
-            return names
+            return None
+        size = os.fstat(f.fileno()).st_size
+        if 12 * count > hash_off or 12 + hash_off > size:
+            raise FormatError(f"{os.path.basename(path)}: BSA header doesn't fit the file "
+                              f"({count} files, directory {hash_off} bytes, file {size} bytes)")
         block = f.read(hash_off)
+    if len(block) < hash_off:
+        raise FormatError(f"{os.path.basename(path)}: BSA directory is cut short")
+    return count, hash_off, block
+
+
+def bsa_file_names(path):
+    """Return lowercase forward-slash paths of every file in a TES3 BSA (FormatError if it's damaged)."""
+    names = set()
+    d = _bsa_directory(path)
+    if d is None:
+        return names
+    count, _hash_off, block = d
     name_offsets = struct.unpack_from(f"<{count}I", block, 8 * count)
     names_start = 12 * count
     for o in name_offsets:
+        if names_start + o >= len(block):
+            raise FormatError(f"{os.path.basename(path)}: a file name lies outside the BSA directory")
         names.add(cstr(block[names_start + o:names_start + o + 260]).lower().replace("\\", "/"))
     return names
 
@@ -265,6 +442,7 @@ class World:
         self.levlists = OrderedDict()      # (LEVC|LEVI, id lower) -> [(plugin, body, deleted)] in load order
         self.fogcells = {}                 # interior cell name lower -> (plugin, NAME, DATA, AMBI) with fog 0
         self.rencells = {}                 # exterior (x, y) -> tes3cmd cell-rename tracking
+        self.cell_heads = {}               # cell key -> header subrecords [(name, data)] of its latest record
         self.ref_mods = []                 # references a plugin makes to its masters' cell objects
         self.persist_mismatch = defaultdict(int)   # master file -> references filed in the wrong group
         self.size_mismatch = []            # (plugin, master, size saved against, size now)
@@ -329,8 +507,7 @@ class World:
         r = self.r
         self.paths[name.lower()] = path
         try:
-            with open(path, "rb") as f:
-                data = f.read()
+            data = read_plugin_bytes(path)
         except OSError as e:
             r.add("ERROR", name, "", "", f"could not read file: {e}")
             return
@@ -475,13 +652,13 @@ class World:
             names = set()
             for sname, sdata in iter_subs(body):
                 if sname == "SCVR":
-                    names.update(n.lower() for n in sdata.decode(ENC, "replace").split("\0") if n)
+                    names.update(n.lower() for n in sdata.decode(ENC, MW_ERRORS).split("\0") if n)
                 elif sname == "SCTX" and not names:
-                    for m in re.finditer(r"^\s*(?:short|long|float)\s+(\w+)", sdata.decode(ENC, "replace"), re.I | re.M):
+                    for m in re.finditer(r"^\s*(?:short|long|float)\s+(\w+)", sdata.decode(ENC, MW_ERRORS), re.I | re.M):
                         names.add(m.group(1).lower())
             self.script_locals[rid] = names
             tx = first_sub(body, b"SCTX")
-            self.script_src[rid] = (name, cstr(nm), tx.decode(ENC, "replace") if tx else "")
+            self.script_src[rid] = (name, cstr(nm), tx.decode(ENC, MW_ERRORS) if tx else "")
             self.script_at[rid] = len(self.loaded)
 
     def _load_cell(self, body, name, off):
@@ -765,7 +942,7 @@ class World:
                 msg = (f"Interior Cell '{i_nm}' trying to become Exterior Cell ({x}, {y}): this plugin has an "
                        f"interior named like that exterior cell")
                 reach = sorted(self.door_dest.get(n, ())) + (["a script"] if n in self.script_cells else [])
-                if not i_plugin.lower().endswith(FIXABLE_EXT) or i_plugin in OUR_PATCHES:
+                if not i_plugin.lower().endswith(FIXABLE_EXT) or is_our_patch(i_plugin):
                     self.r.add("ERROR", i_plugin, "", "", msg + " (in a master; not changed)")
                     continue
                 if i_refs and reach:
@@ -820,14 +997,14 @@ class World:
                                                 "set": {s_: PLACEHOLDER_COIN for (s_, k), v in win[2].items()
                                                         if k == "mesh" and A.placeholder(v)},
                                                 "msgs": [(msg, f"give it the coin model {PLACEHOLDER_COIN}")]})
-                    elif win[1].lower().endswith(FIXABLE_EXT) and win[1] not in OUR_PATCHES:
+                    elif win[1].lower().endswith(FIXABLE_EXT) and not is_our_patch(win[1]):
                         self.r.add("WARN", win[1], "", win[4], msg + "; nothing uses it: --fix removes it")
                         if not any(f.get("drop_record") and f["plugin"] == win[1] and f["tag"] == tag
                                    and f["id"].lower() == rid for f in self.item_fixes):
                             self.item_fixes.append({"plugin": win[1], "tag": tag, "id": win[4], "set": {},
                                                     "npco": set(), "drop_record": True,
                                                     "msgs": [(msg, "remove the unfinished, unused object")]})
-                    elif win[1] not in OUR_PATCHES:
+                    elif not is_our_patch(win[1]):
                         # in a master: the ESM patch deletes it (rebuilt every --fix, so a mod that starts
                         # using it later simply keeps it)
                         self.r.add("WARN", win[1], "", win[4], msg + f"; nothing uses it: --fix deletes it in "
@@ -856,7 +1033,7 @@ class World:
                 continue
             for i, v in enumerate(vers[:-1]):
                 idx, plugin, fields, deleted, oid = v
-                if deleted or not plugin.lower().endswith(FIXABLE_EXT) or plugin in OUR_PATCHES:
+                if deleted or not plugin.lower().endswith(FIXABLE_EXT) or is_our_patch(plugin):
                     continue
                 probs = problems(fields)
                 if not probs:
@@ -927,7 +1104,7 @@ class World:
         winning list (in the plugin, or through the ESM patch for a master)."""
         for (tag, rid), (plugin, oid, entries) in self.lev_win.items():
             gone = {e.lower() for e in entries if e and e.lower() not in self.all_ids}
-            if not gone or plugin in OUR_PATCHES:
+            if not gone or is_our_patch(plugin):
                 continue
             msg = (f"{tag} '{oid}' lists {len(gone)} object(s) that exist nowhere: "
                    f"{', '.join(sorted(gone)[:4])}" + (" ..." if len(gone) > 4 else ""))
@@ -1418,7 +1595,7 @@ class World:
     def _trace_record(self, name, tag, flags, body):
         """--trace: report every record in this plugin that defines, places, deletes or mentions a traced id."""
         low = bytes(body).lower()
-        hits = [t for t in self.trace if t.encode(ENC, "replace") in low]
+        hits = [t for t in self.trace if t.encode(ENC, MW_ERRORS) in low]
         if not hits:
             return
         at = f"[{len(self.loaded) + 1:>3}] {name}"
@@ -1450,7 +1627,7 @@ class World:
                     self.trace_log.append((t, f"{at}: script '{sname}' mentions '{t}' in its compiled data, but has no "
                                           f"source text (the checker reads source text, so it can't see this use)"))
                 else:
-                    for line in tx.decode(ENC, "replace").splitlines():
+                    for line in tx.decode(ENC, MW_ERRORS).splitlines():
                         if t in line.lower():
                             self.trace_log.append((t, f"{at}: script '{sname}': {line.strip()}"))
             else:
@@ -1462,7 +1639,7 @@ class World:
         r = self.r
         o = obj.lower()
         at = self.script_at.get(sid)
-        if at is None or plugin in OUR_PATCHES or self.all_ids.get(o) not in self.PLACEABLE:
+        if at is None or is_our_patch(plugin) or self.all_ids.get(o) not in self.PLACEABLE:
             return
         esp = plugin.lower().endswith(FIXABLE_EXT)
         d_at, d_by = self.first_def_at.get(o, (None, None))
@@ -1527,7 +1704,7 @@ class World:
         r = self.r
         order = {n: i for i, n in enumerate(self.loaded)}
         for plugin, off, label, v, obj in self.missing_placed:
-            if plugin in OUR_PATCHES:
+            if is_our_patch(plugin):
                 continue
             o = obj.lower()
             esp = plugin.lower().endswith(FIXABLE_EXT)
@@ -1540,7 +1717,7 @@ class World:
                 msg = (f"places '{obj}', but '{d_by}' (loading earlier) deletes that {d_tag} record"
                        + (f", and only '{again}' (loading later) defines it again" if again else "")
                        + "; the game logs 'Missing object ... during cell load'")
-                if d_by.lower().endswith(FIXABLE_EXT) and d_by not in OUR_PATCHES:
+                if d_by.lower().endswith(FIXABLE_EXT) and not is_our_patch(d_by):
                     r.add("ERROR", plugin, f"cell {label}", obj, msg)
                     self.undelete.setdefault((d_by, d_tag, o), [obj, set()])[1].add(plugin)
                 else:
@@ -1585,7 +1762,7 @@ class World:
         r = self.r
         for plugin, claimed in self.hedr_count.items():
             real = self.real_count.get(plugin)
-            if real is None or real == claimed or plugin in OUR_PATCHES:
+            if real is None or real == claimed or is_our_patch(plugin):
                 continue
             if plugin.lower().endswith(FIXABLE_EXT):
                 r.add("ERROR", plugin, "", "", f"header says {claimed} record(s), the file has {real}",
@@ -1593,7 +1770,7 @@ class World:
             else:
                 r.add("INFO", plugin, "", "", f"header says {claimed} record(s), the file has {real} (a master; not changed)")
         for plugin, master, expected, actual in self.size_mismatch:
-            if plugin in OUR_PATCHES:
+            if is_our_patch(plugin):
                 continue
             msg = f"master '{master}' has changed size since this plugin was saved; the game warns at startup"
             if not plugin.lower().endswith(FIXABLE_EXT):
@@ -1616,6 +1793,10 @@ class World:
         nm = first_sub(body, b"NAME")
         if d is None or len(d) < 12:
             return
+        try:
+            self.cell_heads[key] = [(n, bytes(x)) for n, x in split_cell(body)[0]]
+        except FormatError:
+            pass
         flags = struct.unpack_from("<I", d)[0]
         if key[0] == "i":
             if flags & 0x80:                       # "behave like exterior": no fog bug
@@ -1659,8 +1840,7 @@ class World:
             if not path:
                 continue
             try:
-                with open(path, "rb") as f:
-                    data = f.read()
+                data = read_plugin_bytes(path)
                 for moff, tag, flags, body in iter_records(data):
                     if tag != "CELL":
                         continue
@@ -1787,7 +1967,7 @@ class World:
             elif sname == "SNAM":
                 info.sound = cstr(sdata)
             elif sname == "NAME":
-                info.text = sdata.decode(ENC, "replace").rstrip("\0")
+                info.text = sdata.decode(ENC, MW_ERRORS).rstrip("\0")
             elif sname == "SCVR":
                 if pending is not None:
                     info.conditions.append((pending, None))
@@ -1801,7 +1981,7 @@ class World:
                     info.conditions.append((pending, val))
                     pending = None
             elif sname == "BNAM":
-                info.result = sdata.decode(ENC, "replace").rstrip("\0")
+                info.result = sdata.decode(ENC, MW_ERRORS).rstrip("\0")
             elif sname == "QSTN":
                 info.qstn = True
             elif sname == "QSTF":
@@ -1943,7 +2123,12 @@ class World:
 
     def _cell_exists(self, value):
         v = value.lower()
-        return any(c.startswith(v) for c in self.cell_names | self.region_names)
+        key = (len(self.cell_names), len(self.region_names))
+        cache = getattr(self, "_cell_union", None)
+        if cache is None or cache[0] != key:         # build the union once, not on every call
+            cache = (key, tuple(self.cell_names | self.region_names))
+            self._cell_union = cache
+        return any(c.startswith(v) for c in cache[1])
 
     def _check_info(self, info, t, quest_stages, sound_files):
         r = self.r
@@ -2719,37 +2904,97 @@ def off_dest(mod, feature, plugin, rel):
     return os.path.join(mod, "Off", feature, name, rel)
 
 
-def backup_asset_original(data_dir, rel, plugin=None, feature="converted"):
+def backup_asset_original(data_dir, rel, plugin=None, feature="converted", track_new=True):
     """Before an asset file is replaced: keep the original in <its Vortex mod folder>\\Off\\<feature>\\<plugin
     name>\\<rel> (Off is never deployed). Not from Vortex: <game folder>\\asset_originals\\<feature>\\<rel>.
     An original kept already (here, or where earlier versions put it: Off\\<plugin name>\\<rel>) is never
-    replaced: only the first, untouched file is kept. Returns the backup path."""
+    replaced. But when the file now there is neither that original nor a repair these tools made of it (a mod
+    update put a new file there), it is kept too, next to the first one with a date added
+    (<name>.YYYYMMDD-HHMMSS<ext>); track_new=False keeps only the first one, as before.
+    Returns the path that holds the file's current original."""
+    current = os.path.join(data_dir, rel)
+    keep = keep_new_original if track_new else (lambda b, _cur: b)
     mod, owner_plugin = asset_owner_folder(data_dir, rel)
     if mod:
         dest = off_dest(mod, feature, plugin or owner_plugin, rel)
         old = os.path.join(mod, "Off", os.path.splitext(os.path.basename(plugin or owner_plugin or ""))[0], rel)
         if (plugin or owner_plugin) and os.path.exists(old):
-            return old
+            return keep(old, current)
         off = os.path.join(mod, "Off")
         for f in (os.listdir(off) if os.path.isdir(off) else ()):          # any feature kept it already
             for d in (os.listdir(os.path.join(off, f)) if os.path.isdir(os.path.join(off, f)) else ()):
                 if os.path.exists(os.path.join(off, f, d, rel)) and f.lower() not in ("broken", "orphaned", "unused"):
-                    return os.path.join(off, f, d, rel)
+                    return keep(os.path.join(off, f, d, rel), current)
     else:
         dest = os.path.join(os.path.dirname(os.path.abspath(data_dir)), BACKUP_DIR, "asset_originals", feature, rel)
     if not os.path.exists(dest):
         os.makedirs(os.path.dirname(dest), exist_ok=True)
-        shutil.copy2(os.path.join(data_dir, rel), dest)
-    return dest
+        shutil.copy2(current, dest)
+        _ASSET_BACKUP_OF[os.path.normcase(os.path.abspath(current))] = dest
+        return dest
+    return keep(dest, current)
+
+
+_ASSET_BACKUP_OF = {}          # normcase(abspath(asset)) -> the kept original its repairs are recorded with
+REPAIRED_SIDECAR = ".repaired.sha256"
+
+
+def _sha256_file(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _repaired_hashes(backup):
+    try:
+        with open(backup + REPAIRED_SIDECAR, encoding="ascii", errors="ignore") as f:
+            return {ln.strip() for ln in f if ln.strip()}
+    except OSError:
+        return set()
+
+
+def keep_new_original(backup, current):
+    """`backup` keeps an original of `current`. If `current` is neither that original, nor a repair these
+    tools wrote (recorded in <backup>.repaired.sha256), nor an original dated earlier, it is a new original
+    (a mod update): keep a copy as <backup name>.YYYYMMDD-HHMMSS<ext> beside it. Returns the path holding
+    current's original (the dated copy, or `backup`)."""
+    _ASSET_BACKUP_OF[os.path.normcase(os.path.abspath(current))] = backup
+    try:
+        h = _sha256_file(current)
+        if h == _sha256_file(backup) or h in _repaired_hashes(backup):
+            return backup
+        root, ext = os.path.splitext(backup)
+        folder, stem = os.path.split(root)
+        pat = re.compile(re.escape(stem) + r"\.\d{8}-\d{6}" + re.escape(ext) + "$", re.IGNORECASE)
+        for fn in sorted(os.listdir(folder)):
+            if pat.match(fn) and _sha256_file(os.path.join(folder, fn)) == h:
+                return os.path.join(folder, fn)
+        dated = f"{root}.{time.strftime('%Y%m%d-%H%M%S')}{ext}"
+        k = 2
+        while os.path.exists(dated):
+            dated = f"{root}.{time.strftime('%Y%m%d-%H%M%S')}-{k}{ext}"
+            k += 1
+        shutil.copy2(current, dated)
+        return dated
+    except OSError:
+        return backup
 
 
 def replace_asset_in_place(path, data):
-    """Write new contents into the existing file (truncate and write): a Vortex hard link stays a hard
-    link, so the mod folder's copy gets the same repair."""
-    with open(path, "r+b") as f:
-        f.seek(0)
-        f.write(data)
-        f.truncate()
+    """Write new contents into the existing file (checked temp copy first, then copied over in place): a
+    Vortex hard link stays a hard link, so the mod folder's copy gets the same repair. The repair's hash is
+    recorded next to the file's kept original, so a later run can tell a repair from a new original."""
+    data = bytes(data)
+    safe_write_bytes(path, data)
+    backup = _ASSET_BACKUP_OF.get(os.path.normcase(os.path.abspath(path)))
+    if backup and os.path.exists(backup):
+        try:
+            with open(backup + REPAIRED_SIDECAR, "a", encoding="ascii") as f:
+                f.write(hashlib.sha256(data).hexdigest() + "\n")
+        except OSError:
+            pass
 
 
 def asset_health_module():
@@ -2840,7 +3085,7 @@ def run_repair_sounds(args):
             elif tag == "SOUN":
                 v = first_sub(b, b"FNAM")
             elif tag == "SCPT":
-                for x in SAY_SOUND_RE.findall((first_sub(b, b"SCTX") or b"").decode(ENC, "replace")):
+                for x in SAY_SOUND_RE.findall((first_sub(b, b"SCTX") or b"").decode(ENC, MW_ERRORS)):
                     used[os.path.join("Sound", x.strip().replace("/", os.sep))].add(n)
                 continue
             else:
@@ -2906,8 +3151,8 @@ def collect_sound_files(data_dirs, bsa_paths):
     for b in bsa_paths:
         try:
             files |= bsa_file_names(b)
-        except (OSError, struct.error):
-            pass
+        except (OSError, struct.error, FormatError) as e:
+            print(f"  note: couldn't read {os.path.basename(b)} ({e}); its files count as missing")
     return files
 
 
@@ -2970,8 +3215,8 @@ class ModelAssets:
                         self.mesh_bsa.setdefault(rel, (b,) + where)
                     if top in self.FOLDERS and rel:
                         self._add(top, rel)
-            except (OSError, struct.error):
-                pass
+            except (OSError, struct.error, FormatError) as e:
+                print(f"  note: couldn't read {os.path.basename(b)} ({e}); its files count as missing")
 
     def _add(self, top, rel):
         self.files[top].add(rel)
@@ -3165,9 +3410,14 @@ class VortexRepo:
             self._index()
         rel = rel.replace("/", "\\").lower().strip("\\")
         stem, ext = os.path.splitext(rel)
+        # a normal map vortex_tidy put in a mod's Off\ folder (Off\normal maps\...) was taken out on
+        # purpose: it never comes back as "the real file"; the flat stand-in is used instead
+        normal_map = bool(IGNORED_MAP_RE.search(os.path.basename(stem)))
         best = None
         for full in self._by_name.get(os.path.basename(stem), ()):
             low = full.replace("/", "\\").lower()
+            if normal_map and "\\off\\" in "\\" + os.path.relpath(full, self.root).replace("/", "\\").lower():
+                continue
             fstem, fext = os.path.splitext(low)
             # "any extension" means another of the same kind (an icon .dds for a .tga), never a model
             # standing in for an icon because their names match
@@ -3423,7 +3673,7 @@ def dds_reduce(data, max_edge=TEXTURE_MAX_EDGE):
     if k == 0:
         return None, "already small enough"
     if mips <= k:
-        return None, f"it has no smaller versions inside it (mipmaps) to fall back on"
+        return None, "it has no smaller versions inside it (mipmaps) to fall back on"
     sizes = [dds_level_size(max(w >> i, 1), max(h >> i, 1), block, bpp) for i in range(mips)]
     if hdr + sum(sizes) > len(data):
         return None, "the file is shorter than its header says"
@@ -3443,7 +3693,7 @@ def placeholder_dds(name):
     """A 4x4 uncompressed DDS for a missing texture: a flat normal map for *_nm / *_n, black for glow,
     reflection and specular maps (so they add nothing), plain grey otherwise."""
     stem = os.path.splitext(os.path.basename(name).lower())[0]
-    if stem.endswith(("_nm", "_n", "_normal")):
+    if stem.endswith(("_nm", "_n", "_normal", "_nrm")):
         bgra = (255, 128, 128, 255)
     elif stem.endswith(("_glow", "_g", "_ref", "_spec", "_s", "_em", "_lum")):
         bgra = (0, 0, 0, 255)
@@ -3628,19 +3878,17 @@ def run_remove_generated(args):
 def bsa_index(path):
     """{lowercase backslash path: (absolute offset, size)} of every file in a TES3 BSA."""
     out = {}
-    with open(path, "rb") as f:
-        head = f.read(12)
-        if len(head) < 12:
-            return out
-        version, hash_off, count = struct.unpack("<III", head)
-        if version != 0x100:
-            return out
-        block = f.read(hash_off)
+    d = _bsa_directory(path)
+    if d is None:
+        return out
+    count, hash_off, block = d
     sizes_offs = [struct.unpack_from("<II", block, 8 * i) for i in range(count)]
     name_offs = struct.unpack_from(f"<{count}I", block, 8 * count)
     names = block[12 * count:]
     data_start = 12 + hash_off + 8 * count
     for (size, off), no in zip(sizes_offs, name_offs):
+        if no >= len(names):
+            raise FormatError(f"{os.path.basename(path)}: a file name lies outside the BSA directory")
         end = names.find(b"\0", no)
         nm = names[no:end].decode("latin-1", "ignore").replace("/", "\\").lower().strip("\\")
         out[nm] = (data_start + off, size)
@@ -3655,12 +3903,27 @@ FIXABLE_EXT = (".esp",)
 FIX_TAG = "; [mwdialog_check] "
 
 
+def set_link(subs, which, value):
+    """Set an INFO's PNAM or NNAM in `subs` [[name, data]], adding it (after INAM, PNAM before NNAM) when
+    the record has none - otherwise the fix would be logged without changing anything."""
+    hit = False
+    for x in subs:
+        if x[0] == which:
+            x[1] = value
+            hit = True
+    if hit:
+        return
+    order = ("INAM", "PNAM") if which == "NNAM" else ("INAM",)
+    pos = max([k + 1 for k, x in enumerate(subs) if x[0] in order] or [0])
+    subs.insert(pos, [which, value])
+
+
 def pack_sub(name, data):
-    return name.encode("ascii") + struct.pack("<I", len(data)) + data
+    return name.encode("latin-1") + struct.pack("<I", len(data)) + bytes(data)
 
 
 def pack_str(s):
-    return s.encode(ENC, "replace") + b"\0" if s else b"\0"
+    return s.encode(ENC, MW_ERRORS) + b"\0" if s else b"\0"
 
 
 def patch_supports(op):
@@ -3794,9 +4057,18 @@ def backup_candidates(path):
     out = []
     for base in (path, os.path.join(game_dir_of(path), BACKUP_DIR, os.path.relpath(os.path.abspath(path),
                                                                                    game_dir_of(path)))):
-        for c in [base + ".bak"] + [f"{base}.bak{k}" for k in range(2, 100)]:
-            if os.path.exists(c):
-                out.append(c)
+        folder, stem = os.path.split(base)
+        try:
+            names = os.listdir(folder or ".")
+        except OSError:
+            continue
+        pat = re.compile(re.escape(stem) + r"\.bak(\d*)$", re.IGNORECASE)
+        found = []
+        for fn in names:                             # no upper limit: .bak100 and later count too
+            m = pat.match(fn)
+            if m and (m.group(1) == "" or int(m.group(1)) >= 2):
+                found.append((int(m.group(1) or 1), os.path.join(folder, fn)))
+        out += [c for _n, c in sorted(found)]
     return out
 
 
@@ -3804,7 +4076,7 @@ def backup_path(path):
     """A new backup name for `path`, in the backup folder: .bak, then .bak2, .bak3... (highest = newest)."""
     base = bak_home(path)
     taken = backup_candidates(path)
-    n = 1 + max([1] + [int(re.search(r"\.bak(\d*)$", c).group(1) or 1) for c in taken]) if taken else 1
+    n = 1 + max([1] + [int(re.search(r"\.bak(\d*)$", c, re.IGNORECASE).group(1) or 1) for c in taken]) if taken else 1
     return base + ".bak" if n == 1 else f"{base}.bak{n}"
 
 
@@ -3849,7 +4121,6 @@ def apply_plan(path, plugin, plan, world, log, collect=None, backup=True):
 
     # First pass: per INFO, its topic, id and links; remember deleted ones for splicing.
     meta = {}                 # off -> dict(topic, id, prev, next)
-    block_order = []          # (off) of kept INFOs in file order, with topic
     current = None
     for off, tag, flags, body in records:
         if tag == "DIAL":
@@ -4042,36 +4313,30 @@ def apply_plan(path, plugin, plan, world, log, collect=None, backup=True):
                 if any(x[0] == "NAME" for x in subs):
                     for x in subs:
                         if x[0] == "NAME":
-                            x[1] = op[1].encode(ENC)
+                            x[1] = op[1].encode(ENC, MW_ERRORS)
                 else:
                     # NAME (the text) follows INAM/PNAM/NNAM/DATA and the speaker filters, before conditions
                     head = ("INAM", "PNAM", "NNAM", "DATA", "ONAM", "RNAM", "CNAM", "FNAM", "ANAM", "DNAM", "SNAM")
                     pos = max([k + 1 for k, x in enumerate(subs) if x[0] in head] or [len(subs)])
-                    subs.insert(pos, ["NAME", op[1].encode(ENC)])
+                    subs.insert(pos, ["NAME", op[1].encode(ENC, MW_ERRORS)])
             elif kind == "set_prev":
-                for s in subs:
-                    if s[0] == "PNAM":
-                        s[1] = pack_str(op[1])
+                set_link(subs, "PNAM", pack_str(op[1]))
                 m["prev"] = op[1]
             elif kind == "set_next":
-                for s in subs:
-                    if s[0] == "NNAM":
-                        s[1] = pack_str(op[1])
+                set_link(subs, "NNAM", pack_str(op[1]))
             elif kind == "comment":
                 for s in subs:
                     if s[0] == "BNAM":
                         had_null = s[1].endswith(b"\0")
-                        text = s[1].rstrip(b"\0").decode(ENC, "replace")
+                        text = s[1].rstrip(b"\0").decode(ENC, MW_ERRORS)
                         lines = text.splitlines(keepends=True)
                         for j, ln in enumerate(lines):
                             if ln.rstrip("\r\n") == op[1] and not ln.lstrip().startswith(FIX_TAG.strip()):
                                 lines[j] = FIX_TAG + ln
-                        s[1] = "".join(lines).encode(ENC, "replace") + (b"\0" if had_null else b"")
+                        s[1] = "".join(lines).encode(ENC, MW_ERRORS) + (b"\0" if had_null else b"")
             elif kind == "relink":
                 choice, where = pick_prev(m["topic"], set(op[1]))
-                for s in subs:
-                    if s[0] == "PNAM":
-                        s[1] = pack_str(choice)
+                set_link(subs, "PNAM", pack_str(choice))
                 m["prev"] = choice
                 desc = f"{desc}: now follows '{choice}' ({where})" if choice else f"{desc}: moved to {where}"
             log.append((plugin, msg, desc))
@@ -4113,19 +4378,15 @@ def apply_plan(path, plugin, plan, world, log, collect=None, backup=True):
         return changes
 
     # update the record count in the TES3 header
-    head = bytearray(out[0])
-    hp = head.find(b"HEDR")
-    if hp == 16:
-        struct.pack_into("<I", head, hp + 8 + 296, len(out) - 1)     # the true count
-        out[0] = bytes(head)
+    out[0] = set_hedr_count(out[0], len(out) - 1)     # the true count
 
     st = os.stat(path)
     if backup:
         bak = backup_path(path)
         shutil.copy2(path, bak)
-    with open(path, "wb") as f:          # rewrite in place (keeps hard links, e.g. Vortex deployments)
-        f.write(b"".join(out))
-    os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns))   # keep the date so load order doesn't change
+    # checked temp copy first, then in place (keeps hard links, e.g. Vortex deployments) and the date,
+    # so load order doesn't change
+    write_plugin_bytes(path, b"".join(out), keep_times=st)
     if backup:
         log.append((plugin, "", f"backup saved as {os.path.basename(bak)}"))
     return changes
@@ -4150,9 +4411,18 @@ def restore_backups(names, data_dir):
         st = os.stat(bak)                        # copy2 kept the plugin's original date on it
         with open(bak, "rb") as f:
             data = f.read()
-        with open(path, "wb") as f:              # in place, so hard links (Vortex) stay intact
-            f.write(data)
-        os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns))
+        try:
+            safe_write_bytes(path, data, keep_times=st)     # in place, so hard links (Vortex) stay intact
+            with open(path, "rb") as f:
+                ok = f.read() == data
+        except OSError as e:
+            print(f"  {n}: NOT restored ({e}); the backup {os.path.basename(bak)} is kept")
+            code = 1
+            continue
+        if not ok:
+            print(f"  {n}: restored copy doesn't match {os.path.basename(bak)}; the backup is kept")
+            code = 1
+            continue
         os.remove(bak)
         print(f"  {n}: restored from {os.path.basename(bak)} (backup removed)")
     return code
@@ -4267,9 +4537,10 @@ def restore_all(data_dir, assume_yes, fix_log):
             st = os.stat(oldest)                   # copy2 kept the plugin's original date on it
             with open(oldest, "rb") as f:
                 data = f.read()
-            with open(path, "wb") as f:            # in place, so hard links (Vortex) stay intact
-                f.write(data)
-            os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns))
+            safe_write_bytes(path, data, keep_times=st)     # in place, so hard links (Vortex) stay intact
+            with open(path, "rb") as f:
+                if f.read() != data:
+                    raise OSError("the restored copy doesn't match the backup; backups kept")
             for _n, b in baks:
                 os.remove(b)
             done += 1
@@ -4457,7 +4728,7 @@ def fix_item_body(body, fx):
             v = fx["set"][n]
             if not v:
                 continue
-            d = v.encode(ENC, "replace") + b"\0"
+            d = v.encode(ENC, MW_ERRORS) + b"\0"
         elif n == "NPCO" and len(d) >= 36 and cstr(d[4:36]).lower() in fx["npco"]:
             continue
         out.append(pack_sub(n, d))
@@ -4517,17 +4788,12 @@ def apply_item_fixes(path, plugin, fixes, log, backup=True, collect=None):
                         msg + (f" (in {plugin})" if collect is not None else ""), action))
     if not changes or collect is not None:
         return changes
-    head = bytearray(out[0])                 # records may have been dropped: keep the count true
-    if head[:4] == b"TES3" and head.find(b"HEDR") == 16:
-        struct.pack_into("<I", head, 16 + 8 + 296, len(out) - 1)
-        out[0] = bytes(head)
+    out[0] = set_hedr_count(out[0], len(out) - 1)    # records may have been dropped: keep the count true
     st = os.stat(path)
     if backup:
         bak = backup_path(path)
         shutil.copy2(path, bak)
-    with open(path, "wb") as f:          # in place: keeps hard links (Vortex) intact
-        f.write(b"".join(out))
-    os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns))
+    write_plugin_bytes(path, b"".join(out), keep_times=st)   # checked copy, then in place (hard links stay)
     if backup:
         log.append((plugin, "", f"backup saved as {os.path.basename(bak)}"))
     return changes
@@ -4540,7 +4806,7 @@ def placeholder_record(world, oid):
     out = []
     for n, d in iter_subs(world.gold_template):
         if n == "NAME":
-            d = oid.encode(ENC, "replace") + b"\0"
+            d = oid.encode(ENC, MW_ERRORS) + b"\0"
         elif n == "FNAM":
             d = b"Placeholder Coin\0"
         elif n == "SCRI":
@@ -4556,12 +4822,12 @@ EARLY_CELL = "mwdialog_check early placeholders"       # in the ESM patch, so it
 
 def placeholder_cell(ids, cell_name=PLACEHOLDER_CELL):
     """A hidden interior cell holding one placed (persistent) copy of each object ID."""
-    subs = [pack_sub("NAME", cell_name.encode(ENC) + b"\0"),
+    subs = [pack_sub("NAME", cell_name.encode(ENC, MW_ERRORS) + b"\0"),
             pack_sub("DATA", struct.pack("<Iii", 1, 0, 0)),               # interior
             pack_sub("AMBI", struct.pack("<IIIf", 0, 0, 0, 0.0))]
     for i, oid in enumerate(ids, 1):
         subs += [pack_sub("FRMR", struct.pack("<I", i)),                 # the patch's own reference #i
-                 pack_sub("NAME", oid.encode(ENC, "replace") + b"\0"),
+                 pack_sub("NAME", oid.encode(ENC, MW_ERRORS) + b"\0"),
                  pack_sub("DATA", struct.pack("<6f", 0, 0, 0, 0, 0, 0))]
     subs.append(pack_sub("NAM0", struct.pack("<I", 0)))                  # no temporary references
     nb = b"".join(subs)
@@ -4586,11 +4852,11 @@ def write_patch(path, entries, masters, log, backup=True, extra=(),
         body.extend(infos.values())
     body = list(extra) + body
     hedr = (struct.pack("<fI", 1.3, 0) + b"mwdialog_check".ljust(32, b"\0")
-            + description.encode(ENC)[:255].ljust(256, b"\0")
+            + description.encode(ENC, MW_ERRORS)[:255].ljust(256, b"\0")
             + struct.pack("<I", len(body)))
     subs = [pack_sub("HEDR", hedr)]
     for name, mpath in masters:
-        subs.append(pack_sub("MAST", name.encode(ENC) + b"\0"))
+        subs.append(pack_sub("MAST", name.encode(ENC, MW_ERRORS) + b"\0"))
         subs.append(pack_sub("DATA", struct.pack("<Q", os.path.getsize(mpath))))
     hb = b"".join(subs)
     header = b"TES3" + struct.pack("<III", len(hb), 0, 0) + hb
@@ -4602,10 +4868,7 @@ def write_patch(path, entries, masters, log, backup=True, extra=(),
             bak = backup_path(path)
             shutil.copy2(path, bak)
             log.append((os.path.basename(path), "", f"previous patch backed up as {os.path.basename(bak)}"))
-    with open(path, "wb") as f:
-        f.write(header + b"".join(body))
-    if st is not None:
-        os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns))   # keep its load-order position
+    write_plugin_bytes(path, header + b"".join(body), keep_times=st)   # keeps its load-order position
     return len(groups), sum(len(g[1]) for g in groups.values())
 
 
@@ -4794,7 +5057,7 @@ def run_fix(args, plugins, bsas, data_dirs, report, world, only, hidden=frozense
         names = {"tex": "texture(s) to convert (DXT / mipmaps / power-of-two size, texconv)",
                  "abs": "model(s) whose absolute texture paths become relative",
                  "snd": "sound(s) to convert (mono / 44.1 kHz, ffmpeg)",
-                 "unused": f"unused or empty file(s) to move to their mod's Off\\unused\\ (--restore-unused)",
+                 "unused": "unused or empty file(s) to move to their mod's Off\\unused\\ (--restore-unused)",
                  "broken": "broken file(s) to keep in Off\\...\\broken\\, a stand-in put in their place",
                  "orphan": "orphaned animation(s) to move to Off\\...\\orphaned\\"}
         print("\n  Asset health:")
@@ -4830,15 +5093,15 @@ def run_fix(args, plugins, bsas, data_dirs, report, world, only, hidden=frozense
         try:
             n = apply_plan(paths[plugin], plugin, plan, world, log)
             print(f"  {plugin}: {n} change(s) written")
-        except (OSError, FormatError) as e:
-            print(f"  {plugin}: NOT changed ({e})")
+        except Exception as e:                       # one plugin's problem never stops the others halfway
+            print(f"  {plugin}: NOT changed ({type(e).__name__}: {e})")
 
     for plugin, fixes in item_esp.items():
         try:
             n = apply_item_fixes(paths[plugin], plugin, fixes, log, backup=plugin not in esp_plans)
             print(f"  {plugin}: {n} record(s) corrected")
-        except (OSError, FormatError) as e:
-            print(f"  {plugin}: NOT changed ({e})")
+        except Exception as e:                       # one plugin's problem never stops the others halfway
+            print(f"  {plugin}: NOT changed ({type(e).__name__}: {e})")
     if generated:
         made = write_generated(os.path.abspath(args.data_dir), os.path.dirname(os.path.abspath(args.data_dir)),
                                generated, log)
@@ -5048,7 +5311,7 @@ def run_fix(args, plugins, bsas, data_dirs, report, world, only, hidden=frozense
     done = set(esp_plans) | set(esm_plans) | set(item_esp) | set(item_esm) | set(OUR_PATCHES)
     others = sum(1 for i in report2.issues if i[0] == "ERROR" and i[1] not in done)
     print(f"  other plugins: {others} ERROR(s)")
-    more = sum(1 for f in report2.fixes if f[0] not in OUR_PATCHES
+    more = sum(1 for f in report2.fixes if not is_our_patch(f[0])
                and (only is None or f[0].lower() in only) and f[0].lower() not in world.unfixable)
     if more:
         print(f"\n{more} more fix(es) became possible because of these changes "
@@ -5240,8 +5503,7 @@ def index_masters(needs, lookup):
         if not path:
             continue
         print(f"  indexing master {os.path.basename(path)}", file=sys.stderr)
-        with open(path, "rb") as f:
-            data = f.read()
+        data = read_plugin_bytes(path)
         mmasters = [x.lower() for x in plugin_masters(data)]
         r, c = recs.setdefault(m, {}), cells.setdefault(m, {})
         for off, tag, flags, body in iter_records(data):
@@ -5267,7 +5529,11 @@ def index_masters(needs, lookup):
 
 
 def clean_cell(body, off, masters_l, own, infos, persistent):
-    """Clean one CELL against its masters' versions. Returns (new body or None to delete, [what])."""
+    """Clean one CELL against its masters' versions. Returns (new body or None to delete, [what]).
+    masters_l: the plugin's masters in MAST order (FRMR numbers count them); infos: the masters' versions of
+    this cell in LOAD order. Each part is compared with the version that wins before this plugin (the last
+    master that has it), never with just any master: a copy of an older master's value deliberately undoes
+    a later master's change and must stay."""
     head, pers, nam0, temp = split_cell(body, off)
     what = []
 
@@ -5279,7 +5545,8 @@ def clean_cell(body, off, masters_l, own, infos, persistent):
         if obj.lower() in persistent:            # tes3cmd: never clean instances of persistent objects
             return True
         dg = block_digest(block)
-        if any(info["refs"].get(bk) == dg for info in infos):
+        winner = next((info["refs"][bk] for info in reversed(infos) if bk in info["refs"]), None)
+        if winner == dg:
             what.append(f"duplicate object instance {obj} (#{bk[1]} from {bk[0]})")
             return False
         return True
@@ -5293,27 +5560,30 @@ def clean_cell(body, off, masters_l, own, infos, persistent):
     interior = dd is not None and len(dd) >= 4 and struct.unpack_from("<I", dd)[0] & 1
     if interior:
         ambi = next((d for n, d in head if n == "AMBI"), None)
-        if ambi is not None and any(info["head"].get("AMBI") == bytes(ambi) for info in infos):
+        last_ambi = next((info["head"]["AMBI"] for info in reversed(infos) if "AMBI" in info["head"]), None)
+        if ambi is not None and last_ambi == bytes(ambi):
             head = [x for x in head if x[0] != "AMBI"]
             what.append("redundant AMBI")
         wh = next((d for n, d in head if n == "WHGT"), None)
         if wh is not None and len(wh) >= 4:
             pw = struct.unpack_from("<f", wh)[0]
-            for info in infos:
+            for info in reversed(infos):            # the last master that sets a water height wins
                 mw = info["head"].get("WHGT")
                 mi = info["head"].get("INTV")   # Morrowind.esm keeps some water heights in INTV
                 mval = (struct.unpack_from("<f", mw)[0] if mw and len(mw) >= 4 else
                         struct.unpack_from("<i", mi)[0] if mi and len(mi) >= 4 else None)
-                if mval is not None and pw == mval:
+                if mval is None:
+                    continue
+                if pw == mval:
                     head = [x for x in head if x[0] != "WHGT"]
                     what.append("redundant WHGT")
-                    break
+                break
 
     n_subs = len(head) + sum(len(b) for b in new_pers + new_temp) + (1 if nam0 is not None else 0)
     if n_subs < 4 and all(n in JUNKCELL_SUBTYPES for n, _d in head) and not new_pers and not new_temp:
-        for info in infos:
-            if all(info["head"].get(n) == bytes(d) for n, d in head):
-                return None, what + ["junk cell (nothing new compared to its master)"]
+        last = infos[-1] if infos else None             # the master version this cell overrides
+        if last is not None and all(last["head"].get(n) == bytes(d) for n, d in head):
+            return None, what + ["junk cell (nothing new compared to its master)"]
     if not what:
         return body, []
     out = head + [x for b in new_pers for x in b]
@@ -5368,7 +5638,7 @@ def plugin_references(data):
                     refs.append((SPEAKER_SUBS[n], v))
             elif n == "SCVR" and len(d) > 5:
                 kind = COND_KINDS.get(chr(d[1]))
-                v = d[5:].decode(ENC, "replace").split("\0")[0]
+                v = d[5:].decode(ENC, MW_ERRORS).split("\0")[0]
                 if kind and v:
                     refs.append((kind, v))
     return refs
@@ -5433,8 +5703,9 @@ def remap_frmr(v, masters_from, merged_index, own_map, own_counter):
     return (merged_index[m] << 24) | ref, (m, ref)
 
 
-def build_merge(inputs, out_name, load_order, file_sizes, log):
+def build_merge(inputs, out_name, load_order, file_sizes, log, master_paths=None):
     """Merge `inputs` [(name, data)] in order. Later inputs win on conflicts, as if loaded in that order.
+    master_paths (name lower -> path) gives the size of a master file_sizes doesn't have.
     Returns the merged plugin's bytes and a summary dict."""
     # masters: every input's masters, in load order (unknown ones at the end, in first-seen order)
     pos = {n.lower(): i for i, n in enumerate(load_order)}
@@ -5470,6 +5741,8 @@ def build_merge(inputs, out_name, load_order, file_sizes, log):
                 topic = topics.setdefault(nm.lower(), {"dial": raw, "infos": OrderedDict(), "src": set()})
                 if bytes(first_sub(body, b"DATA") or b"")[:1] != bytes(first_sub(topic["dial"][16:], b"DATA") or b"")[:1]:
                     log.append(f"warning: topic '{nm}' has a different type in {name}; the first one is kept")
+                elif not (flags & 0x20 or has_sub(body, b"DELE")):
+                    topic["dial"] = raw                # the later input's topic record wins, as in the game
                 topic["src"].add(name)
                 continue
             if tag == "INFO":
@@ -5491,6 +5764,7 @@ def build_merge(inputs, out_name, load_order, file_sizes, log):
                 head, pers, _nam0, temp = split_cell(body, off)
                 c = cells.setdefault(key, {"head": head, "refs": OrderedDict(), "label": label})
                 c["head"] = head                   # the later input's cell settings win
+                c["flags"] = flags                 # ... and its record flags (persistent, blocked...)
                 for is_temp, blocks in ((False, pers), (True, temp)):
                     for b in blocks:
                         b = [list(x) for x in b]
@@ -5531,18 +5805,28 @@ def build_merge(inputs, out_name, load_order, file_sizes, log):
             subs.append(["NAM0", struct.pack("<I", len(temp))])
             subs += [x for b in temp for x in b]
         nb = b"".join(pack_sub(n, d) for n, d in subs)
-        out.append(b"CELL" + struct.pack("<III", len(nb), 0, 0) + nb)
+        out.append(b"CELL" + struct.pack("<III", len(nb), 0, c.get("flags", 0)) + nb)
     for tkey, t in topics.items():
         out.append(t["dial"])
         out.extend(t["infos"].values())
 
     desc = ("Merged by mwdialog_check.py from: " + ", ".join(n for n, _d in inputs))[:255]
     hedr = struct.pack("<fI", 1.3, 0) + b"mwdialog_check merge".ljust(32, b"\0") \
-        + desc.encode(ENC, "replace").ljust(256, b"\0") + struct.pack("<I", len(out))
+        + desc.encode(ENC, MW_ERRORS).ljust(256, b"\0") + struct.pack("<I", len(out))
     head = pack_sub("HEDR", hedr)
     for m in masters:
-        head += pack_sub("MAST", mnames[m].encode(ENC, "replace") + b"\0")
-        head += pack_sub("DATA", struct.pack("<Q", file_sizes.get(m, 0)))
+        size = file_sizes.get(m)
+        if size is None and master_paths and m in master_paths:
+            try:
+                size = os.path.getsize(master_paths[m])
+            except OSError:
+                size = None
+        if size is None:
+            log.append(f"warning: size of master '{mnames[m]}' unknown (not installed?); written as 0 - "
+                       f"the game may warn about it until the merge is resaved in the CS")
+            size = 0
+        head += pack_sub("MAST", mnames[m].encode(ENC, MW_ERRORS) + b"\0")
+        head += pack_sub("DATA", struct.pack("<Q", size))
     tes3 = b"TES3" + struct.pack("<III", len(head), 0, 0) + head
     summary = {"records": len(out), "masters": [mnames[m] for m in masters], "conflicts": conflicts,
                "topics": len(topics), "infos": sum(len(t["infos"]) for t in topics.values()),
@@ -5646,7 +5930,8 @@ def run_merge(args, plugins, bsas, data_dirs):
 
     log = []
     try:
-        merged, summary = build_merge(chosen, os.path.basename(out_path), [n for n, _p in plugins], sizes, log)
+        merged, summary = build_merge(chosen, os.path.basename(out_path), [n for n, _p in plugins], sizes, log,
+                                      {n.lower(): p for n, p in plugins})
     except ValueError as e:
         print(f"\n--merge: {e}", file=sys.stderr)
         return 2
@@ -5716,8 +6001,8 @@ def run_merge(args, plugins, bsas, data_dirs):
         f.write(f"\n==== {datetime.datetime.now():%Y-%m-%d %H:%M:%S} merge ====\n")
         f.write(f"{os.path.basename(out_path)}: merged {', '.join(n for n, _d in chosen)}\n")
     if not in_data:
-        print(f"\n  It's beside the originals, not in Data Files: deploy in Vortex (or copy it into Data Files) "
-              f"so the game sees it.")
+        print("\n  It's beside the originals, not in Data Files: deploy in Vortex (or copy it into Data Files) "
+              "so the game sees it.")
     print("\n  Next: deactivate the merged inputs (they are in the merge now) and activate "
           f"{os.path.basename(out_path)}, e.g. with --add-all-esp. Keep the mods they patch active.")
     return 0
@@ -5819,7 +6104,7 @@ def set_game_files(ini, order, note):
 def write_ini_game_files(ini, order):
     """Rewrite Morrowind.ini's [Game Files] with `order` (backup first). Returns the backup name."""
     raw = open(ini, "rb").read()
-    text = raw.decode(ENC, errors="replace")
+    text = raw.decode(ENC, MW_ERRORS)
     nl = "\r\n" if "\r\n" in text else "\n"
     lines = text.splitlines()
     start = end = None
@@ -5837,12 +6122,20 @@ def write_ini_game_files(ini, order):
         new_lines = lines + ["", "[Game Files]"] + body
     else:
         new_lines = lines[:start + 1] + body + ([""] if end < len(lines) else []) + lines[end:]
-    backup = bak_home(ini) + ".mwdialog-play.bak"   # one backup, replaced each time
+    base = bak_home(ini)
+    original = base + ".mwdialog-original.bak"        # the ini as it was before these tools first changed it
+    if not os.path.exists(original):
+        with open(original, "wb") as f:
+            f.write(raw)
+    backup = base + ".mwdialog-play.bak"              # the latest previous version (same name as before)
     with open(backup, "wb") as f:
         f.write(raw)
-    with open(ini, "wb") as f:
-        f.write((nl.join(new_lines) + nl).encode(ENC, errors="replace"))
-    return os.path.basename(backup)
+    stamped = f"{base}.mwdialog-{time.strftime('%Y%m%d-%H%M%S')}.bak"   # and a dated one, never replaced
+    if not os.path.exists(stamped):
+        with open(stamped, "wb") as f:
+            f.write(raw)
+    safe_write_bytes(ini, (nl.join(new_lines) + nl).encode(ENC, MW_ERRORS))
+    return os.path.basename(stamped)
 
 
 def lua_named_plugins(data_dir):
@@ -5882,7 +6175,7 @@ def plugin_profile(path):
             prof["scripts"] = True
             tx = first_sub(body, b"SCTX")
             if tx:                                   # names a script uses (resolved when it loads)
-                for q, w in re.findall(r'"([^"\n]+)"|([A-Za-z_][\w\'\-]*)', tx.decode(ENC, "replace")):
+                for q, w in re.findall(r'"([^"\n]+)"|([A-Za-z_][\w\'\-]*)', tx.decode(ENC, MW_ERRORS)):
                     prof["refs"].add((q or w).lower())
         if tag in AUTO_SKIP_TAGS:
             prof["cells"] = True
@@ -5903,7 +6196,7 @@ def plugin_profile(path):
                 elif n in ("ONAM", "ANAM", "RNAM", "CNAM", "FNAM", "DNAM"):
                     prof["refs"].add(cstr(d).lower())
                 elif n == "SCVR" and len(d) > 5:
-                    prof["refs"].add(d[5:].decode(ENC, "replace").split("\0")[0].lower())
+                    prof["refs"].add(d[5:].decode(ENC, MW_ERRORS).split("\0")[0].lower())
             continue
         topic = None
         rid = record_id(tag, body)
@@ -5996,7 +6289,7 @@ def run_auto_merge(args, plugins, bsas, data_dirs):
             why = "could not be read"
         elif not low.endswith(".esp"):
             why = None if False else "master file"
-        elif n in OUR_PATCHES or low in other_merges or low in NOT_A_MOD:
+        elif is_our_patch(n) or low in other_merges or low in NOT_A_MOD:
             why = "made by mwdialog_check"
         elif pr["scripts"]:
             why = "has scripts"
@@ -6135,7 +6428,8 @@ def run_auto_merge(args, plugins, bsas, data_dirs):
     sizes = {n.lower(): profs[n.lower()]["size"] for n, _p in order if n.lower() in profs}
     log = []
     try:
-        merged, summary = build_merge(inputs, out_name, [n for n, _p in order], sizes, log)
+        merged, summary = build_merge(inputs, out_name, [n for n, _p in order], sizes, log,
+                                      {n.lower(): p for n, p in order})
     except ValueError as e:
         print(f"\n--auto-merge: {e}", file=sys.stderr)
         return 2
@@ -6249,25 +6543,20 @@ def run_unmerge(args, plugins):
 
 def write_inplace(path, out, backup=True):
     """Write records over a plugin in place: .bak first, record count set, date kept (hard links stay)."""
-    head = bytearray(out[0])
-    if head.find(b"HEDR") == 16:
-        struct.pack_into("<I", head, 16 + 8 + 296, len(out) - 1)
-        out[0] = bytes(head)
+    out[0] = set_hedr_count(out[0], len(out) - 1)
     st = os.stat(path)
     bak = None
     if backup:
         bak = backup_path(path)
         shutil.copy2(path, bak)
-    with open(path, "wb") as f:
-        f.write(b"".join(out))
-    os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns))
+    write_plugin_bytes(path, b"".join(out), keep_times=st)
     return bak
 
 
 def clean_targets(plugins, only):
     for name, path in plugins:
         low = name.lower()
-        if not low.endswith(FIXABLE_EXT) or low in NOT_A_MOD or name in OUR_PATCHES:
+        if not low.endswith(FIXABLE_EXT) or low in NOT_A_MOD or is_our_patch(name):
             continue
         if only is not None and low not in only:
             continue
@@ -6313,10 +6602,12 @@ def run_clean(args, plugins, only):
     recs, cells = index_masters(needs, lookup)
 
     results = {}                                      # name -> (records out, Counter, details)
+    load_pos = {n.lower(): i for i, (n, _p) in enumerate(plugins)}
     for name, (path, masters, persistent) in info.items():
         with open(path, "rb") as f:
             data = f.read()
-        masters_l = [m.lower() for m in masters]
+        masters_l = [m.lower() for m in masters]         # MAST order: what FRMR master numbers count
+        by_load = sorted(masters_l, key=lambda x: load_pos.get(x, -1))   # load order: the last one wins
         out, stats, details = [], Counter(), []
         for off, tag, flags, body in iter_records(data):
             raw = data[off:off + 16 + len(body)]
@@ -6332,13 +6623,16 @@ def run_clean(args, plugins, only):
                     continue
             if tag in CLEAN_DUP_TYPES and rid is not None and masters_l:
                 dg = (digest(body), flags)
-                if any(recs.get(m, {}).get(rid) == dg for m in masters_l):
+                # compare with the version this plugin overrides (the last master that has the record), not
+                # with any master: a copy of an earlier master's version deliberately undoes a later one
+                winner = next((recs[m][rid] for m in reversed(by_load) if rid in recs.get(m, {})), None)
+                if winner == dg:
                     stats["duplicate record"] += 1
                     details.append(f"duplicate record {tag} {rid[1] if tag != 'CELL' else cell_key(body)[1]}")
                     continue
             if tag == "CELL" and masters_l:
                 key, label = cell_key(body)
-                infos = [cells[m][key] for m in masters_l if key in cells.get(m, {})]
+                infos = [cells[m][key] for m in by_load if key in cells.get(m, {})]
                 if infos:
                     nb, what = clean_cell(body, off, masters_l, name.lower(), infos, persistent)
                     for w in what:
@@ -6371,7 +6665,11 @@ def run_clean(args, plugins, only):
     with open(args.fix_log, "a", encoding="utf-8") as f:
         f.write(f"\n==== {datetime.datetime.now():%Y-%m-%d %H:%M:%S} clean ====\n")
         for name, (path, out, stats, details) in results.items():
-            bak = write_inplace(path, out)
+            try:
+                bak = write_inplace(path, out)
+            except Exception as e:                   # one plugin's problem never stops the others halfway
+                print(f"  {name}: NOT cleaned ({type(e).__name__}: {e})")
+                continue
             f.write("".join(f"{name}: cleaned {d}\n" for d in details))
             f.write(f"{name}: backup saved as {os.path.basename(bak)}\n")
     print(f"  Cleaned {len(results)} plugin(s); details in {args.fix_log}")
@@ -6412,41 +6710,56 @@ def parse_levlist(tag, body):
     return flags, chance, entries
 
 
-def merge_levlist(tag, defs, known=None):
-    """tes3cmd's merge: start from the first definition; each later one adds or changes (id, level)
-    counts relative to the first and removes what it dropped from the first; last wins flags/chance."""
-    first, levlist, casing = None, {}, {}
-    for _plugin, body, _deleted in defs:
-        _f, _c, entries = parse_levlist(tag, body)
+def merge_levlist(tag, defs, known=None, masters_of=None):
+    """Merge the definitions [(plugin, body, deleted)] of one leveled list, in load order. Start from the
+    first; each later definition's changes are measured against the version it was made from - the latest
+    earlier definition by one of its masters (masters_of(plugin) -> lowercase names of all its masters,
+    masters' masters included), else the first - and applied: (id, level) entries it adds or whose count it
+    changes, and entries it removed (so a patch can take out what its mod added). Flags and chance-none come
+    from the last definition that changed them. Without masters_of every definition is measured against the
+    first (tes3cmd's merge)."""
+    levlist, casing = {}, {}
+    parsed = []
+    for plugin, body, _deleted in defs:
+        f, c, entries = parse_levlist(tag, body)
         cur = Counter()
         for eid, lvl in entries:
             cur[(eid.lower(), lvl)] += 1
             casing[eid.lower()] = eid
-        if first is None:
-            first = cur
-            levlist = dict(cur)
-            continue
-        for k, n in cur.items():                     # additions and changes
-            if first.get(k) != n:
-                levlist[k] = n
-        first_ids = {e for e, _l in first}
+        parsed.append(((plugin or "").lower(), f, c, cur))
+    flags, chance = parsed[0][1], parsed[0][2]
+    levlist = dict(parsed[0][3])
+    for k in range(1, len(parsed)):
+        plugin, f, c, cur = parsed[k]
+        base = 0
+        if masters_of is not None:
+            mine = masters_of(plugin)
+            base = next((j for j in range(k - 1, -1, -1) if parsed[j][0] in mine), 0)
+        _pp, pf, pc, par = parsed[base]
+        for key, n in cur.items():                   # additions and changes
+            if par.get(key) != n:
+                levlist[key] = n
+        par_ids = {e for e, _l in par}
         cur_ids = {e for e, _l in cur}
-        for k in first:                              # removals from the first definition
-            if k[0] not in cur_ids or k not in cur:
-                levlist.pop(k, None)
-        for e in first_ids - cur_ids:
-            for k in [k for k in levlist if k[0] == e]:
-                levlist.pop(k, None)
-    flags, chance, _e = parse_levlist(tag, defs[-1][1])
+        for key in par:                              # removals from the version it was made from
+            if key not in cur:
+                levlist.pop(key, None)
+        for e in par_ids - cur_ids:
+            for key in [key for key in levlist if key[0] == e]:
+                levlist.pop(key, None)
+        if f != pf:
+            flags = f
+        if c != pc:
+            chance = c
     if known is not None:                            # an entry no active plugin defines: the game can't find it
         levlist = {k: n for k, n in levlist.items() if k[0] in known}
     out = sorted(((lvl, eid) for (eid, lvl), n in levlist.items() for _ in range(n)))
     elem = "CNAM" if tag == "LEVC" else "INAM"
     name = cstr(first_sub(defs[-1][1], b"NAME"))
-    subs = [pack_sub("NAME", name.encode(ENC) + b"\0"), pack_sub("DATA", struct.pack("<I", flags)),
+    subs = [pack_sub("NAME", name.encode(ENC, MW_ERRORS) + b"\0"), pack_sub("DATA", struct.pack("<I", flags)),
             pack_sub("NNAM", bytes([chance])), pack_sub("INDX", struct.pack("<I", len(out)))]
     for lvl, eid in out:
-        subs += [pack_sub(elem, casing[eid].encode(ENC) + b"\0"), pack_sub("INTV", struct.pack("<H", lvl))]
+        subs += [pack_sub(elem, casing[eid].encode(ENC, MW_ERRORS) + b"\0"), pack_sub("INTV", struct.pack("<H", lvl))]
     nb = b"".join(subs)
     return tag.encode("ascii") + struct.pack("<III", len(nb), 0, 0) + nb, len(out)
 
@@ -6473,13 +6786,17 @@ MERGE_LISTS = {"NPCO": lambda d: cstr(d[4:36]).lower() if len(d) >= 36 else None
 def merge_fields(tag, body):
     """A record as [(field, value)] in order. A field is a subrecord, or a run of related ones (AI packages,
     travel destinations, body parts, repeated subrecords) kept as one value; inventory and spell lists are
-    {key: data} so each entry merges on its own."""
+    {(key, occurrence): data} so each entry merges on its own (an item listed twice is two entries)."""
     groups = MERGE_GROUPS.get(tag, {})
     out, idx = [], {}
+    seen_keys = Counter()
     prev = None
     for n, d in iter_subs(body):
         if n in MERGE_LISTS:
             k = MERGE_LISTS[n](d)
+            if k is not None:
+                seen_keys[(n, k)] += 1
+                k = (k, seen_keys[(n, k)])
             if n not in idx:
                 idx[n] = len(out)
                 out.append([n, {}])
@@ -6559,7 +6876,7 @@ def merge_object(tag, versions, parent_of, known, defined=None, file_ok=None):
                     merged[f] = last[f]
     for f in MERGE_LISTS:                            # entries for things no active plugin defines: left out
         if f in merged and known is not None:
-            merged[f] = {e: d for e, d in merged[f].items() if e in known or e in (last.get(f) or {})}
+            merged[f] = {e: d for e, d in merged[f].items() if e[0] in known or e in (last.get(f) or {})}
     order = list(orders[-1])
     for o in reversed(orders[:-1]):
         for i, f in enumerate(o):
@@ -6670,33 +6987,33 @@ def merged_objects(plugins, known=None, file_ok=None):
             closure[n] = seen
         return closure[n]
     print("  Reading objects several plugins change...", file=sys.stderr)
-    want = {t.encode("ascii") for t in MERGE_TAGS}
+    want = set(MERGE_TAGS)
     versions = defaultdict(list)                     # (tag, id) -> [(plugin index, digest, offset, deleted)]
     defined = set()                                  # every id an active plugin defines (scripts too)
     for i, (n, p) in enumerate(order):
         try:
-            data = open(p, "rb").read()
-        except OSError:
+            data = read_plugin_bytes(p)
+            recs_i = list(iter_records(data))        # a damaged file is left out, not half-read
+        except (OSError, FormatError) as e:
+            print(f"  {n}: left out of the object merge ({e})", file=sys.stderr)
             continue
-        pos, end = 0, len(data)
-        while pos + 16 <= end:
-            tag = data[pos:pos + 4]
-            size, _u, fl = struct.unpack_from("<III", data, pos + 4)
-            if tag == b"SCPT":
-                hd = first_sub(data[pos + 16:pos + 16 + size], b"SCHD")
-                if hd:
-                    defined.add(cstr(hd[:32]).lower())
-            elif tag not in (b"CELL", b"INFO", b"DIAL", b"LAND", b"PGRD", b"TES3"):
-                nm = first_sub(data[pos + 16:pos + 16 + size], b"NAME")
-                if nm:
-                    defined.add(cstr(nm).lower())
-            if tag in want:
-                body = data[pos + 16:pos + 16 + size]
-                nm = first_sub(body, b"NAME")
-                if nm:
-                    dele = bool(fl & 0x20) or first_sub(body, b"DELE") is not None
-                    versions[(tag.decode(), cstr(nm).lower())].append((i, hashlib.md5(body).digest(), pos, dele))
-            pos += 16 + size
+        for pos, tag, fl, body in recs_i:
+            try:
+                if tag == "SCPT":
+                    hd = first_sub(body, b"SCHD")
+                    if hd:
+                        defined.add(cstr(hd[:32]).lower())
+                elif tag not in ("CELL", "INFO", "DIAL", "LAND", "PGRD", "TES3"):
+                    nm = first_sub(body, b"NAME")
+                    if nm:
+                        defined.add(cstr(nm).lower())
+                if tag in want:
+                    nm = first_sub(body, b"NAME")
+                    if nm:
+                        dele = bool(fl & 0x20) or first_sub(body, b"DELE") is not None
+                        versions[(tag, cstr(nm).lower())].append((i, hashlib.md5(body).digest(), pos, dele))
+            except FormatError:
+                continue
     cands = {k: v for k, v in versions.items() if len(v) >= 3 and not any(x[3] for x in v)
              and len({x[1] for x in v[1:]}) >= 2}
     need = defaultdict(set)
@@ -6705,7 +7022,7 @@ def merged_objects(plugins, known=None, file_ok=None):
             need[i].add(off)
     bodies = {}
     for i, offs in need.items():
-        data = open(order[i][1], "rb").read()
+        data = read_plugin_bytes(order[i][1])
         for off in offs:
             size, _u, fl = struct.unpack_from("<III", data, off + 4)
             bodies[(i, off)] = (data[off + 16:off + 16 + size], fl)
@@ -6738,20 +7055,56 @@ def run_multipatch(args, plugins, world):
     used = getattr(world, "script_cells", set())
     renamed = [(c, t) for c, t in sorted(world.rencells.items()) if t["reverted"] and t["rec"]
                and t["orig"].strip().lower() not in used]       # a master's name that scripts use wins
+    heads = getattr(world, "cell_heads", {})
+
+    def cell_header(key, nm, d, ambi=None):
+        """The latest header of the cell (region, water, map colour... as the winning record has them), with
+        only NAME (and for fog, DATA and AMBI) changed; just NAME/DATA(/AMBI) if no header was seen."""
+        head = heads.get(key)
+        if not head:
+            subs = [("NAME", nm), ("DATA", d)] + ([("AMBI", ambi)] if ambi is not None else [])
+        else:
+            subs = []
+            for n, v in head:
+                if n == "NAME":
+                    v = nm
+                elif n == "DATA" and ambi is not None:
+                    v = d
+                elif n == "AMBI" and ambi is not None:
+                    v = ambi
+                subs.append((n, v))
+            if not any(n == "NAME" for n, _v in subs):
+                subs.insert(0, ("NAME", nm))
+            if ambi is not None and not any(n == "AMBI" for n, _v in subs):
+                subs.append(("AMBI", ambi))
+        return b"".join(pack_sub(n, v) for n, v in subs)
     for (x, y), t in renamed:
         nm, d = t["rec"]
-        nb = pack_sub("NAME", nm) + pack_sub("DATA", d)
+        nb = cell_header(("e", x, y), nm, d)
         recs.append(b"CELL" + struct.pack("<III", len(nb), 0, 0) + nb)
         notes.append(f"cell ({x}, {y}): keeps the name '{t['name']}' given by {t['plug']}")
     for low in sorted(world.fogcells):
         plugin, nm, d, ambi = world.fogcells[low]
         d = d[:8] + struct.pack("<f", 0.01) + d[12:]
         ambi = ambi[:12] + struct.pack("<f", 0.01) + ambi[16:]
-        nb = pack_sub("NAME", nm) + pack_sub("DATA", d) + pack_sub("AMBI", ambi)
+        nb = cell_header(("i", low), nm, d, ambi)
         recs.append(b"CELL" + struct.pack("<III", len(nb), 0, 0) + nb)
         notes.append(f"cell '{cstr(nm)}': fog density 0 (from {plugin}) set to 0.01")
     counts = Counter()
     known = set(getattr(world, "all_ids", {}) or ()) or None     # ids an active plugin defines
+    mclosure = {}
+
+    def masters_of(plugin):
+        """Every master of `plugin` (lowercase), masters' masters included."""
+        if plugin not in mclosure:
+            seen, stack = set(), [m.lower() for m in world.masters.get(plugin, [])]
+            while stack:
+                x = stack.pop()
+                if x not in seen:
+                    seen.add(x)
+                    stack += [m.lower() for m in world.masters.get(x, [])]
+            mclosure[plugin] = seen
+        return mclosure[plugin]
     for tag in ("LEVC", "LEVI"):
         for (t, low), defs in sorted(world.levlists.items()):
             if t != tag:
@@ -6761,7 +7114,7 @@ def run_multipatch(args, plugins, world):
             defs = [x for x in defs if not x[2]]
             if len(defs) < 3:
                 continue                             # once: nothing to merge; twice: the last already wins
-            rec, n = merge_levlist(tag, defs, known)
+            rec, n = merge_levlist(tag, defs, known, masters_of)
             recs.append(rec)
             counts[tag] += 1
             notes.append(f"{tag} {cstr(first_sub(defs[-1][1], b'NAME'))}: merged from "
@@ -7437,7 +7790,7 @@ def run_cell_conflicts(args, plugins, collect=False):
             c["score"] += 100000
     # a patch for both - a plugin with both as masters that has records for every cell where they conflict -
     # has already decided those cells: the conflict is void. One that covers only some cells is mentioned.
-    patched, partly = {}, {}
+    patched = {}
     active = list(pos)
     for (a, b), c in list(pairs.items()):
         cells = {t[0] for t in c["place"]} | {t[0] for t in c["refs"]} | {t[0] for t in c["settings"]}
@@ -7508,7 +7861,7 @@ def run_cell_conflicts(args, plugins, collect=False):
     print(f"  {len(pairs)} pair(s) of plugins conflict; {len(majors)} major"
           + (f", {len(doubled)} of them DOUBLED (the same objects placed twice)" if doubled else "")
           + ". Most serious first.")
-    print(f"  (pairs where one plugin is a master of the other are left out: one was made with the other in view)")
+    print("  (pairs where one plugin is a master of the other are left out: one was made with the other in view)")
     shown = ranked if args.conflict_all else ranked[:args.conflict_top]
     remembered = read_conflict_answers(os.path.dirname(os.path.abspath(args.data_dir)))
     _rp = os.path.join(os.path.dirname(os.path.abspath(args.data_dir)), RULES_FILE)
@@ -7576,7 +7929,7 @@ def run_cell_conflicts(args, plugins, collect=False):
                   ", ".join(f"{cell_name(k)} ({n})" for k, n in cells.most_common(4))
                   + (f" and {len(cells) - 4} more cell(s)" if len(cells) > 4 else ""))
         if c["settings"]:
-            print(f"    both change the same cell settings:")
+            print("    both change the same cell settings:")
             for key, field, ev, lv in c["settings"][:5]:
                 print(f"      {cell_name(key)} {CELL_SETTING_NAMES[field]}: {_show_setting(field, ev)}  ->  "
                       f"{_show_setting(field, lv)} (wins)")
@@ -7960,10 +8313,10 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
                 auto_known = True
                 if last:
                     ans = default or "s"
-                    print(f"    (taking last time's answers from here on; new conflicts are still asked)")
+                    print("    (taking last time's answers from here on; new conflicts are still asked)")
                 else:
-                    print(f"    (taking last time's answers from here on; new conflicts like this one are still "
-                          f"asked)")
+                    print("    (taking last time's answers from here on; new conflicts like this one are still "
+                          "asked)")
                     try:
                         ans = input("  > ").strip().lower()
                         while ans not in valid:
@@ -8199,7 +8552,7 @@ def fix_performers(args, plugins):
         for x in drop:
             # a deleted reference is FRMR, NAME, DELE and nothing else (the Construction Set's form): the
             # game ends the reference at DELE, and anything after it (its DATA) makes it reload the cell
-            oid = next((d for s_, d in x["blk"] if s_ == "NAME"), x["oid"].encode(ENC) + b"\0")
+            oid = next((d for s_, d in x["blk"] if s_ == "NAME"), x["oid"].encode(ENC, MW_ERRORS) + b"\0")
             blk = [["FRMR", struct.pack("<I", (midx[x["owner"]] << 24) | x["idx"])], ["NAME", oid],
                    ["DELE", struct.pack("<I", 0)]]
             (pers if x["grp"] == "p" else temp).append(blk)
@@ -8213,16 +8566,15 @@ def fix_performers(args, plugins):
         recs += b"CELL" + struct.pack("<III", len(body), 0, 0) + body
     desc = "Doubled bards: keeps the performers of the plugin loading last (rebuilt by mwdialog_check --fix)"
     hedr = (struct.pack("<fI", 1.3, 0) + b"mwdialog_check".ljust(32, b"\0")
-            + desc.encode(ENC, "replace")[:255].ljust(256, b"\0") + struct.pack("<I", len(drops)))
+            + desc.encode(ENC, MW_ERRORS)[:255].ljust(256, b"\0") + struct.pack("<I", len(drops)))
     subs = [pack_sub("HEDR", hedr)]
     for mname in masters:
-        subs += [pack_sub("MAST", mname.encode(ENC) + b"\0"),
+        subs += [pack_sub("MAST", mname.encode(ENC, MW_ERRORS) + b"\0"),
                  pack_sub("DATA", struct.pack("<Q", os.path.getsize(os.path.join(data_dir, mname))))]
     hb = b"".join(subs)
     if os.path.exists(out_path):
         shutil.copy2(out_path, backup_path(out_path))
-    with open(out_path, "wb") as f:
-        f.write(b"TES3" + struct.pack("<III", len(hb), 0, 0) + hb + recs)
+    write_plugin_bytes(out_path, b"TES3" + struct.pack("<III", len(hb), 0, 0) + hb + recs)
     when = max(os.path.getmtime(os.path.join(data_dir, mname)) for mname in masters) + 60
     os.utime(out_path, (when, when))
     cur = read_load_order(args) or []
@@ -8448,14 +8800,14 @@ def fix_cell_winners(args, plugins):
                 if has(blk, "DELE"):
                     continue
                 oid = name_in(blk)
-                if oid.lower() in actor_ids or (oid and oid.lower().encode(ENC, "replace") in text):
+                if oid.lower() in actor_ids or (oid and oid.lower().encode(ENC, MW_ERRORS) in text):
                     kept.append(oid)
                     kept_bk[cl].add(bk)
                     continue
                 dest = next((cstr(d) for s_, d in blk if s_ == "DNAM"), None)
                 if dest:
                     gone_doors.append(dest)
-                nm = next((d for s_, d in blk if s_ == "NAME"), oid.encode(ENC) + b"\0")
+                nm = next((d for s_, d in blk if s_ == "NAME"), oid.encode(ENC, MW_ERRORS) + b"\0")
                 put(key, grp, bk, [["FRMR", b""], ["NAME", nm], ["DELE", struct.pack("<I", 0)]])
                 removed.append(oid)
             else:                                      # someone else's object the loser changed or deleted
@@ -8620,7 +8972,6 @@ def fix_cell_winners(args, plugins):
     # ---- objects that came with something another mod moved: a mod puts its own objects by an original
     # piece (logs in a fireplace, a candle on a shelf), and another mod it doesn't know about moves that
     # piece across the room. Its objects stay where the piece used to be; they're moved after it.
-    names_l = [n.lower() for n, _p in order]
     closure_all = {}
 
     def knows(a, b):
@@ -8933,16 +9284,15 @@ def fix_cell_winners(args, plugins):
         count += 1
     desc = "Rebuilt interiors: the chosen mod's version wins (rebuilt by mwdialog_check --fix)"
     hedr = (struct.pack("<fI", 1.3, 0) + b"mwdialog_check".ljust(32, b"\0")
-            + desc.encode(ENC, "replace")[:255].ljust(256, b"\0") + struct.pack("<I", count))
+            + desc.encode(ENC, MW_ERRORS)[:255].ljust(256, b"\0") + struct.pack("<I", count))
     subs = [pack_sub("HEDR", hedr)]
     for mname in masters:
-        subs += [pack_sub("MAST", mname.encode(ENC) + b"\0"),
+        subs += [pack_sub("MAST", mname.encode(ENC, MW_ERRORS) + b"\0"),
                  pack_sub("DATA", struct.pack("<Q", os.path.getsize(os.path.join(data_dir, mname))))]
     hb = b"".join(subs)
     if os.path.exists(out_path):
         shutil.copy2(out_path, backup_path(out_path))
-    with open(out_path, "wb") as f:
-        f.write(b"TES3" + struct.pack("<III", len(hb), 0, 0) + hb + recs)
+    write_plugin_bytes(out_path, b"TES3" + struct.pack("<III", len(hb), 0, 0) + hb + recs)
     when = max(os.path.getmtime(os.path.join(data_dir, m)) for m in masters) + 60
     os.utime(out_path, (when, when))
     cur = read_load_order(args) or []
@@ -9014,7 +9364,7 @@ def fix_omwaddon_masters(args):
             sname, sdata = subs[i]
             if sname == "MAST" and cstr(sdata).lower() in ren:
                 new = ren[cstr(sdata).lower()]
-                out_subs.append(("MAST", new.encode(ENC) + b"\0"))
+                out_subs.append(("MAST", new.encode(ENC, MW_ERRORS) + b"\0"))
                 if i + 1 < len(subs) and subs[i + 1][0] == "DATA":
                     out_subs.append(("DATA", struct.pack("<Q", os.path.getsize(os.path.join(data_dir, new)))))
                     i += 1
@@ -9057,20 +9407,29 @@ def _rebuild(raw, subs):
     return raw[:4] + struct.pack("<I", len(body)) + raw[8:16] + body
 
 
+# string fields that hold another object's id (outside INFO/SCPT/DIAL, which are only reported)
+ID_REF_FIELDS = frozenset(("ENAM", "SCRI", "NPCS", "BNAM", "CNAM", "RNAM", "ANAM", "KNAM", "TNAM", "XSOL"))
+
+
 def fix_long_names(args, plugins, bsas):
     """--fix: strings longer than the game keeps (it cuts them at 31 characters and warns at startup):
       - BODY/ARMO/CLOT model paths: the mesh gets a copy under a shorter name (a hard link where it can,
         so it takes no space), and the record points to that
       - object ids of 32+ characters: renamed to their first 31 (what the game already cuts them to), in
-        every active plugin: the record, inventories (NPCO) and leveled lists. Ids that scripts or
-        dialogue use are only reported.
-    .esp files only (.bak first, dates kept); an .esm is reported."""
+        every active plugin: the record, inventories (NPCO/NPCS), leveled lists, placed references and the
+        other fields that name an object (script, enchantment, owner, key, trap, soul, race, class, body
+        part...). Ids that scripts or dialogue use are only reported, as are ids whose short name another
+        id already has or shares (renaming would merge two objects).
+    .esp files only (.bak first, dates kept); an .esm is reported. With --openmw-cfg it only reports (the
+    data folders there aren't one Data Files folder to put short meshes in)."""
     data_dir = os.path.abspath(args.data_dir)
     game_dir = os.path.dirname(data_dir)
+    report_only = bool(getattr(args, "openmw_cfg", None))
     models, ids, users = [], {}, set()
+    all_ids = set()
     datas = {}
     for name, path in plugins:
-        if name in OUR_PATCHES:
+        if is_our_patch(name):
             continue
         try:
             with open(path, "rb") as f:
@@ -9083,6 +9442,8 @@ def fix_long_names(args, plugins, bsas):
             if tag in NO_ID_TAGS:
                 continue
             nm = first_sub(body, b"NAME")
+            if nm is not None:
+                all_ids.add(cstr(nm).lower())
             if nm is not None and len(cstr(nm)) > 31:
                 ids.setdefault(cstr(nm).lower(), (cstr(nm), name, tag))
             if tag in LIMITED_MODEL_TAGS:
@@ -9095,9 +9456,9 @@ def fix_long_names(args, plugins, bsas):
     for name, (path, data, recs) in datas.items():
         low = data.lower()
         for idl in list(ids):
-            if idl.encode("latin-1", "replace") in low:
+            if idl.encode(ENC, MW_ERRORS) in low:
                 for off, tag, flags, body in recs:
-                    if tag in ("SCPT", "INFO") and idl.encode("latin-1", "replace") in body.lower():
+                    if tag in ("SCPT", "INFO") and idl.encode(ENC, MW_ERRORS) in body.lower():
                         users.add(idl)
                         break
     print("\n" + "=" * 70 + "\nNAMES LONGER THAN THE GAME KEEPS (31 characters)\n" + "=" * 70)
@@ -9107,8 +9468,8 @@ def fix_long_names(args, plugins, bsas):
             for nm, where in bsa_index(b).items():
                 if nm.startswith("meshes\\"):
                     in_bsa.setdefault(nm[7:], (b, where))
-        except OSError:
-            pass
+        except (OSError, struct.error, FormatError) as e:
+            print(f"  note: couldn't read {os.path.basename(b)} ({e})")
     renames = {}                                     # long model (lower) -> short
     for name, tag, rid, mpath in models:
         key = mpath.lower().replace("/", "\\")
@@ -9116,17 +9477,23 @@ def fix_long_names(args, plugins, bsas):
             continue
         renames[key] = _short_mesh(mpath.replace("/", "\\"))
     new_ids = {}
-    taken = {idl[:31] for idl in ids}
+    prefixes = Counter(idl[:31] for idl in ids)
     for idl, (orig, by, tag) in ids.items():
         if idl in users:
             print(f"  {tag} '{orig}' ({by}): {len(orig)} characters, but scripts or dialogue use it; not renamed")
+            continue
+        if prefixes[idl[:31]] > 1 or idl[:31] in all_ids:
+            print(f"  {tag} '{orig}' ({by}): {len(orig)} characters, but its first 31 ('{orig[:31]}') would be "
+                  f"the same as another object's id; not renamed (rename one of them in the CS)")
             continue
         new_ids[idl] = orig[:31]
     for name, tag, rid, mpath in models:
         print(f"  {name}: {tag} {rid}: model '{mpath}' -> '{renames[mpath.lower().replace('/', chr(92))]}'")
     for idl, new in new_ids.items():
         print(f"  {ids[idl][2]} '{ids[idl][0]}' ({ids[idl][1]}) -> '{new}' in every plugin that uses it")
-    if args.dry_run:
+    if report_only and (renames or new_ids):
+        print("  (--openmw-cfg: only reported; run without it, on the Data Files setup, to change anything)")
+    if args.dry_run or report_only:
         return 0
     # the short meshes
     made = []
@@ -9161,8 +9528,20 @@ def fix_long_names(args, plugins, bsas):
             for longp, short in made:
                 f.write(f"{short}\t{longp}\n")
     # the plugins
-    old_ids = {k.encode("latin-1", "replace"): v for k, v in new_ids.items()}
     fixed = 0
+
+    def id_hit(d):
+        """The new id if string field `d` names a renamed id (whole value; a full 32-byte field may hold the
+        id cut without its NUL), else None."""
+        z = d.find(b"\0")
+        if z >= 0 and d[z:].strip(b"\0"):
+            return None                              # not a plain string field
+        item = cstr(d).lower()
+        if item in new_ids:
+            return new_ids[item]
+        if len(d) == 32 and len(item) == 32:
+            return next((v for k, v in new_ids.items() if k.startswith(item)), None)
+        return None
     for name, (path, data, recs) in datas.items():
         if not name.lower().endswith(FIXABLE_EXT):
             if name in {m[0] for m in models} or any(v[1] == name for v in ids.values()):
@@ -9172,23 +9551,35 @@ def fix_long_names(args, plugins, bsas):
         for off, tag, flags, body in recs:
             raw = data[off:off + 16 + len(body)]
             subs, touched = list(iter_subs(body)), False
+            in_ref = False                           # CELL: past the first FRMR, NAME is the placed object
             for i, (sn, d) in enumerate(subs):
+                if sn == "FRMR":
+                    in_ref = True
+                if not new_ids or tag in ("INFO", "SCPT", "DIAL"):
+                    pass
+                elif (sn in ID_REF_FIELDS or (sn == "NAME" and tag == "CELL" and in_ref)) and len(d) >= 32:
+                    hit = id_hit(d)
+                    if hit:
+                        nb = hit.encode(ENC, MW_ERRORS)
+                        subs[i] = (sn, nb.ljust(len(d), b"\0") if sn == "NPCS" else nb + b"\0")
+                        touched = True
+                        continue
                 if sn == "MODL" and tag in LIMITED_MODEL_TAGS:
                     k = cstr(d).lower().replace("/", "\\")
                     if k in renames:
-                        subs[i] = (sn, renames[k].encode(ENC) + b"\0")
+                        subs[i] = (sn, renames[k].encode(ENC, MW_ERRORS) + b"\0")
                         touched = True
                 elif sn == "NAME" and tag not in NO_ID_TAGS and cstr(d).lower() in new_ids:
-                    subs[i] = (sn, new_ids[cstr(d).lower()].encode(ENC) + b"\0")
+                    subs[i] = (sn, new_ids[cstr(d).lower()].encode(ENC, MW_ERRORS) + b"\0")
                     touched = True
                 elif sn == "NPCO" and len(d) >= 36:
                     item = d[4:36].split(b"\0")[0].decode("latin-1").lower()
                     hit = next((v for k, v in new_ids.items() if k == item or (len(item) == 32 and k.startswith(item))), None)
                     if hit:
-                        subs[i] = (sn, d[:4] + hit.encode(ENC).ljust(32, b"\0") + d[36:])
+                        subs[i] = (sn, d[:4] + hit.encode(ENC, MW_ERRORS).ljust(32, b"\0") + d[36:])
                         touched = True
                 elif sn in ("INAM", "CNAM") and tag in ("LEVI", "LEVC") and cstr(d).lower() in new_ids:
-                    subs[i] = (sn, new_ids[cstr(d).lower()].encode(ENC) + b"\0")
+                    subs[i] = (sn, new_ids[cstr(d).lower()].encode(ENC, MW_ERRORS) + b"\0")
                     touched = True
             if touched:
                 raw = _rebuild(raw, subs)
@@ -9219,7 +9610,7 @@ def fix_ref_groups(args, plugins):
     wanted = defaultdict(set)              # owner -> cells to read
     found = []                             # (plugin, path, data, recs)
     for name, path in plugins:
-        if name in OUR_PATCHES or not name.lower().endswith(FIXABLE_EXT):
+        if is_our_patch(name) or not name.lower().endswith(FIXABLE_EXT):
             continue
         try:
             with open(path, "rb") as f:
@@ -9304,7 +9695,7 @@ def fix_ref_groups(args, plugins):
                             oid = cstr(next((d for s_, d in blk if s_ == "NAME"), b""))
                             # The game only ever looks in the master's group, so a reference a script names is
                             # moved too (persistent here can't help the script: the lookup fails either way).
-                            if want == "t" and grp == "p" and oid and oid.lower().encode(ENC, "replace") in script_text:
+                            if want == "t" and grp == "p" and oid and oid.lower().encode(ENC, MW_ERRORS) in script_text:
                                 scripted.append((label, oid))
                             if want == "t" and grp == "p":
                                 change = True
@@ -9544,7 +9935,7 @@ def run_header(args):
                 continue
             value = value.replace("\\n", "\r\n")
             new = ((author if field == "Author" else desc) + value[1:]) if value.startswith("+") else value
-            raw = new.encode(ENC, "replace")
+            raw = new.encode(ENC, MW_ERRORS)
             if len(raw) > size - 1:
                 print(f"{name}: {field} is {len(raw)} bytes; only {size - 1} fit, so it was cut short")
                 raw = raw[:size - 1]
@@ -9567,6 +9958,7 @@ def run_header(args):
                 f.seek(off)
                 f.write(raw)
         os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns))
+        forget_cached(path)                          # same size and date: the read cache can't tell
         print(f"{name}: updated (backup {os.path.basename(bak)})")
     return code
 
@@ -9968,7 +10360,7 @@ def compute_order(plugins, rule_sets, current_order):
     return order, notes
 
 
-CONTENT_SKIP_TAGS = {"TES3", "DIAL", "CELL", "LAND", "PGRD", "GMST", "TES3", "SKIL", "MGEF"}
+CONTENT_SKIP_TAGS = {"TES3", "DIAL", "CELL", "LAND", "PGRD", "GMST", "SKIL", "MGEF"}
 
 
 def add_master(path, master_name, master_path):
@@ -9984,7 +10376,7 @@ def add_master(path, master_name, master_path):
     if any(n == "MAST" and cstr(d).lower() == master_name.lower() for n, d in subs):
         return None
     new = b"".join(pack_sub(n, d) for n, d in subs)
-    new += pack_sub("MAST", master_name.encode(ENC) + b"\0") + pack_sub("DATA", struct.pack("<Q", os.path.getsize(master_path)))
+    new += pack_sub("MAST", master_name.encode(ENC, MW_ERRORS) + b"\0") + pack_sub("DATA", struct.pack("<Q", os.path.getsize(master_path)))
     head = b"TES3" + struct.pack("<I", len(new)) + data[off + 8:off + 16] + new
     out = [head] + [data[o:o + 16 + len(b)] for o, _t, _f, b in recs[1:]]
     return write_inplace(path, out)
@@ -10066,7 +10458,7 @@ def note_promoted_rules(game_dir, rec):
     except OSError:
         return
     nl = "\r\n" if b"\r\n" in raw else "\n"
-    text = raw.decode(ENC, errors="replace")
+    text = raw.decode(ENC, MW_ERRORS)
     lines = text.splitlines()
     if PROMOTED_START in lines:
         a = lines.index(PROMOTED_START)
@@ -10091,9 +10483,8 @@ def note_promoted_rules(game_dir, rec):
                 block.append(f";;       original: {orig}")
         block.append(PROMOTED_END)
     new = nl.join(lines).rstrip() + nl + (nl.join(block) + nl if block else "")
-    if new.encode(ENC, errors="replace") != raw:
-        with open(path, "wb") as f:
-            f.write(new.encode(ENC, errors="replace"))
+    if new.encode(ENC, MW_ERRORS) != raw:
+        safe_write_bytes(path, new.encode(ENC, MW_ERRORS))
 
 
 def remove_master(path, master_name):
@@ -10113,7 +10504,7 @@ def remove_master(path, master_name):
     for o, t, _f, b in recs[1:]:
         if t == "CELL":
             for n, d in iter_subs(b):
-                if n == "FRMR" and len(d) >= 4 and (struct.unpack_from("<I", d)[0] >> 24) >= idx:
+                if n in ("FRMR", "MVRF") and len(d) >= 4 and (struct.unpack_from("<I", d)[0] >> 24) >= idx:
                     if later or (struct.unpack_from("<I", d)[0] >> 24) == idx:
                         raise FormatError(f"a reference uses master #{idx} or a later one")
     keep, skip_data = [], False
@@ -10371,7 +10762,6 @@ def run_update_rules(args):
             partial.append((src, st["entries"][eb], reasons))
         elif fname in files and line.isdigit():
             cuts[fname][int(line)].append((eb, st["entries"], reasons))
-    total = sum(len(v) for f in cuts.values() for v in f.values())
     if not cuts and not by_hand and not partial:
         print("  No rule is contradicted: nothing to remove.")
         return 0
@@ -10427,8 +10817,7 @@ def run_update_rules(args):
         backup = f"{bak_home(path)}.mwdialog-{stamp}.bak"
         with open(backup, "wb") as f:
             f.write(raw)
-        with open(path, "wb") as f:
-            f.write("".join(lines).encode("latin-1"))
+        safe_write_bytes(path, "".join(lines).encode("latin-1"))
         print(f"\n  {fname}: {sum(len(v) for v in rules.values())} step(s) removed (old file saved as {os.path.basename(backup)}).")
     print("  The sort's result is unchanged: these rules were already being skipped.")
     return 0
@@ -10508,7 +10897,7 @@ def run_sort(args, plugins):
         added = []
         for _k, (mod, patch), why in crules:
             if (mod.lower(), patch.lower()) in skipped or not patch.lower().endswith(FIXABLE_EXT) \
-                    or patch in OUR_PATCHES or patch.lower() in merged or patch.lower() in NOT_A_MOD \
+                    or is_our_patch(patch) or patch.lower() in merged or patch.lower() in NOT_A_MOD \
                     or pos_.get(mod.lower(), 10 ** 9) > pos_.get(patch.lower(), -1):
                 continue
             if rule_puts_before(rule_sets[0], patch, mod):
@@ -10517,7 +10906,8 @@ def run_sort(args, plugins):
                 added.append((patch, mod, None, why))
                 continue
             try:
-                arch = backup_asset_original(os.path.abspath(args.data_dir), patch, plugin=patch, feature="added masters")
+                arch = backup_asset_original(os.path.abspath(args.data_dir), patch, plugin=patch, feature="added masters",
+                                             track_new=False)
                 bak = add_master(paths_[patch], mod, paths_[mod])
             except (OSError, FormatError, KeyError) as e:
                 print(f"  {patch}: could not add master {mod} ({e})")
@@ -10642,7 +11032,6 @@ def full_reset(args, game_dir):
       - the stand-in files the asset check made are removed (the asset check makes what's still needed)
     (Our generated patches need nothing: --fix and --multipatch always rebuild them from scratch.)
     The auto-merge is undone as the step before this one."""
-    data_dir = os.path.abspath(args.data_dir)
     rec = read_disabled(game_dir)
     rules_path = os.path.join(game_dir, RULES_FILE)
     text = open(rules_path, encoding="cp1252", errors="replace").read() if os.path.exists(rules_path) else ""
@@ -11001,7 +11390,7 @@ def _main(argv=None):
                          f"together without changing what wins against any other plugin, merge them into one "
                          f"('{AUTO_MERGE_NAME}', or --merge-name), and deactivate them (recorded in {MERGE_RECORD}; "
                          f"--add-all-esp leaves them out). Use --dry-run first")
-    mg.add_argument("--merge-name", metavar="NAME.esp", help=f"with --auto-merge: the merged plugin's name")
+    mg.add_argument("--merge-name", metavar="NAME.esp", help="with --auto-merge: the merged plugin's name")
     mg.add_argument("--no-follow-up", "--no-follow-fix", dest="no_follow_fix", action="store_true",
                     help="don't run the usual follow-ups: --fix --multipatch after --auto-merge or a --sort "
                          "that changed the order, --add-all-esp --sort after --unmerge, and --fix's own re-scans "
@@ -11336,7 +11725,7 @@ def _main(argv=None):
                 hidden.add((plugin, issue_label(topic, info, msg)))
     issues = [i for i in report.issues
               if SEV_RANK[i[0]] <= limit and (only is None or i[1].lower() in only)
-              and i[1] not in OUR_PATCHES
+              and not is_our_patch(i[1])
               and (i[1], issue_label(i[2], i[3], i[4])) not in hidden]
     order = {n.lower(): k for k, (n, _p) in enumerate(plugins)}
     issues.sort(key=lambda i: (order.get(i[1].lower(), -1), i[1].lower(), i[2].lower(), SEV_RANK[i[0]], i[3]))
@@ -11403,23 +11792,23 @@ def write_bug_reports(args, plugins, report, world):
     names = {n.lower(): (n, p) for n, p in plugins}
     per = defaultdict(lambda: {"ERROR": [], "WARN": [], "repaired": [], "missing": []})
     for sev, plugin, topic, info, msg in report.issues:
-        if sev not in ("ERROR", "WARN") or plugin in OUR_PATCHES or plugin.lower() not in names \
+        if sev not in ("ERROR", "WARN") or is_our_patch(plugin) or plugin.lower() not in names \
                 or NOT_OWN_BUG.search(msg):
             continue
         where = " / ".join(x for x in (f"[{topic}]" if topic else "", info) if x)
         per[plugin.lower()][sev].append(f"  - {where + ': ' if where else ''}{msg}")
     for plugin, off, op, desc, label, topic, info in report.fixes:
-        if plugin and plugin.lower() in names and plugin not in OUR_PATCHES:
+        if plugin and plugin.lower() in names and not is_our_patch(plugin):
             per[plugin.lower()]["repaired"].append(f"  - {label}: {desc}")
     for item in getattr(world, "generated", []):
         rel, why = item[0], item[1]
         pl = item[3] if len(item) > 3 else ""
-        if pl and pl.lower() in names and pl not in OUR_PATCHES and not (len(item) > 2 and item[2]):
+        if pl and pl.lower() in names and not is_our_patch(pl) and not (len(item) > 2 and item[2]):
             per[pl.lower()]["missing"].append(f"  - {rel} (needed by {why}); a stand-in was put in its place")
     # the scan saw every plugin: one that is clean now loses an old section
     written = cleared = 0
     for low, (name, path) in names.items():
-        if name in OUR_PATCHES or low in NOT_A_MOD:
+        if is_our_patch(name) or low in NOT_A_MOD:
             continue
         d = per.get(low)
         lines = []
@@ -11474,15 +11863,24 @@ def apply_load_order_to_ini(args):
 def main(argv=None):
     global MAIN_DEPTH
     MAIN_DEPTH += 1
+    finished = False
     try:
-        return _main(argv)
+        rc = _main(argv)
+        finished = True
+        return rc
     finally:
         MAIN_DEPTH -= 1
         if MAIN_DEPTH == 0:
-            try:
-                apply_load_order_to_ini(TOP_ARGS)
-            except (OSError, UnicodeError) as e:
-                print(f"\nCould not update Morrowind.ini's [Game Files]: {e}", file=sys.stderr)
+            if finished:
+                # only a run that ended normally writes its load order into Morrowind.ini; after a crash or
+                # Ctrl-C the list may be half done (mwdialog_load_order.txt keeps it; --play writes it in)
+                try:
+                    apply_load_order_to_ini(TOP_ARGS)
+                except (OSError, UnicodeError) as e:
+                    print(f"\nCould not update Morrowind.ini's [Game Files]: {e}", file=sys.stderr)
+            elif TOP_ARGS is not None and LOAD_ORDER_WRITTEN:
+                print(f"\nThe run stopped early: Morrowind.ini's [Game Files] was NOT updated from "
+                      f"{LOAD_ORDER_FILE}.", file=sys.stderr)
             LOAD_ORDER_WRITTEN.clear()
             try:
                 cap_fix_log(TOP_ARGS)

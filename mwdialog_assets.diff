@@ -1,0 +1,311 @@
+diff --git a/mwdialog_assets.py b/mwdialog_assets.py
+index 7462d97..14defcc 100644
+--- a/mwdialog_assets.py
++++ b/mwdialog_assets.py
+@@ -364,7 +364,7 @@ def check(world, m):
+         if fourcc == b"DX10":
+             r.add("ERROR", "Data Files", "", "", f"{rel}: DX10/BC7-style DDS; Morrowind (DirectX 8) can't read it. "
+                                                  f"--fix converts it to DXT")
+-            fixes.append(("tex", full, rel, {"dxt": True, "mips": True}))
++            fixes.append(("tex", full, rel, {"dxt": True, "mips": True, "alpha": dx10_has_alpha(head)}))
+             continue
+         info = m.dds_info(head)
+         if info is None:
+@@ -406,7 +406,6 @@ def check(world, m):
+             stem = mm.group(1).replace(b"/", b"\\").rsplit(b"\\", 1)[-1].lower()
+             used.add(stem.decode("latin1"))
+ 
+-    kf_bases = set()
+     cache = shared_cache(os.path.dirname(data_dir))
+     world.text_key_fixes = []
+     allm = nif_files + kf_files
+@@ -524,7 +523,6 @@ def check(world, m):
+             fixes.append(("snd", full, rel, job))
+     # --- unused textures and sounds (conservative: any mention anywhere counts as used)
+     print("Asset health: collecting every name plugins, scripts, Lua and configs use...", file=sys.stderr)
+-    file_ref = re.compile(rb"([\x21-\x7e][\x20-\x7e]{0,250}?)\.(dds|tga|bmp|wav|mp3)", re.I)
+     word_re = re.compile(rb"[A-Za-z0-9_\-]{3,}")
+     sounds_used, words = set(), set()
+ 
+@@ -734,6 +732,10 @@ def apply(fixes, data_dir, game_dir, m, log, dry=False):
+     return ("Dry run: would do " if dry else "") + msg
+ 
+ 
++# <mod>\Off\<unused|orphaned|broken>\... (any case, either slash): a file these tools took out of a mod
++OFF_MARKER_RE = re.compile(r"[\\/]off[\\/](?:unused|orphaned|broken)[\\/]", re.IGNORECASE)
++
++
+ def restore_unused(game_dir, data_dir):
+     """--restore-unused: put back every file listed in mwdialog_unused_assets.txt (staging copy back into the
+     mod folder; Vortex redeploys it, or it is copied into Data Files when it wasn't Vortex's)."""
+@@ -741,31 +743,40 @@ def restore_unused(game_dir, data_dir):
+     if not os.path.exists(path):
+         print("Nothing to restore.")
+         return 0
+-    back = 0
+-    for line in open(path, encoding="utf-8"):
+-        parts = line.rstrip("\n").split("\t")
++    back, failed = 0, []
++    with open(path, encoding="utf-8") as f:
++        lines = f.read().splitlines()
++    for line in lines:
++        parts = line.split("\t")
+         if len(parts) < 3:
+             continue
+         rel, dest = parts[1], parts[2]
+         if not os.path.exists(dest):
+             continue
+-        marker = os.sep + "off" + os.sep + "unused" + os.sep
+-        low = dest.lower()
+-        if marker in low:
+-            mod = dest[:low.index(marker)]
+-            os.makedirs(os.path.dirname(os.path.join(mod, rel)), exist_ok=True)
+-            os.replace(dest, os.path.join(mod, rel))
+-            target = os.path.join(data_dir, rel)
+-            if not os.path.exists(target):
+-                os.makedirs(os.path.dirname(target), exist_ok=True)
+-                try:
+-                    os.link(os.path.join(mod, rel), target)
+-                except OSError:
+-                    shutil.copy2(os.path.join(mod, rel), target)
+-        else:
+-            os.makedirs(os.path.dirname(os.path.join(data_dir, rel)), exist_ok=True)
+-            os.replace(dest, os.path.join(data_dir, rel))
+-        back += 1
++        try:
++            m = OFF_MARKER_RE.search(dest)
++            if m:                                    # from a Vortex mod: back into the mod, linked into Data Files
++                mod = dest[:m.start()]
++                staged = os.path.join(mod, rel)
++                os.makedirs(os.path.dirname(staged), exist_ok=True)
++                os.replace(dest, staged)
++                target = os.path.join(data_dir, rel)
++                if not os.path.exists(target):
++                    os.makedirs(os.path.dirname(target), exist_ok=True)
++                    try:
++                        os.link(staged, target)
++                    except OSError:
++                        shutil.copy2(staged, target)
++            else:
++                os.makedirs(os.path.dirname(os.path.join(data_dir, rel)), exist_ok=True)
++                os.replace(dest, os.path.join(data_dir, rel))
++            back += 1
++        except OSError as e:
++            failed.append(line)
++            print(f"  could not put back '{rel}': {e}")
++    if failed:                                       # keep the record so a later run can finish the job
++        print(f"{back} file(s) put back; {len(failed)} could not be (still listed in {UNUSED_RECORD}).")
++        return 1
+     os.replace(path, path + ".restored")
+     print(f"{back} file(s) put back.")
+     return 0
+@@ -778,6 +789,23 @@ def restore_unused(game_dir, data_dir):
+ # original goes to <mod>\Off\<plugin or mod name>\<path>.
+ # ---------------------------------------------------------------------------------------------------------
+ 
++# DXGI formats (DX10 header) with no alpha worth keeping beyond DXT1's 1-bit one: BC1, BC4, BC5, BC6H,
++# B5G6R5, B8G8R8X8. Everything else (BC2, BC3, BC7, RGBA, unknown) may have real alpha.
++DXGI_NO_ALPHA = {70, 71, 72, 79, 80, 81, 82, 83, 84, 85, 88, 93, 94, 95, 96}
++
++
++def dx10_has_alpha(head):
++    """Whether a DX10-header DDS (its first 148 bytes) may need DXT5 (BC3) alpha when converted to DXT; an
++    opaque one becomes DXT1 (BC1, half the size). Unknown: True (the old behaviour, never loses alpha)."""
++    if len(head) < 148:
++        return True
++    dxgi = struct.unpack_from("<I", head, 128)[0]
++    alpha_mode = struct.unpack_from("<I", head, 144)[0] & 0x7
++    if alpha_mode == 3:                              # DDS_ALPHA_MODE_OPAQUE
++        return False
++    return dxgi not in DXGI_NO_ALPHA
++
++
+ def _examine_dds(rel, full, size, m):
+     """[(severity, message)], job or None."""
+     try:
+@@ -789,7 +817,7 @@ def _examine_dds(rel, full, size, m):
+         return [("ERROR", "not a DDS file (renamed?); the game can't load it")], "broken"
+     if head[84:88] == b"DX10":
+         return [("ERROR", "DX10/BC7-style DDS; Morrowind (DirectX 8) can't read it -> converted to DXT")], \
+-            {"dxt": True, "mips": True}
++            {"dxt": True, "mips": True, "alpha": dx10_has_alpha(head)}
+     info = m.dds_info(head)
+     if info is None:
+         return [], None
+@@ -854,6 +882,36 @@ def _other_plugins_naming(name_b, root, data_dir):
+             and "mwdialog_check" not in fn.lower()]
+ 
+ 
++_MODEL_TEXT = {}               # mod folder (normcase) -> text near non-ASCII bytes in its .nif/.kf files
++
++
++def _models_naming(name_b, root):
++    """True when a .nif/.kf in mod folder `root` holds name_b (lower bytes): a model names the file, and the
++    rename can't change models, so it would lose its texture."""
++    key = os.path.normcase(os.path.abspath(root))
++    if key not in _MODEL_TEXT:
++        bits = []
++        for dp, _ds, fs in os.walk(root):
++            if os.path.basename(dp).lower() == "off" or (os.sep + "off" + os.sep) in (dp.lower() + os.sep):
++                continue
++            for fn in fs:
++                if not fn.lower().endswith((".nif", ".kf")):
++                    continue
++                try:
++                    data = open(os.path.join(dp, fn), "rb").read()
++                except OSError:
++                    continue
++                last = -1
++                for mm in HIGH_BYTE_RE.finditer(data):
++                    k = mm.start()
++                    if k < last:
++                        continue
++                    bits.append(data[max(0, k - 200):k + 200].lower())
++                    last = k + 200
++        _MODEL_TEXT[key] = b"\0".join(bits)
++    return name_b in _MODEL_TEXT[key]
++
++
+ def check_folder(root, m, data_dir=None, bsa_meshes=None):
+     """(issues [(severity, rel, message)], fixes [(kind, full, rel, job)]) for one mod folder. data_dir and
+     bsa_meshes (lowercase paths under Meshes in every BSA) let an animation's model be found elsewhere."""
+@@ -903,7 +961,11 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None):
+             except UnicodeEncodeError:
+                 tail_b = None                  # Cyrillic etc.: no plugin can name it the way Windows needs
+             others = _other_plugins_naming(tail_b, root, data_dir) if tail_b else []
+-            if others:
++            base_b = os.path.basename(tail_b.replace(b"\\", b"/")) if tail_b else None
++            if not others and base_b and _models_naming(base_b, root):
++                issues.append(("WARN", rel, "non-ASCII file name, named so by a model (.nif) in this mod; left "
++                                            "as it is (renaming it would leave the model without it)"))
++            elif others:
+                 issues.append(("WARN", rel, f"non-ASCII file name, named so by {', '.join(others[:3])}; left as "
+                                             f"it is (renaming it would break that plugin)"))
+             else:
+@@ -1016,23 +1078,26 @@ FIX_ORDER = {"ascii": 0, "broken": 1, "orphan": 2, "snd": 3, "keys": 4, "abs": 5
+ 
+ def _backup_in_mod(root, rel, full, plugin_name, feature="converted"):
+     """The original into <mod>\\Off\\<feature>\\<plugin name>\\<rel>, once: not when one is kept already
+-    (by any feature, or where earlier versions put it: Off\\<plugin name>\\<rel>)."""
++    (by any feature, or where earlier versions put it: Off\\<plugin name>\\<rel>) - unless the file now there
++    is a new original (a mod update): then that is kept too, with a date added (see keep_new_original)."""
+     import mwdialog_check as _m
+     off = os.path.join(root, "Off")
+     if os.path.isdir(off):
+         for f in os.listdir(off):
+             fp = os.path.join(off, f)
+             if os.path.exists(os.path.join(fp, rel)):
+-                return os.path.join(fp, rel)                     # old layout
++                return _m.keep_new_original(os.path.join(fp, rel), full)     # old layout
+             if os.path.isdir(fp) and f.lower() not in ("broken", "orphaned", "unused"):
+                 for d in os.listdir(fp):
+                     if os.path.exists(os.path.join(fp, d, rel)):
+-                        return os.path.join(fp, d, rel)
++                        return _m.keep_new_original(os.path.join(fp, d, rel), full)
+     dest = _m.off_dest(root, feature, plugin_name, rel)
+     if not os.path.exists(dest):
+         os.makedirs(os.path.dirname(dest), exist_ok=True)
+         shutil.copy2(full, dest)
+-    return dest
++        _m._ASSET_BACKUP_OF[os.path.normcase(os.path.abspath(full))] = dest
++        return dest
++    return _m.keep_new_original(dest, full)
+ 
+ 
+ def find_ffmpeg():
+@@ -1087,40 +1152,81 @@ def rename_ascii(root, full, rel, new_rel, log):
+         except OSError:
+             break
+         d = os.path.dirname(d)
+-    # the name as plugins have it: no "Meshes\" etc. in front
++    # the name as plugins have it: no "Meshes\" etc. in front (or, rarely, with it)
+     parts_old, parts_new = rel.replace("/", "\\").split("\\"), new_rel.replace("/", "\\").split("\\")
+     pairs = []
+-    for k in range(1, len(parts_old)):
++    for k in (1, 0):
+         o, n = "\\".join(parts_old[k:]), "\\".join(parts_new[k:])
+         try:
+             ob, nb = o.encode("cp1252"), n.encode("cp1252")
+         except UnicodeEncodeError:
+             continue
+         if ob != nb and len(ob) == len(nb):
+-            pairs.append((ob, nb))
++            pairs.append((ob.lower(), nb))
++    if not pairs:
++        return
++    import mwdialog_check as _m
+     for pf in os.listdir(root):
+         if not pf.lower().endswith((".esp", ".esm", ".omwaddon")):
+             continue
+         pp = os.path.join(root, pf)
+-        data = open(pp, "rb").read()
+-        low, new, hits = data.lower(), bytearray(data), 0
+-        for ob, nb in pairs:
+-            i = low.find(ob.lower())
+-            while i >= 0:
+-                new[i:i + len(nb)] = nb
+-                hits += 1
+-                i = low.find(ob.lower(), i + 1)
++        try:
++            data = open(pp, "rb").read()
++            new, hits = plugin_path_rename(data, pairs)
++        except (OSError, _m.FormatError) as e:
++            log(f"{pf}: not changed ({e})")
++            continue
+         if hits:
+-            import mwdialog_check as _m
+             bak = _m.off_dest(root, "names", pf, pf)     # Off\\names\\<plugin>\\<plugin file>, once
+             if not os.path.exists(bak):
+                 os.makedirs(os.path.dirname(bak), exist_ok=True)
+                 shutil.copy2(pp, bak)
+-            with open(pp, "r+b") as f:                 # in place: keeps a Vortex hard link
+-                f.write(bytes(new))
++            # checked temp copy, then in place: keeps a Vortex hard link (and the date: load order)
++            _m.write_plugin_bytes(pp, new, keep_times=os.stat(pp))
+             log(f"{pf}: {hits} name(s) of {rel} changed to {new_rel}")
+ 
+ 
++# subrecords whose whole value is a file path: (record tag, or None for any record; subrecord)
++PATH_SUBS = {(None, "MODL"), (None, "ITEX"), ("ALCH", "TEXT"), ("SOUN", "FNAM"), ("LTEX", "DATA"),
++             ("BSGN", "TNAM"), ("INFO", "SNAM"), ("MGEF", "PTEX")}
++# subrecords holding script text a full path can appear inside (same length, so changed in place)
++PATH_TEXT_SUBS = {("SCPT", "SCTX"), ("SCPT", "SCDT"), ("INFO", "BNAM")}
++
++
++def plugin_path_rename(data, pairs):
++    """Change file paths in a plugin: a path subrecord whose whole value (any case, either slash) is one of
++    pairs' old names, and the full old path (with its folders) inside script text. Book and dialogue text,
++    ids, and other folders' files that only share the file name are left alone.
++    pairs: [(old lower bytes, new bytes)] of equal lengths, the first the path without its top folder.
++    Returns (new bytes, number of changes)."""
++    import mwdialog_check as _m
++    new, hits = bytearray(data), 0
++    script_old, script_new = pairs[0]
++    for off, tag, _flags, body in _m.iter_records(data):
++        p, end = 0, len(body)
++        while p + 8 <= end:
++            sn = bytes(body[p:p + 4]).decode("latin-1")
++            size = struct.unpack_from("<I", body, p + 4)[0]
++            d = bytes(body[p + 8:p + 8 + size])
++            at = off + 16 + p + 8
++            if (tag, sn) in PATH_SUBS or (None, sn) in PATH_SUBS:
++                val = d.split(b"\0", 1)[0].lower().replace(b"/", b"\\")
++                for ob, nb in pairs:
++                    if val == ob:
++                        new[at:at + len(nb)] = nb
++                        hits += 1
++                        break
++            elif (tag, sn) in PATH_TEXT_SUBS and b"\\" in script_old:   # never a bare file name in text
++                low = d.lower().replace(b"/", b"\\")
++                i = low.find(script_old)
++                while i >= 0:
++                    new[at + i:at + i + len(script_new)] = script_new
++                    hits += 1
++                    i = low.find(script_old, i + len(script_old))
++            p += 8 + size
++    return bytes(new), hits
++
++
+ def apply_folder(root, fixes, m, game_dir, plugin_name):
+     """Repair what check_folder() found, in place. Returns (done count, [skipped notes])."""
+     texconv = next((p for p in (os.path.join(game_dir, "texconv.exe"), shutil.which("texconv")) if p and

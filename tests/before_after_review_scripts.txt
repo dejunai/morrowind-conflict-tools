@@ -1,0 +1,73 @@
+=== t1_parse ORIGINAL
+records: [(0, 'TES3', 0, 308), (324, 'MISC', 0, 63)]
+truncated -> MISC record at offset 324 runs past end of file
+HEDR len 300 count@296 = 1
+decoded: 'Topic�X' re-encoded: b'Topic?X\x00' lossless? False
+strict encode (used by set_text/merge_levlist/placeholder_cell NAME) -> UnicodeEncodeError
+=== t1_parse FIXED
+records: [(0, 'TES3', 0, 308), (324, 'MISC', 0, 63)]
+truncated -> MISC record at offset 324 runs past end of file
+HEDR len 300 count@296 = 1
+decoded: 'Topic\x81X' re-encoded: b'Topic\x81X\x00' lossless? True
+strict encode (used by set_text/merge_levlist/placeholder_cell NAME) -> UnicodeEncodeError
+=== t2_encode ORIGINAL
+apply_plan set_text CRASH: 'charmap' codec can't encode character '\ufffd' in position 7: character maps to <undefined>
+merge_levlist CRASH: 'charmap' codec can't encode character '\ufffd' in position 6: character maps to <undefined>
+=== t2_encode FIXED
+apply_plan set_text OK
+merge_levlist OK
+=== t3_clean ORIGINAL
+CLEAN: checking 1 plugin(s) against their masters...
+  indexing master Morrowind.esm
+  indexing master Tribunal.esm
+  Mod.esp: 1 duplicate record
+  Cleaned 1 plugin(s); details in /tmp/tmpuwcukji6/log.txt
+records left in Mod.esp: ['TES3']
+winning MISC x value now comes from: Tribunal.esm (50) -> Mod's intended change LOST
+HEDR record count after clean: 0
+=== t3_clean FIXED
+
+CLEAN: checking 1 plugin(s) against their masters...
+  indexing master Morrowind.esm
+  indexing master Tribunal.esm
+  Nothing to clean.
+records left in Mod.esp: ['TES3', 'MISC']
+winning MISC x value now comes from: Mod.esp
+HEDR record count after clean: 1
+=== t4_misc ORIGINAL
+T4 merged entries: [('a', 1), ('b', 1), ('c', 1)] (patch removed 'c' but it is back)
+T5 backups on disk: 100 last: ['X.esp.bak99', 'X.esp.bak100'] content of .bak100: backup 100
+   restore would pick: X.esp.bak99
+T6 bsa_file_names -> error unpack_from requires a buffer of at least 1200000 bytes for unpacking 400000 bytes at offset 800000 (actual buffer size is 16)
+T6 bsa_index -> error unpack_from requires a buffer of at least 24 bytes for unpacking 8 bytes at offset 16 (actual buffer size is 16)
+T7 move persistent->temp NAM0: 2 changes 1
+=== t4_misc FIXED
+T4 merged entries: [('a', 1), ('b', 1), ('c', 1)] (patch removed 'c' but it is back)
+T5 backups on disk: 101 last: ['X.esp.bak100', 'X.esp.bak101'] content of .bak100: backup 99
+   restore would pick: X.esp.bak101
+T6 bsa_file_names -> FormatError bad.bsa: BSA header doesn't fit the file (100000 files, directory 16 bytes, file 28 bytes)
+T6 bsa_index -> FormatError bad.bsa: BSA header doesn't fit the file (100000 files, directory 16 bytes, file 28 bytes)
+T7 move persistent->temp NAM0: 2 changes 1
+=== t10_restore ORIGINAL
+2 file(s) put back.
+Data Files/meshes/x/xorphaned.kf
+Data Files/meshes/x/xunused.kf
+staging/SomeMod/meshes/x/xunused.kf
+=== t10_restore FIXED
+2 file(s) put back.
+Data Files/meshes/x/xorphaned.kf
+Data Files/meshes/x/xunused.kf
+staging/SomeMod/meshes/x/xorphaned.kf
+staging/SomeMod/meshes/x/xunused.kf
+=== t11_vt ORIGINAL
+textures/tx_sign_n.dds -> Off/normal maps/Signs/textures/tx_sign_n.dds | normal map (not used without OpenMW)
+textures/tx_wall_nm.dds -> Off/normal maps/Signs/textures/tx_wall_nm.dds | normal map (not used without OpenMW)
+DELETED folder (ignores --staging): morrowind - deleted by vortex_tidy
+=== t11_vt FIXED
+DELETED folder (ignores --staging): morrowind - deleted by vortex_tidy
+=== t12_dupimport ORIGINAL
+first broken_dest call took 0.004 s
+second copy imported: True | its ENC: cp1252 vs main ENC: cp1251
+=== t12_dupimport FIXED
+first broken_dest call took 0.004 s
+second copy imported: True | its ENC: cp1252 vs main ENC: cp1251
