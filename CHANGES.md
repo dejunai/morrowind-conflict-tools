@@ -132,3 +132,44 @@ Fix:
 * `run_auto_merge`: objects (MERGE_TAGS) that 2+ inputs change are merged field by field before
   `build_merge` writes them (`object_merges=`), so the AutoMerge itself is right. Off with --no-merge-objects.
 * Tests: tests/test_automerge_objects.py (8).
+
+## Mipmaps only where a world model draws the texture (2026-11-11, branch `mipmaps`)
+Before: vortex_tidy (`check_folder` -> `_examine_dds`) reported "no mipmaps" for EVERY DDS of 64 px+ with one
+level in a mod (except the few `ui_texture` paths) and `--apply` regenerated the chain with texconv (`-m 0`,
+original kept in `Off\textures\`). mwdialog_check's asset pass did the same for every loose DDS in Data Files
+that tidy hadn't already recorded (WARN + a `tex` fix for `--fix`). MCM logos, effect sprites, blood/glow
+sheets, texture packs... all got mipmaps.
+Now:
+* **vortex_tidy**: a texture is reported without mipmaps only when one of the mod's OWN world models names it
+  (`.nif` texture lists from the cached model facts; effect / UI models don't count) and it isn't exempt.
+  Skipped ones are counted ("N texture(s) without mipmaps left alone") and their tidy record keeps
+  `"m": true` + the texture facts (`"t"`), so a later model that starts using one is noticed without
+  re-reading clean files. No cache-key bump (the change only narrows findings).
+* **mwdialog_check --asset-check / --full**: the per-file texture pass no longer judges mipmaps. A new per-pair
+  pass (`mip_pairs`) takes every WINNING model (loose or BSA) that isn't an effect/UI model, resolves each texture
+  it names to the WINNING file (the `.dds` of a `.tga/.bmp` name first) and reports those without mipmaps:
+  loose ones as WARN + a `tex {"mips": true}` fix (merged with any other conversion of the same file; `--fix`,
+  `--dry-run` and the `Off\` backups as before); ones inside a BSA as one INFO line (a BSA can't be changed).
+  This covers texture packs for existing models, including tidy-trusted hard links.
+  Override rules (`WinningFiles`): vanilla Morrowind takes the newest by date - the latest-dated BSA (same
+  date: registered later), then the loose file unless that BSA is newer; Morrowind.ini `TryArchiveFirst=1`
+  prefers the BSA, `-1` loose only.
+  Cache: loose textures `tex2:` (size+date; tidy's `"t"` is used first), textures in BSAs `tex2b:<bsa>|<rel>`
+  (BSA size+date), model texture lists as before (`nif:`, `bsa2:`, tidy `"f"`). Repeat runs read no DDS/NIF.
+* **Exemptions** (`MIP_EXEMPT_DEFAULTS` in mwdialog_assets.py, globs on lowercase backslash paths; user file
+  `mwdialog_mip_exempt.txt` next to Morrowind.ini: `texture:`, `texture-name:`, `mesh:`, `mesh-name:` lines,
+  `!` in front drops a default):
+  - texture paths: `icons\*`, `bookart\*`, `splash\*`, `mwse\*`, `*\mwse\*`, `*\mcm\*`, `textures\{menu,menus,ui,gui,hud,
+    levelup,splash,bookart,birthsign(s),vfx,fx,effects}\*`, `textures\cursor*\*`, `textures\*\vfx\*`, plus the old
+    `ui_texture` set (menu_, tx_menu, tx_cursor, compass, target, scroll... at the top of Textures);
+  - texture names: `menu_*`, `tx_menu*`, `*logo*`, `*splash*`, `cursor*`, `tx_cursor*`, `compass*`, `tx_compass*`,
+    `levelup*`, `vfx_*`, `*_vfx*`, `tx_*fx*`, `fx_*`, `tx_blood*`, `blood_*`, `tx_glow*`, `*_glowsheet*`, `*spritesheet*`;
+  - effect / UI models (their textures don't count): `meshes\e\*`, `meshes\{vfx,fx,mwse,menu,ui}\*`,
+    `meshes\*\vfx\*`, `meshes\*\mwse\*`, names `vfx_*`, `*_vfx*`, `fx_*`. Magic-effect particle textures (MGEF
+    PTEX) are named by no model, so they are never flagged.
+* `ModelAssets.bsa_paths` (one line in mwdialog_check.py) keeps the registered BSA list for the pass.
+* Tests: tests/test_mipmaps.py (8): MCM logo / icon / book art / VFX not flagged, own-model texture flagged,
+  texture pack flagged only by the top-level check, BSA override order + TryArchiveFirst, vanilla BSA model vs
+  loose pack, cached skip re-judged when a model appears, exemption file, cache reuse (no DDS/NIF/BSA reads).
+Not changed: `ModelAssets.mesh_bsa` still keeps the FIRST BSA that has a model (used by the missing-model /
+missing-texture checks); the game uses the newest. DX10 textures are still converted with a full chain.

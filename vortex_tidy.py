@@ -547,8 +547,8 @@ def _tool_modules():
 
 
 def run_assets(args, do_apply):
-    """The asset check on each mod's own files: textures (DX10/BC7, over 2048, no mipmaps, uncompressed,
-    not a power of two, truncated), models (not Morrowind's format, Unix line endings in animation text
+    """The asset check on each mod's own files: textures (DX10/BC7, over 2048, no mipmaps - only those
+    the mod's own world models draw -, uncompressed, not a power of two, truncated), models (not Morrowind's format, Unix line endings in animation text
     keys, absolute texture paths), sounds (stereo, odd rates, 24/32-bit or non-PCM WAV, big MP3 tags),
     empty files, non-ASCII names. Repairs are made in place (Data Files' hard links stay); originals go to
     <mod>\\Off\\<plugin>\\<path>."""
@@ -582,12 +582,13 @@ def run_assets(args, do_apply):
     print("\n" + "=" * 70 + "\nASSET CHECK (each mod's own files)\n" + "=" * 70)
     total_fix = total_issue = 0
     checked = set()
+    mip_stats = {}
     for d in mods:
         if any(fnmatch.fnmatch(d.lower(), pt.lower()) for pt in pats):
             continue
         root = os.path.join(args.staging, d)
         try:
-            issues, fixes = ah.check_folder(root, m, data_dir, bsa_meshes)
+            issues, fixes = ah.check_folder(root, m, data_dir, bsa_meshes, stats=mip_stats)
         except Exception as e:                      # one odd mod never stops the rest
             print(f"  {d}: check failed ({e})")
             continue
@@ -627,6 +628,11 @@ def run_assets(args, do_apply):
                   + (f"; {len(skipped)} skipped, e.g. {skipped[0]}" if skipped else ""))
     print(f"\n  {total_issue} asset issue(s), {total_fix} repairable"
           + ("" if do_apply else " (run with --apply to repair them)"))
+    if mip_stats.get("mips_skipped"):
+        print(f"  {mip_stats['mips_skipped']} texture(s) without mipmaps left alone: no world model of their own "
+              f"mod draws them (menu / MCM / icon / effect pictures, or a texture pack; mwdialog_check's asset "
+              f"check judges texture packs against the models that are deployed). Patterns: "
+              f"{ah.MIP_EXEMPT_RECORD}")
     # the per-mod records in the asset cache: files a checked mod no longer has, and (all mods checked) mods
     # that are gone, are dropped; then everything is written
     try:

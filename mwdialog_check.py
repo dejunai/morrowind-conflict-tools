@@ -3334,6 +3334,7 @@ class ModelAssets:
         self.cache = cache                         # mwdialog_assets' AssetCache: each model's textures
         self.generated = generated or set()        # stand-ins this tool made: never taken from the cache
         self._bsa_facts = {}
+        self.bsa_paths = list(bsa_paths)           # registered BSAs, in Morrowind.ini order
         for d in data_dirs:
             if not os.path.isdir(d):
                 continue
