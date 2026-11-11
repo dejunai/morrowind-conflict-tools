@@ -10732,6 +10732,51 @@ def describe_overlap(res, a, b):
     return out
 
 
+def console_interactive():
+    """(True, "") when questions can be answered here: stdin is a console - or, on Windows, it isn't (a
+    launcher or wrapper redirected it) but the output is on screen and the console's input (CONIN$) can be
+    opened. Else (False, why not)."""
+    try:
+        if sys.stdin is not None and sys.stdin.isatty():
+            return True, ""
+    except (AttributeError, ValueError, OSError):
+        pass
+    try:
+        out_tty = sys.stdout.isatty()
+    except (AttributeError, ValueError, OSError):
+        out_tty = False
+    if os.name == "nt" and out_tty:
+        try:
+            with open("CONIN$", "r"):
+                return True, ""
+        except OSError:
+            pass
+    return False, ("the input isn't a console (redirected, or run by another program)" if out_tty else
+                   "the output isn't on screen (redirected to a file or a pipe)")
+
+
+def ask(prompt):
+    """One answer from the console (lowercased, stripped); None when there is no answer to read. Output is
+    flushed first so the prompt and everything before it is on screen."""
+    try:
+        sys.stdout.flush()
+        sys.stderr.flush()
+    except (AttributeError, ValueError, OSError):
+        pass
+    try:
+        if sys.stdin is not None and sys.stdin.isatty():
+            return input(prompt).strip().lower()
+        if os.name == "nt":                          # stdin redirected: read the console directly
+            sys.stdout.write(prompt)
+            sys.stdout.flush()
+            with open("CONIN$", "r") as con:
+                return con.readline().strip().lower()
+        return input(prompt).strip().lower()
+    except (EOFError, OSError, KeyboardInterrupt):
+        print()
+        return None
+
+
 def run_redundant(args):
     """--redundant / --redundant-auto: find plugins doing the same job as another, describe each and how they
     overlap, and (asking, or with --redundant-auto for the sure ones) turn the redundant one off."""
@@ -10772,7 +10817,8 @@ def run_redundant(args):
         print(f"  Turned off earlier (in {REDUNDANT_RECORD}; --redundant-undo puts them back): "
               + ", ".join(f"{n} (kept {k})" for n, (k, _w) in off_rec.items()))
     if both:
-        print(f"  {len(both)} pair(s) you chose to keep both of are not asked about again.")
+        print(f"  Already answered, not asked again (keep both, in {REDUNDANT_RECORD}; --redundant-undo forgets): "
+              + "; ".join(" + ".join(N.get(x, x) for x in sorted(pair)) for pair in sorted(both, key=sorted)))
     if not exact and not variant:
         print("  None found.")
         return 0
@@ -10811,10 +10857,23 @@ def run_redundant(args):
         for x, why in v["blocked"].items():
             print(f"    {N[x]} can't be turned off: {why}")
         groups.append(("variant", v))
-    interactive = sys.stdin.isatty() and not getattr(args, "no_interactive", False)
+    console, why_not_console = console_interactive()
+    interactive = console and not getattr(args, "no_interactive", False)
     auto = getattr(args, "redundant_auto", False)
+    sure = [g for kind, g in groups if kind == "exact" and g["confidence"] == "high" and g["plugin"].endswith(".esp")]
+    if not interactive:
+        why = "--no-interactive was given" if console else why_not_console
+        print(f"\n  Not asking: {why}. " + (f"Turning off the {len(sure)} high-confidence duplicate(s) (--redundant-auto); "
+                                           f"the other {len(groups) - len(sure)} group(s) are only reported."
+                                           if auto else "Reporting only; nothing is turned off."))
+    elif auto and sure:
+        print(f"\n  --redundant-auto: the {len(sure)} high-confidence duplicate(s) are turned off without asking; "
+              f"asking about the other {len(groups) - len(sure)}.")
     turn_off, new_both = [], set()
+    quit_asking = False
     for kind, g in groups:
+        if quit_asking:
+            break
         if kind == "exact":
             l, k = g["plugin"], g["keep"]
             if auto and g["confidence"] == "high" and l.endswith(".esp"):
@@ -10822,8 +10881,11 @@ def run_redundant(args):
                 continue
             if not interactive:
                 continue
-            ans = input(f"\n  {N[l]}: [o] turn it off (keep {N[k]})  [k] keep both  [s] skip (ask again "
-                        f"next time) > ").strip().lower()
+            ans = ask(f"\n  [{g['confidence']}] {N[l]}: [o] turn it off (keep {N[k]})  [k] keep both  "
+                      f"[s] skip (ask again next time)  [q] stop asking > ")
+            if ans is None or ans.startswith("q"):
+                quit_asking = True
+                continue
             if ans.startswith("o"):
                 turn_off.append((l, k, "doubles " + N[k]))
             elif ans.startswith("k"):
@@ -10837,7 +10899,10 @@ def run_redundant(args):
                 continue
             prompt = "\n  " + "  ".join(f"[{c}] keep {N[keep]}, turn off {N[x]}" for c, keep, x in
                                         (("a", a, b), ("b", b, a)) if x in opts) + "  [k] keep both  [s] skip > "
-            ans = input(prompt).strip().lower()
+            ans = ask(prompt.replace(" > ", "  [q] stop asking > "))
+            if ans is None or ans.startswith("q"):
+                quit_asking = True
+                continue
             if ans.startswith("a") and b in opts:
                 turn_off.append((b, a, "another version of " + N[a] + " (your choice)"))
             elif ans.startswith("b") and a in opts:
@@ -12268,14 +12333,18 @@ def multipatch_aside(args, game_dir):
 
 
 def full_redundant_step(args, common):
-    """--full's redundant-plugins step: in a console, --redundant asks about each (with the descriptions and
-    the overlap); otherwise (or with --yes / --redundant-auto) the high-confidence duplicates are turned off
-    and the rest is reported. --dry-run (in `common`) only reports."""
-    interactive = sys.stdin.isatty() and not getattr(args, "no_interactive", False) and not args.yes \
-        and not getattr(args, "redundant_auto", False)
-    if interactive:
-        return ("redundant plugins (asks about each)", ["--redundant"] + [c for c in common if c != "--no-interactive"])
-    return ("redundant plugins (sure ones turned off, the rest reported)", ["--redundant-auto"] + common)
+    """--full's redundant-plugins step: in a console, --redundant asks about every group (with the
+    descriptions and the overlap), --yes or not; with --redundant-auto the sure ones go without asking and
+    the rest is asked. With nobody to ask (no console, or --no-interactive) the high-confidence duplicates
+    are turned off and the rest is reported, saying why. --dry-run (in `common`) only reports."""
+    # --yes doesn't answer these: turning a mod off is asked about whenever someone is there to answer;
+    # only --redundant-auto turns the sure ones off without asking in a console
+    console, _why = console_interactive()
+    auto = getattr(args, "redundant_auto", False)
+    if console and not getattr(args, "no_interactive", False):
+        return ("redundant plugins (asks about each)",
+                ["--redundant"] + (["--redundant-auto"] if auto else []) + [c for c in common if c != "--no-interactive"])
+    return ("redundant plugins (nobody to ask: sure ones turned off, the rest reported)", ["--redundant-auto"] + common)
 
 
 def run_full(args):
