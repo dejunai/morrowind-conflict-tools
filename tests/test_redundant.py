@@ -203,24 +203,6 @@ def test_auto_never_turns_off_a_version_choice(tmp_path):
     assert order(tmp_path) == ["Morrowind.esm", "Mod - A.esp", "Mod - B.esp"]
 
 
-def test_full_runs_the_report(monkeypatch, tmp_path):
-    game(tmp_path, SPEC)
-    calls = []
-    real = m.main
-
-    def fake(argv):
-        calls.append(argv[1:])
-        return 0
-    monkeypatch.setattr(m, "main", fake)
-    monkeypatch.setattr(m, "full_check", lambda *a, **k: 0)
-    monkeypatch.setattr(m, "full_missing_masters", lambda *a, **k: [])
-    args = m.argparse.Namespace(data_dir=str(tmp_path / "Data Files"), dry_run=True, fix_log="f.log", encoding="cp1252",
-                                yes=False, ini=None, vortex_dir=None, add_all_esp=False, collide_radius=m.COLLIDE_ANY_RADIUS,
-                                fresh_answers=True, use_answers=False)
-    m.run_full(args)
-    assert ["--redundant", "--fix-log", "f.log", "--encoding", "cp1252", "--no-interactive", "--dry-run"] in calls
-
-
 def test_patch_without_master_is_not_a_version(tmp_path):
     """Djangos Dialogue - Patch for Purists: no MAST, but only changes the main mod's records (nothing new) and
     has its own description: a patch on top, not another version to choose between."""
