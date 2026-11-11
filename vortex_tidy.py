@@ -25,7 +25,7 @@ For each mod folder in the staging folder (G:\\Vortex Mods\\morrowind):
     Off\\normal maps\\<mod name>\\ (never deployed): vanilla Morrowind with MGE XE doesn't use them (only OpenMW
     does). If a model names one, mwdialog_check.py --fix puts a flat stand-in normal map in its place, so
     the game shows no missing-texture warnings. Only normal maps whose diffuse texture exists move (tx_wall.dds
-    for tx_wall_n.dds: beside it, at the same path under textures\ in any mod in staging, loose in Data Files,
+    for tx_wall_n.dds: beside it, at the same path under textures\\ in any mod in staging, loose in Data Files,
     or in a BSA there). One with no diffuse anywhere stays where it is, untouched and without a stand-in; if
     nothing uses it, mwdialog_check --full's unused-asset purge takes it out later. The exception: a file
     whose path says "normal maps" (an add-on normal-map pack, for OpenMW) moves either way, and the plan notes
