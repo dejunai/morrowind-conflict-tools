@@ -42,6 +42,12 @@ Mods that install into the game folder instead of Data Files (an .exe, .dll or a
 their root, like MGE XE) are left alone, and so is every mod on the blacklist: the Morrowind Code Patch and
 NIFZER0EDIT built in, plus the folder names in vortex_tidy_blacklist.txt (one per line, wildcards allowed).
 
+  * MWSE Lua mods (MWSE\\mods\\...\\*.lua) are checked by mwdialog_luafix.py for bad habits that pass a syntax
+    check (absurd priorities, polling every frame, one-shot handlers that never unregister, unguarded ref.data,
+    infoFilter reading text, re-registering on every load, log spam...). The plan lists them; --apply patches
+    the safe ones in place (hard links stay; the LuaJIT checker must compile the result; originals kept in
+    mwdialog_backup\\luafix), --undo puts them back. --no-lua skips this, --lua-only does only this.
+
 It only shows the plan unless you pass --apply. Every move is written to a journal, and --undo puts
 everything back. Purge in Vortex before applying, and Deploy afterwards, so the game folder matches.
 
@@ -569,6 +575,15 @@ def undo():
     back = 0
     left = []                                         # ops not undone: kept in the journal for another try
     for op in reversed(last["ops"]):
+        if "luafix" in op:                            # a Lua file mwdialog_luafix patched in place
+            lf = _luafix()
+            ok, msg = lf.restore_op(op) if lf else (False, f"{op['luafix']}: mwdialog_luafix.py not found")
+            if ok:
+                back += 1
+            else:
+                print("  " + msg, file=sys.stderr)
+                left.append(op)
+            continue
         try:
             if "rmdir" in op:
                 os.makedirs(op["rmdir"], exist_ok=True)
@@ -608,6 +623,90 @@ def undo():
               f"({JOURNAL}), so --undo can try them again.")
         return 1
     return 0
+
+
+def _luafix():
+    """mwdialog_luafix.py from this folder, or None."""
+    try:
+        import mwdialog_luafix
+        return mwdialog_luafix
+    except Exception as e:
+        print(f"(mwdialog_luafix.py could not be loaded: {e})", file=sys.stderr)
+        return None
+
+
+def run_lua(args, do_apply):
+    """mwdialog_luafix on each mod's MWSE Lua files: listed in the plan; with --apply the verified patches are
+    written in place (originals in mwdialog_backup\\luafix, journaled here so --undo puts them back)."""
+    lf = _luafix()
+    if lf is None:
+        return
+    game_dir = os.path.dirname(os.path.abspath(__file__))
+    data_dir = os.path.join(game_dir, "Data Files")
+    mods = sorted(d for d in os.listdir(args.staging) if os.path.isdir(os.path.join(args.staging, d))
+                  and d.lower() != "off")
+    if args.only:
+        mods = [d for d in mods if any(fnmatch.fnmatch(d.lower(), pat.lower()) for pat in args.only)]
+    pats = blacklist(create=do_apply) + (args.skip or [])
+    cfg = lf.load_config(game_dir, data_dir)
+    checker = lf.find_checker(getattr(args, "luajit", None), game_dir)
+    print("\n" + "=" * 70 + "\nLUA CHECK (each mod's MWSE Lua files)\n" + "=" * 70)
+    print(f"  syntax check: {checker.name if checker else 'NONE (no LuaJIT/luac found: nothing is patched)'}")
+    out, total, reps = [], {}, []
+    for d in mods:
+        if any(fnmatch.fnmatch(d.lower(), pt.lower()) for pt in pats):
+            continue
+        root = os.path.join(args.staging, d)
+        if not os.path.isdir(os.path.join(root, "MWSE")) and not any(
+                e.lower() == "mwse" for e in os.listdir(root)):
+            continue
+        try:
+            rep = lf.check_paths([root], cfg, False, checker, getattr(args, "lua_level", "high"), data_dir,
+                                 True, False, game_dir)
+        except Exception as e:                        # one odd mod never stops the rest
+            print(f"  {d}: Lua check failed ({e})")
+            continue
+        lines, counts = lf.format_report(rep, indent="    ")
+        for k, v in counts.items():
+            total[k] = total.get(k, 0) + v
+        if lines:
+            out.append(f"\n{d}")
+            out += lines
+        reps.append((d, rep))
+    n_ok = sum(1 for _d, r in reps for e in r.files.values() if e.get("patch") and e["patch"]["ok"])
+    print("\n".join(out[:300]))
+    if len(out) > 300:
+        print(f"    ... ({len(out) - 300} more lines in {PLAN})")
+    print("\n  Lua findings by rule:")
+    print("\n".join(lf.summary_lines(total, "    ")) or "    none")
+    try:
+        with open(PLAN, "a", encoding="utf-8") as f:
+            f.write("\nLUA CHECK\n" + "\n".join(out + lf.summary_lines(total)) + "\n")
+    except OSError:
+        pass
+    try:
+        import mwdialog_assets as ah
+        ah.shared_cache(game_dir).flush()
+    except Exception:
+        pass
+    if not do_apply:
+        print(f"  {n_ok} Lua file(s) to patch (run with --apply)")
+        return
+    if not n_ok:
+        return
+    if checker is None:
+        print("  not patching Lua: no syntax checker (LuaJIT / luac) found")
+        return
+    if not args.yes and input(f"\nPatch {n_ok} Lua file(s) in place? [y/N] ").strip().lower() not in ("y", "yes"):
+        print("  Lua files not changed.")
+        return
+    merged = lf.Report()
+    for _d, rep in reps:
+        merged.files.update(rep.files)
+    written, refused = lf.apply_report(merged, journal=JOURNAL, head_extra={"staging": args.staging, "lua": True})
+    for p, why in refused:
+        print(f"    not patched: {os.path.relpath(p, args.staging)}: {why}")
+    print(f"  patched {written} Lua file(s) (journal {JOURNAL}; --undo puts them back)")
 
 
 def _tool_modules():
@@ -757,14 +856,24 @@ def main():
     ap.add_argument("--yes", action="store_true", help="with --apply: don't ask first")
     ap.add_argument("--undo", action="store_true", help="put back everything the last --apply moved")
     ap.add_argument("--no-assets", action="store_true", help="skip the asset check of each mod's files")
+    ap.add_argument("--no-lua", action="store_true", help="skip the Lua check (mwdialog_luafix)")
+    ap.add_argument("--lua-only", action="store_true", help="only the Lua check: no moves, no asset check")
+    ap.add_argument("--lua-level", choices=("high", "medium"), default="high",
+                    help="which Lua findings --apply patches (default high)")
+    ap.add_argument("--luajit", help="the LuaJIT (or luac) the Lua check compiles with")
     args = ap.parse_args()
     if args.undo:
         return undo()
     if not os.path.isdir(args.staging):
         print(f"Staging folder not found: {args.staging}", file=sys.stderr)
         return 2
+    if args.lua_only:
+        run_lua(args, args.apply)
+        return 0
     moves = run_plan(args)
     if not args.apply:
+        if not args.no_lua:
+            run_lua(args, False)
         if not args.no_assets:
             run_assets(args, False)
         print("\nNothing changed. Purge in Vortex, run again with --apply, then Deploy.")
@@ -772,6 +881,8 @@ def main():
     moves, gone = review(args.staging, moves, assume_keep=args.yes)
     if not moves and not gone:
         print("Nothing to move.")
+        if not args.no_lua:
+            run_lua(args, True)
         if not args.no_assets:
             run_assets(args, True)
         return 0
@@ -780,6 +891,8 @@ def main():
         print("Nothing changed.")
         return 0
     apply(gone + moves, args.staging)
+    if not args.no_lua:
+        run_lua(args, True)
     if not args.no_assets:
         run_assets(args, True)
     return 0
