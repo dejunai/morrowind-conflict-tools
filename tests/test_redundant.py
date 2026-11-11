@@ -239,3 +239,51 @@ def test_lua_names_in_settings_or_turned_off_mods_dont_count(tmp_path):
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_text(text)
     assert m.lua_required_plugins(str(df)) == {"c.esp"}
+
+
+def cell(name, ref_id):
+    return rec("CELL", sub("NAME", z(name)) + sub("DATA", struct.pack("<iii", 1, 0, 0))
+               + sub("FRMR", struct.pack("<I", 1)) + sub("NAME", z(ref_id)))
+
+
+def test_two_halves_with_their_own_cells_are_not_versions(tmp_path):
+    """Danae's Edits: TR and Vv define the same NPCs, each placing them in its own cells (mainland vs
+    Vvardenfell). Not alternatives."""
+    objs = [misc(f"am_npc{i}", 1) for i in range(10)]
+    df, _p = game(tmp_path, [BASE, ("Animated - Edits - TR.esp", objs + [cell(f"Mainland {i}", "am_npc1") for i in range(6)],
+                                    MW, "same mod"),
+                             ("Animated - Edits - Vv.esp", objs + [cell(f"Vvardenfell {i}", "am_npc1") for i in range(6)],
+                              MW, "same mod")])
+    r = find(df, ["Morrowind.esm", "Animated - Edits - TR.esp", "Animated - Edits - Vv.esp"])
+    assert r["variant"] == []
+
+
+def test_added_master_is_a_soft_dependency(tmp_path):
+    """FMI_HulStop lists Danae's Vv only because --sort added it (a content rule); no reference uses it. With
+    the link soft, Vv is judged on its content alone (here: a pure ITM copy, so redundant)."""
+    df, _p = game(tmp_path, [BASE, ("Danae Vv.esp", [misc("a", 1)], MW, ""),
+                             ("HulStop.esp", [misc("hul", 1)], MW + [("Danae Vv.esp", 0)], "")])
+    names = ["Morrowind.esm", "Danae Vv.esp", "HulStop.esp"]
+    assert find(df, names)["exact"] == []
+    r = find(df, names, soft_masters={("hulstop.esp", "danae vv.esp")})
+    assert [e["plugin"] for e in r["exact"]] == ["danae vv.esp"]
+    assert not m.added_master_in_use(os.path.join(df, "HulStop.esp"), "Danae Vv.esp")
+
+
+def test_added_master_used_by_a_reference_stays_hard(tmp_path):
+    df, _p = game(tmp_path, [BASE, ("Mod.esp", [misc("a", 1)], MW, ""),
+                             ("Patch.esp", [rec("CELL", sub("NAME", z("X")) + sub("DATA", struct.pack("<iii", 1, 0, 0))
+                                                + sub("FRMR", struct.pack("<I", (2 << 24) | 5)) + sub("NAME", z("a")))],
+                              MW + [("Mod.esp", 0)], "")])
+    assert m.added_master_in_use(os.path.join(df, "Patch.esp"), "Mod.esp")
+
+
+def test_auto_turning_off_a_soft_master_takes_it_out_of_the_patch(tmp_path):
+    import json
+    df, paths = game(tmp_path, [BASE, ("Danae Vv.esp", [misc("a", 1)], MW, ""),
+                                ("HulStop.esp", [misc("hul", 1)], MW + [("Danae Vv.esp", 0)], "")])
+    (tmp_path / m.ADDED_MASTERS_RECORD).write_text(json.dumps({"HulStop.esp": {"Danae Vv.esp": "2026-11-07; why: content"}}))
+    run(tmp_path, "--redundant-auto", "--no-interactive")
+    assert order(tmp_path) == ["Morrowind.esm", "HulStop.esp"]
+    assert m.read_header_masters(paths["hulstop.esp"]) == ["Morrowind.esm"]
+    assert m.read_added_masters(str(tmp_path)) == {}

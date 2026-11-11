@@ -3166,6 +3166,34 @@ def run_repair_sounds(args):
     return 1 if failed else 0
 
 
+def sound_names_under(root):
+    """"sound/<path>" (lowercase, forward slashes) of every file under the Sound folder `root`, like os.walk +
+    relpath gave them, but with one scandir per folder and no per-file path arithmetic: a voice pack can put
+    a million or more files there, and every scan of a --full lists them."""
+    out = []
+    if not os.path.isdir(root):
+        return out
+    stack = [(root, os.path.basename(os.path.normpath(root)).lower() + "/")]
+    while stack:
+        path, prefix = stack.pop()
+        try:
+            it = os.scandir(path)
+        except OSError:
+            continue
+        with it:
+            for e in it:
+                try:
+                    is_dir = e.is_dir()
+                except OSError:
+                    continue
+                if is_dir:
+                    if _real_dir(e):
+                        stack.append((e.path, prefix + e.name.lower() + "/"))
+                else:
+                    out.append(prefix + e.name.lower())
+    return out
+
+
 def collect_sound_files(data_dirs, bsa_paths, tree=None):
     SOUND_ROOTS[:] = [d for d in data_dirs if os.path.isdir(d)]
     files = set()
@@ -3179,10 +3207,7 @@ def collect_sound_files(data_dirs, bsa_paths, tree=None):
             for fn in os.listdir(d) if os.path.isdir(d) else []:
                 if fn.lower() == "sound":
                     root = os.path.join(d, fn)
-        for dirpath, _dirs, fns in os.walk(root):
-            for fn in fns:
-                rel = os.path.relpath(os.path.join(dirpath, fn), d)
-                files.add(rel.replace("\\", "/").lower())
+        files.update(sound_names_under(root))
     for b in bsa_paths:
         try:
             files |= bsa_file_names(b)
@@ -3259,13 +3284,20 @@ def _real_dir(e):
 class DataTree:
     """Every file under one Data Files folder, from a single walk with os.scandir: files is [(top folder
     lowercase - "" for files in Data Files itself -, path relative to Data Files, full path)]. stat() does one
-    os.stat per file and keeps it for the pass. (The size and date in Windows' directory listing aren't used:
-    for a hard link changed through its other name - a mod file vortex_tidy repaired - they can be stale.)"""
+    os.stat per file and keeps it for the pass. (The size and date in Windows' directory listing can be stale
+    for a hard link changed through its other name - a mod file vortex_tidy repaired - so stat() never uses
+    them.) For the sound and music folders (often a million or more voice files, where one os.stat each takes
+    minutes on Windows) the listing's size and date are kept too, as listed_stamp(i): only good enough to
+    accept a cached "nothing wrong" result; anything else is checked again with os.stat."""
+    LISTED_TOPS = frozenset(("sound", "music"))
 
     def __init__(self, root):
+        from array import array
         self.root = os.path.abspath(root)
         self.files = []
         self._st = {}
+        self._lsize = array("q")                    # parallel to files: the listing's size, -1 if not kept
+        self._ltime = array("q")                    # and its date (whole seconds)
         try:
             first = sorted(os.scandir(self.root), key=lambda e: e.name.lower())
         except OSError:
@@ -3280,7 +3312,7 @@ class DataTree:
                 if _real_dir(e):
                     stack.append((e.name.lower(), e.path, e.name))
             else:
-                self.files.append(("", e.name, e.path))
+                self._add_file("", e.name, e)
         stack.reverse()
         while stack:
             top, path, rel = stack.pop()
@@ -3298,8 +3330,29 @@ class DataTree:
                     if _real_dir(e):
                         subdirs.append((top, e.path, rel + os.sep + e.name))
                 else:
-                    self.files.append((top, rel + os.sep + e.name, e.path))
+                    self._add_file(top, rel + os.sep + e.name, e)
             stack.extend(reversed(subdirs))
+
+    def _add_file(self, top, rel, e):
+        self.files.append((top, rel, e.path))
+        size = mtime = -1
+        if top in self.LISTED_TOPS:
+            try:
+                st = e.stat()                       # Windows: from the directory listing, no extra call
+                size, mtime = st.st_size, int(st.st_mtime)
+            except (OSError, OverflowError, ValueError):
+                size = mtime = -1
+        self._lsize.append(size)
+        self._ltime.append(mtime)
+
+    def listed_stamp(self, i):
+        """files[i]'s size and date from the directory listing, as the asset cache stamps them ("size:date"),
+        or None (not a sound/music file, or not listed)."""
+        try:
+            size = self._lsize[i]
+        except IndexError:
+            return None
+        return None if size < 0 else f"{size}:{self._ltime[i]}"
 
     def covers(self, d):
         return os.path.normcase(os.path.abspath(d)) == os.path.normcase(self.root)
@@ -3313,14 +3366,19 @@ class DataTree:
     def asset_files(self, tops):
         """(top, rel, full) under these top folders, in that order, skipping Off and .Orphaned folders inside
         them (what the asset checks look at)."""
+        for _i, top, rel, full in self.asset_entries(tops):
+            yield top, rel, full
+
+    def asset_entries(self, tops):
+        """asset_files() with each file's index in files (for listed_stamp)."""
         for want in tops:
-            for top, rel, full in self.files:
+            for i, (top, rel, full) in enumerate(self.files):
                 if top != want:
                     continue
                 parts = rel.lower().split(os.sep)[1:-1]
                 if ".orphaned" in parts or "off" in parts:
                     continue
-                yield top, rel, full
+                yield i, top, rel, full
 
 
 class ModelAssets:
@@ -10360,7 +10418,7 @@ def _id_text(key):
     return str(key[1]) if len(key) == 2 else " ".join(str(x) for x in key[1:])
 
 
-def find_redundant(plugins, needed=(), lua=(), keep_both=(), no_candidates=()):
+def find_redundant(plugins, needed=(), lua=(), keep_both=(), no_candidates=(), soft_masters=()):
     """Plugins in `plugins` ([(name, path)], load order) that do the same job as another one:
       exact - every record it has is either identical to the version before it (ITM) or identical to
               another active plugin's copy, and taking it out changes no record's winner: nothing of it is
@@ -10368,9 +10426,13 @@ def find_redundant(plugins, needed=(), lua=(), keep_both=(), no_candidates=()):
               one of them is redundant). High confidence when one plugin holds all its non-ITM records.
       variant - two plugins that share most of their records, most of them identical, and look like two
               versions of one mod (same description, or the same name up to an edit word): alternatives
-              where one is normally picked. Never turned off without asking.
+              where one is normally picked. Never turned off without asking. Not when each has cells of its
+              own (Animated Morrowind - Danae's Edits: Vv for Vvardenfell, TR for the mainland, sharing the
+              objects they place): those are two halves.
     Plugins other active plugins need as masters, that MWSE Lua asks for, or in `no_candidates` (this
-    tool's patches and merges) are never candidates. Returns {"exact": [...], "variant": [...], "info": {...}}."""
+    tool's patches and merges) are never candidates. A master in `soft_masters` ({(plugin, master)}, lowercase:
+    the masters --sort added from content rules, which no reference of the plugin uses) doesn't count: the
+    plugin loads without it, and the tool takes such a master out again when it is turned off. Returns {"exact": [...], "variant": [...], "info": {...}}."""
     names = [n for n, _p in plugins]
     low = [n.lower() for n in names]
     pos = {l: i for i, l in enumerate(low)}
@@ -10389,6 +10451,8 @@ def find_redundant(plugins, needed=(), lua=(), keep_both=(), no_candidates=()):
         for mname in info[l]["masters"]:
             if mname.lower() in pos:
                 dependents[mname.lower()].append(l)
+    soft = {(a.lower(), b.lower()) for a, b in soft_masters}
+    hard_dependents = {mm: [d for d in ds if (d, mm) not in soft] for mm, ds in dependents.items()}
     needed = {x.lower() for x in needed}
     lua = {x.lower() for x in lua}
     blocked = {x.lower() for x in no_candidates}
@@ -10396,7 +10460,7 @@ def find_redundant(plugins, needed=(), lua=(), keep_both=(), no_candidates=()):
     def why_not(l, gone):
         if l in blocked:
             return "this tool's own plugin"
-        if l in needed or [d for d in dependents[l] if d not in gone]:
+        if l in needed or [d for d in hard_dependents.get(l, []) if d not in gone]:
             return "other active plugins need it as a master"
         if l in lua:
             return "an MWSE Lua mod asks for it by name"
@@ -10495,6 +10559,9 @@ def find_redundant(plugins, needed=(), lua=(), keep_both=(), no_candidates=()):
         da, db = " ".join(info[a]["desc"].split()), " ".join(info[b]["desc"].split())
         if not ((da and da == db) or _same_mod_name(names[pos[a]], names[pos[b]])):
             continue
+        own_cells = [sum(1 for k in recs[x] if k[0] == "CELL" and k not in recs[y]) for x, y in ((a, b), (b, a))]
+        if min(own_cells) >= REDUNDANT_VARIANT_MIN:
+            continue                                    # each places things in cells of its own: two halves
         later, other = (a, b) if pos[a] > pos[b] else (b, a)
         if da != db and PATCH_WORD_RE.search(names[pos[later]]) and not PATCH_WORD_RE.search(names[pos[other]]) \
                 and not any(versions[k][0] == later for k in recs[later]):
@@ -10503,7 +10570,7 @@ def find_redundant(plugins, needed=(), lua=(), keep_both=(), no_candidates=()):
                         "blocked": {x: why_not(x, gone) for x in (a, b) if why_not(x, gone)}})
     variant.sort(key=lambda v: -v["same"] / max(1, min(len(recs[v["a"]]), len(recs[v["b"]]))))
     return {"exact": exact, "variant": variant, "recs": recs, "info": info, "versions": versions,
-            "dependents": dependents, "pos": pos, "names": dict(zip(low, names))}
+            "dependents": dependents, "soft": soft, "pos": pos, "names": dict(zip(low, names))}
 
 
 PATCH_WORD_RE = re.compile(r"(?i)(?:^|[^a-z])(patch|fix(?:es|ed)?|compat\w*|add-?on|tweaks?)(?:$|[^a-z])")
@@ -10537,8 +10604,11 @@ def describe_plugin(res, l, vroot=None, paths=None):
     out.append(f"    {len(recs)} records ({_type_text(inf['counts'])}): {new} new, {len(recs) - new} change "
                f"earlier plugins' records; its version wins {wins}")
     deps = res["dependents"].get(l, [])
+    soft = res.get("soft", set())
     if deps:
-        out.append("    needed as a master by: " + ", ".join(res["names"][d] for d in deps[:4])
+        out.append("    needed as a master by: " + ", ".join(res["names"][d] + (" (added by --sort; taken out again "
+                                                                              "if this goes)" if (d, l) in soft else "")
+                                                             for d in deps[:4])
                    + (f" and {len(deps) - 4} more" if len(deps) > 4 else ""))
     return out
 
@@ -10579,7 +10649,17 @@ def run_redundant(args):
     print(f"  Comparing the records of {len(plugins)} active plugins...", file=sys.stderr)
     ours = {n for n, _p in plugins if is_our_patch(n) or not multipatch_source(n)}
     ours |= {k.lower() for k in read_merge_record(game_dir)}
-    res = find_redundant(plugins, lua=lua_required_plugins(data_dir), keep_both=both, no_candidates=ours)
+    soft = set()
+    for dep, mods in read_added_masters(game_dir).items():
+        for mod in (mods or {}):
+            p = paths.get(dep.lower())
+            try:
+                if p and not added_master_in_use(p, mod):
+                    soft.add((dep.lower(), mod.lower()))
+            except (OSError, FormatError, IndexError):
+                pass
+    res = find_redundant(plugins, lua=lua_required_plugins(data_dir), keep_both=both, no_candidates=ours,
+                         soft_masters=soft)
     vroot = None
     if not getattr(args, "no_vortex", False):
         try:
@@ -10681,6 +10761,8 @@ def run_redundant(args):
             print(f"  turned off {N[l]} (kept {N[k]})")
         print(f"  Old load order saved as {backup}; listed in {REDUNDANT_RECORD}. --redundant-undo NAME turns one "
               f"back on.")
+        if any((d, l) in res["soft"] for l in gone for d in res["dependents"].get(l, [])):
+            drop_vanished_added_masters(args)          # now, so no plugin is left listing a master that's off
     write_redundant(game_dir, off_rec, both | new_both, names=N)
     for pair in new_both:
         print("  keeping both: " + " + ".join(N[x] for x in sorted(pair)) + " (not asked again)")
@@ -11333,6 +11415,31 @@ def note_promoted_rules(game_dir, rec):
         safe_write_bytes(path, new.encode(ENC, MW_ERRORS))
 
 
+def _refs_use_master(recs, idx, n_masters):
+    """True when a cell reference in these records points at master #idx (1-based), or at a later master
+    while there is one (taking #idx out would renumber those)."""
+    later = n_masters > idx
+    for _o, t, _f, b in recs:
+        if t == "CELL":
+            for n, d in iter_subs(b):
+                if n in ("FRMR", "MVRF") and len(d) >= 4 and (struct.unpack_from("<I", d)[0] >> 24) >= idx:
+                    if later or (struct.unpack_from("<I", d)[0] >> 24) == idx:
+                        return True
+    return False
+
+
+def added_master_in_use(path, master_name):
+    """Would remove_master refuse? (a reference uses that master's index). False when it isn't a master."""
+    with open(path, "rb") as f:
+        data = f.read()
+    recs = list(iter_records(data))
+    names = [cstr(d) for n, d in iter_subs(recs[0][3]) if n == "MAST"]
+    low = [x.lower() for x in names]
+    if master_name.lower() not in low:
+        return False
+    return _refs_use_master(recs[1:], low.index(master_name.lower()) + 1, len(names))
+
+
 def remove_master(path, master_name):
     """Take a master this tool added back out of a plugin (in place, .bak first). Refused when any
     reference in the plugin uses that master's index."""
@@ -11346,13 +11453,8 @@ def remove_master(path, master_name):
     if master_name.lower() not in low:
         return None
     idx = low.index(master_name.lower()) + 1               # 1-based, as references count them
-    later = len(names) > idx
-    for o, t, _f, b in recs[1:]:
-        if t == "CELL":
-            for n, d in iter_subs(b):
-                if n in ("FRMR", "MVRF") and len(d) >= 4 and (struct.unpack_from("<I", d)[0] >> 24) >= idx:
-                    if later or (struct.unpack_from("<I", d)[0] >> 24) == idx:
-                        raise FormatError(f"a reference uses master #{idx} or a later one")
+    if _refs_use_master(recs, idx, len(names)):
+        raise FormatError(f"a reference uses master #{idx} or a later one")
     keep, skip_data = [], False
     for n, d in subs:
         if n == "MAST" and cstr(d).lower() == master_name.lower():
