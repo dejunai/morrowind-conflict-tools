@@ -847,6 +847,17 @@ def rewrite_absolute(data):
     return len(hits), b"".join(out)
 
 
+def sound_job(top, info):
+    """What --fix would do to a sound with header info (channels, rate): {} when nothing."""
+    ch, rate = info
+    job = {}
+    if top == "sound" and ch > 1:
+        job["mono"] = True
+    if rate not in STD_RATES:
+        job["rate"] = 44100
+    return job
+
+
 def check(world, m):
     """Runs the checks for World `world` (module `m` = mwdialog_check). Stores world.asset_health (fix list)."""
     import builtins, time as _time
@@ -867,8 +878,20 @@ def check(world, m):
     if tree is None or not tree.covers(data_dir):
         tree = m.DataTree(data_dir)
     stats = {}                                   # full path -> os.stat: one per file for the whole pass
-    for top, rel, full in tree.asset_files(ASSET_DIRS):
+    listed = getattr(tree, "listed_stamp", None)
+    entries = tree.asset_entries(ASSET_DIRS) if listed else ((None,) + t for t in tree.asset_files(ASSET_DIRS))
+    for i, top, rel, full in entries:
         low = rel.lower()
+        # sounds and music: the directory listing's size and date first (a voice pack can have a million
+        # files, and an os.stat each takes minutes); the sound check below calls os.stat only when the
+        # cache has no "nothing wrong" entry for that stamp. An empty file is always confirmed by os.stat.
+        ls = listed(i) if listed and top in SOUND_DIRS and low.endswith((".wav", ".mp3")) else None
+        if ls is not None and not ls.startswith("0:"):
+            if any(ord(c) > 127 for c in rel):
+                r.add("ERROR", "Data Files", "", "", f"{rel}: the file name has non-ASCII characters; the game "
+                                                     f"can't open it (rename it, and the plugin/model that names it)")
+            snd_files.append((top, rel, full, ls))
+            continue
         try:
             st = stats[full] = tree.stat(full)
         except OSError:
@@ -888,7 +911,7 @@ def check(world, m):
         if top in TEX_DIRS and low.endswith(".dds"):
             tex_files.append((rel, full, size))
         elif top in SOUND_DIRS and low.endswith((".wav", ".mp3")):
-            snd_files.append((top, rel, full))
+            snd_files.append((top, rel, full, None))
         elif top == "meshes" and low.endswith(".nif"):
             nif_files.append((rel, full))
         elif top == "meshes" and low.endswith(".kf"):
@@ -1048,13 +1071,35 @@ def check(world, m):
     # --- sounds
     ff = find_ffmpeg()
     print(f"Asset health: sounds ({len(snd_files)})...", file=sys.stderr)
-    for k, (top, rel, full) in enumerate(snd_files, 1):
+    for k, (top, rel, full, ls) in enumerate(snd_files, 1):
         if k % 5000 == 0:
             print(f"Asset health: sounds {k}/{len(snd_files)}...", file=sys.stderr)
-        if tidy_clean(rel, full) or full not in stats:
-            continue
-        skey, sstamp = "snd:" + norm_rel(rel), stamp_of(stats[full])
-        info = None if norm_rel(rel) in generated else cache.get(skey, sstamp)
+        key = norm_rel(rel)
+        skey = "snd:" + key
+        info = None
+        if ls is not None and key not in generated:
+            # the listing's stamp: trusted for tidy's "checked clean" and a cached result that needs nothing;
+            # a cached problem, or no entry, is confirmed with a real os.stat below
+            if cache.tidy_lookup(key, ls) is not None:
+                continue
+            info = cache.get(skey, ls)
+            if info and sound_job(top, info):
+                info = None
+        if info is None:
+            if full not in stats:
+                try:
+                    stats[full] = tree.stat(full)
+                except OSError:
+                    continue
+                if stats[full].st_size == 0:
+                    r.add("ERROR", "Data Files", "", "", f"{rel}: empty file (0 bytes); --fix moves it to "
+                                                         f"Off\\...\\broken\\ and puts a stand-in in its place")
+                    fixes.append(("broken", full, rel, "empty file"))
+                    continue
+            if tidy_clean(rel, full):
+                continue
+            sstamp = stamp_of(stats[full])
+            info = None if key in generated else cache.get(skey, sstamp)
         if info is None:
             try:
                 with open(full, "rb") as f:
@@ -1066,11 +1111,7 @@ def check(world, m):
         if not info:
             continue
         ch, rate = info
-        job = {}
-        if top == "sound" and ch > 1:
-            job["mono"] = True
-        if rate not in STD_RATES:
-            job["rate"] = 44100
+        job = sound_job(top, info)
         if job:
             what = ", ".join(x for x, k in (("stereo (3D sounds must be mono)", "mono"), (f"{rate} Hz", "rate"))
                              if k in job)
@@ -1148,7 +1189,7 @@ def check(world, m):
                                                 "levelup", "splash"):
             continue
         unused.append((rel, full, size))
-    for top, rel, full in snd_files:
+    for top, rel, full, _ls in snd_files:
         if top != "sound" or rel.lower().split(os.sep)[1:2] == ["vo"]:
             continue                                   # music plays by folder; voices are left alone
         stem = os.path.splitext(os.path.basename(rel))[0].lower()
