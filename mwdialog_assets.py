@@ -54,11 +54,19 @@ def nif_without_shapes(data):
     return data.startswith(NIF_HEAD) and not any(t in data for t in SHAPE_TAGS + NOT_EMPTY_TAGS)
 
 
-CACHE_FILE = "mwdialog_asset_cache.json"
+CACHE_FILE = "mwdialog_asset_cache.json"           # the old format: converted once, then renamed
+CACHE_DB = "mwdialog_asset_cache.sqlite"
+MIGRATED_SUFFIX = ".migrated"
+# what vortex_tidy found in each mod: tidy3:<mod folder>|<path in the mod>; raise the number when a check is
+# added or made stricter, and every file is looked at again once
+TIDY_KEY = "tidy3:"
+KNOWN_PREFIXES = {"clean2", "seen2", "clean", "seen", "texh", "tex2", "nif", "bsa", "bsa2", "snd", "refs", "names",
+                  "fixed", "tidy3"}
 # tidy's "found clean" entries carry the version of the checks: raise it when a check is added or made
 # stricter, and every file is looked at again once
+# the old cache's tidy entries (per path, not per mod): dropped when it is converted
 CLEAN_KEY = "clean2:"
-SEEN_KEY = "seen2:"            # examined by tidy (clean or not), same size + date
+SEEN_KEY = "seen2:"
 EXT_RE = re.compile(rb"\.(dds|tga|bmp|wav|mp3)(?![A-Za-z0-9_])", re.I)
 NAME_CHARS = set(range(0x21, 0x7f)) | {0x20}
 
@@ -88,70 +96,254 @@ def names_by_ext(b, exts=(b"dds", b"tga", b"bmp", b"wav", b"mp3")):
 
 
 class AssetCache:
-    """Per-file results of the asset checks, keyed by path + size + date (or BSA + offset + size), so the next
-    run only reads new or changed files. The main file (mwdialog_asset_cache.json) is read once; what a run
-    learns goes to mwdialog_asset_cache.json.add (one line per entry, written as it goes), which is merged
-    into the main file once, at the end. A run that was stopped leaves the .add file; the next run reads it
-    in, so nothing learnt is lost."""
-    def __init__(self, game_dir):
-        import json
-        self.path = os.path.join(game_dir, CACHE_FILE)
-        self.add_path = self.path + ".add"
-        try:
-            with open(self.path, encoding="utf-8") as f:
-                self.d = json.load(f)
-        except (OSError, ValueError):
-            self.d = {}
-        self.dirty = False
-        try:                                     # what a stopped run learnt
-            with open(self.add_path, encoding="utf-8") as f:
-                for line in f:
-                    try:
-                        k, v = json.loads(line)
-                        self.d[k] = v
-                        self.dirty = True
-                    except (ValueError, TypeError):
-                        pass                     # a line cut short when it stopped
-        except OSError:
-            pass
-        self._add = None
+    """Per-file results of the asset checks, keyed by path + size + date, so the next run only reads new or
+    changed files. Kept in mwdialog_asset_cache.sqlite next to Morrowind.ini: read once when a run starts,
+    and written as the run goes (a few hundred entries per transaction), so a run that is stopped or
+    crashes keeps everything up to its last batch, and the file is never left half-written (SQLite
+    commits each batch whole or not at all). The old mwdialog_asset_cache.json (and its .add file) is
+    converted the first time and kept as mwdialog_asset_cache.json.migrated."""
+    BATCH = 500
 
+    def __init__(self, game_dir):
+        self.game_dir = game_dir
+        self.path = os.path.join(game_dir, CACHE_DB)
+        self.d = {}                  # key -> [stamp, result as JSON text]
+        self._dec = {}               # key -> result, decoded on first use
+        self._dirty = {}             # key -> (stamp, text), or None for a deleted key, not yet written
+        self.touched = set()         # keys read or written by this run (the rest may be pruned)
+        self._tidx = None            # rel -> [tidy keys], built when first needed
+        self.db = None
+        self._warned = False
+        try:
+            self._open()
+        except Exception as e:                     # a damaged file: keep it aside and start a new one
+            print(f"(asset cache {CACHE_DB} could not be read ({e}); starting a new one, the old file is "
+                  f"kept as {CACHE_DB}.bad)", file=sys.stderr)
+            self._close_quietly()
+            self.d.clear()
+            try:
+                os.replace(self.path, self.path + ".bad")
+            except OSError:
+                pass
+            try:
+                self._open()
+            except Exception:
+                self._close_quietly()              # no cache file this run: everything is read again
+
+    def _open(self):
+        import sqlite3
+        self.db = sqlite3.connect(self.path, timeout=30, isolation_level=None)
+        self.db.execute("PRAGMA journal_mode=WAL")
+        self.db.execute("PRAGMA synchronous=NORMAL")
+        self.db.execute("CREATE TABLE IF NOT EXISTS c (k TEXT PRIMARY KEY, s TEXT NOT NULL, r TEXT NOT NULL)")
+        self.db.execute("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT)")
+        for k, s, r in self.db.execute("SELECT k, s, r FROM c"):
+            self.d[k] = [s, r]
+        self._migrate()
+
+    def _close_quietly(self):
+        try:
+            if self.db is not None:
+                self.db.close()
+        except Exception:
+            pass
+        self.db = None
+
+    def _migrate(self):
+        """The old JSON cache, once: its entries are converted, then the file is renamed .json.migrated."""
+        import json
+        old = os.path.join(self.game_dir, CACHE_FILE)
+        if not os.path.exists(old):
+            return
+        done = self.db.execute("SELECT v FROM meta WHERE k='migrated'").fetchone()
+        if not done:
+            t0 = time.time()
+            try:
+                mb = os.path.getsize(old) / 1048576
+            except OSError:
+                mb = 0
+            print(f"Asset cache: converting {CACHE_FILE} ({mb:.0f} MB) to {CACHE_DB}, once...", file=sys.stderr,
+                  flush=True)
+            d = {}
+            try:
+                with open(old, encoding="utf-8") as f:
+                    d = json.load(f)
+            except (OSError, ValueError, MemoryError) as e:
+                print(f"  (could not read it: {e}; starting with an empty cache)", file=sys.stderr)
+                d = {}
+            try:
+                with open(old + ".add", encoding="utf-8") as f:
+                    for line in f:
+                        try:
+                            k, v = json.loads(line)
+                            d[k] = v
+                        except (ValueError, TypeError):
+                            pass
+            except OSError:
+                pass
+            rows = []
+            own = os.path.normcase(os.path.abspath(self.game_dir))
+            for k, v in d.items():
+                if not isinstance(v, dict) or "s" not in v or "r" not in v:
+                    continue
+                k2 = migrate_key(k, own)
+                if k2 is None:
+                    continue
+                rows.append((k2, str(v["s"]), json.dumps(v["r"], separators=(",", ":"))))
+            del d
+            self.db.execute("BEGIN")
+            self.db.executemany("INSERT OR REPLACE INTO c VALUES (?, ?, ?)", rows)
+            self.db.execute("INSERT OR REPLACE INTO meta VALUES ('migrated', ?)", (time.strftime("%Y-%m-%d %H:%M"),))
+            self.db.execute("COMMIT")
+            for k, s, r in rows:
+                self.d[k] = [s, r]
+            print(f"Asset cache: {len(rows):,} entries kept, in {time.time() - t0:.0f}s; the old file is now "
+                  f"{CACHE_FILE}{MIGRATED_SUFFIX} (delete it when you like)", file=sys.stderr, flush=True)
+        for src in (old, old + ".add"):
+            try:
+                if os.path.exists(src):
+                    os.replace(src, src + MIGRATED_SUFFIX)
+            except OSError as e:
+                print(f"  (could not rename {os.path.basename(src)}: {e})", file=sys.stderr)
+
+    # --- entries
     def get(self, key, stamp):
         v = self.d.get(key)
-        return v["r"] if v and v.get("s") == stamp else None
+        if v is None or v[0] != stamp:
+            return None
+        self.touched.add(key)
+        r = self._dec.get(key, _MISSING)
+        if r is _MISSING:
+            import json
+            r = self._dec[key] = json.loads(v[1])
+        return r
+
+    def has(self, key):
+        return key in self.d
+
+    def touch(self, key):
+        if key in self.d:
+            self.touched.add(key)
 
     def put(self, key, stamp, result):
         import json
-        v = {"s": stamp, "r": result}
-        if self.d.get(key) == v:
+        t = json.dumps(result, separators=(",", ":"))
+        self.touched.add(key)
+        v = self.d.get(key)
+        if v is not None and v[0] == stamp and v[1] == t:
             return
-        self.d[key] = v
-        self.dirty = True
+        self.d[key] = [stamp, t]
+        self._dec[key] = result
+        self._dirty[key] = (stamp, t)
+        if key.startswith(TIDY_KEY):
+            self._tidx = None
+        if len(self._dirty) >= self.BATCH:
+            self.flush()
+
+    def delete(self, key):
+        if self.d.pop(key, None) is not None:
+            self._dec.pop(key, None)
+            self._dirty[key] = None
+            if key.startswith(TIDY_KEY):
+                self._tidx = None
+
+    def prune(self, prefixes, keep=None):
+        """Delete the entries under these key prefixes that this run neither read nor wrote (their files are
+        gone or renamed), except those keep(key) says to keep. Returns how many went."""
+        gone = [k for k in self.d if k.startswith(prefixes) and k not in self.touched and not (keep and keep(k))]
+        for k in gone:
+            self.delete(k)
+        return len(gone)
+
+    # --- what vortex_tidy found in each mod (keys tidy3:<mod folder>|<path>)
+    def tidy_lookup(self, rel_key, stamp):
+        """tidy's record of a mod file at this Data Files path with the same size and date (the same file: a
+        Vortex hard link, or a copy that kept its date), or None."""
+        if self._tidx is None:
+            self._tidx = {}
+            for k in self.d:
+                if k.startswith(TIDY_KEY):
+                    self._tidx.setdefault(k.split("|", 1)[-1], []).append(k)
+        for k in self._tidx.get(rel_key, ()):
+            r = self.get(k, stamp)
+            if r is not None:
+                return r
+        return None
+
+    # --- writing
+    def flush(self):
+        """Write what changed since the last call, in one transaction. Never raises."""
+        if not self._dirty or self.db is None:
+            return True
+        items = list(self._dirty.items())
         try:
-            if self._add is None:
-                self._add = open(self.add_path, "a", encoding="utf-8")
-            self._add.write(json.dumps([key, v], separators=(",", ":")) + "\n")
-            self._add.flush()
-        except OSError:
-            pass
+            self.db.execute("BEGIN")
+            self.db.executemany("INSERT OR REPLACE INTO c VALUES (?, ?, ?)",
+                                [(k, v[0], v[1]) for k, v in items if v is not None])
+            self.db.executemany("DELETE FROM c WHERE k = ?", [(k,) for k, v in items if v is None])
+            self.db.execute("COMMIT")
+        except Exception as e:
+            try:
+                self.db.execute("ROLLBACK")
+            except Exception:
+                pass
+            if not self._warned:
+                self._warned = True
+                print(f"(could not write the asset cache {CACHE_DB}: {e}; the next run reads those files again)",
+                      file=sys.stderr)
+            return False
+        for k, _v in items:
+            if self._dirty.get(k) is _v:
+                del self._dirty[k]
+        return True
 
     def save(self, force=False):
-        """Merge into the main file: only at the end of the run (force); calls along the way do nothing."""
-        if not force or not self.dirty:
-            return
-        import json
-        try:
-            if self._add:
-                self._add.close()
-                self._add = None
-            with open(self.path + ".tmp", "w", encoding="utf-8") as f:
-                json.dump(self.d, f, separators=(",", ":"))
-            os.replace(self.path + ".tmp", self.path)
-            self.dirty = False
-            if os.path.exists(self.add_path):
-                os.remove(self.add_path)
-        except OSError:
-            pass
+        """Write what changed (kept for older callers; the cache is also written as the run goes)."""
+        return self.flush()
+
+    def close(self):
+        """Write what is left and close; when pruning freed a quarter of the file or more, compact it."""
+        self.flush()
+        if self.db is not None:
+            try:
+                free = self.db.execute("PRAGMA freelist_count").fetchone()[0]
+                pages = self.db.execute("PRAGMA page_count").fetchone()[0]
+                if free > 256 and free * 4 > pages:
+                    self.db.execute("VACUUM")
+            except Exception:
+                pass
+        self._close_quietly()
+
+
+_MISSING = object()
+
+
+def migrate_key(k, game_dir_nc):
+    """The new key for an entry of the old JSON cache, or None to drop it: models get the nif: prefix, paths
+    use backslashes; tidy's rel-only clean2:/seen2: entries (now kept per mod), the BSA name lists (now with
+    each model's textures) and the word lists of this tool's own files are dropped."""
+    pre, sep, rest = k.partition(":")
+    if not sep or pre not in KNOWN_PREFIXES:          # a model's facts (no prefix in the old file)
+        return "nif:" + norm_rel(k)
+    if pre in ("clean2", "seen2", "bsa", "clean", "seen"):
+        return None
+    if pre in ("texh", "snd"):
+        return pre + ":" + norm_rel(rest)
+    if pre in ("refs", "names"):
+        p = os.path.normcase(os.path.abspath(rest)).lower()
+        if os.path.dirname(p) == game_dir_nc.lower():   # a file in the Morrowind folder itself: one of ours
+            return None
+        return pre + ":" + rest.lower()
+    return k
+
+
+def norm_rel(rel):
+    """A path under Data Files (or a mod folder) as the cache keys it: lowercase, backslashes."""
+    return rel.replace("/", "\\").lower()
+
+
+def stamp_of(st):
+    return f"{st.st_size}:{int(st.st_mtime)}"
 
 
 _CACHES = {}
@@ -163,17 +355,74 @@ def shared_cache(game_dir):
     if key not in _CACHES:
         _CACHES[key] = AssetCache(game_dir)
         import atexit
-        atexit.register(lambda c=_CACHES[key]: c.save(force=True))
+        atexit.register(lambda c=_CACHES[key]: c.close())
     return _CACHES[key]
 
 
+def close_caches():
+    """Write and close every open cache (tests; a long-running caller)."""
+    for c in list(_CACHES.values()):
+        c.close()
+    _CACHES.clear()
+
+
 def model_facts(b, m):
-    """What the checks need from one model file, small enough to cache."""
+    """What the checks need from one model file, small enough to cache. "tn": the textures it names (paths
+    under Textures, for the missing-texture check); "tex": their names alone (for "unused")."""
     if not b.startswith(NIF_HEAD):
-        return {"bad": b[:40].split(b"\n")[0].decode("latin1", "replace")}
+        return {"bad": b[:40].split(b"\n")[0].decode("latin1", "replace"), "tn": []}
     bad_keys = m.nif_text_keys_lf(b)[0] if m.TEXT_KEY_TAG in b else 0
     return {"tex": sorted({n for n, e in names_by_ext(b, (b"dds", b"tga", b"bmp"))}),
-            "abs": bool(nif_absolute_textures(b)), "noshape": nif_without_shapes(b), "keys": bad_keys}
+            "abs": bool(nif_absolute_textures(b)), "noshape": nif_without_shapes(b), "keys": bad_keys,
+            "tn": m.nif_texture_refs(b)}
+
+
+def model_facts_cached(cache, key, full, st, m, generated=(), need_tn=False):
+    """model_facts for the model at Data Files path `key` (norm_rel) with os.stat `st`: vortex_tidy's record of
+    the same file (same size and date: a Vortex hard link) or this cache's when it is unchanged, else read.
+    A stand-in this tool made is always read. need_tn: an entry from the old cache, without the texture
+    paths, is read again. None if the file can't be read."""
+    stamp = stamp_of(st)
+    if key not in generated and cache is not None:
+        t = cache.tidy_lookup(key, stamp)
+        if t is not None and isinstance(t.get("f"), dict) and "tn" in t["f"]:
+            return t["f"]
+        f = cache.get("nif:" + key, stamp)
+        # an old entry without "tn" whose noshape came from an older, stricter test: read it again
+        if f is not None and ("tn" in f or not (need_tn or f.get("noshape"))):
+            return f
+    try:
+        with open(full, "rb") as fh:
+            f = model_facts(fh.read(), m)
+    except OSError:
+        return None
+    if cache is not None and key not in generated:
+        cache.put("nif:" + key, stamp, f)
+    return f
+
+
+def texture_facts(head, m):
+    """What the texture checks need from a DDS's first 148 bytes: ["bad"] (not a DDS), ["dx10", alpha],
+    ["?"] (a DDS this can't judge) or ["dds", [w, h, mips, header, block, bpp], alpha flag]."""
+    if head[:4] != b"DDS ":
+        return ["bad"]
+    if head[84:88] == b"DX10":
+        return ["dx10", bool(dx10_has_alpha(head))]
+    info = m.dds_info(head)
+    if info is None:
+        return ["?"]
+    return ["dds", list(info), struct.unpack_from("<I", head, 80)[0] & 0x1 if len(head) >= 84 else 0]
+
+
+def prune_tidy(cache, checked, present=None):
+    """After vortex_tidy's asset check: drop the records of files a checked mod no longer has, and (present:
+    every mod folder in staging, when all were checked) of mods that are gone."""
+    def keep(k):
+        mod = k[len(TIDY_KEY):].split("|", 1)[0]
+        if mod in checked:
+            return False                        # checked now: untouched means the file is gone
+        return present is None or mod in present
+    return cache.prune((TIDY_KEY,), keep)
 
 
 def kf_model_name(rel):
@@ -298,12 +547,17 @@ def check(world, m):
     fixes = []                       # (kind, full, rel, detail)
     print("Asset health: reading textures, models, sounds...", file=sys.stderr)
     tex_files, snd_files, nif_files, kf_files = [], [], [], []
-    for top, rel, full in _walk(data_dir, ASSET_DIRS):
+    tree = getattr(world, "tree", None)
+    if tree is None or not tree.covers(data_dir):
+        tree = m.DataTree(data_dir)
+    stats = {}                                   # full path -> os.stat: one per file for the whole pass
+    for top, rel, full in tree.asset_files(ASSET_DIRS):
         low = rel.lower()
         try:
-            size = os.path.getsize(full)
+            st = stats[full] = tree.stat(full)
         except OSError:
             continue
+        size = st.st_size
         if any(ord(c) > 127 for c in rel):
             r.add("ERROR", "Data Files", "", "", f"{rel}: the file name has non-ASCII characters; the game can't "
                                                  f"open it (rename it, and the plugin/model that names it)")
@@ -324,15 +578,14 @@ def check(world, m):
         elif top == "meshes" and low.endswith(".kf"):
             kf_files.append((rel, full))
     cache = shared_cache(os.path.dirname(data_dir))
-    # files tidy already found clean in their mod (a Vortex hard link: same size and date) aren't read again
+    generated = m.generated_rels(os.path.dirname(data_dir))
+    # a file vortex_tidy checked in its mod (the same file: a Vortex hard link, or a copy with the same size
+    # and date) gets the light check only (name, empty file); the stand-ins this tool made always the full one
     def tidy_clean(rel, full):
-        try:
-            st = os.stat(full)
-        except OSError:
+        key = norm_rel(rel)
+        if key in generated or full not in stats:
             return False
-        stamp = f"{st.st_size}:{int(st.st_mtime)}"
-        return any(cache.get(k + rel.lower().replace(a, b), stamp) is True
-                   for k in (CLEAN_KEY, SEEN_KEY) for a, b in (("/", "\\"), ("\\", "/")))
+        return cache.tidy_lookup(key, stamp_of(stats[full])) is not None
     # --- textures
     print(f"Asset health: textures ({len(tex_files)})...", file=sys.stderr)
     for k, (rel, full, size) in enumerate(tex_files, 1):
@@ -340,36 +593,37 @@ def check(world, m):
             print(f"Asset health: textures {k}/{len(tex_files)}...", file=sys.stderr)
         if tidy_clean(rel, full):
             continue
-        try:
-            st = os.stat(full)
-        except OSError:
-            continue
-        hkey, hstamp = "texh:" + rel.lower(), f"{st.st_size}:{int(st.st_mtime)}"
-        hx = cache.get(hkey, hstamp)
-        if hx is not None:
-            head = bytes.fromhex(hx)
-        else:
-            try:
-                with open(full, "rb") as f:
-                    head = f.read(148)
-            except OSError:
-                continue
-            cache.put(hkey, hstamp, head.hex())
-        if head[:4] != b"DDS ":
+        key = norm_rel(rel)
+        gen = key in generated
+        stamp = stamp_of(stats[full])
+        tf = None if gen else cache.get("tex2:" + key, stamp)
+        if tf is None:
+            hx = None if gen else cache.get("texh:" + key, stamp)      # the old cache's header: converted
+            if hx is not None:
+                head = bytes.fromhex(hx)
+            else:
+                try:
+                    with open(full, "rb") as f:
+                        head = f.read(148)
+                except OSError:
+                    continue
+            tf = texture_facts(head, m)
+            cache.delete("texh:" + key)
+            if not gen:
+                cache.put("tex2:" + key, stamp, tf)
+        if tf[0] == "bad":
             r.add("ERROR", "Data Files", "", "", f"{rel}: not a DDS file (renamed?); the game can't load it. "
                                                  f"--fix moves it to Off\\...\\broken\\, a placeholder replaces it")
             fixes.append(("broken", full, rel, "not a DDS file"))
             continue
-        fourcc = head[84:88]
-        if fourcc == b"DX10":
+        if tf[0] == "dx10":
             r.add("ERROR", "Data Files", "", "", f"{rel}: DX10/BC7-style DDS; Morrowind (DirectX 8) can't read it. "
                                                  f"--fix converts it to DXT")
-            fixes.append(("tex", full, rel, {"dxt": True, "mips": True, "alpha": dx10_has_alpha(head)}))
+            fixes.append(("tex", full, rel, {"dxt": True, "mips": True, "alpha": tf[1]}))
             continue
-        info = m.dds_info(head)
-        if info is None:
+        if tf[0] != "dds":
             continue
-        w, h, mips, hdr, block, bpp = info
+        w, h, mips, hdr, block, bpp = tf[1]
         need = hdr
         lw, lh = w, h
         for _ in range(mips):
@@ -386,7 +640,7 @@ def check(world, m):
             job["mips"] = True
         if not block and bpp and bpp >= 24 and max(w, h) >= 256:
             job["dxt"] = True
-            job["alpha"] = bool(struct.unpack_from("<I", head, 80)[0] & 0x1)
+            job["alpha"] = bool(tf[2])
         pw, ph = _pow2(w), _pow2(h)
         if (pw, ph) != (w, h):              # 1, 2: fine even compressed (the block is padded)
             job["size"] = (pw, ph)
@@ -412,19 +666,11 @@ def check(world, m):
     for k, (rel, full) in enumerate(allm, 1):
         if k % 2000 == 0:
             print(f"Asset health: models {k}/{len(allm)}...", file=sys.stderr)
-        try:
-            st = os.stat(full)
-        except OSError:
+        if full not in stats:
             continue
-        stamp = f"{st.st_size}:{int(st.st_mtime)}"
-        facts = cache.get(rel.lower(), stamp)
+        facts = model_facts_cached(cache, norm_rel(rel), full, stats[full], m, generated)
         if facts is None:
-            try:
-                with open(full, "rb") as f:
-                    facts = model_facts(f.read(), m)
-            except OSError:
-                continue
-            cache.put(rel.lower(), stamp, facts)
+            continue
         if facts.get("keys"):
             world.text_key_fixes.append((full, rel, facts["keys"]))
             r.add("ERROR", "Data Files", "", "", f"{rel}: {facts['keys']} animation text key(s) use Unix line endings "
@@ -438,13 +684,6 @@ def check(world, m):
             fixes.append(("broken", full, rel, "not a Morrowind file"))
             continue
         used.update(facts.get("tex", ()))
-        if rel.lower().endswith(".nif") and facts.get("noshape") and "marker" not in rel.lower():
-            try:                                       # cached by an older, stricter test: look again
-                with open(full, "rb") as f:
-                    facts["noshape"] = nif_without_shapes(f.read())
-                cache.put(rel.lower(), stamp, facts)
-            except OSError:
-                pass
         if rel.lower().endswith(".nif") and facts.get("noshape") and "marker" not in rel.lower():
             r.add("WARN", "Data Files", "", "", f"{rel}: model has no polygons (draws nothing); fine if the mod "
                                                 f"hides something on purpose")
@@ -460,45 +699,21 @@ def check(world, m):
             if not os.path.exists(os.path.join(data_dir, kf_model_name(rel))) and twin_rel not in A.mesh_bsa \
                     and twin_rel not in getattr(A, "mesh_loose", {}):
                 kf_orphans.append((rel, full))
-    by_bsa = {}
-    for bsa, off, n in A.mesh_bsa.values():
-        by_bsa.setdefault(bsa, []).append((off, n))
-    for bsa, items in by_bsa.items():
-        try:
-            st = os.stat(bsa)
-        except OSError:
-            continue
-        key = "bsa:" + os.path.basename(bsa).lower()
-        stamp = f"{st.st_size}:{int(st.st_mtime)}"
-        names = cache.get(key, stamp)
-        if names is None:
-            print(f"Asset health: reading the models in {os.path.basename(bsa)} ({len(items)})...", file=sys.stderr)
-            names = set()
-            try:
-                with open(bsa, "rb") as f:
-                    for off, n in sorted(items):
-                        f.seek(off)
-                        names.update(x for x, _e in names_by_ext(f.read(n), (b"dds", b"tga", b"bmp")))
-            except OSError:
-                pass
-            names = sorted(names)
-            cache.put(key, stamp, names)
-        used.update(names)
-    cache.save()
+    # the texture names in the BSAs' models: read once per BSA, then cached while the BSA is unchanged
+    for bsa in sorted({v[0] for v in A.mesh_bsa.values()}):
+        if hasattr(A, "bsa_facts"):
+            used.update(A.bsa_facts(bsa).get("stems", ()))
+    cache.flush()
     # --- sounds
     ff = find_ffmpeg()
     print(f"Asset health: sounds ({len(snd_files)})...", file=sys.stderr)
     for k, (top, rel, full) in enumerate(snd_files, 1):
         if k % 5000 == 0:
             print(f"Asset health: sounds {k}/{len(snd_files)}...", file=sys.stderr)
-        if tidy_clean(rel, full):
+        if tidy_clean(rel, full) or full not in stats:
             continue
-        try:
-            st = os.stat(full)
-        except OSError:
-            continue
-        skey, sstamp = "snd:" + rel.lower(), f"{st.st_size}:{int(st.st_mtime)}"
-        info = cache.get(skey, sstamp)
+        skey, sstamp = "snd:" + norm_rel(rel), stamp_of(stats[full])
+        info = None if norm_rel(rel) in generated else cache.get(skey, sstamp)
         if info is None:
             try:
                 with open(full, "rb") as f:
@@ -542,7 +757,7 @@ def check(world, m):
             st = os.stat(path)
         except OSError:
             return
-        key, stamp = ("refs:" if with_words else "names:") + path.lower(), f"{st.st_size}:{int(st.st_mtime)}"
+        key, stamp = ("refs:" if with_words else "names:") + os.path.abspath(path).lower(), stamp_of(st)
         got = cache.get(key, stamp)
         if got is not None:
             for name, ext in got[0]:
@@ -560,16 +775,25 @@ def check(world, m):
         note_file(p, False)
     game_dir = os.path.dirname(data_dir)
     skip_top = {"meshes", "textures", "sound", "music", "icons", "bookart", "splash", "video", "off", ".orphaned"}
-    for root, keep in ((data_dir, None), (game_dir, {"mge3", "mwse"})):
-        for dp, ds, fs in os.walk(root):
-            if dp == root:
-                if keep is not None:
-                    ds[:] = [d for d in ds if d.lower() in keep]
-                else:
-                    ds[:] = [d for d in ds if d.lower() not in skip_top]
-            for fn in fs:
-                if fn.lower().endswith(REF_TEXT_EXT):
-                    note_file(os.path.join(dp, fn), True)
+    for top, rel, full in tree.files:                   # Data Files outside the asset folders (Lua, configs...)
+        fl = full.lower()
+        if top not in skip_top and fl.endswith(REF_TEXT_EXT) and not fl.endswith(".bugreport.txt"):
+            note_file(full, True)
+    # the Morrowind folder: Morrowind.ini, and the MGE XE and MWSE folders. Not this tool's own files there
+    # (its cache, report and lists name every texture: each would count as used, and "unused" never shrink)
+    try:
+        game_entries = sorted(os.listdir(game_dir))
+    except OSError:
+        game_entries = []
+    for fn in game_entries:
+        full = os.path.join(game_dir, fn)
+        if fn.lower() == "morrowind.ini":
+            note_file(full, True)
+        elif fn.lower() in ("mge3", "mwse") and os.path.isdir(full):
+            for dp, _ds, fs in os.walk(full):
+                for f2 in fs:
+                    if f2.lower().endswith(REF_TEXT_EXT):
+                        note_file(os.path.join(dp, f2), True)
     unused = []
     for rel, full, size in tex_files:
         top = rel.split(os.sep, 1)[0].lower()
@@ -608,6 +832,10 @@ def check(world, m):
         for rel, full, size in unused:
             fixes.append(("unused", full, rel, "nothing names it"))
     world.asset_health = fixes
+    # the pass saw every file: entries for files that are gone (or renamed) go, and what was learnt is written
+    # now, not only when the program ends
+    cache.prune(("tex2:", "texh:", "nif:", "snd:", "refs:", "names:", "bsa2:"))
+    cache.flush()
 
 
 def apply(fixes, data_dir, game_dir, m, log, dry=False):
@@ -931,15 +1159,19 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None):
     # files already found clean (here or by an earlier tidy / check run) aren't read again: keyed by the
     # Data Files path + size + date, which a Vortex hard link shares with the deployed copy
     cache = shared_cache(os.path.dirname(data_dir) if data_dir else os.path.dirname(os.path.abspath(__file__)))
+    mod_key = TIDY_KEY + os.path.basename(os.path.normpath(root)).lower() + "|"
     pending = None
 
     def settle():
         if pending:
-            # tidy looked at it: the full check of Data Files needn't again (what tidy can't fix, it can't
-            # either; tidy's bug report has it). Clean: not even tidy reads it again.
-            cache.put(SEEN_KEY + pending[0][len(CLEAN_KEY):], pending[1], True)
-            if len(issues) == pending[2] and len(fixes) == pending[3]:
-                cache.put(pending[0], pending[1], True)
+            # one record per mod file (tidy3:<mod>|<path>, its size + date): the full check of Data Files trusts
+            # the same file there (what tidy can't fix, it can't either; tidy's bug report has it) and takes a
+            # model's texture list from it. Clean ("c"): not even tidy reads it again.
+            key, stamp, n_issues, n_fixes, facts = pending
+            rec = {"c": len(issues) == n_issues and len(fixes) == n_fixes}
+            if facts is not None:
+                rec["f"] = facts
+            cache.put(key, stamp, rec)
     for top, rel, full in _walk(root, tops):
         settle()
         pending = None
@@ -949,10 +1181,12 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None):
             size = st.st_size
         except OSError:
             continue
-        stamp = f"{size}:{int(st.st_mtime)}"
-        if cache.get(CLEAN_KEY + low, stamp) is True:
+        stamp = stamp_of(st)
+        key = mod_key + norm_rel(rel)
+        got = cache.get(key, stamp)
+        if got is not None and got.get("c"):
             continue
-        pending = (CLEAN_KEY + low, stamp, len(issues), len(fixes))
+        pending = [key, stamp, len(issues), len(fixes), None]
         if any(ord(c) > 127 for c in rel):
             new_rel = ascii_name(rel)
             tail = rel.replace("/", "\\").split("\\", 1)[-1]
@@ -991,6 +1225,7 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None):
                     b = f.read()
             except OSError:
                 continue
+            pending[4] = model_facts(b, m)
             if not b.startswith(NIF_HEAD):
                 first = b[:40].split(b"\n")[0].decode("latin1", "replace")
                 issues.append(("ERROR", rel, f"not a Morrowind file (header '{first}'); the game crashes on it"
@@ -1069,7 +1304,7 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None):
                 issues.append(("WARN", rel, ", ".join(why) + " -> converted"))
                 fixes.append(("snd", full, rel, job))
     settle()
-    cache.save()
+    cache.flush()
     return issues, fixes
 
 

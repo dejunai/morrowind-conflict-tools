@@ -80,4 +80,8 @@ def records_of(path):
 def _fresh_caches():
     if hasattr(m, "_READ_CACHE"):
         m._READ_CACHE.clear()
+    getattr(m, "_BSA_MEMO", {}).clear()
     yield
+    if hasattr(ah, "close_caches"):
+        ah.close_caches()              # each test's asset cache is written and closed with it
+    getattr(m, "_BSA_MEMO", {}).clear()

@@ -581,6 +581,7 @@ def run_assets(args, do_apply):
                 print(f"  (couldn't read {fn}: {e})")
     print("\n" + "=" * 70 + "\nASSET CHECK (each mod's own files)\n" + "=" * 70)
     total_fix = total_issue = 0
+    checked = set()
     for d in mods:
         if any(fnmatch.fnmatch(d.lower(), pt.lower()) for pt in pats):
             continue
@@ -590,6 +591,7 @@ def run_assets(args, do_apply):
         except Exception as e:                      # one odd mod never stops the rest
             print(f"  {d}: check failed ({e})")
             continue
+        checked.add(d.lower())
         if not issues:
             if do_apply:                              # clean now: drop an old tidy section
                 bdir = os.path.join(root, "bugreports")
@@ -625,6 +627,16 @@ def run_assets(args, do_apply):
                   + (f"; {len(skipped)} skipped, e.g. {skipped[0]}" if skipped else ""))
     print(f"\n  {total_issue} asset issue(s), {total_fix} repairable"
           + ("" if do_apply else " (run with --apply to repair them)"))
+    # the per-mod records in the asset cache: files a checked mod no longer has, and (all mods checked) mods
+    # that are gone, are dropped; then everything is written
+    try:
+        cache = ah.shared_cache(game_dir)
+        present = None if args.only else {d.lower() for d in os.listdir(args.staging)
+                                          if os.path.isdir(os.path.join(args.staging, d))}
+        ah.prune_tidy(cache, checked, present)
+        cache.flush()
+    except Exception as e:                          # never stop tidy for its cache
+        print(f"  (asset cache not tidied: {e})")
 
 
 def main():

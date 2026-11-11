@@ -77,3 +77,43 @@ Per-file diffs are in `mwdialog_check.diff`, `mwdialog_assets.diff` and `vortex_
 - The `B023` and `B007` lint items, and the `_func` pyflakes note (an intentional `_` name).
 - `merge_levlist` without `masters_of` (direct callers, tests) still behaves exactly like tes3cmd.
 - The out-of-scope scripts `chargen_ship_patch.py` and `stranded_doors_patch.py` were not reviewed or changed.
+
+## Asset pass speed-ups and the asset cache (`--asset-check` and `--full`)
+
+The baseline is commit `dee9957`. The `*.perf.diff` files hold only this round's changes; the `*.diff` files still show everything since the originals. CLIs are unchanged. The only on-disk change is the cache file, which is converted automatically.
+
+| # | Change | Where |
+|---|---|---|
+| 1 | **The "unused" scan no longer reads the tool's own files.** In the Morrowind folder itself it reads only `Morrowind.ini`, plus the `mge3` and `MWSE` folders. Files under Data Files are still read, except `*.bugreport.txt`. Before, the scan read the cache, `mwdialog_report.txt`, `mwdialog_unused_assets.txt` and the other lists. Every texture name in those files then counted as "used", so from the second run on, "unused" shrank to almost nothing (284 → 0 on the benchmark; now 284 on both runs). The cache's own entry, a word list of the whole cache, is gone too. | `mwdialog_assets.check`, text-file walk |
+| 2 | **Model texture lists are read once and cached.** `ModelAssets.missing_textures` used to read every model (loose and in BSAs) with `NIF_TEXTURE_RE` on every run. It now uses the `"tn"` list in the cached model facts (`nif:<path>`), or vortex_tidy's record of the same file. A BSA's models are read once into `bsa2:<name>`, kept while the BSA's size and date are unchanged. A cache miss uses `nif_texture_names`, which gives exactly the old regex's results but about 15× faster (it finds the extension first). Tests cover spaces, odd characters, cp1252 bytes, double extensions and random bytes. | `nif_texture_names`, `nif_texture_refs`, `ModelAssets.texture_names`/`bsa_facts`, `model_facts`, `model_facts_cached` |
+| 3 | **The cache is written as the run goes, and safely.** Entries are committed in batches of 500 and again right after the asset pass, not only at exit. Each batch is one SQLite transaction, so it is written whole or not at all. A killed run keeps every committed batch; the test kills a process with `os._exit`. Write errors of any kind are reported once and never stop the run. A damaged cache file is renamed `.bad` and a new one is started. There is no `.add` side file any more. | `AssetCache.flush`/`close`, `shared_cache` |
+| 4 | **The cache is smaller and faster.** <br>• **Format:** `mwdialog_asset_cache.sqlite` replaces the JSON. It is read once at start-up, with each entry decoded only when used. <br>• **Texture headers:** stored as a few decoded fields (`tex2:`) instead of 296 hex characters (`texh:`). Old `texh:` entries are converted the first time they are used. <br>• **Pruning:** after each asset pass, entries for files that no longer exist are removed. vortex_tidy removes the records of files and mods that are gone. The file is compacted (VACUUM) when pruning frees a quarter of it or more. <br>• **Migration:** the old `mwdialog_asset_cache.json` and its `.add` file are converted once, then renamed `.json.migrated` / `.json.add.migrated`, not deleted. Converted: model facts (to `nif:`), `texh:`, `snd:`, `refs:`/`names:` and `fixed:`. Dropped: the per-path `clean2:`/`seen2:` entries (now kept per mod), the old `bsa:` lists, and the word lists of the tool's own files. <br>• **Other readers:** vortex_tidy had no direct reader of the JSON left; it already used `shared_cache` (the normal-map redesign removed its direct read). | `AssetCache`, `migrate_key`, `texture_facts` |
+| 5 | **One walk of Data Files per asset pass.** `DataTree` walks Data Files once with `os.scandir`. ModelAssets, the asset checks, the sound list and the Lua/config scan all use it. Before, the same tree was walked four times and up to four `stat` calls were made per file; now it is one `os.stat` per file. The sizes and dates in Windows' directory listing are deliberately **not** used. For a Vortex hard link that vortex_tidy repaired through its other name, those can be stale, and the cache would then trust a changed file. BSA name lists and indexes (`bsa_file_names`, `bsa_index`) are remembered for the run by size + `mtime_ns`. That removes the repeated BSA reads in the 6–7 scans of a `--full`. | `DataTree`, `collect_sound_files(tree=)`, `_bsa_memo` |
+| 6 | **vortex_tidy keeps one record per mod file and the full check trusts it.** The record is keyed `tidy3:<mod folder>\|<path>`, with size + date. It holds a clean flag and, for models, the full model facts including the texture list. A Data Files file counts as the same file when its size and date match a tidy record for that path. With a Vortex hard link they always do; a different file at that path doesn't. Such a file gets the light check only (name, empty file) and its model facts come from tidy, so it isn't read. **Stand-ins** listed in `mwdialog_generated_files.txt` are always checked in full, bypassing both the cache and tidy's records. So a proper file put in place of one is noticed, even when it has the same size and date. | `check_folder`, `run_assets`, `prune_tidy`, `AssetCache.tidy_lookup`, `generated_rels` |
+
+**Removed:** the re-read of every "no polygons" model on each run. That fix-up for older cache entries is now done once, when an old entry is used.
+
+### Benchmark (synthetic install on the box: 22,000 DDS, 8,000 loose NIFs, an 8,000-model BSA, 2,000 WAVs, 800 Lua files, 6 plugins)
+
+| run | before | after |
+|---|---|---|
+| `--asset-check` run 1 / run 2 | 12.1 s / 9.5 s | 7.7 s / **3.1 s** |
+| `--full --yes` run 1 / run 2 | 25.4 s / 12.8 s | 21.5 s / **6.7 s** |
+| `--full` asset step, run 1 / run 2 | 22 s / 10 s | 18 s / **4 s** |
+| cache after run 2 | 23.1 MB JSON (grows every run) | 12.6 MB SQLite (stable) |
+| `--asset-check` after vortex_tidy checked the mods (hard links) | n/a | 5.0 s first run, no model read |
+| first run after converting a 22 MB JSON cache | n/a | conversion 1 s, run 8.5 s, next 3.2 s |
+
+The reports from before and after are identical apart from the order of lines. The one exception is the corrected "unused" count on run 2.
+
+### Behaviour changes you will notice
+
+1. **New cache file.** The cache is now `mwdialog_asset_cache.sqlite`, next to Morrowind.ini, and while a run is going it may have `-wal` and `-shm` files beside it. The first run converts the old JSON and prints `Asset cache: converting mwdialog_asset_cache.json (N MB) ... once`, then the new name of the old file. Delete `mwdialog_asset_cache.json.migrated` when you like.
+2. **The first run after updating does some reading again:**
+   - every model's texture list (to fill `"tn"`);
+   - every BSA's models, once each;
+   - in vortex_tidy, every mod file once, because the old per-path clean entries can't be tied to a mod.
+
+   After that, runs read only new or changed files.
+3. **"Unused" textures and sounds stay reported on later runs.** Before, they disappeared from the second run on. Expect more `--fix` moves to `Off\unused\` than you've seen lately; they are the real unused files.
+4. A BSA's texture names now come from all its models, including ones a later BSA overrides. That is slightly more conservative: a texture only an overridden model uses is never called unused.
