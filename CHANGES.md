@@ -117,3 +117,18 @@ The reports from before and after are identical apart from the order of lines. T
    After that, runs read only new or changed files.
 3. **"Unused" textures and sounds stay reported on later runs.** Before, they disappeared from the second run on. Expect more `--fix` moves to `Off\unused\` than you've seen lately; they are the real unused files.
 4. A BSA's texture names now come from all its models, including ones a later BSA overrides. That is slightly more conservative: a texture only an overridden model uses is never called unused.
+
+## AutoMerge object-merge fix (2026-11-11)
+Bug: `--auto-merge` keeps only the last input's whole record when two inputs change the same object, and the
+merged plugin lists every input's masters. The Multipatch's object merge then measured each AutoMerge record
+against that union of masters, so an input made against Morrowind.esm alone looked like it deliberately undid
+another master's change. Prison-ship lantern: Glowing Flames TLAD Tweaks (masters: vanilla; radius 375, script
+Float, no sound) beat the Expanded Sounds TLAD patch inside the merge; with Expanded Sounds among the merge's
+masters, the Multipatch read "Float, no sound" as an intended revert and kept it.
+Fix:
+* `expand_merged` / `object_merges`: the Multipatch looks at a merged plugin as the plugins it was built from
+  (`mwdialog_merged.txt`), each measured against its own masters; results the merged plugin already has are
+  skipped. Falls back to the merged plugin if any input file is gone.
+* `run_auto_merge`: objects (MERGE_TAGS) that 2+ inputs change are merged field by field before
+  `build_merge` writes them (`object_merges=`), so the AutoMerge itself is right. Off with --no-merge-objects.
+* Tests: tests/test_automerge_objects.py (8).

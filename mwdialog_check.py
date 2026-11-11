@@ -5936,9 +5936,11 @@ def remap_frmr(v, masters_from, merged_index, own_map, own_counter):
     return (merged_index[m] << 24) | ref, (m, ref)
 
 
-def build_merge(inputs, out_name, load_order, file_sizes, log, master_paths=None):
+def build_merge(inputs, out_name, load_order, file_sizes, log, master_paths=None, object_merges=None):
     """Merge `inputs` [(name, data)] in order. Later inputs win on conflicts, as if loaded in that order.
     master_paths (name lower -> path) gives the size of a master file_sizes doesn't have.
+    object_merges ((tag, id lower) -> raw record): objects several inputs change, already merged field by
+    field (merged_objects); they replace the last input's whole record.
     Returns the merged plugin's bytes and a summary dict."""
     # masters: every input's masters, in load order (unknown ones at the end, in first-seen order)
     pos = {n.lower(): i for i, n in enumerate(load_order)}
@@ -6028,7 +6030,11 @@ def build_merge(inputs, out_name, load_order, file_sizes, log, master_paths=None
             winner[rid] = name
 
     out = []
+    stats["objects merged"] = 0
     for rid, raw in records.items():
+        if object_merges and rid in object_merges:
+            raw = object_merges[rid]
+            stats["objects merged"] += 1
         out.append(raw)
     for key, c in cells.items():
         pers = [b for t, b in c["refs"].values() if not t]
@@ -6660,9 +6666,28 @@ def run_auto_merge(args, plugins, bsas, data_dirs):
             inputs.append((c, f.read()))
     sizes = {n.lower(): profs[n.lower()]["size"] for n, _p in order if n.lower() in profs}
     log = []
+    # Objects two or more inputs change: the merge would keep only the last input's whole record, and
+    # with every input's masters on one plugin the Multipatch can no longer tell what that input changed.
+    # Merge them field by field now, each input measured against its own masters (as the Multipatch did
+    # while they were separate plugins).
+    shared = Counter(k for c in cands for k in profs[c.lower()]["keys"] if k[0] in MERGE_TAGS)
+    shared = {k for k, cnt in shared.items() if cnt >= 2}
+    omerge = {}
+    if shared and not getattr(args, "no_merge_objects", False):
+        print(f"  Merging {len(shared)} object(s) that several of the merged plugins change...", file=sys.stderr)
+        mi = merged_inputs_of(game_dir, data_dir)
+        for key, raw, note in object_merges(order, file_ok=merge_file_check(args, None), merged_inputs=mi,
+                                            only=shared):
+            omerge[key] = raw
+            if len(omerge) <= 12:
+                log.append("object merge: " + note)
+        if len(omerge) > 12:
+            log.append(f"object merge: ... and {len(omerge) - 12} more")
+        if omerge:
+            log.append(f"{len(omerge)} object(s) merged field by field from the inputs that change them")
     try:
         merged, summary = build_merge(inputs, out_name, [n for n, _p in order], sizes, log,
-                                      {n.lower(): p for n, p in order})
+                                      {n.lower(): p for n, p in order}, object_merges=omerge)
     except ValueError as e:
         print(f"\n--auto-merge: {e}", file=sys.stderr)
         return 2
@@ -7195,11 +7220,47 @@ def merge_file_check(args, world):
     return ok
 
 
-def merged_objects(plugins, known=None, file_ok=None):
+def merged_objects(plugins, known=None, file_ok=None, merged_inputs=None, only=None):
     """Records of MERGE_TAGS that several plugins change in different ways, merged field by field: what each
     plugin changed (compared with the version it was made against: its masters' latest, or the original)
-    is kept; where two changed the same field, the later one wins. Returns ([record bytes], [notes])."""
-    order = [(n, p) for n, p in plugins if multipatch_source(n)]
+    is kept; where two changed the same field, the later one wins. Returns ([record bytes], [notes]).
+    merged_inputs: {merged plugin lower: [(input name, path)]} - see object_merges. only: a set of
+    (tag, id lower) to look at, the rest is skipped."""
+    out = object_merges(plugins, known, file_ok, merged_inputs, only)
+    return [r for _k, r, _n in out], [n for _k, _r, n in out]
+
+
+def expand_merged(plugins, merged_inputs):
+    """The load order with each merged plugin (--merge/--auto-merge) replaced by the plugins it was built
+    from, in their order, when all of them can still be read. A merged plugin lists every input's masters,
+    so measured as one plugin its records look like they were made against all of those: an input made
+    against Morrowind.esm alone then seems to undo what another master changed (Expanded Sounds' script
+    and sound on the prison ship lanterns). Measured as its inputs, each record is compared with the
+    version its own plugin was made against. Returns (order, {input lower: merged plugin lower})."""
+    if not merged_inputs:
+        return list(plugins), {}
+    active = {n.lower() for n, _p in plugins}
+    out, owner = [], {}
+    for n, p in plugins:
+        ins = merged_inputs.get(n.lower())
+        if ins and all(ip and os.path.isfile(ip) for _i, ip in ins) \
+                and not any(i.lower() in active for i, _ip in ins):
+            for i, ip in ins:
+                out.append((i, ip))
+                owner[i.lower()] = n.lower()
+        else:
+            out.append((n, p))
+    return out, owner
+
+
+def object_merges(plugins, known=None, file_ok=None, merged_inputs=None, only=None):
+    """merged_objects' work: [((tag, id), record bytes, note)]. With merged_inputs, a merged plugin is
+    looked at as the plugins it was built from (expand_merged); a result the merged plugin already has
+    is left out."""
+    real = [(n, p) for n, p in plugins if multipatch_source(n)]
+    vorder, owner = expand_merged(real, merged_inputs)
+    real_path = {n.lower(): p for n, p in real}
+    order = [(n, p) for n, p in vorder if multipatch_source(n)]
     names = [n.lower() for n, _p in order]
     masters = {}
     for n, p in order:
@@ -7242,7 +7303,7 @@ def merged_objects(plugins, known=None, file_ok=None):
                         defined.add(cstr(nm).lower())
                 if tag in want:
                     nm = first_sub(body, b"NAME")
-                    if nm:
+                    if nm and (only is None or (tag, cstr(nm).lower()) in only):
                         dele = bool(fl & 0x20) or first_sub(body, b"DELE") is not None
                         versions[(tag, cstr(nm).lower())].append((i, hashlib.md5(body).digest(), pos, dele))
             except FormatError:
@@ -7259,7 +7320,22 @@ def merged_objects(plugins, known=None, file_ok=None):
         for off in offs:
             size, _u, fl = struct.unpack_from("<III", data, off + 4)
             bodies[(i, off)] = (data[off + 16:off + 16 + size], fl)
-    recs, notes = [], []
+    merged_recs = {}                                 # merged plugin lower -> {(tag, id): body}
+
+    def merged_body(mp, key):
+        if mp not in merged_recs:
+            got = {}
+            try:
+                for _o, t, _f, b in iter_records(read_plugin_bytes(real_path[mp])):
+                    if t in want:
+                        nm = first_sub(b, b"NAME")
+                        if nm:
+                            got[(t, cstr(nm).lower())] = b
+            except (OSError, FormatError, KeyError):
+                pass
+            merged_recs[mp] = got
+        return merged_recs[mp].get(key)
+    out = []
     for (tag, rid), v in sorted(cands.items()):
         vers = [(i, bodies[(i, off)][0]) for i, _d, off, _x in v]
 
@@ -7272,10 +7348,19 @@ def merged_objects(plugins, known=None, file_ok=None):
             continue
         if body is None:
             continue
+        mp = owner.get(names[v[-1][0]])
+        if mp is not None and merged_body(mp, (tag, rid)) == body:
+            continue                                 # the merged plugin already has it (its own object merge)
         fl = bodies[(v[-1][0], v[-1][2])][1]
-        recs.append(tag.encode("ascii") + struct.pack("<III", len(body), 0, fl) + body)
-        notes.append(f"{tag} {rid}: merged from " + ", ".join(order[i][0] for i, *_r in v[1:]))
-    return recs, notes
+        out.append(((tag, rid), tag.encode("ascii") + struct.pack("<III", len(body), 0, fl) + body,
+                    f"{tag} {rid}: merged from " + ", ".join(order[i][0] for i, *_r in v[1:])))
+    return out
+
+
+def merged_inputs_of(game_dir, data_dir):
+    """{merged plugin lower: [(input name, path or None)]} from mwdialog_merged.txt."""
+    files = index_dir(data_dir)
+    return {k.lower(): [(i, files.get(i.lower())) for i in ins] for k, ins in read_merge_record(game_dir).items()}
 
 
 def run_multipatch(args, plugins, world):
@@ -7353,7 +7438,9 @@ def run_multipatch(args, plugins, world):
             notes.append(f"{tag} {cstr(first_sub(defs[-1][1], b'NAME'))}: merged from "
                          f"{len(defs)} plugins ({n} entries)")
     mrecs, mnotes = ([], []) if getattr(args, "no_merge_objects", False) else \
-        merged_objects(plugins, known, file_ok=merge_file_check(args, world))
+        merged_objects(plugins, known, file_ok=merge_file_check(args, world),
+                       merged_inputs=merged_inputs_of(os.path.dirname(os.path.abspath(args.data_dir)),
+                                                      args.data_dir))
     recs += mrecs
     notes += mnotes
     print(f"  {len(renamed)} cell name(s) protected, {len(world.fogcells)} fog-bugged cell(s), "
