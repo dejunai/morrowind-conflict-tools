@@ -592,6 +592,12 @@ def run_assets(args, do_apply):
         except Exception as e:                      # one odd mod never stops the rest
             print(f"  {d}: check failed ({e})")
             continue
+        lp_plan = []
+        try:                                          # paths too long once deployed (Windows' 259 characters)
+            lp_issues, lp_plan = m.longpaths_module().check_mod(root, data_dir, m, game_dir)
+            issues = lp_issues + issues
+        except Exception as e:
+            print(f"  {d}: long-path check failed ({e})")
         checked.add(d.lower())
         if not issues:
             if do_apply:                              # clean now: drop an old tidy section
@@ -601,7 +607,7 @@ def run_assets(args, do_apply):
                         ah.update_bug_report(os.path.join(bdir, e), "vortex_tidy (files)", [], [])
             continue
         total_issue += len(issues)
-        total_fix += len(fixes)
+        total_fix += len(fixes) + len(lp_plan)
         print(f"\n{d}")
         for sev, rel, msg in issues[:12]:
             print(f"    {sev:5} {rel}: {msg}")
@@ -622,6 +628,12 @@ def run_assets(args, do_apply):
             lines += ["", "(The mod's copy was repaired on this PC; originals kept in Off\\.)"]
             ah.update_bug_report(os.path.join(root, "bugreports", plug + (f" [Nexus {nid}]" if nid else "")
                                               + ".bugreport.txt"), "vortex_tidy (files)", head, lines)
+        if do_apply and lp_plan:
+            n = m.longpaths_module().apply_mod(root, lp_plan, m, game_dir, plug, log=print)
+            print(f"    -> {n} file(s) moved to a short path (listed in mwdialog_longpaths.json; "
+                  f"mwdialog_check --longpaths-undo puts them back)")
+            gone = {lp["orig"].lower() for lp in lp_plan} | {t[0].lower() for lp in lp_plan for t in lp["twins"]}
+            fixes = [f for f in fixes if f[2].replace("/", "\\").lower() not in gone]   # moved: next run
         if do_apply and fixes:
             done, skipped = ah.apply_folder(root, fixes, m, game_dir, plug)
             print(f"    -> {done} file(s) repaired (originals in Off\\{plug}\\)"

@@ -3029,6 +3029,19 @@ def replace_asset_in_place(path, data):
             pass
 
 
+def longpaths_module():
+    """mwdialog_longpaths.py, next to this file (asset paths too long for Windows / the game's fields)."""
+    import importlib.util
+    mod = sys.modules.get("mwdialog_longpaths")
+    if mod is None:
+        here = os.path.dirname(os.path.abspath(__file__))
+        spec = importlib.util.spec_from_file_location("mwdialog_longpaths", os.path.join(here, "mwdialog_longpaths.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        sys.modules["mwdialog_longpaths"] = mod
+    return mod
+
+
 def asset_health_module():
     """mwdialog_assets.py, next to this file (texture/model/sound health checks and repairs)."""
     import importlib.util
@@ -4881,6 +4894,11 @@ def scan(args, plugins, bsas, data_dirs, report):
             world.vortex = VortexRepo(vroot)
     world.args_data_dir = args.data_dir
     world.plugin_paths = [p for _n, p in plugins]
+    if tree is not None:                       # paths too long for Windows (before the missing-file checks)
+        try:
+            longpaths_module().check(world, sys.modules[__name__])
+        except Exception as e:                 # never let it stop the scan
+            print(f"(long-path check failed: {e})", file=sys.stderr)
     world.check(sounds)
     return world
 
@@ -5241,7 +5259,8 @@ def run_fix(args, plugins, bsas, data_dirs, report, world, only, hidden=frozense
     keyfix = list(getattr(world, "text_key_fixes", [])) if only is None else []
     health = list(getattr(world, "asset_health", [])) if only is None else []
     if not esp_plans and not esm_plans and not placeholders and not placements and not early and not early_placed \
-            and not item_esp and not item_esm and not generated and not shrink and not keyfix and not health:
+            and not item_esp and not item_esm and not generated and not shrink and not keyfix and not health \
+            and not (only is None and getattr(world, "longpath_plan", None)):
         print("  Nothing that can be fixed automatically.")
         return
     total = print_plan("", esp_plans)
@@ -5365,6 +5384,13 @@ def run_fix(args, plugins, bsas, data_dirs, report, world, only, hidden=frozense
             for kind, full, rel, job in [h for h in health if h[0] == k][:5]:
                 print(f"           e.g. {rel}")
         total += len(health)
+    lp_plan = getattr(world, "longpath_plan", []) if only is None else []
+    if lp_plan:
+        print(f"\n  Paths too long for Windows: files to move to a short path ({len(lp_plan)}; the records and "
+              f"models that name them follow; listed in mwdialog_longpaths.json, --longpaths-undo puts them back):")
+        for line in longpaths_module().plan_lines(world)[:15]:
+            print(line)
+        total += len(lp_plan)
     if args.dry_run:
         print("\nDry run: no files were changed.")
         return
@@ -5395,6 +5421,16 @@ def run_fix(args, plugins, bsas, data_dirs, report, world, only, hidden=frozense
         except Exception as e:                       # one plugin's problem never stops the others halfway
             print(f"  {plugin}: NOT changed ({type(e).__name__}: {e})")
 
+    if lp_plan or getattr(world, "longpath_nifs", None):
+        failed = longpaths_module().apply(world, sys.modules[__name__], os.path.abspath(args.data_dir), log)
+        if failed:                                    # a file that didn't move keeps its records' old path
+            for group in (item_esp, item_esm):
+                for pl in list(group):
+                    group[pl] = [fx for fx in group[pl] if fx.get("longpath") not in failed]
+                    if not group[pl]:
+                        del group[pl]
+        print(f"  Data Files: {len(lp_plan) - len(failed)} file(s) moved to a short path"
+              + (f", {len(failed)} could not be" if failed else ""))
     for plugin, fixes in item_esp.items():
         try:
             n = apply_item_fixes(paths[plugin], plugin, fixes, log, backup=plugin not in esp_plans)
@@ -12282,6 +12318,9 @@ def _main(argv=None):
                     help=f"build '{MULTI_PATCH_NAME}' like 'tes3cmd multipatch': merged leveled lists, "
                          f"fog-bugged cells, reverted cell names, plus objects several mods change merged field "
                          f"by field (load it last)")
+    tc.add_argument("--longpaths-undo", action="store_true",
+                    help="put back every file --fix or vortex_tidy moved to a short path (mwdialog_longpaths.json) "
+                         "and the paths in plugins and models; the next --fix rebuilds the ESM patch without them")
     tc.add_argument("--restore-unused", action="store_true",
                     help="put back the unused textures/sounds --asset-check --fix moved to Off\\unused\\")
     tc.add_argument("--repair-sounds", action="store_true",
@@ -12466,6 +12505,9 @@ def _main(argv=None):
         args.play = True
     if args.full:
         return run_full(args)
+    if getattr(args, "longpaths_undo", False):
+        dd = os.path.abspath(args.data_dir)
+        return longpaths_module().undo(os.path.dirname(dd), dd, sys.modules[__name__])
     if getattr(args, "restore_unused", False):
         dd = os.path.abspath(args.data_dir)
         return asset_health_module().restore_unused(os.path.dirname(dd), dd)

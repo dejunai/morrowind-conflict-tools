@@ -173,3 +173,33 @@ Now:
   loose pack, cached skip re-judged when a model appears, exemption file, cache reuse (no DDS/NIF/BSA reads).
 Not changed: `ModelAssets.mesh_bsa` still keeps the FIRST BSA that has a model (used by the missing-model /
 missing-texture checks); the game uses the newest. DX10 textures are still converted with a full chain.
+
+## Paths too long for Windows / the game's fields (2026-11-11, branch `longpaths`)
+New module `mwdialog_longpaths.py` (loaded by mwdialog_check like mwdialog_assets).
+Limits used (from MWSE's engine headers): full path <= 259 characters (MAX_PATH; Morrowind.exe isn't
+long-path aware; TES3DataHandler keeps Data Files in a MAX_PATH buffer); SOUN FNAM <= 31 (TES3Sound
+filename[32]); MGEF ITEX/PTEX <= 31 (TES3MagicEffect icon[32]/particleTexture[32]; reported, MGEF isn't
+retargeted); MODL/ITEX/BODY/BSGN are heap strings (no record limit); LTEX texturePath[MAX_PATH]. Files in
+a BSA are found by hash: never moved. The CS's 32-character mesh limit is an editor limit only.
+* mwdialog_check --asset-check (also --full): files under Meshes/Textures/Icons/Sound/Splash whose full path
+  in Data Files is over 259 characters (or a sound whose record name is over 31) are planned to move to
+  `<Top>\lp\<name, 16 chars>_<sha1 of old path, 6 hex>.<ext>` (longer hash, then a number, on a clash; the same
+  file always gets the same name; a model's x*.nif/x*.kf twins move with it). Records naming the old path:
+  every .esp record is corrected in place (the existing item-fix path, .bak first); for masters the last
+  master record of each object gets a corrected copy in `mwdialog_check - ESM fixes.esp` (the .esm is never
+  written). Loose models naming a moved texture get the new length-prefixed name (original kept via
+  backup_asset_original, feature "longpaths"). A texture a BSA model names is left alone (WARN). Music,
+  video and book art (named in scripts / book text) are reported only. Near-limit files (>240): one INFO.
+  --fix moves the Data Files file and, for a Vortex hard link, the mod folder's copy; a failed move drops
+  its record fixes. --dry-run shows the plan. Report first by default.
+* `mwdialog_longpaths.json` (next to Morrowind.ini) lists every move (old/new path, files, edited .esp and
+  models, masters corrected through the patch). Files already moved are never shortened again; records
+  still naming an old path (another mod, a master) are pointed at the new one on later runs, and the old
+  name counts as present for the missing-file checks. `--longpaths-undo` moves everything back and
+  restores the paths in plugins and models (the next --fix rebuilds the patch without the copies).
+* vortex_tidy: per mod, files whose path will be too long once deployed are moved inside the mod folder
+  (--apply), the mod's .esp files edited (originals in Off\longpaths\), its models' texture names rewritten,
+  its .esm listed for mwdialog_check's ESM patch; staging paths over 259 that deploy fine: INFO.
+* Tests: tests/test_longpaths.py (8): naming/uniqueness/collisions, .esp edited + .esm via patch, loose model
+  texture + icon (.tga name, .dds file), BSA-named texture left alone, undo + rerun idempotency with x*.kf
+  twins, dry run, tidy per-mod flow then the ESM patch, sound name over the 32-byte field.
