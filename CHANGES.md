@@ -244,5 +244,6 @@ recognised and reported with a confidence score, instead of being "repaired" int
   Data Files, or in a BSA there. One with no diffuse anywhere is left where it is - not moved, no stand-in -
   and listed in the plan ("left in place"); if nothing uses it, mwdialog_check --full's unused-asset purge
   removes it.
-- Exception: a file whose path (mod folder included) says "normal maps" - an add-on normal-map pack, which is
+- Exception: a file whose path (mod folder included) says "normal map(s)" - any case and separator,
+  `(?<![a-z])normal[\s_\-.]*maps?(?![a-z])`: Normal Maps, normal_map, Normal-Map, NormalMap, normal.maps - an add-on normal-map pack, which is
   for OpenMW only - moves either way, and the plan notes the pack as not applicable to classic Morrowind.

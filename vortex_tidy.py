@@ -28,7 +28,7 @@ For each mod folder in the staging folder (G:\\Vortex Mods\\morrowind):
     for tx_wall_n.dds: beside it, at the same path under textures\\ in any mod in staging, loose in Data Files,
     or in a BSA there). One with no diffuse anywhere stays where it is, untouched and without a stand-in; if
     nothing uses it, mwdialog_check --full's unused-asset purge takes it out later. The exception: a file
-    whose path says "normal maps" (an add-on normal-map pack, for OpenMW) moves either way, and the plan notes
+    whose path says "normal map(s)" in any spelling (an add-on normal-map pack, for OpenMW) moves either way, and the plan notes
     the pack as not applicable to classic Morrowind.
   * MGE XE grass plugins (only statics and cells, nearly all grass/groundcover) go to Grass\\, where MGE
     XE's distant land generator reads them; the game itself never loads them.
@@ -192,7 +192,8 @@ def files_under(path):
 
 NOTES = []             # plan-wide warnings (shown at the top of the plan, and again by --apply)
 NO_DIFFUSE_WARNING = "no matching diffuse texture anywhere, check it's really a normal map; --undo puts it back"
-NORMAL_PACK_RE = re.compile(r"(?i)normal[\s_\-]*maps")       # 'Normal Maps' folder or mod: an add-on normal-map pack
+# 'Normal Maps' / 'normal_map' / 'NormalMap' / 'normal.maps' folder or mod: an add-on normal-map pack
+NORMAL_PACK_RE = re.compile(r"(?i)(?<![a-z])normal[\s_\-.]*maps?(?![a-z])")
 ORPHAN_NORMALS = []    # (mod folder, path in it) of normal maps left in place: no diffuse texture anywhere
 NORMAL_PACKS = {}      # mod folder -> normal maps moved from its "normal maps" paths
 _TEX_INDEX = {}        # staging folder -> (set of texture paths without extension, set of base names)

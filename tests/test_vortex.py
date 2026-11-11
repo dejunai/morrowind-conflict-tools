@@ -1,5 +1,7 @@
 """Regression tests for vortex_tidy.py (I7 normal maps, I8, M12)."""
 import json
+
+import pytest
 import os
 import struct
 import sys
@@ -151,3 +153,26 @@ def test_M12_tool_modules_reuses_loaded_modules(monkeypatch):
     monkeypatch.setitem(sys.modules, "mwdialog_assets", ah)
     a, b = vt._tool_modules()
     assert a is m and b is ah
+
+
+@pytest.mark.parametrize("folder,pack", [
+    ("Normal Maps", True), ("normal_map", True), ("Normal-Map", True), ("NormalMap", True), ("normal.maps", True),
+    ("NORMALMAPS", True), ("normal  maps", True), ("abnormalmap", False), ("normal mapping", False),
+    ("Normals", False), ("map normal", False)])
+def test_I7_normal_map_pack_path_variants(tmp_path, monkeypatch, folder, pack):
+    monkeypatch.setattr(vt, "HERE", str(tmp_path))
+    mod = tmp_path / "staging" / "Rocks-77-1-0"
+    d = mod / "Textures" / folder
+    d.mkdir(parents=True)
+    (d / "tx_rock_n.dds").write_bytes(b"DDS ")                      # an orphan: moves only from a pack path
+    moved = [n for n, _d, _w in _plan(mod)]
+    assert moved == (["tx_rock_n.dds"] if pack else [])
+    assert bool(vt.NORMAL_PACKS) == pack
+
+
+def test_I7_normal_map_pack_named_by_the_mod_folder(tmp_path, monkeypatch):
+    monkeypatch.setattr(vt, "HERE", str(tmp_path))
+    mod = tmp_path / "staging" / "Vanilla NormalMap Pack-88-1-0"
+    (mod / "Textures").mkdir(parents=True)
+    (mod / "Textures" / "tx_rock_n.dds").write_bytes(b"DDS ")
+    assert [n for n, _d, _w in _plan(mod)] == ["tx_rock_n.dds"]
