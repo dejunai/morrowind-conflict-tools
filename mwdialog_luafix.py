@@ -77,7 +77,8 @@ OWN_MODS = {"mwcollide", "mwfloatfix", "mwguard", "mwhangwatch", "mwinfoloop", "
 # defaults; mwguard.json (shared with the runtime guard) and mwdialog_luafix.json override them
 DEFAULTS = {
     "priorityLimit": 10000,          # mwguard: |priority| >= this is absurd (the guide says the same)
-    "priorityClampTo": 1000,         # mwguard's runtime clamp (used by priorityMode "clamp")
+    "priorityClampTo": 1000,         # the old mwguard's runtime clamp (priorityMode "clamp"); the passive mwguard
+                                     # only reports |priority| >= priorityLimit, which keepOrder stays under
     "priorityMode": "keepOrder",     # keepOrder: absurd priorities go to just under the limit (9000..9999), so
                                      # they still sort ahead of every ordinary priority; clamp: clampTo..2*clampTo
     "minInterval": 0.35,             # the guide: at least 0.35 s between repeating calls
@@ -203,7 +204,8 @@ def mwguard_log_cover(data_dir, cfg, mod_key):
     except OSError:
         return False, "mwguard's main.lua can't be read"
     if "logSpamGuard" not in txt:
-        return False, "the installed mwguard has no log-spam guard (an old version)"
+        return False, ("the installed mwguard leaves MWSE.log alone (the passive profiler of 2026-11-11 has no "
+                       "log-spam redirect)")
     if not cfg.get("enabled", True) or not cfg.get("logSpamGuard", True):
         return False, "mwguard.json turns mwguard or its log-spam guard off"
     low = mod_key.lower()

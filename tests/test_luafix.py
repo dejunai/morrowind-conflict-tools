@@ -549,3 +549,18 @@ def test_H1_toggle_pattern_guard_is_behaviour_preserving():
            "event.register('activate', onAct)\nevent.register('mobileDeactivated', onDeact)\n")
     new = patch(src)
     assert "if not event.isRegistered('simulate', onSim) then event.register('simulate', onSim) end" in new
+
+
+def test_F1_passive_mwguard_does_not_count_as_covering(tmp_path):
+    data, root = mod_tree(tmp_path, {"main.lua": SPAM})
+    dd = tmp_path / "Data Files"
+    (dd / "MWSE" / "mods" / "mwguard").mkdir(parents=True)
+    (dd / "MWSE" / "mods" / "mwguard" / "main.lua").write_text("-- passive profiler\nlocal d = { enabled = true }")
+    rep = lf.check_paths([str(data)], CFG, checker=OkChecker(), use_cache=False, data_dir=str(dd))
+    e = next(iter(rep.files.values()))
+    assert e["patch"]["ok"] and "F1" in e["patch"]["rules"]
+    assert any("leaves MWSE.log alone" in f["fix"] for f in e["findings"] if f["rule"] == "F1")
+
+
+def test_patched_priorities_are_below_mwguards_report_limit():
+    assert all(abs(lf.compress_priority(p, CFG)) < CFG["priorityLimit"] for p in (10000, -10 ** 9, float("inf")))
