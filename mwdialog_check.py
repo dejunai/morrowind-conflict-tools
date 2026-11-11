@@ -6944,12 +6944,19 @@ def run_unmerge(args, plugins):
         del rec[out]
     lookup = index_dir(data_dir)
     keep = [n for n in active if n.lower() not in {t.lower() for t in todo}]
-    back = [lookup[r.lower()] for r in restore if r.lower() in lookup]
+    red_off = {n.lower() for n in read_redundant(game_dir)[0]}
+    left_off = [r for r in restore if r.lower() in red_off]      # --redundant turned these off: they stay off
+    back = [lookup[r.lower()] for r in restore if r.lower() in lookup and r.lower() not in red_off]
     missing = [r for r in restore if r.lower() not in lookup]
     full = sort_vanilla([lookup[n.lower()] for n in keep if n.lower() in lookup] + back)
     bak = set_game_files(ini, [os.path.basename(p) for p in full], "unmerge")
     write_merge_record(game_dir, rec)
+    pending = read_merge_rebuild(game_dir)
+    if pending:                                   # undone: nothing left to rebuild without those plugins
+        write_merge_rebuild(game_dir, OrderedDict((k, v) for k, v in pending.items()
+                                                  if k.lower() not in {t.lower() for t in todo}))
     print(f"  {len(back)} plugin(s) active again" + (f"; not found: {', '.join(missing)}" if missing else "")
+          + (f"; left off ({REDUNDANT_RECORD}): {', '.join(left_off)}" if left_off else "")
           + f" (old list saved as {bak}).")
     return 0
 
@@ -10734,10 +10741,13 @@ def run_redundant(args):
     lookup = index_dir(data_dir)
     cur = read_load_order(args) or []
     plugins = [(os.path.basename(lookup[n.lower()]), lookup[n.lower()]) for n in cur if n.lower() in lookup]
+    # an AutoMerge (or --merge) is measured as the plugins it was built from: one of them can be redundant
+    # too (it is then left out of the merge's next rebuild)
+    plugins, merge_owner = expand_merged(plugins, merged_inputs_of(game_dir, data_dir))
     paths = {n.lower(): p for n, p in plugins}
     off_rec, both = read_redundant(game_dir)
     print(f"  Comparing the records of {len(plugins)} active plugins...", file=sys.stderr)
-    ours = {n for n, _p in plugins if is_our_patch(n) or not multipatch_source(n)}
+    ours = {n.lower() for n, _p in plugins if is_our_patch(n) or not multipatch_source(n)}
     ours |= {k.lower() for k in read_merge_record(game_dir)}
     soft = set()
     for dep, mods in read_added_masters(game_dir).items():
@@ -10845,18 +10855,83 @@ def run_redundant(args):
     if turn_off:
         gone = {l for l, _k, _w in turn_off}
         ini = args.ini or os.path.join(game_dir, "Morrowind.ini")
-        backup = set_game_files(ini, [n for n in cur if n.lower() not in gone], "--redundant")
+        backup = None
+        if any(n.lower() in gone for n in cur):
+            backup = set_game_files(ini, [n for n in cur if n.lower() not in gone], "--redundant")
+        rebuild = OrderedDict()
         for l, k, w in turn_off:
             off_rec[N[l]] = (N[k], w)
-            print(f"  turned off {N[l]} (kept {N[k]})")
-        print(f"  Old load order saved as {backup}; listed in {REDUNDANT_RECORD}. --redundant-undo NAME turns one "
-              f"back on.")
+            owner = merge_owner.get(l)
+            if owner:
+                merged = next((m for m in read_merge_record(game_dir) if m.lower() == owner), owner)
+                rebuild.setdefault(merged, []).append(N[l])
+                print(f"  turned off {N[l]} (kept {N[k]}): it is merged into {merged}, which must be rebuilt "
+                      f"without it")
+            else:
+                print(f"  turned off {N[l]} (kept {N[k]})")
+            fix_log_line(args, game_dir, f"--redundant: turned off {N[l]} (kept {N[k]}; {w})"
+                         + (f"; merged into {owner}: marked for rebuild" if owner else ""))
+        if rebuild:
+            mark_merge_rebuild(game_dir, rebuild)
+            print(f"  Marked for rebuild ({MERGE_REBUILD_RECORD}): " + ", ".join(rebuild)
+                  + " - --auto-merge (or --full) rebuilds it without the plugins turned off.")
+        print((f"  Old load order saved as {backup}; listed" if backup else "  Listed") + f" in {REDUNDANT_RECORD}. "
+              f"--redundant-undo NAME turns one back on.")
         if any((d, l) in res["soft"] for l in gone for d in res["dependents"].get(l, [])):
             drop_vanished_added_masters(args)          # now, so no plugin is left listing a master that's off
     write_redundant(game_dir, off_rec, both | new_both, names=N)
     for pair in new_both:
         print("  keeping both: " + " + ".join(N[x] for x in sorted(pair)) + " (not asked again)")
     return 1
+
+
+MERGE_REBUILD_RECORD = "mwdialog_merge_rebuild.txt"
+
+
+def fix_log_line(args, game_dir, text):
+    """One dated line in the fix log (mwdialog_fixes.log next to the game, unless --fix-log says otherwise)."""
+    try:
+        with open(os.path.join(game_dir, getattr(args, "fix_log", "") or "mwdialog_fixes.log"), "a",
+                  encoding="utf-8") as lf:
+            lf.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {text}\n")
+    except OSError:
+        pass
+
+
+def read_merge_rebuild(game_dir):
+    """{merged plugin: [inputs turned off by --redundant]} for merges that must be rebuilt without them."""
+    out = OrderedDict()
+    try:
+        with open(os.path.join(game_dir, MERGE_REBUILD_RECORD), encoding="utf-8") as f:
+            for line in f:
+                s_ = line.rstrip("\r\n")
+                if s_.strip() and not s_.startswith(";"):
+                    merged, _, ins = s_.partition("\t")
+                    out[merged.strip()] = [i for i in ins.split("|") if i]
+    except OSError:
+        pass
+    return out
+
+
+def mark_merge_rebuild(game_dir, add):
+    rec = read_merge_rebuild(game_dir)
+    for merged, ins in add.items():
+        rec.setdefault(merged, [])
+        rec[merged] += [i for i in ins if i not in rec[merged]]
+    write_merge_rebuild(game_dir, rec)
+
+
+def write_merge_rebuild(game_dir, rec):
+    path = os.path.join(game_dir, MERGE_REBUILD_RECORD)
+    if not rec:
+        if os.path.exists(path):
+            os.remove(path)
+        return
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("; Merged plugins that still contain a plugin --redundant turned off. --auto-merge (and --full)\n"
+                "; rebuild them without it; --unmerge doesn't bring it back. merged<TAB>input|input\n")
+        for merged, ins in rec.items():
+            f.write(f"{merged}\t{'|'.join(ins)}\n")
 
 
 def run_redundant_undo(args):
@@ -10877,7 +10952,7 @@ def run_redundant_undo(args):
     if todo:
         lookup = index_dir(data_dir)
         cur = read_load_order(args) or []
-        have = {c.lower() for c in cur}
+        have = {c.lower() for c in cur} | merged_away(game_dir, data_dir)   # still inside a merge: stays there
         back = [lookup[n.lower()] for n in todo if n.lower() in lookup and n.lower() not in have]
         order = list(cur)
         for p in sort_vanilla(back):                # back where it loaded among the rest: by date, masters first
@@ -10895,6 +10970,12 @@ def run_redundant_undo(args):
         print(f"  Turned back on: {', '.join(todo)} (old list saved as {backup}). --sort puts them in their place.")
     for n in todo:
         del off_rec[n]
+        fix_log_line(args, game_dir, f"--redundant-undo: turned {n} back on")
+    pending = read_merge_rebuild(game_dir)
+    if pending and todo:                     # a merge waiting to drop it no longer needs to
+        low = {n.lower() for n in todo}
+        pending = OrderedDict((k, [i for i in v if i.lower() not in low]) for k, v in pending.items())
+        write_merge_rebuild(game_dir, OrderedDict((k, v) for k, v in pending.items() if v))
     if not args.redundant_undo and both:
         print(f"  Forgot {len(both)} keep-both choice(s).")
         both = set()
@@ -12186,11 +12267,22 @@ def multipatch_aside(args, game_dir):
     return 0
 
 
+def full_redundant_step(args, common):
+    """--full's redundant-plugins step: in a console, --redundant asks about each (with the descriptions and
+    the overlap); otherwise (or with --yes / --redundant-auto) the high-confidence duplicates are turned off
+    and the rest is reported. --dry-run (in `common`) only reports."""
+    interactive = sys.stdin.isatty() and not getattr(args, "no_interactive", False) and not args.yes \
+        and not getattr(args, "redundant_auto", False)
+    if interactive:
+        return ("redundant plugins (asks about each)", ["--redundant"] + [c for c in common if c != "--no-interactive"])
+    return ("redundant plugins (sure ones turned off, the rest reported)", ["--redundant-auto"] + common)
+
+
 def run_full(args):
     """--full, from scratch:
         turn back on what earlier runs turned off (and drop their conflict rules and asset stand-ins),
-        undo the auto-merge, report cell conflicts, sort, report redundant plugins (--redundant's own
-        choices, in mwdialog_redundant.txt, are kept), set the old Multipatch aside, clean and fix with
+        undo the auto-merge, turn off redundant plugins (asking in a console; --no-redundant skips it; the
+        choices, in mwdialog_redundant.txt, are kept), report cell conflicts, sort, set the old Multipatch aside, clean and fix with
         the asset check, sort again;
         stop and open the report if any error is left; otherwise auto-merge, sort, --all, sort again;
         stop and open the report if any error is left; otherwise offer the interactive --cell-conflicts.
@@ -12230,12 +12322,15 @@ def run_full(args):
         first.append(("undo the auto-merge", ["--unmerge", "--no-follow-up"]))
     if args.add_all_esp:
         first.append(("add every plugin in Data Files", ["--add-all-esp"]))
+    if not getattr(args, "no_redundant", False):
+        # early: once the plugin list is whole (merges undone, masters checked), before anything reads the
+        # plugins - a plugin turned off here is not cleaned, fixed, merged, patched or asset-checked
+        first.append(full_redundant_step(args, common))
     first += [
         (("cell conflicts (your remembered answers)", ["--cell-conflicts", "--use-answers"])
          if getattr(args, "use_answers", False) else
          ("cell conflicts (report)", ["--cell-conflicts", "--no-interactive"])),
         ("sort", ["--sort", "--no-follow-up"]),
-        ("redundant plugins (report)", ["--redundant"]),
         # The Multipatch is built once, after the auto-merge (which ignores this tool's patches): before it,
         # the old one is set aside and only clean + fix (+ the asset check) run on the unmerged order.
         ("set the old Multipatch aside (rebuilt after the auto-merge)", "multipatch_aside"),
@@ -12270,6 +12365,8 @@ def run_full(args):
                         rc = full_reset(args, game_dir)
                     elif extra == "multipatch_aside":
                         rc = multipatch_aside(args, game_dir)
+                    elif extra and extra[0] in ("--redundant", "--redundant-auto"):
+                        rc = main([args.data_dir] + extra)       # carries its own copy of the common flags
                     else:
                         rc = main([args.data_dir] + extra + common)
                 except KeyboardInterrupt:
@@ -12526,6 +12623,9 @@ def _main(argv=None):
     tc.add_argument("--redundant-auto", action="store_true",
                     help="--redundant, turning off the high-confidence ones (an .esp that changes nothing in the "
                          "game and that nothing needs) without asking; two versions of one mod are still only asked about")
+    tc.add_argument("--no-redundant", action="store_true",
+                    help="with --full: skip the redundant-plugins step (by default it runs early, so plugins doing "
+                         "nothing another doesn't already do are turned off before anything else reads them)")
     tc.add_argument("--redundant-undo", nargs="*", metavar="NAME",
                     help="turn back on plugins --redundant turned off (all of them, and forget the keep-both "
                          "choices, with no name)")
@@ -12562,6 +12662,12 @@ def _main(argv=None):
                 release_redundant(args)
             except (OSError, UnicodeError) as e:
                 print(f"(could not check {REDUNDANT_RECORD}: {e})", file=sys.stderr)
+        if getattr(args, "data_dir", None) and os.path.isdir(args.data_dir) and not (args.full or args.auto_merge):
+            pend = read_merge_rebuild(os.path.dirname(os.path.abspath(args.data_dir)))
+            if pend:
+                print(f"Note: {', '.join(pend)} still contain{'s' if len(pend) == 1 else ''} plugin(s) --redundant "
+                      f"turned off ({', '.join(i for v in pend.values() for i in v)}); --auto-merge or --full "
+                      f"rebuilds without them.", file=sys.stderr)
     if args.all:
         args.clean = args.fix = args.multipatch = True
     if args.play_anyway:
