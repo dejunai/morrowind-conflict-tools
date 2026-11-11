@@ -153,7 +153,7 @@ def test_G2_puddle_poll_is_throttled_without_moving_lines():
     new = patch(PUDDLE)
     assert "local function onSimulate(e) if mwluafix_gate(1, 0.35) then return end\n" in new
     assert new.count("\n") == PUDDLE.count("\n")            # every line number stays
-    assert new.startswith("--[[mwdialog_luafix 1: G2]] local mwluafix_gate do")
+    assert new.startswith(f"--[[mwdialog_luafix {lf.VERSION}: G2]] local mwluafix_gate do")
 
 
 @pytest.mark.parametrize("body", [
@@ -349,9 +349,13 @@ def test_F1_skipped_when_mwguard_runtime_guard_clearly_covers(tmp_path):
     rep = lf.check_paths([str(data)], CFG, checker=OkChecker(), use_cache=False, data_dir=str(dd))
     e = next(iter(rep.files.values()))
     assert e["patch"] is None and {f["conf"] for f in e["findings"] if f["rule"] == "F1"} == {"covered"}
-    cfg = dict(CFG, logExemptMods=["testmod"])            # exempt in mwguard: not covered -> shim
+    cfg = dict(CFG, logShimWhenMwguard=True)            # asked for anyway -> shim
     rep = lf.check_paths([str(data)], cfg, checker=OkChecker(), use_cache=False, data_dir=str(dd))
     assert next(iter(rep.files.values()))["patch"]["ok"]
+    for cfg in (dict(CFG, logExemptMods=["testmod"]), dict(CFG, log=dict(CFG["log"], exemptMods=["TestMod"]))):
+        rep = lf.check_paths([str(data)], dict(cfg, logShimWhenMwguard=True), checker=OkChecker(), use_cache=False,
+                             data_dir=str(dd))
+        assert next(iter(rep.files.values()))["patch"] is None      # exempt: stays in MWSE.log
 
 
 def test_F2_debug_logger_level_set_to_info():
@@ -365,7 +369,7 @@ def test_F2_debug_logger_level_set_to_info():
 def test_F1_shim_runs_errors_pass_and_spam_goes_to_the_mod_log(tmp_path):
     src = "for i = 1, 100 do mwse.log('line %d', i) end\nmwse.log('Error: something broke')\nprint('a', 'b')\n" \
           "return mwse.version"
-    new = lf.log_shim("testmod", dict(CFG, logBudgetInit=5)) + src
+    new = lf.log_shim("testmod", dict(CFG, log=dict(CFG["log"], budgetInit=5, perSecond=0))) + src
     logdir = tmp_path / "Data Files" / "MWSE" / "logs"
     logdir.mkdir(parents=True)
     rt = _lj.LuaRuntime()
@@ -379,7 +383,7 @@ def test_F1_shim_runs_errors_pass_and_spam_goes_to_the_mod_log(tmp_path):
         os.chdir(cwd)
     shown = list(rt.globals().lines.values())
     assert shown[:5] == [f"line {i}" for i in range(1, 6)]
-    assert any("further MWSE.log output goes to" in s for s in shown)
+    assert any("further output goes to" in s for s in shown)
     assert "Error: something broke" in shown and "a" not in shown
     log = logdir / "testmod.log" if os.name == "nt" else tmp_path / "Data Files\\MWSE\\logs\\testmod.log"
     text = log.read_text()
