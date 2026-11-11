@@ -24,9 +24,12 @@ For each mod folder in the staging folder (G:\\Vortex Mods\\morrowind):
   * Normal maps (textures\\...\\*_n / *_nm / *_normal / *_nrm, .dds/.tga/.bmp) all go to
     Off\\normal maps\\<mod name>\\ (never deployed): vanilla Morrowind with MGE XE doesn't use them (only OpenMW
     does). If a model names one, mwdialog_check.py --fix puts a flat stand-in normal map in its place, so
-    the game shows no missing-texture warnings. One with no diffuse texture beside it (tx_wall.dds for
-    tx_wall_n.dds) is still moved, with a warning in the plan and in --apply's output: check it really is
-    a normal map (--undo puts it back).
+    the game shows no missing-texture warnings. Only normal maps whose diffuse texture exists move (tx_wall.dds
+    for tx_wall_n.dds: beside it, at the same path under textures\ in any mod in staging, loose in Data Files,
+    or in a BSA there). One with no diffuse anywhere stays where it is, untouched and without a stand-in; if
+    nothing uses it, mwdialog_check --full's unused-asset purge takes it out later. The exception: a file
+    whose path says "normal maps" (an add-on normal-map pack, for OpenMW) moves either way, and the plan notes
+    the pack as not applicable to classic Morrowind.
   * MGE XE grass plugins (only statics and cells, nearly all grass/groundcover) go to Grass\\, where MGE
     XE's distant land generator reads them; the game itself never loads them.
   * OpenMW-only content goes to Off\\OpenMW\\<mod name>\\ (never deployed): *.omwscripts files and the scripts, l10n,
@@ -188,7 +191,72 @@ def files_under(path):
 
 
 NOTES = []             # plan-wide warnings (shown at the top of the plan, and again by --apply)
-NO_DIFFUSE_WARNING = "no matching diffuse texture beside it, check it's really a normal map; --undo puts it back"
+NO_DIFFUSE_WARNING = "no matching diffuse texture anywhere, check it's really a normal map; --undo puts it back"
+NORMAL_PACK_RE = re.compile(r"(?i)normal[\s_\-]*maps")       # 'Normal Maps' folder or mod: an add-on normal-map pack
+ORPHAN_NORMALS = []    # (mod folder, path in it) of normal maps left in place: no diffuse texture anywhere
+NORMAL_PACKS = {}      # mod folder -> normal maps moved from its "normal maps" paths
+_TEX_INDEX = {}        # staging folder -> (set of texture paths without extension, set of base names)
+
+
+def _tex_key(rel):
+    """'textures\\tx\\wall.dds' / 'tx/wall.tga' -> 'tx\\wall' (lowercase, no extension, under textures\\)."""
+    r = rel.replace("/", "\\").lower().lstrip("\\")
+    if r.startswith("textures\\"):
+        r = r[9:]
+    return os.path.splitext(r)[0]
+
+
+def texture_index(staging):
+    """Every diffuse-capable texture there is: in each mod in the staging folder (not Off\\), loose in Data Files
+    and in its BSAs (Data Files next to this script). Built once per staging folder."""
+    key = os.path.abspath(staging)
+    if key in _TEX_INDEX:
+        return _TEX_INDEX[key]
+    paths = set()
+    roots = []
+    try:
+        roots = [os.path.join(staging, d) for d in os.listdir(staging) if os.path.isdir(os.path.join(staging, d))
+                 and d.lower() != "off"]
+    except OSError:
+        pass
+    data_dir = os.path.join(HERE, "Data Files")
+    if os.path.isdir(data_dir):
+        roots.append(data_dir)
+    for root in roots:
+        try:
+            tex = next((e for e in os.listdir(root) if e.lower() == "textures"), None)
+        except OSError:
+            continue
+        if not tex:
+            continue
+        for p in files_under(os.path.join(root, tex)):
+            if os.path.splitext(p)[1].lower() in (".dds", ".tga", ".bmp"):
+                paths.add(_tex_key(os.path.relpath(p, os.path.join(root, tex))))
+    try:
+        bsas = [os.path.join(data_dir, f) for f in os.listdir(data_dir) if f.lower().endswith(".bsa")]
+    except OSError:
+        bsas = []
+    if bsas:
+        m, _ah = _tool_modules()
+        for b in bsas:
+            try:
+                for pth in (m.bsa_file_names(b) if m else ()):
+                    if pth.lower().startswith("textures/") and pth.lower().endswith((".dds", ".tga", ".bmp")):
+                        paths.add(_tex_key(pth))
+            except Exception:                      # a damaged BSA: its textures just don't count
+                continue
+    _TEX_INDEX[key] = (paths, {p.rsplit("\\", 1)[-1] for p in paths})
+    return _TEX_INDEX[key]
+
+
+def diffuse_exists(path, tex_root, staging):
+    """The texture a normal map belongs to exists somewhere: beside it, at the same path under textures\\
+    (any mod, Data Files, a BSA), or by name (textures are found by name when a model's path is off)."""
+    if has_diffuse_sibling(path):
+        return True
+    key = NORMAL_MAP.sub("", _tex_key(os.path.relpath(path, tex_root)))
+    paths, names = texture_index(staging)
+    return key in paths or key.rsplit("\\", 1)[-1] in names
 
 
 def has_diffuse_sibling(path):
@@ -275,19 +343,28 @@ def plan_mod(mod_dir):
             continue
         if el == "textures":
             # normal maps (*_n, *_nm, *_normal, *_nrm): vanilla Morrowind + MGE XE never uses them (only
-            # OpenMW does), so every one goes to Off\normal maps\<mod>\, which is never deployed. If a model
-            # names one, mwdialog_check.py --fix puts a flat stand-in normal map in its place (no
-            # "tex not found" warnings). One with no diffuse texture beside it still moves, with a warning:
-            # it may be a real texture whose name only looks like a normal map's (--undo puts it back).
+            # OpenMW does), so one whose diffuse texture exists goes to Off\normal maps\<mod>\, which is never
+            # deployed. If a model names one, mwdialog_check.py --fix puts a flat stand-in normal map in its
+            # place (no "tex not found" warnings). One with no diffuse anywhere stays put (no stand-in either):
+            # it may be a real texture whose name only looks like a normal map's, and if nothing uses it
+            # --full's unused-asset purge removes it. A "normal maps" path (an add-on normal-map pack) moves
+            # regardless.
+            staging = os.path.dirname(os.path.abspath(mod_dir))
             for p in files_under(src):
                 stem = os.path.splitext(os.path.basename(p))[0].lower()
                 if os.path.splitext(p)[1].lower() not in (".dds", ".tga", ".bmp") or not NORMAL_MAP.search(stem):
                     continue
                 rel = os.path.relpath(p, mod_dir)
                 why = "normal map (not used without OpenMW)"
-                if not has_diffuse_sibling(p):
+                pack = bool(NORMAL_PACK_RE.search(os.path.join(os.path.basename(mod_dir), rel)))
+                if not diffuse_exists(p, src, staging):
+                    if not pack:
+                        ORPHAN_NORMALS.append((os.path.basename(mod_dir), rel))
+                        continue
                     why += f"; WARNING: {NO_DIFFUSE_WARNING}"
-                    NOTES.append(f"{os.path.basename(mod_dir)}\\{rel}: {NO_DIFFUSE_WARNING}")
+                if pack:
+                    why += "; from a normal-map add-on pack (OpenMW only)"
+                    NORMAL_PACKS[os.path.basename(mod_dir)] = NORMAL_PACKS.get(os.path.basename(mod_dir), 0) + 1
                 move(p, os.path.join(mod_dir, "Off", "normal maps", name, rel), why)
             continue
         if el in GAME_DIRS or el in SUPPORT_DIRS:
@@ -397,6 +474,9 @@ def run_plan(args):
     if args.only:
         mods = [d for d in mods if any(fnmatch.fnmatch(d.lower(), pat.lower()) for pat in args.only)]
     lines, all_moves, skipped, touched = [], [], [], 0
+    ORPHAN_NORMALS.clear()
+    NORMAL_PACKS.clear()
+    _TEX_INDEX.clear()
     pats = blacklist(create=bool(getattr(args, "apply", False))) + (args.skip or [])
     for d in mods:
         hit = next((pt for pt in pats if fnmatch.fnmatch(d.lower(), pt.lower())), None)
@@ -422,8 +502,16 @@ def run_plan(args):
             f"{sum(1 for m in all_moves if m[1])} move(s); {len(skipped)} left alone"]
     for d, why in skipped:
         head.append(f"  left alone: {d} ({why})")
+    for d, n in sorted(NORMAL_PACKS.items()):
+        NOTES.append(f"{d}: a normal-map add-on pack ({n} normal map(s) under a 'normal maps' path) - not "
+                     f"applicable to classic Morrowind (only OpenMW uses normal maps); consider removing it in Vortex")
+    if ORPHAN_NORMALS:
+        NOTES.append(f"{len(ORPHAN_NORMALS)} normal map(s) with no diffuse texture anywhere left in place (no "
+                     f"stand-in); mwdialog_check --full's unused-asset purge removes the unused ones")
     for note in NOTES:
         head.append(f"  NOTE: {note}")
+    for d, rel in ORPHAN_NORMALS[:50]:
+        lines.append(f"  left in place (no diffuse texture anywhere): {d}\\{rel}")
     for mod_dir, (addons, scripts) in sorted(REVIEW.items()):
         head.append(f"  NEEDS A LOOK (OpenMW-only: {', '.join(addons)}, no .esp, scripts {', '.join(scripts)}): "
                     f"{os.path.basename(mod_dir)} - --apply stops at it and offers to delete it")

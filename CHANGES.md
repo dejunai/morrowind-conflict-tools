@@ -236,3 +236,13 @@ recognised and reported with a confidence score, instead of being "repaired" int
   for Caeris' Camonna Tong, an older version: its embedded CS_GalynScript is identical to the installed one and
   CS_CT12 resolves, but its Galyn Arvel carries `CS_FairKey`, which Camonna Tong 2.16 no longer has (an earlier
   --fix removed it). Verdict: other version, 25% confidence of a different mod; keep it.
+
+## vortex_tidy: orphan normal maps stay in place
+
+- A normal map (`*_n`, `*_nm`, `*_normal`, `*_nrm`) moves to `Off\normal maps\<mod>\` only when its diffuse
+  texture exists: beside it, at the same path under `textures\` (or by name) in any mod in staging, loose in
+  Data Files, or in a BSA there. One with no diffuse anywhere is left where it is - not moved, no stand-in -
+  and listed in the plan ("left in place"); if nothing uses it, mwdialog_check --full's unused-asset purge
+  removes it.
+- Exception: a file whose path (mod folder included) says "normal maps" - an add-on normal-map pack, which is
+  for OpenMW only - moves either way, and the plan notes the pack as not applicable to classic Morrowind.

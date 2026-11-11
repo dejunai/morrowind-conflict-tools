@@ -23,6 +23,9 @@ def _moved(mod):
 # ---------------------------------------------------------------- I7: normal maps (all moved; warn without a diffuse)
 def _plan(mod):
     vt.NOTES.clear()
+    vt.ORPHAN_NORMALS.clear()
+    vt.NORMAL_PACKS.clear()
+    vt._TEX_INDEX.clear()
     return [(os.path.basename(s), d, w) for s, d, w in vt.plan_mod(str(mod)) if d and "normal maps" in d]
 
 
@@ -44,39 +47,52 @@ def test_I7_model_named_normal_map_moves_too(tmp_path, monkeypatch):
     assert os.path.join("Off", "normal maps", "Signs", "textures", "tx_wall_nm.dds") in plan[0][1]
 
 
-def test_I7_no_diffuse_sibling_moves_with_warning(tmp_path):
-    mod = _mod(tmp_path, ["tx_sign_n.dds", "tx_sign_s.dds"])        # no tx_sign.* beside it
+def test_I7_orphan_normal_map_is_left_in_place(tmp_path, monkeypatch):
+    monkeypatch.setattr(vt, "HERE", str(tmp_path))                 # no Data Files: staging only
+    mod = _mod(tmp_path, ["tx_sign_n.dds", "tx_sign_s.dds", "tx_wall_n.dds", "tx_wall.dds"])
     plan = _plan(mod)
-    assert [n for n, _d, _w in plan] == ["tx_sign_n.dds"]
-    assert vt.NO_DIFFUSE_WARNING in plan[0][2]
-    assert len(vt.NOTES) == 1 and "tx_sign_n.dds" in vt.NOTES[0] and vt.NO_DIFFUSE_WARNING in vt.NOTES[0]
+    assert [n for n, _d, _w in plan] == ["tx_wall_n.dds"]           # the one with a diffuse still moves
+    assert vt.ORPHAN_NORMALS == [("Signs-1234-1-0", os.path.join("textures", "tx_sign_n.dds"))]
+    assert vt.NOTES == []
 
 
-def test_I7_diffuse_sibling_means_no_warning(tmp_path):
-    mod = _mod(tmp_path, ["tx_wall_n.dds", "tx_wall.tga"])
-    plan = _plan(mod)
-    assert [n for n, _d, _w in plan] == ["tx_wall_n.dds"]
-    assert vt.NO_DIFFUSE_WARNING not in plan[0][2] and vt.NOTES == []
+def test_I7_diffuse_in_another_mod_or_a_bsa_counts(tmp_path, monkeypatch):
+    from test_cache import _bsa
+    monkeypatch.setattr(vt, "HERE", str(tmp_path))
+    mod = _mod(tmp_path, ["tx_rock_n.dds", "tx_bsa_nm.dds", "tx_none_n.dds"])
+    other = tmp_path / "staging" / "Rocks-55-1-0" / "Textures"
+    other.mkdir(parents=True)
+    (other / "tx_rock.dds").write_bytes(b"DDS ")
+    (tmp_path / "Data Files").mkdir()
+    (tmp_path / "Data Files" / "Morrowind.bsa").write_bytes(_bsa([("textures\\tx_bsa.dds", b"DDS ")]))
+    monkeypatch.setattr(vt, "_tool_modules", lambda: (m, ah))
+    assert sorted(n for n, _d, _w in _plan(mod)) == ["tx_bsa_nm.dds", "tx_rock_n.dds"]
+    assert [os.path.basename(r) for _d, r in vt.ORPHAN_NORMALS] == ["tx_none_n.dds"]
 
 
-def test_I7_warning_shown_in_plan_and_apply_output(tmp_path, monkeypatch, capsys):
-    mod = _mod(tmp_path, ["tx_sign_n.dds"])
+def test_I7_orphan_in_a_normal_maps_pack_still_moves_and_the_pack_is_flagged(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(vt, "HERE", str(tmp_path))
+    mod = tmp_path / "staging" / "Better Rocks-77-1-0"
+    nm = mod / "Textures" / "Normal Maps"
+    nm.mkdir(parents=True)
+    (nm / "tx_rock_n.dds").write_bytes(b"DDS ")                    # no diffuse anywhere, but a pack: moves
+    (mod / "Textures" / "tx_lone_n.dds").write_bytes(b"DDS ")       # no diffuse, not in the pack path: stays
     monkeypatch.setattr(vt, "PLAN", str(tmp_path / "plan.txt"))
-    monkeypatch.setattr(vt, "JOURNAL", str(tmp_path / "journal.jsonl"))
     monkeypatch.setattr(vt, "BLACKLIST_FILE", str(tmp_path / "bl.txt"))
     vt.NOTES.clear()
 
     class A:
         pass
     a = A()
-    a.staging, a.only, a.skip, a.apply = str(mod.parent), None, None, True
+    a.staging, a.only, a.skip, a.apply = str(mod.parent), None, None, False
     moves = vt.run_plan(a)
-    plan_out = capsys.readouterr().out
-    assert vt.NO_DIFFUSE_WARNING in plan_out and "tx_sign_n.dds" in plan_out
-    vt.apply(moves, str(mod.parent))
-    apply_out = capsys.readouterr().out
-    assert "WARNING" in apply_out and vt.NO_DIFFUSE_WARNING in apply_out
-    assert (mod / "Off" / "normal maps" / "Signs" / "textures" / "tx_sign_n.dds").exists()
+    out = capsys.readouterr().out
+    moved = [os.path.basename(s) for s, d, _w in moves if d and "normal maps" in d.lower()]
+    assert moved == ["tx_rock_n.dds"]
+    assert vt.NO_DIFFUSE_WARNING in next(w for s, _d, w in moves if s.endswith("tx_rock_n.dds"))
+    assert "Better Rocks-77-1-0: a normal-map add-on pack" in out and "not applicable to classic Morrowind" in out
+    assert "left in place (no diffuse texture anywhere)" in open(tmp_path / "plan.txt").read()
+    assert vt.ORPHAN_NORMALS == [("Better Rocks-77-1-0", os.path.join("Textures", "tx_lone_n.dds"))]
 
 
 # ---------------------------------------------------------------- I8: damaged BSA in Data Files
