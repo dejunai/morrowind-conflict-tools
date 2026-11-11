@@ -2637,7 +2637,8 @@ def run_add_all_esp(args):
     grass = grass_plugin_paths(game_dir)
     away = merged_away(game_dir, data_dir)
     turned_off = {n.lower() for n in read_disabled(game_dir)}
-    found, skipped, merged_skip, off_skip = [], [], [], []
+    redundant_off = {n.lower() for n in read_redundant(game_dir)[0]}
+    found, skipped, merged_skip, off_skip, red_skip = [], [], [], [], []
     for fn in os.listdir(data_dir):
         p = os.path.join(data_dir, fn)
         if not fn.lower().endswith((".esm", ".esp")) or not os.path.isfile(p):
@@ -2650,6 +2651,9 @@ def run_add_all_esp(args):
             continue
         if fn.lower() in turned_off:
             off_skip.append(fn)
+            continue
+        if fn.lower() in redundant_off:
+            red_skip.append(fn)
             continue
         found.append(p)
     order = [os.path.basename(p) for p in sort_vanilla(found)]
@@ -2674,6 +2678,9 @@ def run_add_all_esp(args):
     if off_skip:
         print(f"  {len(off_skip)} plugin(s) left out because --fix turned them off as doubled ({DISABLED_RECORD}; "
               f"--reenable puts them back)")
+    if red_skip:
+        print(f"  {len(red_skip)} plugin(s) left out because --redundant turned them off ({REDUNDANT_RECORD}; "
+              f"--redundant-undo puts them back)")
     if len(order) > 255:
         print(f"  Note: {len(order)} plugins is over the original engine's 255 limit; MWSE is needed to load them all.")
     if not added and not missing and [n.lower() for n in current] == [n.lower() for n in order]:
@@ -10230,6 +10237,525 @@ def run_reenable(args):
     return 0
 
 
+# --------------------------------------------------------------------------
+# --redundant: plugins doing the same job as another
+# --------------------------------------------------------------------------
+
+REDUNDANT_RECORD = "mwdialog_redundant.txt"
+REDUNDANT_VARIANT_SHARE = 0.5     # alternative versions: at least half of the smaller one's records shared...
+REDUNDANT_VARIANT_SAME = 0.5      # ...and at least half of those shared records identical
+REDUNDANT_VARIANT_MIN = 5         # ...and at least this many shared records
+REDUNDANT_MAX_VERSIONS = 12       # records in more plugins than this (GMSTs, busy cells) don't pair plugins up
+
+
+def read_redundant(game_dir):
+    """(OrderedDict {plugin turned off: (kept plugin, why)}, {frozenset(a, b) you chose to keep both of})."""
+    off, both = OrderedDict(), set()
+    try:
+        with open(os.path.join(game_dir, REDUNDANT_RECORD), "r", encoding="utf-8") as f:
+            for line in f:
+                s = line.rstrip("\r\n")
+                if not s.strip() or s.lstrip().startswith(";"):
+                    continue
+                parts = s.split("\t")
+                if parts[0] == "off" and len(parts) >= 3:
+                    off[parts[1].strip()] = (parts[2].strip(), parts[3].strip() if len(parts) > 3 else "")
+                elif parts[0] == "both" and len(parts) >= 3:
+                    both.add(frozenset((parts[1].strip().lower(), parts[2].strip().lower())))
+    except OSError:
+        pass
+    return off, both
+
+
+def write_redundant(game_dir, off, both, names=None):
+    path = os.path.join(game_dir, REDUNDANT_RECORD)
+    if not off and not both:
+        if os.path.exists(path):
+            os.remove(path)
+        return
+    names = names or {}
+    lines = [f"; {REDUNDANT_RECORD}: what --redundant decided about plugins that do the same job as another.",
+             "; off<TAB>plugin<TAB>kept plugin<TAB>why: turned off (--add-all-esp leaves it out; it comes back on by",
+             ";   itself when the kept plugin is gone). --redundant-undo NAME (or no name: all) turns it back on.",
+             "; both<TAB>A<TAB>B: you chose to keep both; --redundant doesn't ask about the pair again",
+             ";   (--redundant-undo with no name forgets these too). --full keeps all of this.", ""]
+    lines += [f"off\t{n}\t{k}\t{w}" for n, (k, w) in off.items()]
+    for pair in sorted(both, key=sorted):
+        a, b = sorted(pair)
+        lines.append(f"both\t{names.get(a, a)}\t{names.get(b, b)}")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+
+
+def plugin_summary(path):
+    """What --redundant shows and compares for one plugin: {key: digest}, record counts by type, header."""
+    with open(path, "rb") as f:
+        data = f.read()
+    recs, counts, info = {}, Counter(), {"author": "", "desc": "", "masters": []}
+    for _off, tag, flags, body in iter_records(data):
+        if tag == "TES3":
+            h = first_sub(body, b"HEDR")
+            if h is not None and len(h) >= 296:
+                info["author"] = cstr(h[8:40])
+                info["desc"] = cstr(h[40:296])
+            info["masters"] = [cstr(d) for n, d in iter_subs(body) if n == "MAST"]
+            continue
+        if tag == "LTEX":                      # texture indexes are per plugin: never compared
+            continue
+        rid = record_id(tag, body)
+        if rid is None:
+            continue
+        if rid[0] != tag:
+            rid = (tag,) + tuple(rid[1:])
+        counts[tag] += 1
+        recs[rid] = hashlib.md5(struct.pack("<I", flags & 0x20) + body).digest()
+    info["counts"] = counts
+    return recs, info
+
+
+def lua_required_plugins(data_dir):
+    """Plugin names MWSE Lua code or mod metadata asks for (tes3.isModActive, *-metadata.toml), lowercase.
+    Unlike lua_named_plugins, settings and caches (MWSE\\config, listing every plugin) and mods set aside in
+    an 'off' folder don't count."""
+    names = set()
+    pat = re.compile(r'"([^"\n]{1,120}\.(?:esp|esm))"|\'([^\'\n]{1,120}\.(?:esp|esm))\'|\[\[([^\]\n]{1,120}\.(?:esp|esm))\]\]',
+                     re.I)
+    files = []
+    for base, dirs, fns in os.walk(os.path.join(data_dir, "MWSE")):
+        dirs[:] = [d for d in dirs if d.lower() not in ("config", "off")]     # settings; turned-off mods
+        files += [os.path.join(base, fn) for fn in fns if fn.lower().endswith(".lua")
+                  or fn.lower().endswith("-metadata.toml")]
+    try:
+        files += [os.path.join(data_dir, fn) for fn in os.listdir(data_dir) if fn.lower().endswith("-metadata.toml")]
+    except OSError:
+        pass
+    for path in files:
+        try:
+            text = open(path, "r", encoding="utf-8", errors="replace").read()
+        except OSError:
+            continue
+        for mt in pat.finditer(text):
+            names.add((mt.group(1) or mt.group(2) or mt.group(3)).lower())
+    return names
+
+
+def vortex_mod_name(path, root):
+    """The Vortex mod folder a deployed plugin comes from (through its hard link), or ''."""
+    if not root:
+        return ""
+    r = os.path.normcase(os.path.abspath(root)) + os.sep
+    for other in hard_link_names(path):
+        o = os.path.normcase(os.path.abspath(other))
+        if o.startswith(r):
+            return os.path.abspath(other)[len(r):].split(os.sep)[0]
+    return ""
+
+
+def _type_text(c, n=5):
+    items = Counter(c).most_common()
+    return ", ".join(f"{k} {v}" for k, v in items[:n]) + (f", +{len(items) - n} more types" if len(items) > n else "")
+
+
+def _id_text(key):
+    return str(key[1]) if len(key) == 2 else " ".join(str(x) for x in key[1:])
+
+
+def find_redundant(plugins, needed=(), lua=(), keep_both=(), no_candidates=()):
+    """Plugins in `plugins` ([(name, path)], load order) that do the same job as another one:
+      exact - every record it has is either identical to the version before it (ITM) or identical to
+              another active plugin's copy, and taking it out changes no record's winner: nothing of it is
+              lost, and nothing it overrides changes. Found one at a time (two copies of each other: only
+              one of them is redundant). High confidence when one plugin holds all its non-ITM records.
+      variant - two plugins that share most of their records, most of them identical, and look like two
+              versions of one mod (same description, or the same name up to an edit word): alternatives
+              where one is normally picked. Never turned off without asking.
+    Plugins other active plugins need as masters, that MWSE Lua asks for, or in `no_candidates` (this
+    tool's patches and merges) are never candidates. Returns {"exact": [...], "variant": [...], "info": {...}}."""
+    names = [n for n, _p in plugins]
+    low = [n.lower() for n in names]
+    pos = {l: i for i, l in enumerate(low)}
+    recs, info = {}, {}
+    for n, p in plugins:
+        try:
+            recs[n.lower()], info[n.lower()] = plugin_summary(p)
+        except (OSError, FormatError):
+            recs[n.lower()], info[n.lower()] = {}, {"author": "", "desc": "", "masters": [], "counts": Counter()}
+    versions = defaultdict(list)                       # key -> [(position, plugin)] in load order
+    for l in low:
+        for k in recs[l]:
+            versions[k].append(l)
+    dependents = defaultdict(list)
+    for l in low:
+        for mname in info[l]["masters"]:
+            if mname.lower() in pos:
+                dependents[mname.lower()].append(l)
+    needed = {x.lower() for x in needed}
+    lua = {x.lower() for x in lua}
+    blocked = {x.lower() for x in no_candidates}
+
+    def why_not(l, gone):
+        if l in blocked:
+            return "this tool's own plugin"
+        if l in needed or [d for d in dependents[l] if d not in gone]:
+            return "other active plugins need it as a master"
+        if l in lua:
+            return "an MWSE Lua mod asks for it by name"
+        return None
+
+    def exact_check(l, gone):
+        """(itm, {other plugin: identical copies of its non-ITM records}) when l is redundant, else None."""
+        own = recs[l]
+        if not own:
+            return None
+        itm, copies = 0, Counter()
+        for k, d in own.items():
+            vs = [x for x in versions[k] if x not in gone]
+            i = vs.index(l)
+            if i > 0 and recs[vs[i - 1]][k] == d:
+                itm += 1
+                continue
+            same = [x for x in vs if x != l and recs[x][k] == d]
+            if not same:
+                return None                            # something only it has (or its own version of it)
+            if i == len(vs) - 1:
+                return None                            # it wins this record; without it another version would
+            for x in same:
+                copies[x] += 1
+        return itm, copies
+
+    def classify(l, gone):
+        """(phase, entry) for a redundant plugin: phase 0 all ITM, 1 one plugin holds all its other records,
+        2 its records are spread over several plugins; None when it isn't redundant."""
+        r = exact_check(l, gone)
+        if r is None:
+            return None
+        itm, copies = r
+        nonitm = len(recs[l]) - itm
+        if copies:
+            keep, n = max(copies.items(), key=lambda kv: (kv[1], pos[kv[0]]))
+            phase = 1 if n == nonitm else 2
+        else:                                          # all ITM: the plugin whose versions it repeats most
+            prev = Counter()
+            for k in recs[l]:
+                vs = [x for x in versions[k] if x not in gone]
+                prev[vs[vs.index(l) - 1]] += 1
+            keep, _n = max(prev.items(), key=lambda kv: (kv[1], pos[kv[0]]))
+            phase = 0
+        return phase, {"plugin": l, "keep": keep, "records": len(recs[l]), "itm": itm, "copies": dict(copies),
+                       "confidence": "high" if phase < 2 else "medium"}
+
+    # one at a time, surest first (all-ITM, then contained in one plugin, then spread out); smaller and
+    # earlier-loading first within each: of two copies of each other the later one already wins and stays
+    exact, gone = [], set()
+    order = sorted((l for l in low if not why_not(l, set())), key=lambda l: (len(recs[l]), pos[l]))
+    while True:
+        best = None
+        for l in order:
+            if l in gone or why_not(l, gone):
+                continue
+            c = classify(l, gone)
+            if c is None:
+                continue
+            # a plugin restating one that loads before it (an add-on's copy) goes before one whose content a
+            # later plugin carries (the later one may be the add-on)
+            rank = (c[0], pos[c[1]["keep"]] > pos[l])
+            if best is None or rank < best[0]:
+                best = (rank, c[1])
+                if rank == (0, False):
+                    break
+        if best is None:
+            break
+        e = best[1]
+        gone.add(e["plugin"])
+        if not any(frozenset((e["plugin"], x)) in keep_both for x in [e["keep"]] + list(e["copies"])):
+            exact.append(e)
+
+    # alternative versions of one mod
+    co = Counter()
+    for k, vs in versions.items():
+        vs = [x for x in vs if x not in gone]
+        if 1 < len(vs) <= REDUNDANT_MAX_VERSIONS:
+            for i in range(len(vs)):
+                for j in range(i + 1, len(vs)):
+                    co[(vs[i], vs[j])] += 1
+    variant = []
+    for (a, b), shared in co.items():
+        small = min(len(recs[a]), len(recs[b]))
+        if shared < REDUNDANT_VARIANT_MIN or shared < REDUNDANT_VARIANT_SHARE * small:
+            continue
+        if frozenset((a, b)) in keep_both:
+            continue
+        ma = {x.lower() for x in info[a]["masters"]}
+        mb = {x.lower() for x in info[b]["masters"]}
+        if a in mb or b in ma:                          # a patch for the other, not another version of it
+            continue
+        same = sum(1 for k in recs[a] if k in recs[b] and recs[a][k] == recs[b][k])
+        if same < REDUNDANT_VARIANT_SAME * shared:
+            continue
+        da, db = " ".join(info[a]["desc"].split()), " ".join(info[b]["desc"].split())
+        if not ((da and da == db) or _same_mod_name(names[pos[a]], names[pos[b]])):
+            continue
+        later, other = (a, b) if pos[a] > pos[b] else (b, a)
+        if da != db and PATCH_WORD_RE.search(names[pos[later]]) and not PATCH_WORD_RE.search(names[pos[other]]) \
+                and not any(versions[k][0] == later for k in recs[later]):
+            continue                                    # "X - Patch for Y" adding nothing of its own: a patch on top
+        variant.append({"a": a, "b": b, "shared": shared, "same": same,
+                        "blocked": {x: why_not(x, gone) for x in (a, b) if why_not(x, gone)}})
+    variant.sort(key=lambda v: -v["same"] / max(1, min(len(recs[v["a"]]), len(recs[v["b"]]))))
+    return {"exact": exact, "variant": variant, "recs": recs, "info": info, "versions": versions,
+            "dependents": dependents, "pos": pos, "names": dict(zip(low, names))}
+
+
+PATCH_WORD_RE = re.compile(r"(?i)(?:^|[^a-z])(patch|fix(?:es|ed)?|compat\w*|add-?on|tweaks?)(?:$|[^a-z])")
+
+
+def _same_mod_name(a, b):
+    """Two plugin names that are one mod's name plus different edit/variant words."""
+    def stem(n):
+        s = os.path.splitext(n)[0].lower()
+        s = re.sub(r"[\s_\-\.]+", " ", s)
+        return s.strip()
+    sa, sb = stem(a), stem(b)
+    k = 0
+    while k < min(len(sa), len(sb)) and sa[k] == sb[k]:
+        k += 1
+    return k >= 8 and k >= 0.6 * min(len(sa), len(sb))
+
+
+def describe_plugin(res, l, vroot=None, paths=None):
+    """Lines that say what one plugin is and does."""
+    inf, recs, versions = res["info"][l], res["recs"][l], res["versions"]
+    new = sum(1 for k in recs if versions[k][0] == l)
+    wins = sum(1 for k in recs if versions[k][-1] == l)
+    name = res["names"][l]
+    mod = vortex_mod_name(paths[l], vroot) if paths and vroot else ""
+    desc = " ".join(inf["desc"].split())
+    out = [f"{name}  (#{res['pos'][l] + 1} in the load order" + (f"; Vortex mod: {mod}" if mod else "") + ")"]
+    if desc or inf["author"]:
+        out.append(f"    {(desc[:200] + ('...' if len(desc) > 200 else '')) or '(no description)'}"
+                   + (f"  [by {inf['author']}]" if inf["author"] else ""))
+    out.append(f"    {len(recs)} records ({_type_text(inf['counts'])}): {new} new, {len(recs) - new} change "
+               f"earlier plugins' records; its version wins {wins}")
+    deps = res["dependents"].get(l, [])
+    if deps:
+        out.append("    needed as a master by: " + ", ".join(res["names"][d] for d in deps[:4])
+                   + (f" and {len(deps) - 4} more" if len(deps) > 4 else ""))
+    return out
+
+
+def describe_overlap(res, a, b):
+    ra, rb = res["recs"][a], res["recs"][b]
+    shared = [k for k in ra if k in rb]
+    same = [k for k in shared if ra[k] == rb[k]]
+    differ = [k for k in shared if ra[k] != rb[k]]
+    only_a = [k for k in ra if k not in rb]
+    only_b = [k for k in rb if k not in ra]
+    na, nb = res["names"][a], res["names"][b]
+    pct = lambda x, n: f"{100 * x / n:.0f}%" if n else "-"
+    out = [f"    shared records: {len(shared)} ({pct(len(shared), len(ra))} of {na}, {pct(len(shared), len(rb))} "
+           f"of {nb}); identical: {len(same)}; different: {len(differ)}"]
+    if differ:
+        later = a if res["pos"][a] > res["pos"][b] else b
+        out.append(f"    different ({_type_text(Counter(k[0] for k in differ))}), e.g. "
+                   + ", ".join(_id_text(k) for k in differ[:4]) + f"; {res['names'][later]} loads later, so its "
+                   f"version of these is the one used")
+    for who, only in ((na, only_a), (nb, only_b)):
+        out.append(f"    only in {who}: {len(only)}" + (f" ({_type_text(Counter(k[0] for k in only))}), e.g. "
+                                                     + ", ".join(_id_text(k) for k in only[:4]) if only else ""))
+    return out
+
+
+def run_redundant(args):
+    """--redundant / --redundant-auto: find plugins doing the same job as another, describe each and how they
+    overlap, and (asking, or with --redundant-auto for the sure ones) turn the redundant one off."""
+    data_dir = os.path.abspath(args.data_dir)
+    game_dir = os.path.dirname(data_dir)
+    print("\n" + "=" * 70 + "\nREDUNDANT PLUGINS (two plugins doing the same job)\n" + "=" * 70)
+    lookup = index_dir(data_dir)
+    cur = read_load_order(args) or []
+    plugins = [(os.path.basename(lookup[n.lower()]), lookup[n.lower()]) for n in cur if n.lower() in lookup]
+    paths = {n.lower(): p for n, p in plugins}
+    off_rec, both = read_redundant(game_dir)
+    print(f"  Comparing the records of {len(plugins)} active plugins...", file=sys.stderr)
+    ours = {n for n, _p in plugins if is_our_patch(n) or not multipatch_source(n)}
+    ours |= {k.lower() for k in read_merge_record(game_dir)}
+    res = find_redundant(plugins, lua=lua_required_plugins(data_dir), keep_both=both, no_candidates=ours)
+    vroot = None
+    if not getattr(args, "no_vortex", False):
+        try:
+            vroot = args.vortex_dir or find_vortex_root(data_dir)
+        except (OSError, AttributeError):
+            vroot = None
+    N = res["names"]
+    exact, variant = res["exact"], res["variant"]
+    if off_rec:
+        print(f"  Turned off earlier (in {REDUNDANT_RECORD}; --redundant-undo puts them back): "
+              + ", ".join(f"{n} (kept {k})" for n, (k, _w) in off_rec.items()))
+    if both:
+        print(f"  {len(both)} pair(s) you chose to keep both of are not asked about again.")
+    if not exact and not variant:
+        print("  None found.")
+        return 0
+    groups = []
+    if exact:
+        print(f"\n  Doing nothing another plugin doesn't already do ({len(exact)}): taking one out changes no "
+              f"record in the game.")
+    for e in exact:
+        l, k = e["plugin"], e["keep"]
+        nonitm = e["records"] - e["itm"]
+        print(f"\n  [{e['confidence']}] {N[l]}  ->  turn off, keep {N[k]}")
+        others = "" if e["confidence"] == "high" else \
+            f" ({e['copies'][k]} of them) and of " + ", ".join(N[x] for x in e["copies"] if x != k)
+        if not nonitm:
+            what = f"all {e['records']} of its records are identical to the version loading before them (ITM)"
+        elif not e["itm"]:
+            what = f"all {e['records']} of its records are identical copies of {N[k]}'s{others}"
+        else:
+            what = (f"{e['itm']} of its {e['records']} records are identical to the version loading before them "
+                    f"(ITM); the other {nonitm} are identical copies of {N[k]}'s{others}")
+        print(f"    why: {what}. Taking it out changes no record's winner and loses no record.")
+        for line in describe_plugin(res, l, vroot, paths) + describe_plugin(res, k, vroot, paths):
+            print("  " + line)
+        for line in describe_overlap(res, l, k):
+            print("  " + line)
+        groups.append(("exact", e))
+    if variant:
+        print(f"\n  Two versions of one mod, both active ({len(variant)}): most records shared and identical. "
+              f"Their differences are real conflicts, so nothing here is turned off unless you choose to.")
+    for v in variant:
+        a, b = v["a"], v["b"]
+        print(f"\n  [choice] {N[a]}  vs  {N[b]}")
+        for line in describe_plugin(res, a, vroot, paths) + describe_plugin(res, b, vroot, paths) \
+                + describe_overlap(res, a, b):
+            print("  " + line)
+        for x, why in v["blocked"].items():
+            print(f"    {N[x]} can't be turned off: {why}")
+        groups.append(("variant", v))
+    interactive = sys.stdin.isatty() and not getattr(args, "no_interactive", False)
+    auto = getattr(args, "redundant_auto", False)
+    turn_off, new_both = [], set()
+    for kind, g in groups:
+        if kind == "exact":
+            l, k = g["plugin"], g["keep"]
+            if auto and g["confidence"] == "high" and l.endswith(".esp"):
+                turn_off.append((l, k, "doubles " + N[k] + (" (all ITM)" if g["itm"] == g["records"] else "")))
+                continue
+            if not interactive:
+                continue
+            ans = input(f"\n  {N[l]}: [o] turn it off (keep {N[k]})  [k] keep both  [s] skip (ask again "
+                        f"next time) > ").strip().lower()
+            if ans.startswith("o"):
+                turn_off.append((l, k, "doubles " + N[k]))
+            elif ans.startswith("k"):
+                new_both.add(frozenset((l, k)))
+        else:
+            a, b = g["a"], g["b"]
+            if not interactive:
+                continue
+            opts = [x for x in (a, b) if x not in g["blocked"]]
+            if not opts:
+                continue
+            prompt = "\n  " + "  ".join(f"[{c}] keep {N[keep]}, turn off {N[x]}" for c, keep, x in
+                                        (("a", a, b), ("b", b, a)) if x in opts) + "  [k] keep both  [s] skip > "
+            ans = input(prompt).strip().lower()
+            if ans.startswith("a") and b in opts:
+                turn_off.append((b, a, "another version of " + N[a] + " (your choice)"))
+            elif ans.startswith("b") and a in opts:
+                turn_off.append((a, b, "another version of " + N[b] + " (your choice)"))
+            elif ans.startswith("k"):
+                new_both.add(frozenset((a, b)))
+    if not turn_off and not new_both:
+        if not interactive and not auto:
+            print("\n  Report only (nothing changed). --redundant in a console asks about each; --redundant-auto "
+                  "turns off the high-confidence ones by itself.")
+        return 1
+    if args.dry_run:
+        print("\n  Dry run: would turn off " + (", ".join(N[l] for l, _k, _w in turn_off) or "nothing") + ".")
+        return 1
+    if turn_off:
+        gone = {l for l, _k, _w in turn_off}
+        ini = args.ini or os.path.join(game_dir, "Morrowind.ini")
+        backup = set_game_files(ini, [n for n in cur if n.lower() not in gone], "--redundant")
+        for l, k, w in turn_off:
+            off_rec[N[l]] = (N[k], w)
+            print(f"  turned off {N[l]} (kept {N[k]})")
+        print(f"  Old load order saved as {backup}; listed in {REDUNDANT_RECORD}. --redundant-undo NAME turns one "
+              f"back on.")
+    write_redundant(game_dir, off_rec, both | new_both, names=N)
+    for pair in new_both:
+        print("  keeping both: " + " + ".join(N[x] for x in sorted(pair)) + " (not asked again)")
+    return 1
+
+
+def run_redundant_undo(args):
+    """--redundant-undo [NAME...]: turn back on what --redundant turned off (all of it, and forget the
+    keep-both choices, with no name)."""
+    data_dir = os.path.abspath(args.data_dir)
+    game_dir = os.path.dirname(data_dir)
+    off_rec, both = read_redundant(game_dir)
+    want = {x.lower() for x in args.redundant_undo} if args.redundant_undo else {n.lower() for n in off_rec}
+    todo = [n for n in off_rec if n.lower() in want]
+    if not todo and not (not args.redundant_undo and both):
+        print("--redundant-undo: nothing to undo. Turned off by --redundant: " + (", ".join(off_rec) or "none"))
+        return 1
+    if args.dry_run:
+        print("--redundant-undo would turn back on: " + (", ".join(todo) or "nothing")
+              + ("" if args.redundant_undo else f"; and forget {len(both)} keep-both choice(s)"))
+        return 0
+    if todo:
+        lookup = index_dir(data_dir)
+        cur = read_load_order(args) or []
+        have = {c.lower() for c in cur}
+        back = [lookup[n.lower()] for n in todo if n.lower() in lookup and n.lower() not in have]
+        order = list(cur)
+        for p in sort_vanilla(back):                # back where it loaded among the rest: by date, masters first
+            name = os.path.basename(p)
+            mt = os.path.getmtime(p)
+            at = len(order)
+            for i, c in enumerate(order):
+                cp = lookup.get(c.lower())
+                if cp and not c.lower().endswith(".esm") and not name.lower().endswith(".esm") \
+                        and os.path.getmtime(cp) > mt:
+                    at = i
+                    break
+            order.insert(at, name)
+        backup = set_game_files(args.ini or os.path.join(game_dir, "Morrowind.ini"), order, "--redundant-undo")
+        print(f"  Turned back on: {', '.join(todo)} (old list saved as {backup}). --sort puts them in their place.")
+    for n in todo:
+        del off_rec[n]
+    if not args.redundant_undo and both:
+        print(f"  Forgot {len(both)} keep-both choice(s).")
+        both = set()
+    write_redundant(game_dir, off_rec, both)
+    return 0
+
+
+def release_redundant(args):
+    """A plugin --redundant turned off comes back on when the plugin kept in its place is gone (not in Data
+    Files, or no longer active)."""
+    if getattr(args, "plugins", None) or getattr(args, "openmw_cfg", None) or args.dry_run:
+        return 0
+    data_dir = os.path.abspath(args.data_dir)
+    game_dir = os.path.dirname(data_dir)
+    off_rec, _both = read_redundant(game_dir)
+    if not off_rec:
+        return 0
+    lookup = index_dir(data_dir)
+    active = {n.lower() for n in (read_load_order(args) or [])} | merged_away(game_dir, data_dir)
+    lost = [(n, k) for n, (k, _w) in off_rec.items() if n.lower() in lookup
+            and (k.lower() not in lookup or k.lower() not in active)]
+    if not lost:
+        return 0
+    print("\nPlugins --redundant turned off whose kept plugin is gone:")
+    for n, k in lost:
+        print(f"  {n}: turned off for {k}, which is gone; turning {n} back on")
+    a2 = copy.copy(args)
+    a2.redundant_undo = [n for n, _k in lost]
+    a2.dry_run = False
+    run_redundant_undo(a2)
+    return len(lost)
+
+
 def run_header(args):
     lookup = index_dir(args.data_dir)
     code = 0
@@ -11471,7 +11997,8 @@ def multipatch_aside(args, game_dir):
 def run_full(args):
     """--full, from scratch:
         turn back on what earlier runs turned off (and drop their conflict rules and asset stand-ins),
-        undo the auto-merge, report cell conflicts, sort, set the old Multipatch aside, clean and fix with
+        undo the auto-merge, report cell conflicts, sort, report redundant plugins (--redundant's own
+        choices, in mwdialog_redundant.txt, are kept), set the old Multipatch aside, clean and fix with
         the asset check, sort again;
         stop and open the report if any error is left; otherwise auto-merge, sort, --all, sort again;
         stop and open the report if any error is left; otherwise offer the interactive --cell-conflicts.
@@ -11516,6 +12043,7 @@ def run_full(args):
          if getattr(args, "use_answers", False) else
          ("cell conflicts (report)", ["--cell-conflicts", "--no-interactive"])),
         ("sort", ["--sort", "--no-follow-up"]),
+        ("redundant plugins (report)", ["--redundant"]),
         # The Multipatch is built once, after the auto-merge (which ignores this tool's patches): before it,
         # the old one is set aside and only clean + fix (+ the asset check) run on the unmerged order.
         ("set the old Multipatch aside (rebuilt after the auto-merge)", "multipatch_aside"),
@@ -11786,6 +12314,16 @@ def _main(argv=None):
                     help="with --fix: don't look for (or turn off) plugins that place the same objects twice")
     tc.add_argument("--reenable", nargs="*", metavar="NAME",
                     help=f"turn back on plugins --fix turned off as doubled (all of them with no name; see {DISABLED_RECORD})")
+    tc.add_argument("--redundant", action="store_true",
+                    help="find plugins doing the same job as another (nothing of theirs would be missed, or two "
+                         "versions of one mod), describe each and how they overlap, and ask which to keep "
+                         f"(report only when not in a console, or with --no-interactive; remembered in {REDUNDANT_RECORD})")
+    tc.add_argument("--redundant-auto", action="store_true",
+                    help="--redundant, turning off the high-confidence ones (an .esp that changes nothing in the "
+                         "game and that nothing needs) without asking; two versions of one mod are still only asked about")
+    tc.add_argument("--redundant-undo", nargs="*", metavar="NAME",
+                    help="turn back on plugins --redundant turned off (all of them, and forget the keep-both "
+                         "choices, with no name)")
     tc.add_argument("--trace", nargs="+", metavar="ID",
                     help="follow object IDs through the load order: who defines, places, deletes or scripts them")
     tc.add_argument("--clean", action="store_true",
@@ -11814,6 +12352,11 @@ def _main(argv=None):
                 release_lost_winners(args)
             except (OSError, UnicodeError) as e:
                 print(f"(could not check {DISABLED_RECORD}: {e})", file=sys.stderr)
+        if getattr(args, "data_dir", None) and os.path.isdir(args.data_dir) and args.redundant_undo is None:
+            try:
+                release_redundant(args)
+            except (OSError, UnicodeError) as e:
+                print(f"(could not check {REDUNDANT_RECORD}: {e})", file=sys.stderr)
     if args.all:
         args.clean = args.fix = args.multipatch = True
     if args.play_anyway:
@@ -11894,7 +12437,8 @@ def _main(argv=None):
     if args.play:
         actions = (args.sort, args.add_all_esp, args.clean, args.fix, args.multipatch, args.patch_esm,
                    args.header, args.trace, args.restore, args.restore_all, args.restore_dates, args.csv,
-                   args.clean_up, args.merge, args.auto_merge, args.unmerge is not None, args.cell_conflicts, args.reenable is not None, args.remove_generated, args.restore_textures,
+                   args.clean_up, args.merge, args.auto_merge, args.unmerge is not None, args.cell_conflicts, args.reenable is not None, args.remove_generated,
+                   args.redundant, args.redundant_auto, args.redundant_undo is not None, args.restore_textures,
                    args.update_rules)
         if not any(actions):                 # --play on its own: just start the game
             GAME_STARTED.append(True)
@@ -11925,6 +12469,10 @@ def _main(argv=None):
             return rc
     if args.reenable is not None:
         return run_reenable(args)
+    if args.redundant_undo is not None:
+        return run_redundant_undo(args)
+    if args.redundant or args.redundant_auto:
+        return run_redundant(args)
     if args.remove_generated:
         return run_remove_generated(args)
     if args.restore_textures:
