@@ -203,3 +203,36 @@ a BSA are found by hash: never moved. The CS's 32-character mesh limit is an edi
 * Tests: tests/test_longpaths.py (8): naming/uniqueness/collisions, .esp edited + .esm via patch, loose model
   texture + icon (.tga name, .dds file), BSA-named texture left alone, undo + rerun idempotency with x*.kf
   twins, dry run, tidy per-mod flow then the ESM patch, sound name over the 32-byte field.
+
+## Master mismatch guard (mwdialog_mastercheck.py)
+
+A patch made for a different mod with the same file name, or for another version of its master, is now
+recognised and reported with a confidence score, instead of being "repaired" into place.
+
+- **Primary signal: reference resolution.** For each .esp and each master it lists *or names in its file name*
+  (`X - Y Compatibility Patch.esp` -> `X.esp`, `Y.esp`; tes3cmd-made patches often list no masters), the IDs it
+  overrides or names (inventory, scripts, spells, factions, races/classes/body parts, leveled-list entries,
+  journal/topic/object names in its scripts and result scripts, INFO PNAM/NNAM links, cell references into the
+  master) are checked against the installed master. An ID that isn't defined anywhere but carries one of the
+  master's ID prefixes (e.g. `CS_`) counts as a reference into that master that no longer resolves.
+- **Evidence that survives cleaning.** References an earlier --fix removed (`'X' doesn't exist -> ...`) and master
+  cell references dropped (`in master 'M', which no longer exists there`) are read back from
+  `mwdialog_fixes.log` and `mwdialog_backup\fixes.archive.txt` (stream-parsed: only lines with the key phrases are
+  decoded; the append-only archive is continued from the cached offset, a rotated log is re-read), and misses are
+  kept per (plugin, master) in `mwdialog_mastercheck_cache.json`.
+- **Header size only when it is the original value:** the size recorded the first time a mismatch is seen
+  (`mwdialog_master_sizes.json`, written before --fix syncs it), the oldest `synced the size recorded for 'M'
+  (a -> b)` line in the logs, or - when the header was rewritten (a sync or "added master" in the logs) - the
+  plugin as downloaded: the Vortex download archive named like the mod's staging folder (`--vortex-downloads`,
+  default: Vortex's setting, else `K:\downloads\vortex\morrowind`; .zip natively, .7z/.rar via 7-Zip;
+  `--no-archive-lookup` to skip). The downloaded copy's references are checked too. Archive reads are cached
+  by archive size/date.
+- **Verdicts:** `matches`, `other version` (WARN: a few references gone, the rest lines up; stays enabled, --fix
+  cleans as before) and `different mod` (confidence >= 0.75, `--mismatch-threshold`): WARN, and --fix/--clean
+  do **not** sync the header size or strip the dead references/cell references of that plugin (they are the
+  evidence). `--disable-mismatched` takes such plugins out of `mwdialog_load_order.txt` (logged; add the line back
+  to undo). `--no-master-guard` turns the check off.
+- Camonna Tong case (real data): `OAAB Brother Junipers Twin Lamps - Camonna Tong Compatibility Patch.esp` is
+  for Caeris' Camonna Tong, an older version: its embedded CS_GalynScript is identical to the installed one and
+  CS_CT12 resolves, but its Galyn Arvel carries `CS_FairKey`, which Camonna Tong 2.16 no longer has (an earlier
+  --fix removed it). Verdict: other version, 25% confidence of a different mod; keep it.

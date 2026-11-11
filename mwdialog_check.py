@@ -1782,6 +1782,26 @@ class World:
                                     "drop_record": True,
                                     "msgs": [(dmsg, "remove the deletion, so the object exists for them")]})
 
+    def _master_guard(self):
+        """Patches made for a different master than the installed one (mwdialog_mastercheck): their header
+        size and dead references are not 'repaired' (that would hide the mismatch), only reported."""
+        self.master_verdicts = {}
+        if getattr(self, "args_data_dir", None) is None or getattr(getattr(self, "args", None), "no_master_guard", False):
+            return
+        try:
+            mc = mastercheck_module()
+            self.master_verdicts = mc.check(self, sys.modules[__name__], getattr(self, "args", None))
+            bad = mc.mismatched(self.master_verdicts, getattr(getattr(self, "args", None), "mismatch_threshold", None)
+                                or mc.DIFFERENT_AT)
+        except Exception as e:                 # never let it stop the scan
+            print(f"(master check failed: {e})", file=sys.stderr)
+            return
+        self.mismatched_plugins = bad
+        if bad:
+            self.item_fixes = [f for f in self.item_fixes if str(f.get("plugin", "")).lower() not in bad]
+            self.r.fixes = [f for f in self.r.fixes if not (str(f[0]).lower() in bad
+                                                             and f[2][0] in ("drop_ref", "move_ref", "sync_master"))]
+
     def _check_headers(self):
         """tes3cmd header --synchronize: record counts and master sizes."""
         r = self.r
@@ -1800,6 +1820,11 @@ class World:
             msg = f"master '{master}' has changed size since this plugin was saved; the game warns at startup"
             if not plugin.lower().endswith(FIXABLE_EXT):
                 r.add("INFO", plugin, "", "", msg + " (a master; not changed)")
+            elif getattr(self, "master_verdicts", {}).get((plugin.lower(), master.lower()), {}).get("kind") == "different mod":
+                v = self.master_verdicts[(plugin.lower(), master.lower())]
+                r.add("WARN", plugin, "", "", msg + f"; not synced: it looks made for a different '{master}' "
+                                                   f"(confidence {int(round(v['confidence'] * 100))}%), so the size "
+                                                   f"is the evidence, not the error")
             elif (plugin.lower(), master.lower()) in self.ref_error_masters:
                 # the mismatch may be the only hint that this plugin no longer lines up with its master
                 r.add("WARN", plugin, "", "", msg + "; not synced, because some of its references don't line up "
@@ -2055,6 +2080,7 @@ class World:
             self._check_models()
         self._check_refs()
         self._check_missing_placed()
+        self._master_guard()
         self._check_headers()
         self._check_scripts()
         self._check_placed()
@@ -3027,6 +3053,19 @@ def replace_asset_in_place(path, data):
                 f.write(hashlib.sha256(data).hexdigest() + "\n")
         except OSError:
             pass
+
+
+def mastercheck_module():
+    """mwdialog_mastercheck.py, next to this file (patches made for a different master than the installed one)."""
+    import importlib.util
+    mod = sys.modules.get("mwdialog_mastercheck")
+    if mod is None:
+        here = os.path.dirname(os.path.abspath(__file__))
+        spec = importlib.util.spec_from_file_location("mwdialog_mastercheck", os.path.join(here, "mwdialog_mastercheck.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        sys.modules["mwdialog_mastercheck"] = mod
+    return mod
 
 
 def longpaths_module():
@@ -4893,6 +4932,7 @@ def scan(args, plugins, bsas, data_dirs, report):
         if vroot and os.path.isdir(vroot) and not getattr(args, "no_vortex", False):
             world.vortex = VortexRepo(vroot)
     world.args_data_dir = args.data_dir
+    world.args = args
     world.plugin_paths = [p for _n, p in plugins]
     if tree is not None:                       # paths too long for Windows (before the missing-file checks)
         try:
@@ -4900,6 +4940,19 @@ def scan(args, plugins, bsas, data_dirs, report):
         except Exception as e:                 # never let it stop the scan
             print(f"(long-path check failed: {e})", file=sys.stderr)
     world.check(sounds)
+    bad = getattr(world, "mismatched_plugins", None)
+    if bad and getattr(args, "disable_mismatched", False) and not getattr(args, "dry_run", False) \
+            and not getattr(args, "_mismatched_done", False):
+        args._mismatched_done = True
+        try:
+            order = read_load_order(args) or [n for n, _p in plugins]
+            gone = mastercheck_module().disable(os.path.dirname(os.path.abspath(args.data_dir)), order, bad,
+                                                sys.modules[__name__], getattr(args, "fix_log", None))
+            if gone:
+                print(f"Taken out of the load order (made for a different master): {', '.join(gone)} "
+                      f"(put back by adding them to {LOAD_ORDER_FILE})", file=sys.stderr)
+        except (OSError, UnicodeError) as e:
+            print(f"(could not take mismatched plugins out of the load order: {e})", file=sys.stderr)
     return world
 
 
@@ -12318,6 +12371,16 @@ def _main(argv=None):
                     help=f"build '{MULTI_PATCH_NAME}' like 'tes3cmd multipatch': merged leveled lists, "
                          f"fog-bugged cells, reverted cell names, plus objects several mods change merged field "
                          f"by field (load it last)")
+    tc.add_argument("--disable-mismatched", action="store_true",
+                    help="take plugins made for a different master than the installed one (mwdialog_mastercheck: "
+                         "references that don't resolve, original header size) out of the load order")
+    tc.add_argument("--mismatch-threshold", type=float, default=None, metavar="0-1",
+                    help="confidence from which a master counts as a different mod (default 0.75)")
+    tc.add_argument("--vortex-downloads", default=None, metavar="DIR",
+                    help="Vortex download folder, to read a plugin's original header from its download archive "
+                         "when --fix has rewritten it (default: Vortex's setting, else K:\\downloads\\vortex\\morrowind)")
+    tc.add_argument("--no-archive-lookup", action="store_true", help="don't open download archives for the master check")
+    tc.add_argument("--no-master-guard", action="store_true", help="skip the master mismatch check")
     tc.add_argument("--longpaths-undo", action="store_true",
                     help="put back every file --fix or vortex_tidy moved to a short path (mwdialog_longpaths.json) "
                          "and the paths in plugins and models; the next --fix rebuilds the ESM patch without them")
