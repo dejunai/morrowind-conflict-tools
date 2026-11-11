@@ -267,3 +267,24 @@ recognised and reported with a confidence score, instead of being "repaired" int
   asset cache (`luafix1:` keys).
 - vortex_tidy: the Lua check runs per staging mod after the moves (plan lists it, `--apply` patches, `--undo`
   reverts; `--no-lua`, `--lua-only`, `--lua-level`, `--luajit`).
+
+## mwdialog_luafix 2: the log shim replaces the old mwguard's log-spam guard
+
+mwguard is now a passive profiler, so F1 is the only thing keeping log spam out of MWSE.log.
+
+- **One shim per mod, inline on line 1 of each of its files that logs.** Line numbers don't move. The shim makes `print`, `mwse` and `mwluafix_log` locals of that file only. The global `print` and other mods are never touched. The shared state lives in `package.loaded["mwluafix_logshim:<mod>"]`, built by whichever of the mod's files loads first.
+- **Routing, like the old guard:**
+  - The mod's first `budgetInit` lines (40) reach MWSE.log, plus `budget` (10) after `initialized`.
+  - Errors and warnings always reach MWSE.log: anything matching `keepPatterns` (error / traceback / fail / warn / attempt to / `file.lua:N:` ...). The mod's own log gets them too.
+  - Everything else goes to `Data Files\MWSE\logs\<mod>.log`, with one notice in MWSE.log.
+- **The mod's own log:**
+  - Identical lines collapse into "previous line repeated N more time(s)".
+  - At most `perSecond` (50) lines a second; the rest are counted as "dropped".
+  - Rotated at `maxMB` (2), keeping one `<mod>.old.log`. The previous session's log is rotated the same way at the first write.
+  - If something else (the mod's own `outputFile` logger) already wrote `<mod>.log` this session, the shim writes `<mod>.luafix.log` instead.
+- **Flushing:** opened lazily and buffered. Flushed on every line before `initialized`, on errors, every `flushSeconds` (2), and on save/loaded/menuEnter and Lua shutdown.
+- **Failures:** every io call is pcall'd or returns nil. A log that can't be opened leaves the mod in MWSE.log. Ten internal errors and the shim passes everything through.
+- **Loggers:** `mwse.Logger.new(...)`, `require("logging.logger").new(...)` and `.getLogger(...)` in a shimmed mod become `mwluafix_log.wrap(...)`. On that instance only, trace/debug/info go through the same route, and the logger's own level and format still decide. warn/error are untouched. With MWSE's logger, the record is made from the wrapper, so `EnableLogLineNumbers` still shows the mod's line.
+- **Scope:** `--lua-log flagged` (default: mods with log-spam signs), `all` (every mod that logs) or `off`, in both `mwdialog_luafix` and `vortex_tidy`, or `log.scope`. `exemptMods` (and the old `logExemptMods`) never get it.
+- **Upgrading:** version-1 shims already in files are replaced in place by the new one, even with the scope off.
+- **Settings:** `mwguard.json` → `"luafix": { "log": { scope, budgetInit, budget, keepPatterns, perSecond, maxMB, keepOld, flushSeconds, errorRepeat, exemptMods } }`. The old top-level `logBudgetInit` / `logBudget` / `logKeepPatterns` / `logExemptMods` are still read.

@@ -68,7 +68,7 @@ JOURNAL = os.path.join(HERE, "mwdialog_luafix_journal.jsonl")
 BACKUP_ROOT = os.path.join(HERE, "mwdialog_backup", "luafix")
 CONFIG_FILE = os.path.join(HERE, "mwdialog_luafix.json")
 PLAN_FILE = os.path.join(HERE, "mwdialog_luafix_plan.txt")
-VERSION = 1
+VERSION = 2
 MARK = "mwdialog_luafix"
 
 OWN_MODS = {"mwcollide", "mwfloatfix", "mwguard", "mwhangwatch", "mwinfoloop", "mwperformers", "mwsoundguard",
@@ -83,10 +83,19 @@ DEFAULTS = {
                                      # they still sort ahead of every ordinary priority; clamp: clampTo..2*clampTo
     "minInterval": 0.35,             # the guide: at least 0.35 s between repeating calls
     "exemptMods": sorted(OWN_MODS),
-    "logBudgetInit": 40,             # mwguard: lines a mod may write to MWSE.log while the game starts
-    "logBudget": 10,                 # ... and after that
-    "logKeepPatterns": ["error", "traceback", "exception", "fail", "warn", "stack", "attempt to", "assert",
-                        "invalid", "%.lua:%d+:", "^lua:"],
+    "log": {                         # the log shim (F1): mwguard.json "luafix": { "log": { ... } } overrides
+        "scope": "flagged",          # flagged: mods with log-spam signs; all: every mod that logs; off: none
+        "budgetInit": 40,            # lines a mod may write to MWSE.log while the game starts
+        "budget": 10,                # ... and after the initialized event
+        "keepPatterns": ["error", "traceback", "exception", "fail", "warn", "stack", "attempt to", "assert",
+                         "invalid", "%.lua:%d+:", "^lua:"],   # lines that always reach MWSE.log (Lua patterns)
+        "perSecond": 50,             # the mod's own log takes at most this many lines a second (0: no cap)
+        "maxMB": 2,                  # the mod's own log is rotated at this size ...
+        "keepOld": 1,                # ... keeping the previous one as <mod>.old.log (0: none)
+        "flushSeconds": 2,           # buffered lines reach the disk at least this often
+        "errorRepeat": 0,            # > 0: the same error line past this many times goes to the mod's log only
+        "exemptMods": [],            # mods that never get the shim (their output stays in MWSE.log)
+    },
     "logSpamGuard": True,
     "enabled": True,
     "logShimWhenMwguard": False,     # also patch log spam when mwguard's runtime guard covers the mod
@@ -160,10 +169,15 @@ CONSOLE_ONLY = {"togglepov": "tes3.togglePOV() (or tes3.force1stPerson() / tes3.
 
 
 # ---------------------------------------------------------------------------------------------------------- config
+LEGACY_LOG = {"logBudgetInit": "budgetInit", "logBudget": "budget", "logKeepPatterns": "keepPatterns",
+              "logExemptMods": "exemptMods"}
+
+
 def load_config(game_dir=HERE, data_dir=None):
     """DEFAULTS, then MWSE\\config\\mwguard.json (mwguard's own file: one place for the thresholds both use),
     its "luafix" section, then mwdialog_luafix.json next to this script."""
     cfg = dict(DEFAULTS)
+    cfg["log"] = dict(DEFAULTS["log"])
     data_dir = data_dir or os.path.join(game_dir, "Data Files")
     guard = os.path.join(data_dir, "MWSE", "config", "mwguard.json")
     src = []
@@ -178,7 +192,13 @@ def load_config(game_dir=HERE, data_dir=None):
         if section:
             d = d.get(section) if isinstance(d.get(section), dict) else {}
         for k, v in d.items():
-            if section is not None or k in DEFAULTS or k == "logExemptMods":   # mwguard.json: shared keys only
+            if k == "log" and section is not None and isinstance(v, dict):
+                cfg["log"] = dict(cfg["log"], **v)
+            elif k in LEGACY_LOG and section is None:       # the old mwguard's log-spam keys
+                cfg["log"] = dict(cfg["log"], **{LEGACY_LOG[k]: v})
+            elif k == "log":
+                continue
+            elif section is not None or k in DEFAULTS or k == "logExemptMods":   # mwguard.json: shared keys only
                 cfg[k] = v
             elif k == "throttleSeconds" and section is None and isinstance(v, (int, float)):
                 cfg["minInterval"] = max(float(v), 0.05)       # mwguard v1's name for it
@@ -209,7 +229,7 @@ def mwguard_log_cover(data_dir, cfg, mod_key):
     if not cfg.get("enabled", True) or not cfg.get("logSpamGuard", True):
         return False, "mwguard.json turns mwguard or its log-spam guard off"
     low = mod_key.lower()
-    for m in cfg.get("logExemptMods") or []:
+    for m in (cfg.get("logExemptMods") or []) + list(cfg["log"].get("exemptMods") or []):
         m = str(m).lower().replace("\\", "/")
         if m == low or m == low.split("/")[0]:
             return False, "the mod is in mwguard's logExemptMods"
@@ -523,6 +543,15 @@ class FileAnalysis:
         self.tree = L.parse(src)
         self.gassign, self.gfuncs, self.greads = resolve(self.tree)
         self.nodes = list(L.walk(self.tree))
+        cut = src.find(SHIM_END)                  # our own log shim is not the mod's code
+        if cut >= 0:
+            cut += len(SHIM_END)
+        else:
+            m = SHIM_V1_RE.search(src)
+            cut = m.end() if m else -1
+        if cut >= 0:
+            self.nodes = [n for n in self.nodes if n.s >= cut]
+        self.old_shim = bool(SHIM_V1_RE.search(src))
         self.calls = [n for n in self.nodes if n.kind == "Call"]
         self._lines = None
         self.registrations = []          # (call, event, handler Function or None, handler arg, options)
@@ -668,7 +697,7 @@ class FileAnalysis:
         for r in (self.r_priority, self.r_per_frame, self.r_timers, self.r_one_shot, self.r_data_guard,
                   self.r_keycode, self.r_destroy, self.r_console, self.r_info_filter, self.r_reregister,
                   self.r_reload_timers, self.r_globals, self.r_toplevel, self.r_loops, self.r_logger_level,
-                  self.r_log_triggers):
+                  self.r_log_triggers, self.r_loggers):
             r()
         return self.findings
 
@@ -1203,7 +1232,38 @@ class FileAnalysis:
             elif c.func.kind == "Index" and L.dotted(c.func) == "mwse.log" and \
                     getattr(c.func.obj, "binding", None) is None:
                 n += 1
-        return n
+        return n + len(self.logger_creations())
+
+    def logger_creations(self):
+        """mwse.Logger.new(...) / require("logging.logger").new(...) / .getLogger(...) calls (also through a
+        local holding the library), not already wrapped: (call node) list."""
+        out = []
+        for c in self.calls:
+            f = c.func
+            if f.kind != "Index" or f.field not in ("new", "getLogger"):
+                continue
+            o = f.obj
+            while o.kind == "Paren":
+                o = o.expr
+            if o.kind == "Name" and getattr(o, "binding", None) is not None and o.binding.value is not None \
+                    and not o.binding.assigns:
+                o = o.binding.value
+            ok = (L.dotted(o) or "") in ("mwse.Logger", "mwseLogger")
+            if not ok and o.kind == "Call" and o.func.kind == "Name" and o.func.id in ("require", "include") \
+                    and o.args and o.args[0].kind == "String":
+                ok = (L.string_value(o.args[0].raw) or "").lower() in ("logging.logger", "logger", "mwse.logger")
+            if not ok:
+                continue
+            par = getattr(c, "parent", None)
+            if par is not None and par.kind == "Call" and L.dotted(par.func) == "mwluafix_log.wrap":
+                continue
+            out.append(c)
+        return out
+
+    def r_loggers(self):
+        for c in self.logger_creations():
+            self.add("F1", c, "logger created here", "its trace/debug/info lines go through the log shim", "logger",
+                     [(c.s, c.s, "mwluafix_log.wrap("), (c.e, c.e, ")")], ["shim"])
 
     def requires(self):
         out = []
@@ -1228,34 +1288,232 @@ def lua_str(s):
     return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
+SHIM_END = "--[[/mwluafix_logshim]]"
+# the version-1 shim (print / mwse.log only, no cap, no logger wrap): replaced by the current one on sight
+SHIM_V1_RE = re.compile(r"local print, mwse = \(function\(_p, _m\) local fmt, find, lower, sub = string\.format, "
+                        r"[^\n]*?\{ __index = _m, __newindex = _m \}\) end\)\(print, mwse\) ")
+SHIM_V = 2
+LOG_SHIM_LUA = r"""
+local print, mwse, mwluafix_log = (function(_p, _m)
+local S = package.loaded[@KEY@]
+if type(S) == "table" and S.v == @V@ then return S.print, S.mwse, S end
+S = { v = @V@, redirected = 0, dropped = 0, collapsed = 0 }
+package.loaded[@KEY@] = S
+local C = @CFG@
+local G, MARK = _G, @MARK@
+local find, lower, sub, gsub, concat, fmt, date, select, tostring, pcall = string.find, string.lower, string.sub, string.gsub, table.concat, string.format, os.date, select, tostring, pcall
+local dir = "Data Files\\MWSE\\logs"
+local path, oldPath = dir .. "\\" .. C.name .. ".log", dir .. "\\" .. C.name .. ".old.log"
+local t0 = os.time() - math.floor(os.clock()) - 1
+local init, run, started, redirected, f, dead, busy, fails = 0, 0, false, false, nil, false, false, 0
+local bytes, dirty, last, lastN, sec, secN, dropped, errs, errKeys = 0, false, nil, 0, -1, 0, 0, {}, 0
+local function isErr(t)
+local l = lower(#t > 4096 and sub(t, 1, 4096) or t)
+for i = 1, #C.keep do
+local ok, h = pcall(find, l, C.keep[i])
+if ok and h then return true end
+end
+return false
+end
+local function out(s)
+f:write(date("[%H:%M:%S] "), s, "\n")
+bytes = bytes + #s + 12
+dirty = true
+end
+local function pending()
+if lastN > 0 then out("[previous line repeated " .. lastN .. " more time(s)]") lastN = 0 end
+if dropped > 0 then out("[" .. dropped .. " line(s) dropped: more than " .. C.perSecond .. " in one second]") dropped = 0 end
+end
+local function flushAll()
+if f then pending() if dirty then dirty = false f:flush() end end
+end
+local function rotate()
+if f then pcall(f.close, f) f = nil end
+if C.keepOld > 0 then os.remove(oldPath) os.rename(path, oldPath) else os.remove(path) end
+f = io.open(path, "w")
+bytes, last = 0, nil
+if f then
+pcall(f.setvbuf, f, "full", 16384)
+f:write(date("[%Y-%m-%d %H:%M:%S] "), C.name, ": lines past its MWSE.log allowance (", MARK, ")\n")
+end
+return f
+end
+local function open()
+pcall(function() lfs.mkdir(dir) end)
+local ok, m = pcall(function() return lfs.attributes(path, "modification") end)
+if ok and type(m) == "number" and m >= t0 then
+path, oldPath = dir .. "\\" .. C.name .. ".luafix.log", dir .. "\\" .. C.name .. ".luafix.old.log"
+end
+return rotate()
+end
+local function toFile(t)
+if t == last then lastN = lastN + 1 S.collapsed = S.collapsed + 1 return end
+local s = os.time()
+if s ~= sec then sec, secN = s, 0 end
+secN = secN + 1
+if C.perSecond > 0 and secN > C.perSecond then dropped = dropped + 1 S.dropped = S.dropped + 1 return end
+if bytes >= C.maxBytes and not rotate() then dead = true return end
+pending()
+last = t
+out(t)
+S.redirected = S.redirected + 1
+if not started then dirty = false f:flush() end
+end
+S.start = function()
+if started then return end
+started = true
+pcall(flushAll)
+pcall(function() timer.start({ type = timer.real, duration = C.flushSeconds, iterations = -1, persist = false, callback = function() pcall(flushAll) end }) end)
+end
+local function route(t, force)
+if not started then
+local ok, v = pcall(function() return tes3.isInitialized() end)
+if ok and v then S.start() end
+end
+if force or isErr(t) then
+if C.errorRepeat > 0 then
+local k = gsub(sub(t, 1, (find(t, "\n", 1, true) or 201) - 1), "%d+", "#")
+local n = errs[k] or 0
+if n == 0 then
+if errKeys >= 500 then errs, errKeys = {}, 0 end
+errKeys = errKeys + 1
+end
+errs[k] = n + 1
+if n >= C.errorRepeat then
+if f then toFile(t) end
+return false
+end
+end
+if f then pending() out(t) dirty = false f:flush() end
+return true
+end
+local _, nl = gsub(t, "\n", "")
+nl = nl + 1
+if not redirected then
+if started then
+if run + nl <= C.after then run = run + nl return true end
+elseif init + nl <= C.init then
+init = init + nl
+return true
+end
+redirected = true
+if not open() then
+dead = true
+_p(fmt("[%s] %s writes a lot to MWSE.log, but %s can't be opened: leaving it here", MARK, C.name, path))
+return true
+end
+_p(fmt("[%s] %s has written %d line(s) to MWSE.log; its further output goes to %s (errors still show here)", MARK, C.name, init + run, path))
+end
+if dead or not f then return true end
+toFile(t)
+return false
+end
+local function fail(e)
+fails = fails + 1
+if fails >= 10 then dead = true end
+if fails == 1 then pcall(_p, fmt("[%s] %s: log shim error (the line went to MWSE.log): %s", MARK, C.name, tostring(e))) end
+end
+local function decidePrint(n, ...)
+local t
+if n <= 1 then
+t = tostring((...))
+else
+local parts = {}
+for i = 1, n do parts[i] = tostring((select(i, ...))) end
+t = concat(parts, "\t")
+end
+return route(t, false)
+end
+S.print = function(...)
+if busy or dead then return _p(...) end
+busy = true
+local ok, pass = pcall(decidePrint, select("#", ...), ...)
+busy = false
+if not ok then fail(pass) return _p(...) end
+if pass then return _p(...) end
+end
+local function decideLog(f0, ...)
+local ok, t = pcall(fmt, tostring(f0), ...)
+if not ok then t = tostring(f0) end
+return route(t, false)
+end
+S.mwse = setmetatable({ log = function(f0, ...)
+if busy or dead then return _m.log(f0, ...) end
+busy = true
+local ok, pass = pcall(decideLog, f0, ...)
+busy = false
+if not ok then fail(pass) pass = true end
+if pass then return _m.log(f0, ...) end
+end }, { __index = _m, __newindex = _m })
+local function back(g, ok, ...)
+if G.print == S.print then G.print = g end
+if not ok then error((...), 0) end
+return ...
+end
+local wrapped = setmetatable({}, { __mode = "k" })
+local LV = { trace = 5, debug = 4, info = 3 }
+local function wrap(lg)
+for name, lv in pairs(LV) do
+local orig = lg[name]
+if type(orig) == "function" then
+rawset(lg, name, function(self, ...)
+if dead or self ~= lg or G.print == S.print then return orig(self, ...) end
+local sd = type(lg.makeRecord) == "function" and type(lg.writeRecord) == "function" and lg.sharedData
+if sd and type(sd.level) == "number" then
+if sd.level < lv then return end
+local rec = lg:makeRecord(lv)
+local g = G.print
+G.print = S.print
+return back(g, pcall(lg.writeRecord, lg, rec, ...))
+end
+local g = G.print
+G.print = S.print
+return back(g, pcall(orig, self, ...))
+end)
+end
+end
+end
+S.wrap = function(lg)
+if type(lg) == "table" and not wrapped[lg] then
+wrapped[lg] = true
+pcall(wrap, lg)
+end
+return lg
+end
+S.flush = flushAll
+S.stats = function() return { init = init, run = run, redirected = redirected, dead = dead, path = path, fails = fails, started = started } end
+pcall(function()
+event.register("initialized", S.start)
+for _, ev in ipairs({ "loaded", "save", "menuEnter" }) do event.register(ev, function() pcall(flushAll) end) end
+end)
+pcall(function()
+local p = newproxy(true)
+getmetatable(p).__gc = function() pcall(flushAll) end
+S.gc = p
+end)
+return S.print, S.mwse, S
+end)(print, mwse) --[[/mwluafix_logshim]]
+"""
+
+
 def log_shim(mod_key, cfg):
-    """One line that rebinds print and mwse.log for this file only (locals; nothing global changes). Like
-    mwguard's runtime guard: the mod's first logBudgetInit lines (+ logBudget once the game has started) and
-    anything that looks like an error or warning reach MWSE.log unchanged; the rest go to
-    Data Files\\MWSE\\logs\\<mod>.log. The count is shared by all the mod's files (kept in package.loaded)."""
-    safe = log_name(mod_key)
-    path = "Data Files\\MWSE\\logs\\" + safe + ".log"
-    pats = ", ".join(lua_str(p) for p in cfg["logKeepPatterns"])
-    key = lua_str("mwluafix_logshim:" + safe)
-    note = lua_str(f"[{MARK}] {safe}: its further MWSE.log output goes to {path} (errors still show here)")
-    return (
-        "local print, mwse = (function(_p, _m) local fmt, find, lower, sub = string.format, string.find, "
-        "string.lower, string.sub "
-        f"local st = package.loaded[{key}] if type(st) ~= \"table\" then st = {{ n = 0, f = false }} "
-        f"package.loaded[{key}] = st end local keep = {{ {pats} }} "
-        "local function pass(t) local l = lower(sub(t, 1, 4096)) for i = 1, #keep do "
-        "local ok, h = pcall(find, l, keep[i]) if ok and h then return true end end "
-        "local started = tes3 and tes3.isInitialized and tes3.isInitialized() "
-        f"if st.n < {cfg['logBudgetInit']} + (started and {cfg['logBudget']} or 0) then st.n = st.n + 1 return true end "
-        "if st.f == false then pcall(function() lfs.mkdir(\"Data Files\\\\MWSE\\\\logs\") end) "
-        f"st.f = io.open({lua_str(path)}, \"a\") or nil if st.f then _m.log({note}) end end "
-        "if not st.f then return true end st.f:write(os.date(\"[%Y-%m-%d %H:%M:%S] \"), t, \"\\n\") st.f:flush() "
-        "return false end "
-        "return function(...) local parts = {} for i = 1, select(\"#\", ...) do parts[i] = tostring((select(i, ...))) "
-        "end if pass(table.concat(parts, \"\\t\")) then return _p(...) end end, "
-        "setmetatable({ log = function(f, ...) local ok, t = pcall(fmt, tostring(f), ...) "
-        "if not ok then t = tostring(f) end if pass(t) then return _m.log(f, ...) end end }, "
-        "{ __index = _m, __newindex = _m }) end)(print, mwse) ")
+    """The log shim, on one line (so no line number moves): local print, mwse and mwluafix_log for this file
+    only (nothing global changes). The state lives in package.loaded, one per mod, built by whichever of the
+    mod's files loads first. Like the old mwguard's log-spam guard: the first budgetInit lines (budget more after
+    the initialized event) and anything that looks like an error reach MWSE.log; the rest go to
+    Data Files\\MWSE\\logs\\<mod>.log (<mod>.luafix.log when something else wrote that file this session),
+    with identical lines collapsed, a per-second cap and rotation at maxMB. trace/debug/info of the mod's own
+    loggers (wrapped where it creates them) are sent through the same route; warn/error are left alone. Every
+    file operation is pcall'd or returns nil; ten internal errors and it passes everything through."""
+    lc = cfg["log"]
+    keep = ", ".join(lua_str(p) for p in lc["keepPatterns"])
+    conf = (f'{{ name = {lua_str(log_name(mod_key))}, init = {int(lc["budgetInit"])}, after = {int(lc["budget"])}, '
+            f'keep = {{ {keep} }}, perSecond = {int(lc["perSecond"])}, maxBytes = {int(float(lc["maxMB"]) * 1048576)}, '
+            f'keepOld = {int(lc["keepOld"])}, flushSeconds = {float(lc["flushSeconds"])}, '
+            f'errorRepeat = {int(lc["errorRepeat"])} }}')
+    body = " ".join(l for l in LOG_SHIM_LUA.split("\n") if l)
+    return (body.replace("@KEY@", lua_str("mwluafix_logshim:" + log_name(mod_key))).replace("@V@", str(SHIM_V))
+            .replace("@CFG@", conf).replace("@MARK@", lua_str(MARK)) + " ")
 
 
 MARK_RE = re.compile(r"--\[\[" + MARK + r" (\d+): ([^\]]*)\]\] ")
@@ -1280,7 +1538,8 @@ def build_patch(src, findings, mod_key, cfg, level="high", want_shim=False):
             edits += [(s, e, t) for s, e, t in f["edits"]]
             rules.append(f["rule"])
             needs |= set(f["needs"])
-    if want_shim and "mwluafix_logshim:" not in src:
+    v1 = SHIM_V1_RE.search(src)
+    if (want_shim or v1) and SHIM_END not in src:
         needs.add("shim")
         rules.append("F1")
     if not edits and "shim" not in needs:
@@ -1293,13 +1552,17 @@ def build_patch(src, findings, mod_key, cfg, level="high", want_shim=False):
         kept.append((s, e, t))
         last_end = max(last_end, e)
     out = src
+    if v1 and "shim" in needs:                     # upgrade in place: the old shim's span becomes the new one
+        kept = [x for x in kept if x[0] >= v1.end() or x[1] <= v1.start()]
+        kept.append((v1.start(), v1.end(), log_shim(mod_key, cfg)))
+        kept.sort(key=lambda x: (x[0], x[1]))
     for s, e, t in reversed(kept):
         out = out[:s] + t + out[e:]
     ip = insert_point(out)
     m = MARK_RE.match(out, ip)
     allr = sorted(set(m.group(2).split() if m else []) | set(rules))
     head = f"--[[{MARK} {VERSION}: {' '.join(allr)}]] "
-    if "shim" in needs and "mwluafix_logshim:" not in src:
+    if "shim" in needs and not v1 and SHIM_END not in src:
         head += log_shim(mod_key, cfg)
     if "gate" in needs and "mwluafix_gate = function" not in src:
         head += GATE_HELPER
@@ -1398,8 +1661,17 @@ def _analyse(src, key, rel, cfg):
     return a
 
 
+def log_exempt(cfg, key):
+    low = key.lower()
+    for m in list(cfg["log"].get("exemptMods") or []) + list(cfg.get("logExemptMods") or []):
+        m = str(m).lower().replace("\\", "/")
+        if m == low or m == low.split("/")[0]:
+            return True
+    return False
+
+
 def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_dir=None, use_cache=True,
-                log_shim_always=False, game_dir=HERE):
+                log_shim_always=False, game_dir=HERE, log_scope=None):
     """Check every Lua file under paths; patches are prepared (and verified) but nothing is written."""
     rep = Report()
     ah, cache = _cache(game_dir) if use_cache else (None, None)
@@ -1429,7 +1701,7 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
                 hit = cache.get(ckey, ah.stamp_of(st))
                 if hit is not None and hit.get("cfg") == ch:
                     ent.update(error=hit.get("err"), logs=hit.get("logs", 0), requires=hit.get("req", []),
-                               sha=hit.get("sha"), cached=True,
+                               sha=hit.get("sha"), cached=True, old_shim=hit.get("v1", False),
                                findings=[Finding(f, edits=[], needs=set(f.get("needs", []))) for f in hit["f"]])
                     continue
             with open(p, "rb") as f:
@@ -1437,7 +1709,7 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
             ent["sha"] = sha(b)
             try:
                 a = analyses[p] = _analyse(b.decode("latin-1"), key, rel, cfg)
-                ent.update(findings=a.findings, logs=a.log_calls(), requires=a.requires())
+                ent.update(findings=a.findings, logs=a.log_calls(), requires=a.requires(), old_shim=a.old_shim)
             except L.LuaSyntaxError as e:
                 ent["error"] = f"can't be parsed ({e}); left alone"
             except RecursionError:
@@ -1445,28 +1717,49 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
             if cache is not None:
                 cache.put(ckey, ah.stamp_of(st), {
                     "cfg": ch, "err": ent["error"], "logs": ent["logs"], "req": ent["requires"], "sha": ent["sha"],
+                    "v1": ent.get("old_shim", False),
                     "f": [dict({k: v for k, v in f.items() if k not in ("edits", "needs")}, needs=sorted(f["needs"]),
                                fixable=bool(f["edits"])) for f in ent["findings"]]})
         _require_cycles(rep, files)
         # F1: does the mod need the log shim? (decided per mod, like mwguard's per-mod allowance)
-        triggers = [f for p, _r in files for f in rep.files[p]["findings"] if f["rule"] == "F1"]
-        shim = False
-        if triggers:
+        scope = log_scope or cfg["log"].get("scope") or "flagged"
+        f1 = [f for p, _r in files for f in rep.files[p]["findings"] if f["rule"] == "F1"]
+        triggers = [f for f in f1 if f["conf"] == "trigger"]
+        logs = any(rep.files[p]["logs"] for p, _r in files if not rep.files[p]["error"])
+        shim, why = False, "the log shim is off (--lua-log off / log.scope)"
+        if scope != "off" and (triggers or (scope == "all" and logs)):
             covered, why = mwguard_log_cover(data_dir, cfg, key)
-            shim = not covered or log_shim_always or bool(cfg.get("logShimWhenMwguard"))
+            if log_exempt(cfg, key):
+                why = "the mod is in the log shim's exemptMods"
+            else:
+                shim = not covered or log_shim_always or bool(cfg.get("logShimWhenMwguard"))
+                if not triggers:
+                    why = "--lua-log all" + (f"; {why}" if not shim else "")
             rep.mods[key] = {"shim": shim, "why": why}
-            for f in triggers:
-                if shim:
-                    f["conf"] = "high"
-                    f["fix"] = (f"log shim: past its first {cfg['logBudgetInit']} lines, MWSE\\logs\\{log_name(key)}"
-                                f".log; errors still reach MWSE.log ({why})")
-                else:
-                    f["conf"], f["fix"] = "covered", f"nothing to patch: {why}"
+        lc = cfg["log"]
+        for f in triggers:
+            if shim:
+                f["conf"] = "high"
+                f["fix"] = (f"log shim: past its first {lc['budgetInit']}+{lc['budget']} lines, MWSE\\logs\\"
+                            f"{log_name(key)}.log (at most {lc['perSecond']}/s, repeats collapsed, rotated at "
+                            f"{lc['maxMB']} MB); errors still reach MWSE.log ({why})")
+            else:
+                f["conf"], f["fix"] = "covered", f"nothing to patch: {why}"
+        for p, _r in files:                        # logger wraps only travel with the shim
+            ent = rep.files[p]
+            if shim:
+                for f in ent["findings"]:
+                    if f["rule"] == "F1" and f["what"] == "logger created here":
+                        f["conf"] = "high"
+            else:
+                ent["findings"] = [f for f in ent["findings"] if not (f["rule"] == "F1" and f["what"] ==
+                                                                     "logger created here")]
         for p, rel in files:
             ent = rep.files[p]
             if ent["error"]:
                 continue
-            want_shim = shim and ent["logs"] > 0
+            want_shim = shim and ent["logs"] > 0 or bool(analyses.get(p) and analyses[p].old_shim) or \
+                bool(ent.get("old_shim"))
             fixable = any((f["edits"] or f.get("fixable")) and f["conf"] in fix_conf for f in ent["findings"])
             if not (fixable or want_shim):
                 continue
@@ -1713,6 +2006,9 @@ def main(argv=None):
     ap.add_argument("--luajit", help="the LuaJIT (or luac) to check syntax with")
     ap.add_argument("--no-syntax-check", action="store_true", help="patch even with no LuaJIT/luac (parser only)")
     ap.add_argument("--log-shim-always", action="store_true", help="add the log shim even where mwguard covers it")
+    ap.add_argument("--lua-log", choices=("flagged", "all", "off"),
+                    help="which mods get the log shim: flagged (default: mods with log-spam signs), all (every mod "
+                         "that logs), off")
     ap.add_argument("--no-cache", action="store_true", help="read every file again")
     ap.add_argument("--all", action="store_true", help="also list what was left alone on purpose")
     ap.add_argument("--json", help="also write the findings as JSON to this file")
@@ -1733,7 +2029,7 @@ def main(argv=None):
               "relies on the parser alone).", file=sys.stderr)
         return 2
     rep = check_paths(paths, cfg, args.include_own, checker, args.level, data_dir, not args.no_cache,
-                      args.log_shim_always)
+                      args.log_shim_always, log_scope=args.lua_log)
     lines, counts = format_report(rep, args.all)
     n_ok = sum(1 for e in rep.files.values() if e.get("patch") and e["patch"]["ok"])
     head = [f"mwdialog_luafix plan, {time.strftime('%Y-%m-%d %H:%M')}: {len(rep.files)} Lua file(s) checked, "

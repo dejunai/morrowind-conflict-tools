@@ -662,7 +662,7 @@ def run_lua(args, do_apply):
             continue
         try:
             rep = lf.check_paths([root], cfg, False, checker, getattr(args, "lua_level", "high"), data_dir,
-                                 True, False, game_dir)
+                                 True, False, game_dir, log_scope=getattr(args, "lua_log", None))
         except Exception as e:                        # one odd mod never stops the rest
             print(f"  {d}: Lua check failed ({e})")
             continue
@@ -861,6 +861,8 @@ def main():
     ap.add_argument("--lua-level", choices=("high", "medium"), default="high",
                     help="which Lua findings --apply patches (default high)")
     ap.add_argument("--luajit", help="the LuaJIT (or luac) the Lua check compiles with")
+    ap.add_argument("--lua-log", choices=("flagged", "all", "off"),
+                    help="which mods the Lua check gives the log shim: flagged (default), all, off")
     args = ap.parse_args()
     if args.undo:
         return undo()
