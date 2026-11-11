@@ -204,8 +204,8 @@ def mwguard_log_cover(data_dir, cfg, mod_key):
     except OSError:
         return False, "mwguard's main.lua can't be read"
     if "logSpamGuard" not in txt:
-        return False, ("the installed mwguard leaves MWSE.log alone (the passive profiler of 2026-11-11 has no "
-                       "log-spam redirect)")
+        return False, ("the installed mwguard is a passive profiler with no log-spam redirect, so nothing else "
+                       "keeps this out of MWSE.log")
     if not cfg.get("enabled", True) or not cfg.get("logSpamGuard", True):
         return False, "mwguard.json turns mwguard or its log-spam guard off"
     low = mod_key.lower()

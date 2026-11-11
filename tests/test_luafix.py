@@ -559,7 +559,7 @@ def test_F1_passive_mwguard_does_not_count_as_covering(tmp_path):
     rep = lf.check_paths([str(data)], CFG, checker=OkChecker(), use_cache=False, data_dir=str(dd))
     e = next(iter(rep.files.values()))
     assert e["patch"]["ok"] and "F1" in e["patch"]["rules"]
-    assert any("leaves MWSE.log alone" in f["fix"] for f in e["findings"] if f["rule"] == "F1")
+    assert any("passive profiler with no log-spam redirect" in f["fix"] for f in e["findings"] if f["rule"] == "F1")
 
 
 def test_patched_priorities_are_below_mwguards_report_limit():
