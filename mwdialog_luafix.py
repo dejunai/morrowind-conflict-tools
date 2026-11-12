@@ -50,6 +50,8 @@ only written when LuaJIT (or luac) compiles the patched text; if the original do
     python mwdialog_luafix.py "G:\\Vortex Mods\\morrowind\\Some Mod"   (one folder)
     python mwdialog_luafix.py --apply                (patch the high-confidence findings)
     python mwdialog_luafix.py --undo                 (put back the files of the last --apply)
+--apply patches only when the plan it works out lists the same actions as mwdialog_luafix_plan.txt (else it
+refuses, writes the new plan and keeps the old as mwdialog_luafix_plan.prev.txt; no plan: run plan mode first).
 After --apply, mwdialog_luafix_plan.txt is blanked (a second --apply does nothing until plan mode runs again) or
 cut down to the patches not written; a copy of it is kept in that run's mwdialog_backup\\luafix\\<run>\\.
 vortex_tidy.py runs the same check on every staging mod (its plan shows it, --apply patches, --undo reverts;
@@ -2229,7 +2231,8 @@ def format_report(rep, show_info=False, indent="  "):
                          + (f"  -> {f['fix']}" if f["fix"] else ""))
         pt = e.get("patch")
         if pt:
-            lines.append(f"{indent}    => " + (f"patch ready ({', '.join(pt['rules'])})" if pt["ok"]
+            lines.append(f"{indent}    => " + (f"patch ready ({', '.join(pt['rules'])}) "
+                                               f"[{sha(pt['text'].encode('latin-1'))[:8]}]" if pt["ok"]
                                                else f"NOT patched: {pt['why']}"))
     return lines, counts
 
@@ -2278,10 +2281,10 @@ def main(argv=None):
     args = ap.parse_args(argv)
     if args.undo:
         return undo(force=args.force)             # works from the journal; the plan file plays no part
-    if args.apply and PF.state(PLAN_FILE) == "applied":
-        print(PF.refuse_message(PLAN_FILE, "mwdialog_luafix.py"))
-        return 0
     reviewed = PF.read(PLAN_FILE) if args.apply else None
+    if args.apply and (PF.state(PLAN_FILE) != "pending" or not PF.has_any_actions(reviewed)):
+        print(PF.no_plan_message(PLAN_FILE, "mwdialog_luafix.py"))
+        return 2
     data_dir = os.path.join(HERE, "Data Files")
     paths = args.paths or [os.path.join(data_dir, "MWSE", "mods")]
     cfg = load_config(HERE, data_dir)
@@ -2300,7 +2303,14 @@ def main(argv=None):
     n_ok = sum(1 for e in rep.files.values() if e.get("patch") and e["patch"]["ok"])
     head = [f"mwdialog_luafix plan, {time.strftime('%Y-%m-%d %H:%M')}: {len(rep.files)} Lua file(s) checked, "
             f"{n_ok} to patch, {len(rep.skipped)} left alone (MWSE's own code / your mods)"] + summary_lines(counts)
-    PF.write_atomic(PLAN_FILE, "\n".join(head + lines) + "\n")
+    fresh = "\n".join(head + lines) + "\n"
+    if args.apply:                                # enact only the plan that was reviewed
+        added, removed = PF.compare(reviewed, fresh)
+        if added or removed:
+            PF.refuse_mismatch(PLAN_FILE, fresh, added, removed, "mwdialog_luafix.py")
+            return 2
+    else:
+        PF.write_atomic(PLAN_FILE, fresh)
     print("\n".join(head))
     print("\n".join(lines[:300]))
     if len(lines) > 300:
@@ -2314,19 +2324,17 @@ def main(argv=None):
     if not args.apply:
         print(f"\n{n_ok} file(s) would be patched. Nothing changed (--apply patches them).")
         return 0
-    if reviewed is not None and not PF.same_actions(reviewed, PF.read(PLAN_FILE)):
-        print("NOTE: --apply recomputed the plan and it differs from the plan file you last reviewed (both are "
-              "kept in the run's backup folder).")
+    print("The plan matches the one you reviewed.")
     bdir = run_backup_dir(BACKUP_ROOT)
     if not n_ok:
         print("Nothing to patch.")
-        PF.finish(PLAN_FILE, "mwdialog_luafix.py", [], bdir, reviewed, note="there was nothing to patch")
+        PF.finish(PLAN_FILE, "mwdialog_luafix.py", [], bdir, reviewed, fresh, note="there was nothing to patch")
         return 0
     if not args.yes and input(f"\nPatch {n_ok} file(s)? [y/N] ").strip().lower() not in ("y", "yes"):
         print("Nothing changed.")
         return 0
     done, refused, finished = [], [], False
-    enacted = PF.read(PLAN_FILE)
+    enacted = fresh
     try:
         w, refused = apply_report(rep, journal=JOURNAL, backup_root=BACKUP_ROOT, bdir=bdir, done=done,
                                   head_extra={"plan_copy": os.path.join(bdir, "plan_enacted.txt")})

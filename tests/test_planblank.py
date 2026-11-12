@@ -102,9 +102,9 @@ def test_tidy_second_apply_is_a_no_op(tidy, capsys):
     tidy("--apply", "--yes")
     (tidy.mod / "late.txt").write_text("would be moved by a fresh plan")
     capsys.readouterr()
-    assert tidy("--apply", "--yes") == 0
+    assert tidy("--apply", "--yes") == 2
     out = capsys.readouterr().out
-    assert "plan is empty / already applied" in out and "plan mode first" in out
+    assert "REFUSED" in out and "plan is empty / already applied" in out and "plan mode first" in out
     assert (tidy.mod / "late.txt").exists() and len(_runs(vt.JOURNAL)) == 1
     tidy()                                                                    # plan mode regenerates it
     assert PF.state(vt.PLAN) == "pending" and "late.txt  ->" in open(vt.PLAN).read()
@@ -226,7 +226,7 @@ def test_luafix_apply_blanks_the_plan_with_an_audit_copy_and_second_apply_is_a_n
     assert os.path.exists(run["plan_copy"]) and "a/main.lua" in open(run["plan_copy"]).read()
     assert os.path.dirname(run["plan_copy"]).startswith(lf.BACKUP_ROOT)
     capsys.readouterr()
-    assert luafix("--apply", "--yes") == 0
+    assert luafix("--apply", "--yes") == 2
     assert "already applied" in capsys.readouterr().out
     assert len([x for x in open(lf.JOURNAL) if '"run"' in x]) == 1
 
@@ -253,8 +253,147 @@ def test_luafix_undo_works_without_the_plan_file(luafix):
     assert all(f.read_text() == PUDDLE for f in luafix.files)
 
 
-def test_luafix_nothing_to_patch_also_blanks(luafix, tmp_path):
+def test_luafix_plan_with_no_actions_refuses(luafix, capsys):
     for f in luafix.files:
         f.write_text("local x = 1\n")
     luafix()
-    assert luafix("--apply", "--yes") == 0 and PF.state(lf.PLAN_FILE) == "applied"
+    capsys.readouterr()
+    assert luafix("--apply", "--yes") == 2
+    assert "lists no actions" in capsys.readouterr().out and PF.state(lf.PLAN_FILE) == "pending"
+
+
+# ------------------------------------------------------------------------------------------- strict --apply
+def test_planfile_compare_ignores_headers_comments_and_order():
+    a = "x plan, 2026-11-11 10:00: 2\n  left alone: Z\n\nM   [M]\n    a  ->  b   (doc)\n    c  ->  d   (doc)\n"
+    b = "# a comment\nx plan, 2026-11-12 09:00: 2\n\nM   [M]\n    c  ->  d   (doc)\n    a  ->  b   (doc)\n"
+    assert PF.compare(a, b) == ([], [])
+    added, removed = PF.compare(a, b.replace("c  ->  d", "c  ->  e"))
+    assert len(added) == 1 and len(removed) == 1 and "c  ->  e" in added[0][1]
+    assert PF.actions("\nM\n    lua m/main.lua\n        G2 high        line 9: x\n        G5 report      line 2: y\n"
+                      "        => patch ready (G2) [abcd1234]\n") == {
+        ("M | lua m/main.lua", "G2 high        line 9: x"): 1, ("M | lua m/main.lua", "=> patch ready (G2) [abcd1234]"): 1}
+
+
+def test_tidy_missing_plan_refuses(tidy, capsys):
+    assert tidy("--apply", "--yes") == 2
+    out = capsys.readouterr().out
+    assert "there is no plan file" in out and "plan mode first" in out
+    assert (tidy.mod / "readme.txt").exists() and not _runs(vt.JOURNAL)
+
+
+def test_tidy_plan_with_no_actions_refuses(tidy, capsys):
+    open(vt.PLAN, "w").write("vortex_tidy plan, 2026-11-11 10:00: 1 mod(s), 0 to change\n")
+    assert tidy("--apply", "--yes") == 2 and "lists no actions" in capsys.readouterr().out
+
+
+def test_tidy_mismatch_refuses_changes_nothing_and_rewrites_the_plan_with_prev(tidy, capsys):
+    tidy()
+    reviewed = open(vt.PLAN).read()
+    (tidy.mod / "changelog.txt").write_text("new since the review")         # one more move now
+    os.remove(tidy.mod / "notes.txt")                                        # one less
+    capsys.readouterr()
+    assert tidy("--apply", "--yes") == 2
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and "1 action(s) added, 1 removed" in out
+    assert "changelog.txt" in out and "notes.txt" in out
+    prev = os.path.splitext(vt.PLAN)[0] + ".prev.txt"
+    assert f"saved as {prev}" in out
+    assert open(prev).read() == reviewed                                     # the reviewed one, kept
+    assert "changelog.txt  ->" in open(vt.PLAN).read()                       # the new one, to review
+    assert (tidy.mod / "readme.txt").exists() and (tidy.mod / "changelog.txt").exists() and not _runs(vt.JOURNAL)
+    assert tidy("--apply", "--yes") == 0                                     # reviewed now: it applies
+    assert (tidy.mod / "Docs" / "Foo-1-1-0 - changelog.txt").exists() and PF.state(vt.PLAN) == "applied"
+
+
+def test_tidy_edited_plan_file_refuses_too(tidy):
+    tidy()
+    t = open(vt.PLAN).read()
+    open(vt.PLAN, "w").write("\n".join(ln for ln in t.splitlines() if "notes.txt" not in ln) + "\n")
+    assert tidy("--apply", "--yes") == 2 and (tidy.mod / "notes.txt").exists()
+
+
+def test_tidy_lua_only_compares_only_the_lua_section(tidy_lua, capsys):
+    tidy_lua()                                                               # full plan: moves + Lua
+    (tidy_lua.mod / "changelog.txt").write_text("a move the plan doesn't have")
+    assert tidy_lua("--lua-only", "--apply", "--yes") == 1                   # moves differ: not compared
+    assert "mwluafix_gate(" in tidy_lua.lua.read_text()
+    assert (tidy_lua.mod / "changelog.txt").exists()                         # --lua-only moves nothing
+
+
+def test_tidy_lua_only_mismatch_refuses(tidy_lua, capsys):
+    tidy_lua("--lua-only")
+    tidy_lua.lua.write_text(PUDDLE.replace("0.35", "x").replace("bigger", "much bigger"))   # patch text changes
+    capsys.readouterr()
+    assert tidy_lua("--lua-only", "--apply", "--yes") == 2
+    assert "REFUSED" in capsys.readouterr().out and "mwluafix_gate(" not in tidy_lua.lua.read_text()
+    assert os.path.exists(os.path.splitext(vt.PLAN)[0] + ".prev.txt")
+
+
+@pytest.fixture
+def tidy_assets(tidy, monkeypatch):
+    from conftest import ah, m
+    bar = tidy.mod.parent / "Bar-2-1-0" / "Meshes"
+    bar.mkdir(parents=True)
+    (bar / "empty.nif").write_bytes(b"")
+    monkeypatch.setattr(vt, "_tool_modules", lambda: (m, ah))
+    monkeypatch.setattr(m, "stand_in_bytes", lambda rel: b"NIF stand-in")
+    staging = str(tidy.mod.parent)
+
+    def run(*extra):
+        monkeypatch.setattr(sys, "argv", ["vortex_tidy.py", "--staging", staging, "--no-lua", *extra])
+        return vt.main()
+    run.nif, run.mod = bar / "empty.nif", tidy.mod
+    return run
+
+
+def test_tidy_asset_repairs_are_in_the_plan_and_applied_only_as_reviewed(tidy_assets):
+    assert tidy_assets() == 0
+    plan = open(vt.PLAN).read()
+    assert "\nASSET CHECK\n" in plan and "    repair broken Meshes" in plan and "empty.nif empty" in plan
+    assert tidy_assets.nif.stat().st_size == 0                              # plan mode changes nothing
+    assert tidy_assets("--apply", "--yes") == 0
+    assert tidy_assets.nif.stat().st_size > 0 and PF.state(vt.PLAN) == "applied"   # stand-in put there
+
+
+def test_tidy_new_asset_repair_since_review_refuses(tidy_assets, capsys):
+    tidy_assets()
+    (tidy_assets.nif.parent / "empty2.nif").write_bytes(b"")
+    capsys.readouterr()
+    assert tidy_assets("--apply", "--yes") == 2
+    out = capsys.readouterr().out
+    assert "1 action(s) added, 0 removed" in out and "empty2.nif" in out
+    assert tidy_assets.nif.stat().st_size == 0 and (tidy_assets.mod / "readme.txt").exists()
+
+
+def test_luafix_mismatch_refuses_and_keeps_prev(luafix, capsys):
+    luafix()
+    luafix.files[1].write_text("local x = 1\n")                             # b no longer needs a patch
+    capsys.readouterr()
+    assert luafix("--apply", "--yes") == 2
+    out = capsys.readouterr().out
+    assert "REFUSED" in out and "0 action(s) added" in out
+    assert "mwluafix_gate(" not in luafix.files[0].read_text()
+    prev = os.path.splitext(lf.PLAN_FILE)[0] + ".prev.txt"
+    assert "b/main.lua" in open(prev).read() and "b/main.lua" not in open(lf.PLAN_FILE).read()
+    assert luafix("--apply", "--yes") == 0 and "mwluafix_gate(" in luafix.files[0].read_text()
+
+
+def test_luafix_missing_plan_refuses(luafix, capsys):
+    assert luafix("--apply", "--yes") == 2
+    assert "there is no plan file" in capsys.readouterr().out
+    assert all(f.read_text() == PUDDLE for f in luafix.files)
+
+
+def test_tidy_asset_repair_that_fails_stays_in_the_plan(tidy_assets, monkeypatch):
+    from conftest import m
+    tidy_assets()
+
+    def boom(rel):
+        if rel.endswith("empty.nif"):
+            raise OSError("no stand-in")
+        return b"NIF stand-in"
+    monkeypatch.setattr(m, "stand_in_bytes", boom)
+    assert tidy_assets("--apply", "--yes") == 1
+    plan = open(vt.PLAN).read()
+    assert plan.startswith("# partially applied") and "ASSET CHECK" in plan
+    assert "repair broken Meshes/empty.nif" in plan and "a.nif" not in plan and "readme.txt" not in plan

@@ -112,7 +112,7 @@ def test_I8_damaged_bsa_does_not_stop_the_asset_check(tmp_path, monkeypatch, cap
         pass
     a = A()
     a.staging, a.only, a.skip, a.apply = str(staging), None, None, False
-    vt.run_assets(a, False)
+    vt.assets_check(a)
     assert "ASSET CHECK" in capsys.readouterr().out
 
 
