@@ -50,6 +50,9 @@ NIFZER0EDIT built in, plus the folder names in vortex_tidy_blacklist.txt (one pe
 
 It only shows the plan unless you pass --apply. Every move is written to a journal, and --undo puts
 everything back. Purge in Vortex before applying, and Deploy afterwards, so the game folder matches.
+--apply works the plan out again and enacts it; afterwards vortex_tidy_plan.txt is blanked (only a "# applied
+..." line: a second --apply does nothing until plan mode is run again), or cut down to what was NOT applied.
+Copies of the plan as reviewed and as enacted go to mwdialog_backup\\tidy\\<run>\\. --undo uses the journal only.
 
     python vortex_tidy.py                      (plan for every mod; nothing is changed)
     python vortex_tidy.py --only "MUSE*"       (plan for some mods; wildcards allowed)
@@ -65,10 +68,15 @@ import struct
 import sys
 import time
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import mwdialog_planfile as PF                   # noqa: E402
+
 STAGING = r"G:\Vortex Mods\morrowind"
 HERE = os.path.dirname(os.path.abspath(__file__))
 JOURNAL = os.path.join(HERE, "vortex_tidy_journal.jsonl")
 PLAN = os.path.join(HERE, "vortex_tidy_plan.txt")
+AUDIT_ROOT = os.path.join(HERE, "mwdialog_backup", "tidy")     # a copy of each enacted plan, per --apply run
+LUA_HEAD = "LUA CHECK"
 
 GAME_DIRS = {"meshes", "textures", "icons", "sound", "music", "bookart", "splash", "fonts", "video",
              "distantland"}
@@ -475,6 +483,45 @@ def review(staging, moves, assume_keep=False):
     return moves, gone
 
 
+def move_lines(d, res, staging):
+    """The plan lines of one mod's moves (d: its folder name)."""
+    out = [f"\n{d}   [{mod_name(d)}]"]
+    base = os.path.join(staging, d)
+    for src, dst, why in res:
+        rs = os.path.relpath(src, base)
+        if dst is None:
+            out.append(f"    remove empty  {rs}")
+        else:
+            out.append(f"    {rs}  ->  {os.path.relpath(dst, base)}   ({why})")
+    return out
+
+
+def moves_as_lines(moves, staging):
+    """Plan lines for a list of moves (grouped by mod folder, in order)."""
+    out, groups = [], {}
+    for mv in moves:
+        rel = os.path.relpath(mv[0], staging)
+        d = rel.split(os.sep)[0] if not rel.startswith("..") else os.path.dirname(mv[0])
+        groups.setdefault(d, []).append(mv)
+    for d, res in groups.items():
+        out += move_lines(d, res, staging) if not os.path.isabs(d) else \
+            [f"\n{d}"] + [f"    {a}  ->  {b}   ({w})" for a, b, w in res]
+    return out
+
+
+def split_plan(text):
+    """(the moves part, the Lua part) of a plan file's text."""
+    t = text or ""
+    i = t.find("\n" + LUA_HEAD + "\n")
+    return (t, "") if i < 0 else (t[:i], t[i + 1:])
+
+
+def has_actions(part):
+    """Does a plan part list anything to do (indented action lines, not comments or notes)?"""
+    return any(ln.startswith("    ") and ln.strip() and not ln.lstrip().startswith("#")
+               for ln in (part or "").splitlines())
+
+
 def run_plan(args):
     mods = sorted(d for d in os.listdir(args.staging) if os.path.isdir(os.path.join(args.staging, d))
                   and d.lower() != "off")                       # your own Off folder is never touched
@@ -497,13 +544,7 @@ def run_plan(args):
         if not res:
             continue
         touched += 1
-        lines.append(f"\n{d}   [{mod_name(d)}]")
-        for src, dst, why in res:
-            rs = os.path.relpath(src, os.path.join(args.staging, d))
-            if dst is None:
-                lines.append(f"    remove empty  {rs}")
-            else:
-                lines.append(f"    {rs}  ->  {os.path.relpath(dst, os.path.join(args.staging, d))}   ({why})")
+        lines += move_lines(d, res, args.staging)
         all_moves += res
     head = [f"vortex_tidy plan, {time.strftime('%Y-%m-%d %H:%M')}: {len(mods)} mod(s), {touched} to change, "
             f"{sum(1 for m in all_moves if m[1])} move(s); {len(skipped)} left alone"]
@@ -522,8 +563,7 @@ def run_plan(args):
     for mod_dir, (addons, scripts) in sorted(REVIEW.items()):
         head.append(f"  NEEDS A LOOK (OpenMW-only: {', '.join(addons)}, no .esp, scripts {', '.join(scripts)}): "
                     f"{os.path.basename(mod_dir)} - --apply stops at it and offers to delete it")
-    with open(PLAN, "w", encoding="utf-8") as f:
-        f.write("\n".join(head + lines) + "\n")
+    PF.write_atomic(PLAN, "\n".join(head + lines) + "\n")
     print("\n".join(head))
     print("\n".join(lines[:200]))
     if len(lines) > 200:
@@ -532,28 +572,38 @@ def run_plan(args):
     return all_moves
 
 
-def apply(moves, staging):
-    done = 0
+def apply(moves, staging, progress=None, head_extra=None):
+    """Make the moves, journaling each. progress (a list) gets the index of every move done, as it is done,
+    so an interrupted run knows what is left. Returns the moves that failed."""
+    done, failed = 0, []
+    head = {"run": time.strftime("%Y-%m-%d %H:%M:%S"), "staging": staging}
+    head.update(head_extra or {})
     with open(JOURNAL, "a", encoding="utf-8") as j:
-        j.write(json.dumps({"run": time.strftime("%Y-%m-%d %H:%M:%S"), "staging": staging}) + "\n")
-        for src, dst, why in moves:
+        j.write(json.dumps(head) + "\n")
+        for i, (src, dst, why) in enumerate(moves):
             try:
                 if dst is None:
                     for base, dirs, fns in os.walk(src, topdown=False):   # only empty folders go
                         if not os.listdir(base):
                             os.rmdir(base)
                             j.write(json.dumps({"rmdir": base}) + "\n")
+                    if progress is not None:
+                        progress.append(i)
                     continue
                 os.makedirs(os.path.dirname(dst), exist_ok=True)
                 os.rename(src, dst)          # same drive: a rename, so Vortex's hard links keep their file
                 j.write(json.dumps({"src": src, "dst": dst}) + "\n")
                 j.flush()
                 done += 1
+                if progress is not None:
+                    progress.append(i)
                 if NO_DIFFUSE_WARNING in why:
                     print(f"  WARNING: moved {src} -> {dst}: {NO_DIFFUSE_WARNING}")
             except OSError as e:
                 print(f"  could not move {src}: {e}", file=sys.stderr)
+                failed.append((src, dst, why))
     print(f"Moved {done} item(s). Journal: {JOURNAL} (--undo puts them back). Now Deploy in Vortex.")
+    return failed
 
 
 def undo():
@@ -640,7 +690,7 @@ def run_lua(args, do_apply):
     written in place (originals in mwdialog_backup\\luafix, journaled here so --undo puts them back)."""
     lf = _luafix()
     if lf is None:
-        return
+        return {"left": []}
     game_dir = os.path.dirname(os.path.abspath(__file__))
     data_dir = os.path.join(game_dir, "Data Files")
     mods = sorted(d for d in os.listdir(args.staging) if os.path.isdir(os.path.join(args.staging, d))
@@ -679,9 +729,13 @@ def run_lua(args, do_apply):
         print(f"    ... ({len(out) - 300} more lines in {PLAN})")
     print("\n  Lua findings by rule:")
     print("\n".join(lf.summary_lines(total, "    ")) or "    none")
-    try:
-        with open(PLAN, "a", encoding="utf-8") as f:
-            f.write("\nLUA CHECK\n" + "\n".join(out + lf.summary_lines(total)) + "\n")
+    try:                                            # the plan's Lua part (replacing an older one)
+        cur = PF.read(PLAN)
+        base = split_plan(cur)[0] if cur is not None and PF.state(PLAN) == "pending" and \
+            getattr(args, "_lua_keep_base", True) else \
+            f"vortex_tidy plan (Lua only), {time.strftime('%Y-%m-%d %H:%M')}"
+        PF.write_atomic(PLAN, base.rstrip("\n") + f"\n\n{LUA_HEAD}\n" + "\n".join(out + lf.summary_lines(total))
+                        + "\n")
     except OSError:
         pass
     try:
@@ -689,24 +743,32 @@ def run_lua(args, do_apply):
         ah.shared_cache(game_dir).flush()
     except Exception:
         pass
-    if not do_apply:
-        print(f"  {n_ok} Lua file(s) to patch (run with --apply)")
-        return
-    if not n_ok:
-        return
-    if checker is None:
-        print("  not patching Lua: no syntax checker (LuaJIT / luac) found")
-        return
-    if not args.yes and input(f"\nPatch {n_ok} Lua file(s) in place? [y/N] ").strip().lower() not in ("y", "yes"):
-        print("  Lua files not changed.")
-        return
     merged = lf.Report()
     for _d, rep in reps:
         merged.files.update(rep.files)
-    written, refused = lf.apply_report(merged, journal=JOURNAL, head_extra={"staging": args.staging, "lua": True})
+    res = {"left": [], "rep": merged, "done": []}
+    if not do_apply:
+        print(f"  {n_ok} Lua file(s) to patch (run with --apply)")
+        return res
+    if not n_ok:
+        return res
+    pending = lf.pending_lines(merged, (), "    ")
+    if checker is None:
+        print("  not patching Lua: no syntax checker (LuaJIT / luac) found")
+        res["left"] = pending
+        return res
+    if not args.yes and input(f"\nPatch {n_ok} Lua file(s) in place? [y/N] ").strip().lower() not in ("y", "yes"):
+        print("  Lua files not changed.")
+        res["left"] = pending
+        return res
+    res["left"] = pending                           # until written: an interruption leaves them in the plan
+    written, refused = lf.apply_report(merged, journal=JOURNAL, head_extra=dict(
+        {"staging": args.staging, "lua": True}, **getattr(args, "_journal_extra", {})), done=res["done"])
+    res["left"] = lf.pending_lines(merged, res["done"], "    ")
     for p, why in refused:
         print(f"    not patched: {os.path.relpath(p, args.staging)}: {why}")
     print(f"  patched {written} Lua file(s) (journal {JOURNAL}; --undo puts them back)")
+    return res
 
 
 def _tool_modules():
@@ -865,39 +927,101 @@ def main():
                     help="which mods the Lua check gives the log shim: flagged (default), all, off")
     args = ap.parse_args()
     if args.undo:
-        return undo()
+        return undo()                                 # works from the journal; the plan file plays no part
     if not os.path.isdir(args.staging):
         print(f"Staging folder not found: {args.staging}", file=sys.stderr)
         return 2
-    if args.lua_only:
-        run_lua(args, args.apply)
-        return 0
-    moves = run_plan(args)
     if not args.apply:
+        if args.lua_only:
+            run_lua(args, False)
+            return 0
+        moves = run_plan(args)
         if not args.no_lua:
             run_lua(args, False)
         if not args.no_assets:
             run_assets(args, False)
         print("\nNothing changed. Purge in Vortex, run again with --apply, then Deploy.")
         return 0
+    return apply_main(args)
+
+
+def apply_main(args):
+    """--apply: refused when the plan file is blank (already applied); otherwise the plan is computed again and
+    enacted, and the plan file is then blanked - or cut down to what was not applied - atomically, with copies
+    of the plan as reviewed and as enacted in mwdialog_backup\\tidy\\<run>\\."""
+    if PF.state(PLAN) == "applied":
+        print(PF.refuse_message(PLAN, "vortex_tidy.py"))
+        return 0
+    reviewed = PF.read(PLAN)
+    audit = os.path.join(AUDIT_ROOT, time.strftime("%Y%m%d-%H%M%S"))
+    args._journal_extra = {"plan_copy": os.path.join(audit, "plan_enacted.txt")}
+    st = {"moves": [], "progress": [], "failed": None, "moves_keep": "", "lua": None, "started": False,
+          "finished": False}
+    if args.lua_only:
+        st["moves_keep"] = split_plan(reviewed)[0] if PF.state(PLAN) == "pending" and \
+            has_actions(split_plan(reviewed)[0]) else ""      # not enacted by --lua-only: stays in the plan
+        try:
+            st["started"] = True
+            st["lua"] = run_lua(args, True)
+            st["finished"] = True
+        finally:
+            _finish_plan(args, st, reviewed, audit)
+        return 0 if not _left_lines(args, st) else 1
+    moves = run_plan(args)
     moves, gone = review(args.staging, moves, assume_keep=args.yes)
-    if not moves and not gone:
+    if moves or gone:
+        what = f"{sum(1 for m in moves if m[1])} move(s)" + (f" and delete {len(gone)} mod(s)" if gone else "")
+        if not args.yes and input(f"\nApply {what}? Purge in Vortex first. [y/N] ").strip().lower() not in \
+                ("y", "yes"):
+            print("Nothing changed.")
+            return 0
+    else:
         print("Nothing to move.")
+    left = []
+    try:
+        st["started"] = True
+        st["moves"] = gone + moves
+        if st["moves"]:
+            st["failed"] = apply(st["moves"], args.staging, st["progress"], args._journal_extra)
         if not args.no_lua:
-            run_lua(args, True)
+            st["lua"] = run_lua(args, True)
         if not args.no_assets:
             run_assets(args, True)
-        return 0
-    what = f"{sum(1 for m in moves if m[1])} move(s)" + (f" and delete {len(gone)} mod(s)" if gone else "")
-    if not args.yes and input(f"\nApply {what}? Purge in Vortex first. [y/N] ").strip().lower() not in ("y", "yes"):
-        print("Nothing changed.")
-        return 0
-    apply(gone + moves, args.staging)
-    if not args.no_lua:
-        run_lua(args, True)
-    if not args.no_assets:
-        run_assets(args, True)
-    return 0
+        st["finished"] = True
+    finally:
+        left = _finish_plan(args, st, reviewed, audit)
+    return 0 if not left else 1
+
+
+def _left_lines(args, st):
+    done = set(st["progress"])
+    left_moves = [m for i, m in enumerate(st["moves"]) if i not in done]
+    out = []
+    if st["moves_keep"]:
+        out += [ln for ln in st["moves_keep"].splitlines() if not ln.startswith("#")]
+    out += moves_as_lines(left_moves, args.staging)
+    lua = st["lua"]
+    if lua is None and st["started"] and not args.no_lua and not st["finished"]:
+        lua = {"left": []}                            # interrupted before the Lua check ran: rerun plan mode
+    if lua and lua.get("left"):
+        out += ["", LUA_HEAD] + lua["left"]
+    return out
+
+
+def _finish_plan(args, st, reviewed, audit):
+    if not st["started"]:
+        return []
+    enacted = PF.read(PLAN)
+    if reviewed is not None and not PF.same_actions(reviewed, enacted):
+        print("NOTE: --apply recomputed the plan and it differs from the plan file you last reviewed (both "
+              f"copies are in {audit}).")
+    left = _left_lines(args, st)
+    note = "" if st["finished"] else "the run was interrupted; anything not listed here was applied"
+    if not st["finished"] and not args.no_lua and st["lua"] is None and not args.lua_only:
+        note += " (the Lua check had not run: rerun plan mode)"
+    PF.finish(PLAN, "vortex_tidy.py" + (" --lua-only" if args.lua_only else ""), left, audit, reviewed, enacted,
+              note)
+    return left
 
 
 if __name__ == "__main__":
