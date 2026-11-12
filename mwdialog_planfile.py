@@ -37,10 +37,19 @@ def write_atomic(path, text):
             os.replace(tmp, path)
             return
         except PermissionError:
-            if i == 9:
-                os.remove(tmp)
-                raise
-            time.sleep(0.2)
+            if i < 9:
+                time.sleep(0.2)
+    # still held open by a program that doesn't allow a rename over it: write it in place instead (a plan left
+    # pending after its --apply is the thing to avoid), and say so
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+        print(f"(note: {path} is open in another program, so it was rewritten in place rather than replaced)")
+    finally:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
 
 
 def read(path):
