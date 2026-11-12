@@ -127,3 +127,119 @@ def same_actions(a, b):
         ls = [ln.rstrip() for ln in (t or "").splitlines() if ln.strip() and not ln.lstrip().startswith("#")]
         return ls[1:] if ls and ("plan" in ls[0].lower()) else ls
     return body(a) == body(b)
+
+
+# ---------------------------------------------------------------------------------------------- strict --apply
+# --apply enacts a plan only when the plan it works out lists the same actions as the plan file on disk (the
+# one you reviewed). Actions are compared as a multiset of (context, action line): the mod / Lua file they
+# belong to and the action itself; headers, comments, dates, notes, summaries, report-only findings and the
+# order of the lines are ignored (the order --apply uses is computed the same deterministic way plan mode
+# does, so the same set means the same run).
+import collections                                                     # noqa: E402
+import re                                                              # noqa: E402
+
+SECTION_HEADS = ("LUA CHECK", "ASSET CHECK")
+_DATED_HEAD = re.compile(r"\bplan\b.*\d{4}-\d\d-\d\d")
+_FINDING = re.compile(r"^[A-Z]\d+ (high|medium)\s")
+_ACTION_START = ("remove empty", "=> patch ready", "repair ", "shorten ")
+
+
+def sections(text):
+    """{"moves": ..., "LUA CHECK": ..., "ASSET CHECK": ...}: the parts of a plan file's text (each without
+    its heading line)."""
+    out, cur = {"moves": []}, "moves"
+    for ln in (text or "").splitlines():
+        if ln.strip() in SECTION_HEADS and not ln.startswith(" "):
+            cur = ln.strip()
+            out.setdefault(cur, [])
+            continue
+        out.setdefault(cur, []).append(ln)
+    return {k: "\n".join(v) for k, v in out.items()}
+
+
+def actions(text):
+    """The actions a plan text lists: Counter of (context, action)."""
+    got = collections.Counter()
+    mod = lua = ""
+    for ln in (text or "").splitlines():
+        s = ln.strip()
+        if not s or s.startswith("#"):
+            continue
+        if not ln.startswith(" "):
+            if s in SECTION_HEADS or _DATED_HEAD.search(s):
+                continue
+            mod, lua = s, ""
+            continue
+        if s.startswith("lua "):
+            lua = s
+            continue
+        if not ln.startswith("    "):
+            continue                                    # head notes, "left alone", summaries
+        if "  ->  " in s or s.startswith(_ACTION_START) or _FINDING.match(s):
+            got[(mod + (" | " + lua if lua else ""), s)] += 1
+    return got
+
+
+def compare(reviewed_text, fresh_text, parts=None):
+    """(added, removed): actions in the fresh plan but not the reviewed one, and the other way round, over the
+    given parts (None: the whole plan)."""
+    if parts is None:
+        a, b = actions(reviewed_text), actions(fresh_text)
+    else:
+        rs, fs = sections(reviewed_text), sections(fresh_text)
+        a, b = collections.Counter(), collections.Counter()
+        for p in parts:
+            a += actions(rs.get(p, ""))
+            b += actions(fs.get(p, ""))
+    return list((b - a).elements()), list((a - b).elements())
+
+
+def has_any_actions(text, parts=None):
+    if parts is None:
+        return bool(actions(text))
+    s = sections(text)
+    return any(actions(s.get(p, "")) for p in parts)
+
+
+def prev_path(path):
+    base, ext = os.path.splitext(path)
+    return base + ".prev" + (ext or ".txt")
+
+
+def diff_summary(added, removed, show=5):
+    def fmt(x):
+        ctx, a = x
+        return f"      {ctx}: {a}" if ctx else f"      {a}"
+    out = [f"  {len(added)} action(s) added, {len(removed)} removed since the plan you reviewed"]
+    if added:
+        out.append("    added:")
+        out += [fmt(x)[:220] for x in added[:show]] + ([f"      ... and {len(added) - show} more"]
+                                                       if len(added) > show else [])
+    if removed:
+        out.append("    removed:")
+        out += [fmt(x)[:220] for x in removed[:show]] + ([f"      ... and {len(removed) - show} more"]
+                                                         if len(removed) > show else [])
+    return out
+
+
+def refuse_mismatch(path, fresh_text, added, removed, tool, log=print):
+    """The plan changed since it was reviewed: keep the reviewed file as <plan>.prev.txt, write the fresh one
+    (to review), say what changed. Nothing is enacted."""
+    prev = prev_path(path)
+    if os.path.exists(path):
+        shutil.copyfile(path, prev)
+    write_atomic(path, fresh_text)
+    log(f"\nREFUSED: the plan {tool} --apply works out now is not the one in the plan file you reviewed. "
+        f"Nothing was changed.")
+    for ln in diff_summary(added, removed):
+        log(ln)
+    log(f"The plan you reviewed was saved as {prev}; the new plan is in {path}.")
+    log(f"Review {path}, then run {tool} --apply again.")
+
+
+def no_plan_message(path, tool):
+    st = state(path)
+    why = {"missing": "there is no plan file", "applied": f"the plan is empty / already applied "
+           f"({header_of(path)})"}.get(st, "the plan file lists no actions")
+    return (f"REFUSED: {why} ({path}). Run {tool} in plan mode first (without --apply), review the plan, "
+            f"then --apply. Nothing was changed.")

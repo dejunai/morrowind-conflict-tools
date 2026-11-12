@@ -50,7 +50,11 @@ NIFZER0EDIT built in, plus the folder names in vortex_tidy_blacklist.txt (one pe
 
 It only shows the plan unless you pass --apply. Every move is written to a journal, and --undo puts
 everything back. Purge in Vortex before applying, and Deploy afterwards, so the game folder matches.
---apply works the plan out again and enacts it; afterwards vortex_tidy_plan.txt is blanked (only a "# applied
+--apply enacts only the plan you reviewed: it works the plan out again (moves, Lua patches, asset repairs -
+all listed in vortex_tidy_plan.txt; --lua-only: its Lua section) and refuses, changing nothing, when the
+actions differ from the plan file: the new plan is written for review and the old one kept as
+vortex_tidy_plan.prev.txt. No plan file (or a blank one) also refuses: run plan mode first.
+Afterwards vortex_tidy_plan.txt is blanked (only a "# applied
 ..." line: a second --apply does nothing until plan mode is run again), or cut down to what was NOT applied.
 Copies of the plan as reviewed and as enacted go to mwdialog_backup\\tidy\\<run>\\. --undo uses the journal only.
 
@@ -77,6 +81,7 @@ JOURNAL = os.path.join(HERE, "vortex_tidy_journal.jsonl")
 PLAN = os.path.join(HERE, "vortex_tidy_plan.txt")
 AUDIT_ROOT = os.path.join(HERE, "mwdialog_backup", "tidy")     # a copy of each enacted plan, per --apply run
 LUA_HEAD = "LUA CHECK"
+ASSET_HEAD = "ASSET CHECK"
 
 GAME_DIRS = {"meshes", "textures", "icons", "sound", "music", "bookart", "splash", "fonts", "video",
              "distantland"}
@@ -563,7 +568,9 @@ def run_plan(args):
     for mod_dir, (addons, scripts) in sorted(REVIEW.items()):
         head.append(f"  NEEDS A LOOK (OpenMW-only: {', '.join(addons)}, no .esp, scripts {', '.join(scripts)}): "
                     f"{os.path.basename(mod_dir)} - --apply stops at it and offers to delete it")
-    PF.write_atomic(PLAN, "\n".join(head + lines) + "\n")
+    args._moves_text = "\n".join(head + lines) + "\n"
+    if getattr(args, "_write_plan", True):
+        PF.write_atomic(PLAN, args._moves_text)
     print("\n".join(head))
     print("\n".join(lines[:200]))
     if len(lines) > 200:
@@ -685,19 +692,19 @@ def _luafix():
         return None
 
 
-def run_lua(args, do_apply):
-    """mwdialog_luafix on each mod's MWSE Lua files: listed in the plan; with --apply the verified patches are
-    written in place (originals in mwdialog_backup\\luafix, journaled here so --undo puts them back)."""
+def lua_check(args):
+    """mwdialog_luafix on each mod's MWSE Lua files (nothing written): {"reps", "merged", "body" (the plan's Lua
+    section), "n_ok", "checker"}, or None when mwdialog_luafix.py is missing."""
     lf = _luafix()
     if lf is None:
-        return {"left": []}
+        return None
     game_dir = os.path.dirname(os.path.abspath(__file__))
     data_dir = os.path.join(game_dir, "Data Files")
     mods = sorted(d for d in os.listdir(args.staging) if os.path.isdir(os.path.join(args.staging, d))
                   and d.lower() != "off")
     if args.only:
         mods = [d for d in mods if any(fnmatch.fnmatch(d.lower(), pat.lower()) for pat in args.only)]
-    pats = blacklist(create=do_apply) + (args.skip or [])
+    pats = blacklist(create=bool(args.apply)) + (args.skip or [])
     cfg = lf.load_config(game_dir, data_dir)
     checker = lf.find_checker(getattr(args, "luajit", None), game_dir)
     print("\n" + "=" * 70 + "\nLUA CHECK (each mod's MWSE Lua files)\n" + "=" * 70)
@@ -729,15 +736,6 @@ def run_lua(args, do_apply):
         print(f"    ... ({len(out) - 300} more lines in {PLAN})")
     print("\n  Lua findings by rule:")
     print("\n".join(lf.summary_lines(total, "    ")) or "    none")
-    try:                                            # the plan's Lua part (replacing an older one)
-        cur = PF.read(PLAN)
-        base = split_plan(cur)[0] if cur is not None and PF.state(PLAN) == "pending" and \
-            getattr(args, "_lua_keep_base", True) else \
-            f"vortex_tidy plan (Lua only), {time.strftime('%Y-%m-%d %H:%M')}"
-        PF.write_atomic(PLAN, base.rstrip("\n") + f"\n\n{LUA_HEAD}\n" + "\n".join(out + lf.summary_lines(total))
-                        + "\n")
-    except OSError:
-        pass
     try:
         import mwdialog_assets as ah
         ah.shared_cache(game_dir).flush()
@@ -746,29 +744,41 @@ def run_lua(args, do_apply):
     merged = lf.Report()
     for _d, rep in reps:
         merged.files.update(rep.files)
-    res = {"left": [], "rep": merged, "done": []}
-    if not do_apply:
-        print(f"  {n_ok} Lua file(s) to patch (run with --apply)")
-        return res
-    if not n_ok:
-        return res
-    pending = lf.pending_lines(merged, (), "    ")
-    if checker is None:
+    print(f"  {n_ok} Lua file(s) to patch" + ("" if args.apply else " (run with --apply)"))
+    return {"reps": reps, "merged": merged, "body": "\n".join(out + lf.summary_lines(total)), "n_ok": n_ok,
+            "checker": checker, "done": [], "lf": lf}
+
+
+def lua_pending(lres):
+    """Plan lines (per mod) of the Lua patches not written yet."""
+    if not lres:
+        return []
+    out = []
+    for d, rep in lres["reps"]:
+        ls = lres["lf"].pending_lines(rep, lres["done"], "    ")
+        if ls:
+            out += [f"\n{d}"] + ls
+    return out
+
+
+def lua_apply(args, lres):
+    """Write the verified Lua patches lua_check() found (the reviewed ones), in place; originals in
+    mwdialog_backup\\luafix, journaled here so --undo puts them back. A file changed since the check is refused."""
+    if not lres or not lres["n_ok"]:
+        return
+    if lres["checker"] is None:
         print("  not patching Lua: no syntax checker (LuaJIT / luac) found")
-        res["left"] = pending
-        return res
-    if not args.yes and input(f"\nPatch {n_ok} Lua file(s) in place? [y/N] ").strip().lower() not in ("y", "yes"):
+        return
+    if not args.yes and input(f"\nPatch {lres['n_ok']} Lua file(s) in place? [y/N] ").strip().lower() not in \
+            ("y", "yes"):
         print("  Lua files not changed.")
-        res["left"] = pending
-        return res
-    res["left"] = pending                           # until written: an interruption leaves them in the plan
-    written, refused = lf.apply_report(merged, journal=JOURNAL, head_extra=dict(
-        {"staging": args.staging, "lua": True}, **getattr(args, "_journal_extra", {})), done=res["done"])
-    res["left"] = lf.pending_lines(merged, res["done"], "    ")
+        return
+    lf = lres["lf"]
+    written, refused = lf.apply_report(lres["merged"], journal=JOURNAL, head_extra=dict(
+        {"staging": args.staging, "lua": True}, **getattr(args, "_journal_extra", {})), done=lres["done"])
     for p, why in refused:
         print(f"    not patched: {os.path.relpath(p, args.staging)}: {why}")
     print(f"  patched {written} Lua file(s) (journal {JOURNAL}; --undo puts them back)")
-    return res
 
 
 def _tool_modules():
@@ -796,27 +806,31 @@ def _tool_modules():
     return mods[0], mods[1]
 
 
-def run_assets(args, do_apply):
-    """The asset check on each mod's own files: textures (DX10/BC7, over 2048, no mipmaps - only those
-    the mod's own world models draw -, uncompressed, not a power of two, truncated), models (not Morrowind's format, Unix line endings in animation text
-    keys, absolute texture paths), sounds (stereo, odd rates, 24/32-bit or non-PCM WAV, big MP3 tags),
-    empty files, non-ASCII names. Repairs are made in place (Data Files' hard links stay); originals go to
-    <mod>\\Off\\<plugin>\\<path>."""
-    m, ah = _tool_modules()
-    if m is None:
-        print("\n(asset check skipped: mwdialog_check.py / mwdialog_assets.py not found next to vortex_tidy.py)")
-        return
-    game_dir = os.path.dirname(os.path.abspath(__file__))
-    mods = sorted(d for d in os.listdir(args.staging) if os.path.isdir(os.path.join(args.staging, d))
-                  and d.lower() != "off")
-    if args.only:
-        mods = [d for d in mods if any(fnmatch.fnmatch(d.lower(), pat.lower()) for pat in args.only)]
-    pats = blacklist(create=do_apply) + (args.skip or [])
-    data_dir = os.path.join(game_dir, "Data Files")
-    bsa_meshes = set()
-    if not os.path.isdir(data_dir):
-        print(f"\n(note: no Data Files folder next to vortex_tidy.py ({data_dir}): an animation's model in "
-              f"another mod or a BSA can't be found, so more files may be reported)")
+def asset_action_lines(ent):
+    """The plan's action lines for one mod's asset repairs (what --apply does to its files)."""
+    out = []
+    for kind, _full, rel, job in ent["fixes"]:
+        j = json.dumps(job, sort_keys=True) if isinstance(job, (dict, list)) else ("" if job is None else str(job))
+        out.append(f"repair {kind} {rel}" + (f" {j}" if j else ""))
+    for lp in ent["lp_plan"]:
+        tw = len(lp.get("twins") or [])
+        out.append(f"shorten {lp['orig']} -> {lp['short']}" + (f" (+{tw} twin(s))" if tw else ""))
+    return out
+
+
+def assets_check_mod(root, m, ah, data_dir, bsa_meshes, game_dir, stats):
+    issues, fixes = ah.check_folder(root, m, data_dir, bsa_meshes, stats=stats)
+    lp_plan = []
+    try:                                              # paths too long once deployed (Windows' 259 characters)
+        lp_issues, lp_plan = m.longpaths_module().check_mod(root, data_dir, m, game_dir)
+        issues = lp_issues + issues
+    except Exception as e:
+        print(f"  {os.path.basename(root)}: long-path check failed ({e})")
+    return {"issues": issues, "fixes": fixes, "lp_plan": lp_plan}
+
+
+def _bsa_meshes(m, data_dir):
+    out = set()
     try:
         names = os.listdir(data_dir)
     except OSError:
@@ -826,85 +840,170 @@ def run_assets(args, do_apply):
             try:
                 for pth in m.bsa_file_names(os.path.join(data_dir, fn)):
                     if pth.startswith("meshes/"):
-                        bsa_meshes.add(pth[7:].replace("/", "\\"))
+                        out.add(pth[7:].replace("/", "\\"))
             except (OSError, ValueError, struct.error, getattr(m, "FormatError", ValueError)) as e:
                 print(f"  (couldn't read {fn}: {e})")
+    return out
+
+
+def assets_check(args):
+    """The asset check on each mod's own files: textures (DX10/BC7, over 2048, no mipmaps - only those
+    the mod's own world models draw -, uncompressed, not a power of two, truncated), models (not Morrowind's
+    format, Unix line endings in animation text keys, absolute texture paths), sounds (stereo, odd rates,
+    24/32-bit or non-PCM WAV, big MP3 tags), empty files, non-ASCII names, paths too long once deployed.
+    Nothing is changed: {"mods": {folder: {...}}, "body": the plan's ASSET CHECK section, "keys": Counter of
+    the repair actions}, or None when the asset modules are missing."""
+    m, ah = _tool_modules()
+    if m is None:
+        print("\n(asset check skipped: mwdialog_check.py / mwdialog_assets.py not found next to vortex_tidy.py)")
+        return None
+    game_dir = os.path.dirname(os.path.abspath(__file__))
+    mods = sorted(d for d in os.listdir(args.staging) if os.path.isdir(os.path.join(args.staging, d))
+                  and d.lower() != "off")
+    if args.only:
+        mods = [d for d in mods if any(fnmatch.fnmatch(d.lower(), pat.lower()) for pat in args.only)]
+    pats = blacklist(create=bool(args.apply)) + (args.skip or [])
+    data_dir = os.path.join(game_dir, "Data Files")
+    if not os.path.isdir(data_dir):
+        print(f"\n(note: no Data Files folder next to vortex_tidy.py ({data_dir}): an animation's model in "
+              f"another mod or a BSA can't be found, so more files may be reported)")
+    bsa_meshes = _bsa_meshes(m, data_dir)
     print("\n" + "=" * 70 + "\nASSET CHECK (each mod's own files)\n" + "=" * 70)
     total_fix = total_issue = 0
-    checked = set()
-    mip_stats = {}
+    res = {"mods": {}, "m": m, "ah": ah, "data_dir": data_dir, "bsa": bsa_meshes, "game_dir": game_dir,
+           "stats": {}, "done": set(), "body": ""}
+    body = []
     for d in mods:
         if any(fnmatch.fnmatch(d.lower(), pt.lower()) for pt in pats):
             continue
         root = os.path.join(args.staging, d)
         try:
-            issues, fixes = ah.check_folder(root, m, data_dir, bsa_meshes, stats=mip_stats)
+            ent = assets_check_mod(root, m, ah, data_dir, bsa_meshes, game_dir, res["stats"])
         except Exception as e:                      # one odd mod never stops the rest
             print(f"  {d}: check failed ({e})")
             continue
-        lp_plan = []
-        try:                                          # paths too long once deployed (Windows' 259 characters)
-            lp_issues, lp_plan = m.longpaths_module().check_mod(root, data_dir, m, game_dir)
-            issues = lp_issues + issues
-        except Exception as e:
-            print(f"  {d}: long-path check failed ({e})")
-        checked.add(d.lower())
+        ent["root"] = root
+        res["mods"][d] = ent
+        issues = ent["issues"]
         if not issues:
-            if do_apply:                              # clean now: drop an old tidy section
-                bdir = os.path.join(root, "bugreports")
-                for e in (os.listdir(bdir) if os.path.isdir(bdir) else ()):
-                    if e.lower().endswith(".bugreport.txt"):
-                        ah.update_bug_report(os.path.join(bdir, e), "vortex_tidy (files)", [], [])
             continue
+        acts = asset_action_lines(ent)
         total_issue += len(issues)
-        total_fix += len(fixes) + len(lp_plan)
+        total_fix += len(acts)
         print(f"\n{d}")
         for sev, rel, msg in issues[:12]:
             print(f"    {sev:5} {rel}: {msg}")
         if len(issues) > 12:
             print(f"    ... and {len(issues) - 12} more")
-        plug = next((os.path.splitext(e)[0] for e in sorted(os.listdir(root))
-                     if os.path.splitext(e)[1].lower() in (".esp", ".esm")), mod_name(d))
-        if do_apply:
-            plug_file = next((e for e in sorted(os.listdir(root))
-                              if os.path.splitext(e)[1].lower() in (".esp", ".esm")), None)
-            nid = ah.nexus_id(root)
-            head = (ah.bug_report_header(os.path.join(root, plug_file), m, mod_folder=root) if plug_file else
-                    [f"Bug report for {mod_name(d)}", f"Mod: {mod_name(d)} (no plugin)",
-                     f"Generated {time.strftime('%Y-%m-%d %H:%M')} by vortex_tidy.",
-                     "Paths are relative to the mod's folder (Data Files)."])
-            lines = [f"Problems in the mod's files: {len(issues)}"]
-            lines += [f"  - {sev} {rel}: {msg}" for sev, rel, msg in issues]
-            lines += ["", "(The mod's copy was repaired on this PC; originals kept in Off\\.)"]
-            ah.update_bug_report(os.path.join(root, "bugreports", plug + (f" [Nexus {nid}]" if nid else "")
-                                              + ".bugreport.txt"), "vortex_tidy (files)", head, lines)
-        if do_apply and lp_plan:
-            n = m.longpaths_module().apply_mod(root, lp_plan, m, game_dir, plug, log=print)
+        body.append(f"\n{d}")
+        body += [f"    {a}" for a in acts]
+        body += [f"      issue: {sev} {rel}: {msg}" for sev, rel, msg in issues]
+    summary = f"  {total_issue} asset issue(s), {total_fix} repairable"
+    print(f"\n{summary}" + ("" if args.apply else " (run with --apply to repair them)"))
+    st = res["stats"]
+    if st.get("mips_skipped"):
+        print(f"  {st['mips_skipped']} texture(s) without mipmaps left alone: no world model of their own "
+              f"mod draws them (menu / MCM / icon / effect pictures, or a texture pack; mwdialog_check's asset "
+              f"check judges texture packs against the models that are deployed). Patterns: "
+              f"{ah.MIP_EXEMPT_RECORD}")
+    res["body"] = "\n".join(body + [summary])
+    _prune_asset_cache(args, res)
+    return res
+
+
+def _prune_asset_cache(args, res):
+    # the per-mod records in the asset cache: files a checked mod no longer has, and (all mods checked) mods
+    # that are gone, are dropped; then everything is written
+    try:
+        ah = res["ah"]
+        cache = ah.shared_cache(res["game_dir"])
+        present = None if args.only else {d.lower() for d in os.listdir(args.staging)
+                                          if os.path.isdir(os.path.join(args.staging, d))}
+        ah.prune_tidy(cache, {d.lower() for d in res["mods"]}, present)
+        cache.flush()
+    except Exception as e:                          # never stop tidy for its cache
+        print(f"  (asset cache not tidied: {e})")
+
+
+def assets_pending(ares):
+    """Plan lines of the reviewed asset repairs not done yet."""
+    if not ares:
+        return []
+    out = []
+    for d, ent in ares["mods"].items():
+        acts = [a for a in asset_action_lines(ent) if (d, a) not in ares["done"]]
+        if acts:
+            out += [f"\n{d}"] + [f"    {a}" for a in acts]
+    return out
+
+
+def assets_apply(args, ares, moved_mods=()):
+    """Make the asset repairs assets_check() listed (the reviewed ones) - nothing else. A mod whose files the
+    moves of this run touched is checked again first, and only the reviewed repairs that still apply are
+    made; the rest stay in the plan. Originals go to <mod>\\Off\\<plugin>\\<path>."""
+    if not ares:
+        return
+    m, ah, game_dir = ares["m"], ares["ah"], ares["game_dir"]
+    for d, ent in ares["mods"].items():
+        root = ent["root"]
+        wanted = set(asset_action_lines(ent))
+        if d in moved_mods and wanted:
+            try:
+                now = assets_check_mod(root, m, ah, ares["data_dir"], ares["bsa"], game_dir, {})
+            except Exception as e:
+                print(f"  {d}: check failed ({e})")
+                continue
+            new = set(asset_action_lines(now))
+            if new - wanted:
+                print(f"  {d}: {len(new - wanted)} repair(s) appeared after the moves - not in the plan you "
+                      f"reviewed, so not made (rerun plan mode)")
+            now["fixes"] = [f for f, a in zip(now["fixes"], asset_action_lines(dict(now, lp_plan=[])))
+                            if a in wanted]
+            now["lp_plan"] = [lp for lp, a in zip(now["lp_plan"], asset_action_lines(dict(now, fixes=[])))
+                              if a in wanted]
+            now["root"] = root
+            work = now
+        else:
+            work = ent
+        issues, fixes, lp_plan = work["issues"], work["fixes"], work["lp_plan"]
+        if not issues:                                # clean now: drop an old tidy section
+            bdir = os.path.join(root, "bugreports")
+            for e in (os.listdir(bdir) if os.path.isdir(bdir) else ()):
+                if e.lower().endswith(".bugreport.txt"):
+                    ah.update_bug_report(os.path.join(bdir, e), "vortex_tidy (files)", [], [])
+            continue
+        if not fixes and not lp_plan:
+            continue
+        plug_file = next((e for e in sorted(os.listdir(root))
+                          if os.path.splitext(e)[1].lower() in (".esp", ".esm")), None)
+        plug = os.path.splitext(plug_file)[0] if plug_file else mod_name(d)
+        nid = ah.nexus_id(root)
+        head = (ah.bug_report_header(os.path.join(root, plug_file), m, mod_folder=root) if plug_file else
+                [f"Bug report for {mod_name(d)}", f"Mod: {mod_name(d)} (no plugin)",
+                 f"Generated {time.strftime('%Y-%m-%d %H:%M')} by vortex_tidy.",
+                 "Paths are relative to the mod's folder (Data Files)."])
+        lines = [f"Problems in the mod's files: {len(issues)}"]
+        lines += [f"  - {sev} {rel}: {msg}" for sev, rel, msg in issues]
+        lines += ["", "(The mod's copy was repaired on this PC; originals kept in Off\\.)"]
+        ah.update_bug_report(os.path.join(root, "bugreports", plug + (f" [Nexus {nid}]" if nid else "")
+                                          + ".bugreport.txt"), "vortex_tidy (files)", head, lines)
+        if lp_plan:
+            lpm = m.longpaths_module()
+            n = lpm.apply_mod(root, lp_plan, m, game_dir, plug, log=print)
+            for lp, a in zip(lp_plan, asset_action_lines({"fixes": [], "lp_plan": lp_plan})):
+                if os.path.exists(os.path.join(root, lpm.fs(lp["short"]) if hasattr(lpm, "fs") else lp["short"])):
+                    ares["done"].add((d, a))
             print(f"    -> {n} file(s) moved to a short path (listed in mwdialog_longpaths.json; "
                   f"mwdialog_check --longpaths-undo puts them back)")
             gone = {lp["orig"].lower() for lp in lp_plan} | {t[0].lower() for lp in lp_plan for t in lp["twins"]}
             fixes = [f for f in fixes if f[2].replace("/", "\\").lower() not in gone]   # moved: next run
-        if do_apply and fixes:
+        if fixes:
             done, skipped = ah.apply_folder(root, fixes, m, game_dir, plug)
+            for f, a in zip(fixes, asset_action_lines({"fixes": fixes, "lp_plan": []})):
+                if not any(sk.startswith(f[2] + " (") for sk in skipped):
+                    ares["done"].add((d, a))
             print(f"    -> {done} file(s) repaired (originals in Off\\{plug}\\)"
                   + (f"; {len(skipped)} skipped, e.g. {skipped[0]}" if skipped else ""))
-    print(f"\n  {total_issue} asset issue(s), {total_fix} repairable"
-          + ("" if do_apply else " (run with --apply to repair them)"))
-    if mip_stats.get("mips_skipped"):
-        print(f"  {mip_stats['mips_skipped']} texture(s) without mipmaps left alone: no world model of their own "
-              f"mod draws them (menu / MCM / icon / effect pictures, or a texture pack; mwdialog_check's asset "
-              f"check judges texture packs against the models that are deployed). Patterns: "
-              f"{ah.MIP_EXEMPT_RECORD}")
-    # the per-mod records in the asset cache: files a checked mod no longer has, and (all mods checked) mods
-    # that are gone, are dropped; then everything is written
-    try:
-        cache = ah.shared_cache(game_dir)
-        present = None if args.only else {d.lower() for d in os.listdir(args.staging)
-                                          if os.path.isdir(os.path.join(args.staging, d))}
-        ah.prune_tidy(cache, checked, present)
-        cache.flush()
-    except Exception as e:                          # never stop tidy for its cache
-        print(f"  (asset cache not tidied: {e})")
 
 
 def main():
@@ -932,61 +1031,95 @@ def main():
         print(f"Staging folder not found: {args.staging}", file=sys.stderr)
         return 2
     if not args.apply:
-        if args.lua_only:
-            run_lua(args, False)
-            return 0
-        moves = run_plan(args)
-        if not args.no_lua:
-            run_lua(args, False)
-        if not args.no_assets:
-            run_assets(args, False)
-        print("\nNothing changed. Purge in Vortex, run again with --apply, then Deploy.")
-        return 0
+        return plan_main(args)
     return apply_main(args)
 
 
+def compose(moves_text, lua_body=None, asset_body=None):
+    """The plan file: the moves part, then the LUA CHECK and ASSET CHECK sections (when there)."""
+    t = (moves_text or "").rstrip("\n") + "\n"
+    if lua_body is not None:
+        t += f"\n{LUA_HEAD}\n" + lua_body.rstrip("\n") + "\n"
+    if asset_body is not None:
+        t += f"\n{ASSET_HEAD}\n" + asset_body.rstrip("\n") + "\n"
+    return t
+
+
+def _lua_only_base(text):
+    """For --lua-only: the parts of a pending plan file that are not the Lua section (kept as they are)."""
+    if PF.state(PLAN) != "pending":
+        return f"vortex_tidy plan (Lua only), {time.strftime('%Y-%m-%d %H:%M')}\n", None
+    sec = PF.sections(text)
+    return sec.get("moves", ""), sec.get(ASSET_HEAD)
+
+
+def fresh_plan(args):
+    """Work the plan out (nothing changed, nothing written): (text, parts compared, moves, lua, assets)."""
+    if args.lua_only:
+        lres = lua_check(args)
+        base, abody = _lua_only_base(PF.read(PLAN))
+        return compose(base, lres["body"] if lres else "", abody), [LUA_HEAD], [], lres, None
+    args._write_plan = False
+    moves = run_plan(args)
+    lres = None if args.no_lua else lua_check(args)
+    ares = None if args.no_assets else assets_check(args)
+    parts = ["moves"] + ([] if args.no_lua else [LUA_HEAD]) + ([] if args.no_assets else [ASSET_HEAD])
+    text = compose(args._moves_text, None if args.no_lua else (lres["body"] if lres else ""),
+                   None if args.no_assets else (ares["body"] if ares else ""))
+    return text, parts, moves, lres, ares
+
+
+def plan_main(args):
+    text, _parts, _moves, _l, _a = fresh_plan(args)
+    PF.write_atomic(PLAN, text)
+    print(f"\nFull plan: {PLAN}")
+    print("\nNothing changed. Purge in Vortex, review the plan, run again with --apply, then Deploy.")
+    return 0
+
+
 def apply_main(args):
-    """--apply: refused when the plan file is blank (already applied); otherwise the plan is computed again and
-    enacted, and the plan file is then blanked - or cut down to what was not applied - atomically, with copies
-    of the plan as reviewed and as enacted in mwdialog_backup\\tidy\\<run>\\."""
-    if PF.state(PLAN) == "applied":
-        print(PF.refuse_message(PLAN, "vortex_tidy.py"))
-        return 0
+    """--apply enacts the plan you reviewed and nothing else: the plan is worked out again and must list the
+    same actions as the plan file (moves, Lua patches, asset repairs; --lua-only: the Lua section only), or
+    nothing is done - the new plan is written for review and the old one kept as vortex_tidy_plan.prev.txt.
+    Afterwards the plan file is blanked, or cut down to what was not applied, atomically, with copies of the
+    plan as reviewed and as enacted in mwdialog_backup\\tidy\\<run>\\."""
     reviewed = PF.read(PLAN)
+    parts = [LUA_HEAD] if args.lua_only else \
+        ["moves"] + ([] if args.no_lua else [LUA_HEAD]) + ([] if args.no_assets else [ASSET_HEAD])
+    if PF.state(PLAN) != "pending" or not PF.has_any_actions(reviewed, parts):
+        print(PF.no_plan_message(PLAN, "vortex_tidy.py" + (" --lua-only" if args.lua_only else "")))
+        return 2
+    text, parts, moves, lres, ares = fresh_plan(args)
+    added, removed = PF.compare(reviewed, text, parts)
+    if added or removed:
+        PF.refuse_mismatch(PLAN, text, added, removed, "vortex_tidy.py" + (" --lua-only" if args.lua_only else ""))
+        return 2
+    print("\nThe plan matches the one you reviewed.")
     audit = os.path.join(AUDIT_ROOT, time.strftime("%Y%m%d-%H%M%S"))
     args._journal_extra = {"plan_copy": os.path.join(audit, "plan_enacted.txt")}
-    st = {"moves": [], "progress": [], "failed": None, "moves_keep": "", "lua": None, "started": False,
-          "finished": False}
-    if args.lua_only:
-        st["moves_keep"] = split_plan(reviewed)[0] if PF.state(PLAN) == "pending" and \
-            has_actions(split_plan(reviewed)[0]) else ""      # not enacted by --lua-only: stays in the plan
-        try:
-            st["started"] = True
-            st["lua"] = run_lua(args, True)
-            st["finished"] = True
-        finally:
-            _finish_plan(args, st, reviewed, audit)
-        return 0 if not _left_lines(args, st) else 1
-    moves = run_plan(args)
-    moves, gone = review(args.staging, moves, assume_keep=args.yes)
-    if moves or gone:
-        what = f"{sum(1 for m in moves if m[1])} move(s)" + (f" and delete {len(gone)} mod(s)" if gone else "")
-        if not args.yes and input(f"\nApply {what}? Purge in Vortex first. [y/N] ").strip().lower() not in \
-                ("y", "yes"):
-            print("Nothing changed.")
-            return 0
-    else:
-        print("Nothing to move.")
+    sec = PF.sections(reviewed)
+    keep = {k: v for k, v in sec.items() if k not in parts and PF.has_any_actions(v)}   # not enacted: stays
+    st = {"moves": [], "progress": [], "lua": lres, "assets": ares, "keep": keep, "started": False,
+          "finished": False, "text": text}
+    if not args.lua_only:
+        moves, gone = review(args.staging, moves, assume_keep=args.yes)
+        if moves or gone:
+            what = f"{sum(1 for m in moves if m[1])} move(s)" + (f" and delete {len(gone)} mod(s)" if gone else "")
+            if not args.yes and input(f"\nApply {what}? Purge in Vortex first. [y/N] ").strip().lower() not in \
+                    ("y", "yes"):
+                print("Nothing changed.")
+                return 0
+        else:
+            print("Nothing to move.")
+        st["moves"] = gone + moves
     left = []
     try:
         st["started"] = True
-        st["moves"] = gone + moves
         if st["moves"]:
-            st["failed"] = apply(st["moves"], args.staging, st["progress"], args._journal_extra)
-        if not args.no_lua:
-            st["lua"] = run_lua(args, True)
-        if not args.no_assets:
-            run_assets(args, True)
+            apply(st["moves"], args.staging, st["progress"], args._journal_extra)
+        lua_apply(args, lres)
+        moved_mods = {os.path.relpath(st["moves"][i][0], args.staging).split(os.sep)[0] for i in st["progress"]}
+        assets_apply(args, ares, moved_mods)
         st["finished"] = True
     finally:
         left = _finish_plan(args, st, reviewed, audit)
@@ -995,32 +1128,26 @@ def apply_main(args):
 
 def _left_lines(args, st):
     done = set(st["progress"])
-    left_moves = [m for i, m in enumerate(st["moves"]) if i not in done]
     out = []
-    if st["moves_keep"]:
-        out += [ln for ln in st["moves_keep"].splitlines() if not ln.startswith("#")]
-    out += moves_as_lines(left_moves, args.staging)
-    lua = st["lua"]
-    if lua is None and st["started"] and not args.no_lua and not st["finished"]:
-        lua = {"left": []}                            # interrupted before the Lua check ran: rerun plan mode
-    if lua and lua.get("left"):
-        out += ["", LUA_HEAD] + lua["left"]
+    if "moves" in st["keep"]:
+        out += [ln for ln in st["keep"]["moves"].splitlines() if not ln.startswith("#")]
+    out += moves_as_lines([m for i, m in enumerate(st["moves"]) if i not in done], args.staging)
+    lua = lua_pending(st["lua"]) or ([st["keep"][LUA_HEAD]] if LUA_HEAD in st["keep"] else [])
+    if lua:
+        out += ["", LUA_HEAD] + lua
+    ast = assets_pending(st["assets"]) or ([st["keep"][ASSET_HEAD]] if ASSET_HEAD in st["keep"] else [])
+    if ast:
+        out += ["", ASSET_HEAD] + ast
     return out
 
 
 def _finish_plan(args, st, reviewed, audit):
     if not st["started"]:
         return []
-    enacted = PF.read(PLAN)
-    if reviewed is not None and not PF.same_actions(reviewed, enacted):
-        print("NOTE: --apply recomputed the plan and it differs from the plan file you last reviewed (both "
-              f"copies are in {audit}).")
     left = _left_lines(args, st)
     note = "" if st["finished"] else "the run was interrupted; anything not listed here was applied"
-    if not st["finished"] and not args.no_lua and st["lua"] is None and not args.lua_only:
-        note += " (the Lua check had not run: rerun plan mode)"
-    PF.finish(PLAN, "vortex_tidy.py" + (" --lua-only" if args.lua_only else ""), left, audit, reviewed, enacted,
-              note)
+    PF.finish(PLAN, "vortex_tidy.py" + (" --lua-only" if args.lua_only else ""), left, audit, reviewed,
+              st["text"], note)
     return left
 
 
