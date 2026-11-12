@@ -13,8 +13,15 @@ Rules (thresholds come from MWSE\\config\\mwguard.json when it exists - the same
   G3 a repeating timer faster than 0.35 s whose callback only polls -> 0.35 s                          fix
   G4 a one-shot handler (done flag) that never unregisters -> unregisters once the flag is set         fix
   G5 per-frame costs: uncached lookups, config/file I/O, allocations, message boxes every frame      report
-  A1 ref.data.x read without a guard -> (ref.data and ref.data.x)                                      fix
-  A2 a keybind's .keyCode read with no check                                                          report
+  A1 ref.data.x used without a guard -> (ref.data and ref.data.x) / if ref.data then ... end           fix
+  A2 a keybind's .keyCode (.mouseButton ...) read with no check -> (key and key.keyCode)               fix
+  A3 a tes3 lookup that can return nil (getObject, getReference, getPlayerTarget, findMenu...) used
+     without a check -> guarded                                                                        fix
+  A4 an event field that can be nil (damage e.attacker, attack e.targetMobile, cellChanged
+     e.previousCell, uiObjectTooltip e.reference...) used without a check -> guarded                  fix
+     Nil guards (A1-A4): inside a condition, an and-guard: (x and x.y == z); a standalone call or
+     assignment: if x then ... end; a local's value: local v = (x and f(x.y)). Nothing changes while the
+     value is there. Where none of these fits with certainty the finding stays a report, with the reason.
   B1 a UI element used after :destroy()                                                               report
   C1 an engine console command sent through tes3.runLegacyScript                                      report
   D1 an infoFilter handler reading e.info.text for every response -> returns early unless e.passes     fix
@@ -68,7 +75,7 @@ JOURNAL = os.path.join(HERE, "mwdialog_luafix_journal.jsonl")
 BACKUP_ROOT = os.path.join(HERE, "mwdialog_backup", "luafix")
 CONFIG_FILE = os.path.join(HERE, "mwdialog_luafix.json")
 PLAN_FILE = os.path.join(HERE, "mwdialog_luafix_plan.txt")
-VERSION = 2
+VERSION = 3
 MARK = "mwdialog_luafix"
 
 OWN_MODS = {"mwcollide", "mwfloatfix", "mwguard", "mwhangwatch", "mwinfoloop", "mwperformers", "mwsoundguard",
@@ -102,6 +109,23 @@ DEFAULTS = {
 }
 
 PER_FRAME = {"simulate", "simulated", "enterFrame"}
+# nil guards
+KEY_FIELDS = {"keyCode", "mouseButton", "mouseWheel", "isShiftDown", "isAltDown", "isControlDown", "isSuperDown"}
+NIL_LOOKUPS = {"tes3.getObject", "tes3.getReference", "tes3.getPlayerTarget", "tes3.getEquippedItem", "tes3.getCell",
+               "tes3.getFaction", "tes3.getSound", "tes3.getScript", "tes3.findDialogue",
+               "tes3.getRegion", "tes3.findClass", "tes3ui.findMenu"}
+_DMG = {"attacker", "attackerReference", "projectile", "magicSourceInstance", "magicEffectInstance"}
+_ATK = {"targetMobile", "targetReference"}
+_CAST = {"target"}
+NULLABLE_EVENT_FIELDS = {
+    "damage": _DMG, "damaged": _DMG, "damageHandToHand": _DMG, "damagedHandToHand": _DMG,
+    "attack": _ATK, "attackHit": _ATK, "attackStart": _ATK, "calcHitChance": {"target", "targetMobile"},
+    "cellChanged": {"previousCell"}, "activationTargetChanged": {"current", "previous"},
+    "uiObjectTooltip": {"reference", "itemData"}, "itemTileUpdated": {"itemData"},
+    "equip": {"itemData"}, "equipped": {"itemData"}, "unequipped": {"itemData"},
+    "spellCast": _CAST, "spellCasted": _CAST, "spellCastedFailure": _CAST, "magicCasted": _CAST,
+    "leveledItemPicked": {"pick", "spawner"}, "leveledCreaturePicked": {"pick", "spawner"}}
+NIL_TMP = "mwluafix_v"
 FRAME_EXEMPT_EVENTS = {"cameraControl", "calcMoveSpeed", "mouseAxis", "preventRest"}
 ONCE_EVENTS = {"initialized", "modConfigReady", "initialize"}
 FREQUENT_EVENTS = PER_FRAME | FRAME_EXEMPT_EVENTS | {
@@ -695,7 +719,7 @@ class FileAnalysis:
     # --- rules
     def run(self):
         for r in (self.r_priority, self.r_per_frame, self.r_timers, self.r_one_shot, self.r_data_guard,
-                  self.r_keycode, self.r_destroy, self.r_console, self.r_info_filter, self.r_reregister,
+                  self.r_keycode, self.r_lookups, self.r_event_fields, self.r_destroy, self.r_console, self.r_info_filter, self.r_reregister,
                   self.r_reload_timers, self.r_globals, self.r_toplevel, self.r_loops, self.r_logger_level,
                   self.r_log_triggers, self.r_loggers):
             r()
@@ -934,10 +958,17 @@ class FileAnalysis:
                 v = base.binding.value
                 if v is not None and L.dotted(v) in ("tes3.player", "tes3.mobilePlayer.reference"):
                     continue
-            if not self._rvalue_slot(n):
-                continue
             f = L.enclosing_function(n)
             if self._data_checked(f.body if f is not None else self.tree.body, bt):
+                continue
+            if not self._rvalue_slot(n):
+                lv = sorted((x for x in chain if x.e >= dnode.e and x is not n), key=lambda x: x.e)
+                g = " and ".join(self.src[n.s:x.e] for x in lv)
+                if n.parent is not None and n.parent.kind == "Assign" and any(t is n for t in n.parent.targets) \
+                        or n.parent is not None and n.parent.kind in ("Index", "Method", "Call", "Table", "Binop",
+                                                                       "Return", "Local", "Assign", "Unop", "Paren"):
+                    self._nil_fix("A1", n, g, f"{self.text(n)[:60]} used without checking {bt}.data (nil on "
+                                  f"references that can't hold Lua data)")
                 continue
             levels = sorted((x for x in chain if x.e >= dnode.e), key=lambda x: x.e)
             rep = "(" + " and ".join(self.src[n.s:x.e] for x in levels) + ")"
@@ -988,21 +1019,230 @@ class FileAnalysis:
 
     def r_keycode(self):
         for n in self.nodes:
-            if n.kind != "Index" or n.field != "keyCode":
+            if n.kind != "Index" or n.field not in KEY_FIELDS:
                 continue
             bt = L.dotted(n.obj)
             if not bt or not re.search(r"(?i)config|cfg|setting|key|bind", bt):
                 continue
             if n.parent is not None and n.parent.kind == "Assign" and any(t is n for t in n.parent.targets):
                 continue
+            root = n.obj
+            while root.kind == "Index":
+                root = root.obj
+            rb = getattr(root, "binding", None) if root.kind == "Name" else None
+            if rb is not None and rb.kind == "for" and n.obj.kind == "Name":
+                continue                                    # a loop variable is never nil
             f = L.enclosing_function(n)
             scope = f.body if f is not None else self.tree.body
-            checked = any(m.kind in ("Index", "Name") and L.dotted(m) == bt and m.parent is not None and (
-                m.parent.kind == "Binop" and m.parent.op in ("and", "or") and m.parent.left is m or
-                m.parent.kind == "Unop" and m.parent.op == "not" or m.parent.kind == "If") for m in L.walk(scope))
-            if not checked:
-                self.add("A2", n, f"{bt}.keyCode read with no check (an unbound key is nil)",
-                         f"check {bt} first (the guide's isUnbound pattern)")
+            if self._guard_checked(scope, bt):
+                continue
+            self._nil_fix("A2", n, bt, f"{bt}.{n.field} read with no check (an unbound key is nil)")
+
+    # --- nil guards (A1-A4)
+    def _check_pos(self, m):
+        """Is m (an x or x.y read) a nil check: x and ..., not x, if x, x == / ~= ..., type(x), assert(x)?"""
+        p = m.parent
+        if p is None:
+            return False
+        if p.kind == "Paren":
+            return self._check_pos(p)
+        if p.kind == "Binop" and (p.op in ("and", "or") and p.left is m or p.op in ("==", "~=")):
+            return True
+        if p.kind == "Binop" and p.op == "and" and p.right is m and (
+                self._in_condition(m) or p.parent is not None and p.parent.kind == "Binop" and
+                p.parent.op == "and" and p.parent.left is p):
+            return True                                     # a and m and m.x / if a and m then
+        if p.kind == "Unop" and p.op == "not":
+            return True
+        if p.kind == "If" and any(c is m for c, _b in p.clauses):
+            return True
+        if p.kind in ("While", "Repeat") and p.cond is m:
+            return True
+        if p.kind == "Call" and L.dotted(p.func) in ("type", "assert") and p.args and p.args[0] is m:
+            return True
+        return False
+
+    def _guard_checked(self, scope, g, binding=None):
+        key = (id(scope), g, id(binding))
+        cache = self.__dict__.setdefault("_gcache", {})
+        if key not in cache:
+            hit = False
+            for m in L.walk(scope):
+                if m.kind not in ("Name", "Index") or L.dotted(m) != g:
+                    continue
+                if binding is not None and getattr(m, "binding", None) is not binding:
+                    continue
+                if self._check_pos(m) or (m.parent is not None and m.parent.kind == "Assign" and
+                                          any(t is m for t in m.parent.targets)):
+                    hit = True
+                    break
+            cache[key] = hit
+        return cache[key]
+
+    @staticmethod
+    def _multi_tail(c):
+        """c is the last expression of a list that can take several values (truncating it would change them)."""
+        p = c.parent
+        if c.kind not in ("Call", "Method", "Vararg") or p is None:
+            return False
+        if p.kind == "Local":
+            return p.exprs and p.exprs[-1] is c and len(p.names) > len(p.exprs)
+        if p.kind == "Return":
+            return p.exprs and p.exprs[-1] is c
+        if p.kind == "Assign":
+            return p.exprs and p.exprs[-1] is c and len(p.targets) > len(p.exprs)
+        return False
+
+    def _wrap(self, node, g, how):
+        L_ = node.e - node.s
+        if how == "stmt":
+            return [(node.s, node.s, f"if {g} then ", (1, -L_)), (node.e, node.e, " end", (0, L_))]
+        return [(node.s, node.s, f"({g} and ", (1, -L_)), (node.e, node.e, ")", (0, L_))]
+
+    def nil_plan(self, n, g):
+        """(edits, how) guarding n (a read through g, which may be nil) so it is skipped when g is nil and
+        nothing changes when it isn't; (None, why) when no rewrite is certain."""
+        p = n.parent
+        if p is None:
+            return None, "no enclosing code"
+        in_slot = p.kind in ("Local", "Return") and any(x is n for x in p.exprs) or \
+            p.kind == "Assign" and any(x is n for x in p.exprs)
+        # 1. the read itself is the value: x.y == z, if x.y, (in a condition) x.y and ..., local v = x.y
+        if n.kind == "Index" or not self._multi_tail(n):
+            if p.kind == "Binop" and p.op in ("==", "~=") or \
+                    p.kind == "If" and any(c is n for c, _b in p.clauses) or \
+                    p.kind == "While" and p.cond is n or \
+                    p.kind == "Binop" and p.op in ("and", "or") and self._in_condition(n) or \
+                    in_slot and p.kind != "Assign" and n.kind == "Index":
+                return self._wrap(n, g, "expr"), "and-guard"
+        # 2. climb to the condition operand, the local's value or the statement
+        c, crossed_table = n, False
+        while c.parent is not None and c.parent.kind not in ("Block", "Function", "If", "While", "Repeat", "Local",
+                                                             "Assign", "Return", "CallStat") and \
+                not (c.parent.kind == "Binop" and c.parent.op in ("and", "or")):
+            crossed_table |= c.parent.kind == "Table"
+            c = c.parent
+        q = c.parent
+        if q is not None and (q.kind == "Binop" and q.op in ("and", "or") and self._in_condition(c) or
+                              q.kind == "If" and any(x is c for x, _b in q.clauses) or
+                              q.kind == "While" and q.cond is c):
+            return self._wrap(c, g, "expr"), "and-guard on the condition"
+        if q is not None and q.kind == "Repeat" and q.cond is c:
+            return None, "in a repeat-until condition (a guard there could loop forever)"
+        if q is not None and q.kind in ("Local", "Return") and any(x is c for x in q.exprs):
+            if crossed_table:
+                return None, "inside a table constructor in a local/return value"
+            if self._multi_tail(c):
+                return None, "the value is a call whose extra return values are used"
+            return self._wrap(c, g, "expr"), "and-guard on the value"
+        st = stmt_of(n)
+        if st.parent is None or st.parent.kind != "Block":
+            return None, "not inside a statement"
+        if st.kind == "CallStat" or st.kind == "Assign" and len(st.targets) == 1 and len(st.exprs) == 1:
+            t = (L.dotted(st.targets[0]) or "") if st.kind == "Assign" else ""
+            if st.kind == "Assign" and t and any(x == t or x.startswith(t + ".") for x in g.split(" and ")):
+                return None, "the statement assigns the value being checked"
+            return self._wrap(st, g, "stmt"), "if-guard on the statement"
+        if q is not None and q.kind == "Binop":
+            return None, "in an and/or expression outside a condition"
+        return None, f"inside a {st.kind.lower()} statement that can't be wrapped without changing scope or flow"
+
+    def _nil_fix(self, rule, n, g, what):
+        edits, how = self.nil_plan(n, g)
+        if edits is None:
+            return self.add(rule, n, what, f"check {g} first - left as a report: {how}", "report")
+        seen = self.__dict__.setdefault("_nil_seen", set())
+        sig = tuple((s, e, t) for s, e, t, _o in edits)
+        if sig in seen:                                      # same guard as another read in this place
+            return self.add(rule, n, what, f"{how} on {g} (with the read above)", "high")
+        seen.add(sig)
+        tgt = (edits[0][0], edits[1][0])
+        body = " ".join(self.src[tgt[0]:tgt[1]].split())
+        prev = edits[0][2] + (body if len(body) <= 90 else body[:80] + " ... ") + edits[1][2]
+        return self.add(rule, n, what, f"{how}: {prev}", "high", edits)
+
+    def _uses_of(self, n):
+        """n.x / n:m() reads of n (a nil-able value): the Index/Method nodes that would fail."""
+        p = n.parent
+        return p if p is not None and p.kind in ("Index", "Method") and p.obj is n else None
+
+    def _guard_binding_uses(self, rule, b, g, what_of):
+        if b.assigns or any(self._check_pos(r) for r in b.reads):
+            return
+        for r in b.reads:
+            u = self._uses_of(r)
+            if u is not None and u.s >= (self.nodes[0].s if self.nodes else 0):
+                self._nil_fix(rule, u, g, what_of(u))
+
+    def r_lookups(self):
+        decl_b = {}
+        for n in self.nodes:
+            b = getattr(n, "binding", None) if n.kind == "Name" else None
+            if b is not None and b.kind == "local":
+                decl_b.setdefault(id(b.decl), {})[b.name] = b
+        for st in self.nodes:
+            if st.kind == "Local" and len(st.names) == 1 and len(st.exprs) == 1 and st.exprs[0].kind == "Call" \
+                    and L.dotted(st.exprs[0].func) in NIL_LOOKUPS:
+                d = L.dotted(st.exprs[0].func)
+                b = decl_b.get(id(st), {}).get(st.names[0])
+                if b is not None:
+                    self._guard_binding_uses("A3", b, st.names[0], lambda u, d=d, nm=st.names[0]: (
+                        f"{self.text(u)[:50]} - {nm} comes from {d}, which returns nil when nothing is found, and is "
+                        f"never checked"))
+        for c in self.calls:
+            d = L.dotted(c.func)
+            if d not in NIL_LOOKUPS or self._uses_of(c) is None:
+                continue
+            what = f"{self.text(c)[:50]} used directly ({d} returns nil when nothing is found)"
+            st = stmt_of(c)
+            head = st.call if st.kind == "CallStat" else st.targets[0] if st.kind == "Assign" and \
+                len(st.targets) == 1 and len(st.exprs) == 1 else None
+            while head is not None and head is not c and head.kind in ("Index", "Method", "Call"):
+                head = head.obj if head.kind in ("Index", "Method") else head.func
+            if head is c and st.parent is not None and st.parent.kind == "Block" and \
+                    not any(m.kind == "Name" and m.id == NIL_TMP for m in L.walk(st)):
+                pre = f"do local {NIL_TMP} = {self.text(c)} if {NIL_TMP} then {NIL_TMP}"
+                L_ = st.e - st.s
+                edits = [(c.s, c.e, pre, (1, -L_)), (st.e, st.e, " end end", (0, L_))]
+                self.add("A3", c, what, f"held in a local and checked: do local {NIL_TMP} = {d}(...) if {NIL_TMP} "
+                         f"then ... end end", "high", edits)
+            else:
+                self.add("A3", c, what, f"keep the result in a local and check it - left as a report: the lookup "
+                         f"is indexed inside a bigger expression", "report")
+
+    def r_event_fields(self):
+        for c, ev, fn, harg, opts in self.registrations:
+            fields = NULLABLE_EVENT_FIELDS.get(ev or "")
+            if not fields or fn is None or not fn.params:
+                continue
+            p = fn.params[0]
+            done = self.__dict__.setdefault("_ev_done", set())
+            for n in L.walk(fn.body):
+                if n.kind != "Index" or n.field not in fields or n.obj.kind != "Name" or n.obj.id != p:
+                    continue
+                b = getattr(n.obj, "binding", None)
+                if b is None or b.kind != "param" or b.decl is not fn or id(n) in done:
+                    continue
+                done.add(id(n))
+                g = f"{p}.{n.field}"
+                if self._guard_checked(fn.body, g):
+                    continue
+                par = n.parent
+                if par is not None and par.kind == "Local" and len(par.names) == 1 and len(par.exprs) == 1 and \
+                        par.exprs[0] is n:                  # local t = e.target ... t.x
+                    for m in L.walk(fn.body):
+                        bb = getattr(m, "binding", None) if m.kind == "Name" else None
+                        if bb is not None and bb.decl is par:
+                            if id(bb) not in done:
+                                done.add(id(bb))
+                                self._guard_binding_uses("A4", bb, par.names[0], lambda u, g=g, nm=par.names[0]: (
+                                    f"{self.text(u)[:50]} - {nm} is {g}, nil in some {ev} events, never checked"))
+                            break
+                    continue
+                u = self._uses_of(n)
+                if u is not None:
+                    self._nil_fix("A4", u, g, f"{self.text(u)[:50]} - {g} is nil in some {ev} events and is "
+                                  f"never checked")
 
     def r_destroy(self):
         for blk in (n for n in self.nodes if n.kind == "Block"):
@@ -1535,7 +1775,7 @@ def build_patch(src, findings, mod_key, cfg, level="high", want_shim=False):
     edits, rules, needs = [], [], set()
     for f in findings:
         if f["conf"] in ok_conf and f["edits"]:
-            edits += [(s, e, t) for s, e, t in f["edits"]]
+            edits += [tuple(x) if len(x) > 3 else (x[0], x[1], x[2], (1, 0)) for x in f["edits"]]
             rules.append(f["rule"])
             needs |= set(f["needs"])
     v1 = SHIM_V1_RE.search(src)
@@ -1544,7 +1784,8 @@ def build_patch(src, findings, mod_key, cfg, level="high", want_shim=False):
         rules.append("F1")
     if not edits and "shim" not in needs:
         return None, []
-    edits.sort(key=lambda x: (x[0], x[1]))
+    edits.sort(key=lambda x: (x[0], x[1], x[3]))    # inserts at one place: closers inner-first, openers outer-first
+    edits = [x[:3] for x in edits]
     kept, last_end = [], -1
     for s, e, t in edits:                          # overlapping edits: the first wins (the next run gets the rest)
         if s < last_end or (s == e and s < last_end):

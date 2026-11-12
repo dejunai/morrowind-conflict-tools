@@ -306,7 +306,8 @@ def test_report_only_rules():
     a = analyse(src)
     got = set(rules(a))
     assert {"A2", "B1", "C1", "H6", "G5", "H3", "H4", "H2"} <= got
-    assert all(not f["edits"] for f in a.findings if f["rule"] in ("A2", "B1", "C1", "H6", "G5", "H3", "H4", "H2"))
+    assert all(not f["edits"] for f in a.findings if f["rule"] in ("B1", "C1", "H6", "G5", "H3", "H4", "H2"))
+    assert all(f["edits"] and f["conf"] == "high" for f in a.findings if f["rule"] == "A2")   # now a nil guard
     assert "H4" not in rules(analyse(src, "testmod/util.lua"))     # required later: top level is fine there
     g5 = next(f for f in a.findings if f["rule"] == "G5")
     assert g5["conf"] == "report-high" and "mwse.saveConfig" in g5["what"]
@@ -568,3 +569,189 @@ def test_F1_passive_mwguard_does_not_count_as_covering(tmp_path):
 
 def test_patched_priorities_are_below_mwguards_report_limit():
     assert all(abs(lf.compress_priority(p, CFG)) < CFG["priorityLimit"] for p in (10000, -10 ** 9, float("inf")))
+
+
+# ------------------------------------------------------------------------------------------------ nil guards (A1-A4)
+def nil_findings(a, rule):
+    return [f for f in a.findings if f["rule"] == rule]
+
+
+def run_lua(src, *args):
+    rt = _lj.LuaRuntime()
+    fn = rt.execute(src)
+    return rt, fn
+
+
+PEEK = ("local config = { peekEnabled = true }\nlocal peek = {}\n"
+        "local function pressedKey(e)\n"
+        "    if e.keyCode == config.peekLeftKey.keyCode then\n        peek.left = true\n"
+        "    elseif e.keyCode == config.peekRightKey.keyCode then\n        peek.right = true\n    end\nend\n"
+        "event.register(tes3.event.keyDown, pressedKey)\n"
+        "return function(c, e) config = c peek = {} pressedKey(e) return peek.left, peek.right end\n")
+
+
+def test_A2_keybind_in_a_condition_gets_an_and_guard_and_is_idempotent():
+    a = analyse(PEEK)
+    a2 = nil_findings(a, "A2")
+    assert [f["conf"] for f in a2] == ["high", "high"] and all(f["edits"] for f in a2)
+    new = patch(PEEK)
+    assert "    if e.keyCode == (config.peekLeftKey and config.peekLeftKey.keyCode) then\n" in new
+    assert "    elseif e.keyCode == (config.peekRightKey and config.peekRightKey.keyCode) then\n" in new
+    assert new.count("\n") == PEEK.count("\n")
+    assert patch(new) is None                                  # applied again: nothing more
+    assert not nil_findings(analyse(new), "A2")
+
+
+@need_lua
+def test_A2_patched_peek_keys_behave_the_same_when_bound_and_do_not_crash_unbound():
+    new = "event = { register = function() end } tes3 = { event = {} }\n" + patch(PEEK)
+    old = "event = { register = function() end } tes3 = { event = {} }\n" + PEEK
+    rt = _lj.LuaRuntime()
+    f_new, f_old = rt.execute(new), rt.execute(old)
+    bound = rt.eval("{ peekLeftKey = { keyCode = 16 }, peekRightKey = { keyCode = 18 } }")
+    for kc in (16, 18, 20):
+        e = rt.eval("{ keyCode = %d }" % kc)
+        assert f_new(bound, e) == f_old(bound, e)
+    unbound = rt.eval("{ peekRightKey = { keyCode = 18 } }")
+    with pytest.raises(Exception):
+        f_old(unbound, rt.eval("{ keyCode = 18 }"))
+    assert f_new(unbound, rt.eval("{ keyCode = 18 }")) == (None, True)
+    assert f_new(unbound, rt.eval("{ keyCode = 16 }")) == (None, None)
+
+
+def test_A2_statement_call_is_wrapped_and_local_value_is_guarded():
+    src = ("local cfg = mwse.loadConfig('x')\n"
+           "event.register('keyDown', onKey, { filter = cfg.toggleKey.keyCode })\n"
+           "local function f()\n local down = ic:isKeyDown(cfg.modKey.keyCode)\n return down\nend\n")
+    new = patch(src)
+    assert "if cfg.toggleKey then event.register('keyDown', onKey, { filter = cfg.toggleKey.keyCode }) end\n" in new
+    assert " local down = (cfg.modKey and ic:isKeyDown(cfg.modKey.keyCode))\n" in new
+    assert patch(new) is None
+
+
+def test_A2_table_key_in_a_local_stays_a_report_with_the_reason():
+    src = "local function f(kb)\n local map = { [kb.cfg.next.keyCode] = 1 }\n return map\nend\n"
+    a2 = nil_findings(analyse(src), "A2")
+    assert a2 and a2[0]["conf"] == "report" and not a2[0]["edits"] and "table constructor" in a2[0]["fix"]
+
+
+def test_A2_checked_key_and_loop_variable_are_left_alone():
+    src = ("local function f(e)\n if not config.k then return end\n if e.keyCode == config.k.keyCode then end\nend\n"
+           "local function g(e)\n for _, key in pairs(keys) do if e.keyCode == key.keyCode then end end\nend\n"
+           "local function h(e)\n if type(config.j) ~= 'table' or not config.j.keyCode then return end\nend\n")
+    assert not nil_findings(analyse(src), "A2")
+
+
+def test_A1_write_and_call_with_ref_data_get_an_if_guard():
+    src = "local function f(ref)\n ref.data.x = 1\n show(ref.data.count)\nend\n"
+    new = patch(src)
+    assert " if ref.data then ref.data.x = 1 end\n" in new
+    assert " if ref.data then show(ref.data.count) end\n" in new
+    assert patch(new) is None
+
+
+def test_A1_init_then_write_both_guarded_once():
+    src = "local function f(ref)\n ref.data.m = ref.data.m or {}\n ref.data.m.n = 1\nend\n"
+    new = patch(src)
+    assert " if ref.data then ref.data.m = ref.data.m or {} end\n if ref.data and ref.data.m then ref.data.m.n = 1 end\n" in new
+    assert patch(new) is None
+    assert not nil_findings(analyse("local function f(ref)\n if not ref.data then return end\n ref.data.x = 1\nend\n"), "A1")
+
+
+def test_A3_lookup_local_uses_are_guarded():
+    src = ("local function f()\n local ref = tes3.getReference('x')\n ref:disable()\n"
+           " if ref.cell.isInterior then go() end\n local p = ref.position:copy()\n ref.scale = 2\n return p\nend\n")
+    new = patch(src)
+    assert " if ref then ref:disable() end\n" in new
+    assert " if (ref and ref.cell.isInterior) then go() end\n" in new
+    assert " local p = (ref and ref.position:copy())\n" in new
+    assert " if ref then ref.scale = 2 end\n" in new
+    assert patch(new) is None
+
+
+def test_A3_checked_or_reassigned_lookup_is_left_alone():
+    src = ("local function f()\n local ref = tes3.getReference('x')\n if not ref then return end\n ref:disable()\nend\n"
+           "local function g()\n local o = tes3.getObject('x')\n o = o or fallback\n o:doIt()\nend\n")
+    assert not nil_findings(analyse(src), "A3")
+
+
+def test_A3_direct_lookup_statement_is_held_in_a_local():
+    src = "local function f()\n tes3.getObject('x').value = 5\n tes3ui.findMenu('M'):updateLayout()\nend\n"
+    new = patch(src)
+    assert " do local mwluafix_v = tes3.getObject('x') if mwluafix_v then mwluafix_v.value = 5 end end\n" in new
+    assert " do local mwluafix_v = tes3ui.findMenu('M') if mwluafix_v then mwluafix_v:updateLayout() end end\n" in new
+    assert patch(new) is None
+
+
+def test_A3_direct_lookup_inside_an_expression_stays_a_report():
+    src = "local function f()\n return tes3.getObject('x').name .. '!'\nend\n"
+    a3 = nil_findings(analyse(src), "A3")
+    assert a3 and a3[0]["conf"] == "report" and "bigger expression" in a3[0]["fix"]
+
+
+@need_lua
+def test_A3_patched_lookup_runs_the_same_when_found_and_skips_when_not():
+    src = ("local found\ntes3 = { getObject = function(id) return found end }\n"
+           "local function f()\n tes3.getObject('x').value = 5\n local o = tes3.getObject('y')\n o.count = 3\n"
+           " return 'done'\nend\nreturn function(v) found = v return f() end\n")
+    new = patch(src)
+    rt = _lj.LuaRuntime()
+    t = rt.eval("{}")
+    assert rt.execute(new)(t) == "done" and t["value"] == 5 and t["count"] == 3
+    assert rt.execute(new)(None) == "done"
+    with pytest.raises(Exception):
+        rt.execute(src)(None)
+
+
+def test_A4_nullable_event_field_is_guarded_and_alias_too():
+    src = ("local function onDamage(e)\n if e.attacker.actorType == 1 then x() end\n"
+           " local a = e.attackerReference\n a:say('hi')\nend\nevent.register(tes3.event.damage, onDamage)\n"
+           "local function onAct(e)\n e.target:disable()\nend\nevent.register('activate', onAct)\n")
+    new = patch(src)
+    assert " if (e.attacker and e.attacker.actorType) == 1 then x() end\n" in new
+    assert " if a then a:say('hi') end\n" in new
+    assert " e.target:disable()\n" in new                       # activate always has a target
+    assert patch(new) is None
+
+
+def test_A4_checked_field_is_left_alone():
+    src = ("local function onTip(e)\n if e.object.isSoulGem and e.itemData and e.itemData.soul then end\nend\n"
+           "event.register('uiObjectTooltip', onTip)\n")
+    assert not nil_findings(analyse(src), "A4")
+
+
+def test_nil_guard_never_truncates_extra_return_values_or_guards_repeat():
+    src = ("local function f()\n local o = tes3.getObject('x')\n local a, b = o:pair()\n"
+           " repeat step() until o.done\n return a, b\nend\n")
+    a3 = nil_findings(analyse(src), "A3")
+    assert sorted(f["conf"] for f in a3) == ["report", "report"]
+    assert any("extra return values" in f["fix"] for f in a3) and any("repeat" in f["fix"] for f in a3)
+
+
+@need_lua
+def test_nested_guards_in_one_condition_compile_and_hold_under_each_missing_key():
+    src = ("local cfg = {}\nlocal function f(e, ic)\n if ic:isKeyDown(cfg.a.keyCode) == cfg.b.keyCode then return 1 end\n"
+           " return 0\nend\nreturn function(c, e, ic) cfg = c return f(e, ic) end\n")
+    new = patch(src)
+    assert patch(new) is None
+    rt = _lj.LuaRuntime()
+    fn = rt.execute(new)
+    ic = rt.eval("{ isKeyDown = function(self, k) return k end }")
+    assert fn(rt.eval("{ a = { keyCode = 3 }, b = { keyCode = 3 } }"), None, ic) == 1
+    assert fn(rt.eval("{ a = { keyCode = 3 }, b = { keyCode = 4 } }"), None, ic) == 0
+    assert fn(rt.eval("{ b = { keyCode = 3 } }"), None, ic) == 0
+    assert fn(rt.eval("{ a = { keyCode = 3 } }"), None, ic) == 0
+
+
+@need_lua
+def test_every_nil_guard_patch_compiles():
+    srcs = [PEEK, "local function f(ref)\n ref.data.x = 1\n show(ref.data.count)\nend\n",
+            "local function f()\n tes3.getObject('x').value = 5\n tes3ui.findMenu('M'):updateLayout()\nend\n",
+            "local function f()\n local ref = tes3.getReference('x')\n ref:disable()\n local p = ref.position:copy()\n"
+            " return p\nend\n",
+            "local function onDamage(e)\n local a = e.attackerReference\n a:say('hi')\nend\n"
+            "event.register('damage', onDamage)\n"]
+    ch = lf.LupaChecker()
+    for s in srcs:
+        new = patch(s)
+        assert new and ch.check(new)[0], new
