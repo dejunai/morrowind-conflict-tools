@@ -24,15 +24,17 @@ import re
 import shutil
 import struct
 import subprocess
+import sys
 import time
 import zipfile
 from collections import Counter
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import mwdialog_paths as MP  # noqa: E402
 
 DIFFERENT_AT = 0.75                      # confidence at or above which a master is called a different mod
 SIZES_RECORD = "mwdialog_master_sizes.json"
 CACHE_FILE = "mwdialog_mastercheck_cache.json"
 FIX_LOGS = ("mwdialog_fixes.log", os.path.join("mwdialog_backup", "fixes.archive.txt"))
-DEFAULT_DOWNLOADS = r"K:\downloads\vortex\morrowind"
 BASE_GAME = {"morrowind.esm", "tribunal.esm", "bloodmoon.esm"}
 ARCHIVE_EXT = (".7z", ".zip", ".rar")
 NOT_IDS = {"player", "", "self"}
@@ -335,50 +337,23 @@ def log_facts(game_dir, cache, extra_logs=()):
 # ---------------------------------------------------------------------------------------- download archives
 
 def vortex_settings_downloads():
-    """Vortex's download folder from its settings (best effort: a scan of the state database's files for the
-    settings key; values are JSON strings). None if not found."""
-    appdata = os.environ.get("APPDATA")
-    if not appdata:
-        return None
-    state = os.path.join(appdata, "Vortex", "state")
+    """Vortex's download folder from its settings, or None. Kept as a thin wrapper around mwdialog_paths."""
     try:
-        files = sorted((os.path.join(state, f) for f in os.listdir(state) if f.endswith((".log", ".ldb"))),
-                       key=os.path.getmtime, reverse=True)
-    except OSError:
+        return MP.resolve_downloads(required=False)
+    except MP.VortexPathError:
         return None
-    pat = re.compile(rb"settings###downloads###path.{0,8}?\"((?:[^\"\\]|\\.){3,400})\"", re.S)
-    for fn in files:
-        try:
-            with open(fn, "rb") as f:
-                hits = pat.findall(f.read())
-        except OSError:
-            continue
-        if hits:
-            try:
-                return json.loads(b'"' + hits[-1] + b'"').replace("{USERDATA}", os.path.join(appdata, "Vortex"))
-            except ValueError:
-                continue
-    return None
 
 
-def downloads_dir(args=None):
-    cand = [getattr(args, "vortex_downloads", None), os.environ.get("MW_VORTEX_DOWNLOADS")]
-    v = vortex_settings_downloads()
-    if v:
-        cand += [os.path.join(v, "morrowind"), v]
-    cand.append(DEFAULT_DOWNLOADS)
-    for c in cand:
-        if c and os.path.isdir(c):
-            return c
-    return None
+def downloads_dir(args=None, required=False):
+    """The Morrowind Vortex download folder. CLI --vortex-downloads / --downloads wins; otherwise
+    Vortex's own setting. No hardcoded fallback."""
+    cli = getattr(args, "vortex_downloads", None) if args else None
+    return MP.resolve_downloads(cli=cli, required=required)
 
 
-def find_7z():
-    for c in (shutil.which("7z"), shutil.which("7za"), shutil.which("7zz"),
-              r"C:\Program Files\7-Zip\7z.exe", r"C:\Program Files (x86)\7-Zip\7z.exe"):
-        if c and os.path.isfile(c):
-            return c
-    return None
+def find_7z(game_dir=None, required=False):
+    """7-Zip: PATH (shutil.which('7z')), then <game>\\tools\\7z. No registry, no Program Files paths."""
+    return MP.find_7z(game_dir=game_dir, required=required)
 
 
 def archives_for(dl, mod_folder):
@@ -397,7 +372,7 @@ def archives_for(dl, mod_folder):
     return [os.path.join(dl, n) for n in names if n.lower().endswith(ARCHIVE_EXT) and n.lower().startswith(stem)]
 
 
-def plugins_in_archive(archive, plugin_name):
+def plugins_in_archive(archive, plugin_name, game_dir=None):
     """[(entry name, bytes)] for every copy of `plugin_name` in the archive (several option folders may
     have one)."""
     want = plugin_name.lower()
@@ -411,7 +386,8 @@ def plugins_in_archive(archive, plugin_name):
             return out
         except (OSError, zipfile.BadZipFile):
             pass
-    exe = find_7z()
+    need = archive.lower().endswith((".7z", ".rar"))
+    exe = find_7z(game_dir, required=need)
     if not exe:
         return out
     try:
@@ -431,7 +407,7 @@ def plugins_in_archive(archive, plugin_name):
     return out
 
 
-def original_from_archive(plugin_name, installed_data, mod_folder, dl, cache):
+def original_from_archive(plugin_name, installed_data, mod_folder, dl, cache, game_dir=None):
     """The plugin as downloaded: {"archive", "entry", "masters": [(name, size)], "refs": [...], "defs": [...]}
     or None. The copy whose records best match the installed file wins. Cached by archive size and date."""
     arcs = cache.setdefault("archives", {})
@@ -446,7 +422,7 @@ def original_from_archive(plugin_name, installed_data, mod_folder, dl, cache):
         copies = arcs.get(key)
         if copies is None:
             copies = []
-            for entry, data in plugins_in_archive(arc, plugin_name):
+            for entry, data in plugins_in_archive(arc, plugin_name, game_dir=game_dir):
                 f = plugin_facts(data)
                 copies.append({"archive": arc, "entry": entry, "masters": header_masters(data),
                                "refs": sorted(f["refs"])[:5000], "defs": sorted(f["defs"])[:5000],
@@ -558,7 +534,7 @@ def check(world, mw, args=None):
     sizes = read_sizes_record(game_dir)
     evidence = cache.setdefault("evidence", {})
     vortex_root = getattr(getattr(world, "vortex", None), "root", None) or getattr(args, "vortex_dir", None)
-    dl = None if getattr(args, "no_archive_lookup", False) else downloads_dir(args)
+    dl = None if getattr(args, "no_archive_lookup", False) else downloads_dir(args, required=False)
     defined = set(world.all_ids) | set(world.topics) | set(world.info_home)
     names = {n: os.path.basename(world.paths[n]) if n in world.paths else n for n in world.loaded}
     loaded = [names[n] for n in world.loaded]
@@ -599,7 +575,7 @@ def check(world, mw, args=None):
             f2, rm = facts, removed
             if dl and (rewritten or orig is None) and original is None:
                 folder = staging_folder_of(path, vortex_root, mw)
-                original = original_from_archive(plugin, data, folder, dl, cache) or False
+                original = original_from_archive(plugin, data, folder, dl, cache, game_dir=game_dir) or False
             if original:
                 om = {n.lower(): s for n, s in original["masters"]}
                 if orig is None or src == "header":

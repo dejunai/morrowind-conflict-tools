@@ -1,3 +1,18 @@
+# Relative paths, Vortex settings, and bundled LuaJIT (2026-11-11)
+
+- No hardcoded absolute paths in the tools. The game root is the folder the scripts live in.
+- Vortex's Morrowind staging and download folders are read from Vortex's own settings
+  (`%APPDATA%\Vortex\state.v2`, `state`, or a settings backup). `--staging`, `--vortex-dir`,
+  `--vortex-downloads` / `--downloads` override. If Vortex's data cannot be read and no flag is
+  given, the tool exits with a message naming the folders it tried and the flag to pass.
+- Recorded paths (`mwdialog_added_masters.json`, `mwdialog_reduced_textures.txt`, and the promoted
+  block in `mwdialog_check.rules.txt`) are stored as `staging:` / `downloads:` / `game:` plus a
+  path relative to that base. Older absolute entries are still read and are converted on the next write.
+- LuaJIT is looked up at `<game>\tools\luajit\luajit.exe`, then on PATH. It is not committed
+  (see `tools/README.md`).
+- 7-Zip is looked up on PATH (`7z`), then at `<game>\tools\7z`. No registry and no Program Files
+  paths. A missing 7-Zip is a clear error when a `.7z`/`.rar` archive needs to be opened.
+
 # mwdialog_check / mwdialog_assets / vortex_tidy: fixes from the code review
 
 Drop-in replacements for the three scripts. The command-line options, file names and on-disk formats are unchanged:
@@ -224,7 +239,7 @@ recognised and reported with a confidence score, instead of being "repaired" int
   (`mwdialog_master_sizes.json`, written before --fix syncs it), the oldest `synced the size recorded for 'M'
   (a -> b)` line in the logs, or - when the header was rewritten (a sync or "added master" in the logs) - the
   plugin as downloaded: the Vortex download archive named like the mod's staging folder (`--vortex-downloads`,
-  default: Vortex's setting, else `K:\downloads\vortex\morrowind`; .zip natively, .7z/.rar via 7-Zip;
+  default: Vortex's own setting (no hardcoded fallback); .zip natively, .7z/.rar via 7-Zip (PATH, then <game>\tools\7z);
   `--no-archive-lookup` to skip). The downloaded copy's references are checked too. Archive reads are cached
   by archive size/date.
 - **Verdicts:** `matches`, `other version` (WARN: a few references gone, the rest lines up; stays enabled, --fix

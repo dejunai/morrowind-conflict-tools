@@ -8,7 +8,8 @@ This repository also includes the rule files and run records from one real insta
 
 - **Python 3** (the tools use the standard library only)
 - **Windows** is the intended environment (Vortex staging paths, `MAX_PATH` checks, Win32 process checks)
-- Optional: **LuaJIT** (or `luac`) so Lua patches can be syntax-checked before they are written. The `lupa` package is a fallback if neither is on `PATH`.
+- Optional: **LuaJIT** (or `luac`) so Lua patches can be syntax-checked before they are written. Place a copy in `tools/luajit/` (see `tools/README.md`); otherwise `luajit` on `PATH`, then the `lupa` package, is used.
+- Optional: **7-Zip** (`7z` on PATH, or `tools/7z/`) to read `.7z`/`.rar` download archives in the master check
 - Optional: **texconv** for DDS conversion, mipmaps, and compression in the asset fixer
 
 On Windows you can also use the included `mwdialog_check.bat` and `vortex_tidy.bat` wrappers.
@@ -21,7 +22,7 @@ On Windows you can also use the included `mwdialog_check.bat` and `vortex_tidy.b
 | `mwdialog_assets.py` | Asset health used by `--asset-check` / `--fix`: unreadable or truncated DDS, missing mipmaps, uncompressed textures, unused loose files, files in the wrong folder. |
 | `mwdialog_mastercheck.py` | Whether a compatibility patch was built for the master that is actually installed (reference resolution, size/date signals). |
 | `mwdialog_longpaths.py` | Asset paths that are too long for Windows `MAX_PATH` or for Morrowind's fixed-length fields. Used by both the checker and tidy. |
-| `vortex_tidy.py` | Tidies each mod folder in Vortex's Morrowind staging directory: loose docs/images, wrong-folder assets, then the asset check and the Lua check. Plan first, then `--apply`. |
+| `vortex_tidy.py` | Tidies each mod folder in Vortex's Morrowind staging directory (from Vortex's settings, or `--staging`): loose docs/images, wrong-folder assets, then the asset check and the Lua check. Plan first, then `--apply`. |
 | `mwdialog_luafix.py` | Static checker and in-place patcher for MWSE Lua (parser-based, not regex). Nil guards, absurd event priorities, log-spam shim, one-shot handlers, and related rules. Plan first, then `--apply`. |
 | `mwdialog_lua.py` | Pure-Python Lua 5.1 / LuaJIT tokenizer and parser, used by `mwdialog_luafix.py`. |
 | `mwdialog_planfile.py` | Shared plan-file helpers: atomic writes, blanking after a successful `--apply`, audit copies, strict comparison of the reviewed plan. |
@@ -77,7 +78,7 @@ These live next to the scripts in the game folder, except as noted.
 - `vortex_tidy_blacklist.txt` — Vortex staging folders tidy should never touch
 - `Data Files/MWSE/config/mwguard.json` — thresholds shared with `mwdialog_luafix.py` (copy this to `Data Files\MWSE\config\` in the game folder)
 
-**Records the tools read and update** (this install's current state):
+**Records the tools read and update** (this install's current state; file paths in them are stored as `staging:` / `downloads:` / `game:` plus a relative path):
 
 - `mwdialog_load_order.txt` — plugin load order
 - `mwdialog_conflict_answers.json` — answers given to conflict questions
@@ -89,16 +90,20 @@ These live next to the scripts in the game folder, except as noted.
 
 A default `mwdialog_mip_exempt.txt` can be added beside the scripts if you want to override the built-in mipmap exemptions; this install did not have one.
 
+## Vortex paths
+
+Staging and download folders are read from Vortex's own settings (`%APPDATA%\Vortex\state.v2`, `state`, or a settings backup). `{game}` and `{USERDATA}` placeholders are expanded. `--staging` / `--vortex-dir` and `--vortex-downloads` / `--downloads` override those settings.
+
+If Vortex's data cannot be read and no override is given, the tool exits with a message that names every folder it tried and the flag to pass. There is no hardcoded fallback path. `--no-vortex` skips the staging folder; `--no-archive-lookup` (or `--no-master-guard`) skips the download folder.
+
+The "deleted by vortex_tidy" folder is derived from the resolved staging folder (`<staging name> - deleted by vortex_tidy`, beside it).
+
 ## Usage notes
 
-- Put the scripts in the Morrowind game folder, or pass paths (`--staging` for tidy, folder arguments for luafix). `vortex_tidy.py` defaults to `G:\Vortex Mods\morrowind`.
+- Put the scripts in the Morrowind game folder, or pass paths (`--staging` for tidy, folder arguments for luafix).
 - For tidy, Purge in Vortex first, `--apply`, then Deploy.
 - Do not run `--full`, `--fix`, or `--apply` against live mods until you have reviewed the plan.
 - Tests live in `tests/`. From a clone: `pytest`.
-
-## Personal paths
-
-Several configs and the `diag/` scripts contain absolute paths from the original install, including `G:\Program Files\Steam\steamapps\common\Morrowind` and `G:\Vortex Mods\morrowind`. They are install-specific, not secrets.
 
 ## License
 

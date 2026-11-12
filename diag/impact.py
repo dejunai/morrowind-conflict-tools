@@ -1,6 +1,6 @@
 import os, sys, importlib.util, struct, json
 from collections import Counter, defaultdict
-GAME = r"G:\Program Files\Steam\steamapps\common\Morrowind"
+GAME = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(GAME, "Data Files")
 def load(name, path):
     spec = importlib.util.spec_from_file_location(name, path)

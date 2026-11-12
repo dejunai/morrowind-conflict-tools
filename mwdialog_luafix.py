@@ -47,7 +47,7 @@ mwdialog_backup\\luafix\\<run>\\..., every write is journaled, and --undo puts t
 only written when LuaJIT (or luac) compiles the patched text; if the original doesn't compile it is left alone.
 
     python mwdialog_luafix.py                        (plan for Data Files\\MWSE\\mods; nothing is changed)
-    python mwdialog_luafix.py "G:\\Vortex Mods\\morrowind\\Some Mod"   (one folder)
+    python mwdialog_luafix.py "<staging>\\Some Mod"   (one folder)
     python mwdialog_luafix.py --apply                (patch the high-confidence findings)
     python mwdialog_luafix.py --undo                 (put back the files of the last --apply)
 --apply patches only when the plan it works out lists the same actions as mwdialog_luafix_plan.txt (else it
@@ -308,16 +308,10 @@ class LupaChecker:
         return e is None, (e.decode("latin-1") if isinstance(e, bytes) else str(e or ""))
 
 
-MWMANAGER_LUAJIT = r"G:\projects\MWManager\tools\luajit\luajit.exe"
-
-
 def find_checker(explicit=None, game_dir=HERE):
-    """The user's compiled LuaJIT first (MWManager's tools\\luajit, or one next to this script), then luajit /
-    luac on PATH, then lupa; None if there is none."""
-    exe = "luajit.exe" if os.name == "nt" else "luajit"
-    cands = [explicit] if explicit else []
-    cands += [os.path.join(game_dir, "tools", "luajit", exe), os.path.join(game_dir, exe), MWMANAGER_LUAJIT]
-    for c in cands:
+    """LuaJIT at <game>\\tools\\luajit\\ first, then luajit / luac on PATH, then lupa; None if there is none."""
+    import mwdialog_paths as MP
+    for c in MP.luajit_candidates(game_dir, explicit):
         if c and os.path.isfile(c):
             return LuaJITChecker(c, "luac" if "luac" in os.path.basename(c).lower() else "luajit")
     if explicit:
@@ -2294,8 +2288,9 @@ def main(argv=None):
           f"{compress_priority(math.inf, cfg)}), interval "
           f"{cfg['minInterval']} s" + (f"; settings from {', '.join(cfg['_sources'])}" if cfg["_sources"] else ""))
     if args.apply and checker is None and not args.no_syntax_check:
-        print("No LuaJIT/luac found (--luajit PATH): not patching without a syntax check (--no-syntax-check "
-              "relies on the parser alone).", file=sys.stderr)
+        import mwdialog_paths as MP
+        print("No LuaJIT/luac found. " + MP.describe_luajit_search(HERE)
+              + " Not patching without a syntax check.", file=sys.stderr)
         return 2
     rep = check_paths(paths, cfg, args.include_own, checker, args.level, data_dir, not args.no_cache,
                       args.log_shim_always, log_scope=args.lua_log)

@@ -10,7 +10,7 @@ Checks, and what --fix does:
   DDS uncompressed 32-bit (256 px and up) ................ WARN   compressed to DXT1/DXT5 (texconv)
   DDS not a power of two / DXT not a multiple of 4 ....... WARN   resized to the nearest power of two (texconv)
   NIF/KF that isn't a Morrowind file (not 4.0.0.2) ....... ERROR  report only
-  absolute texture path inside a NIF (C:\\...) ............ ERROR  rewritten to a normal relative path
+  absolute texture path inside a NIF ....................... ERROR  rewritten to a normal relative path
   empty (0-byte) asset ................................... ERROR  moved to Off when a BSA has the real file
   file name with non-ASCII characters .................... ERROR  report only (plugins/models name it)
   stereo sound under Sound\\ (3D sounds must be mono) ..... WARN   down-mixed to mono (ffmpeg)

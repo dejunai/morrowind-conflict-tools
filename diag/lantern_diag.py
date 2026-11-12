@@ -1,5 +1,5 @@
 import os, sys
-GAME = r"G:\Program Files\Steam\steamapps\common\Morrowind"
+GAME = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, sys.argv[1] if len(sys.argv) > 1 else GAME)
 import mwdialog_check as M
 DATA = os.path.join(GAME, "Data Files")

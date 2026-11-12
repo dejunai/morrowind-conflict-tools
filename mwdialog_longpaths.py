@@ -3,7 +3,7 @@ mod's staging folder).
 
 Limits (checked against MWSE's reverse-engineered engine structures, MWSE/TES3*.h):
   * Morrowind.exe is a 32-bit program without Windows' long-path opt-in, so a file it opens must have a full
-    path of at most 259 characters (MAX_PATH 260 with the closing NUL): "G:\\...\\Data Files\\Meshes\\...".
+    path of at most 259 characters (MAX_PATH 260 with the closing NUL): "<game>\\Data Files\\Meshes\\...".
     The game keeps its Data Files folder in a MAX_PATH buffer too (TES3DataHandler dataFilesPath[MAX_PATH]).
   * Sound records keep the file name in a fixed 32-byte field (TES3Sound.h filename[32]: at most 31
     characters under Sound\\); magic effects keep their icon and particle texture in 32-byte fields

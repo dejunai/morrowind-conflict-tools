@@ -1,5 +1,5 @@
 import os, sys, importlib.util
-GAME = r"G:\Program Files\Steam\steamapps\common\Morrowind"; DATA = os.path.join(GAME, "Data Files")
+GAME = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); DATA = os.path.join(GAME, "Data Files")
 spec = importlib.util.spec_from_file_location("mwn", os.path.join(os.path.dirname(os.path.abspath(__file__)), "mwdialog_check_new.py"))
 M = importlib.util.module_from_spec(spec); sys.modules["mwn"] = M; spec.loader.exec_module(M)
 files = M.index_dir(DATA)

@@ -51,3 +51,6 @@ mgeXE.toml
 csse.toml
 vortex.deployment.dinput.json
 mlox/
+
+# Local LuaJIT copy (place luajit.exe, lua51.dll, jit\ and COPYRIGHT here; see tools/README.md)
+tools/luajit/

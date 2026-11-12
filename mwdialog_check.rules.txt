@@ -2046,205 +2046,205 @@ mwse_Containers.esp
 ;; master, so it always loads after it. A rule of yours putting the patch first takes the master
 ;; out again (the original plugin is kept where 'original' says).
 ;;   AATL Doors of Oblivion Interop.ESP  +master  The Doors of Oblivion 1.4.esp   (content: 7 of AATL Doors of Oblivion Interop.ESP's 9 records are The Doors of Oblivion 1.4.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\AATL Compatibility Patches FOMOD 55361 1.5.4 2026-08-25T04-30Z FsqlsTWU\Off\AATL FTHOG Interop\AATL Doors of Oblivion Interop.ESP
+;;       original: staging:AATL Compatibility Patches FOMOD 55361 1.5.4 2026-08-25T04-30Z FsqlsTWU\Off\AATL FTHOG Interop\AATL Doors of Oblivion Interop.ESP
 ;;   AATL FTHOG Interop.ESP  +master  From the Hand of God.ESP   (content: 1 of AATL FTHOG Interop.ESP's 1 records are From the Hand of God.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\AATL Compatibility Patches FOMOD 55361 1.5.4 2026-08-25T04-30Z FsqlsTWU\Off\AATL FTHOG Interop\AATL FTHOG Interop.ESP
+;;       original: staging:AATL Compatibility Patches FOMOD 55361 1.5.4 2026-08-25T04-30Z FsqlsTWU\Off\AATL FTHOG Interop\AATL FTHOG Interop.ESP
 ;;   abotWindowsGlow.esp  +master  abotWindowsGlowTR1912.esp   (content: 33 of abotWindowsGlow.esp's 35 records are abotWindowsGlowTR1912.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\abotWindowsGlow119-42271-1-19-1577970461\Off\abotWindowsGlow\abotWindowsGlow.esp
+;;       original: staging:abotWindowsGlow119-42271-1-19-1577970461\Off\abotWindowsGlow\abotWindowsGlow.esp
 ;;   AEA-Compatibility.esp  +master  Area Effect Projectiles Integrated (PAR Edit).esp   (content rule; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Main file-47749-4-1585592699\Off\AEA-Compatibility\AEA-Compatibility.esp
+;;       original: staging:Main file-47749-4-1585592699\Off\AEA-Compatibility\AEA-Compatibility.esp
 ;;   avp BTBGI-NE - Imperial Legion Expansion.esp  +master  Imperial Legion Expansion.esp   (content: 11 of avp BTBGI-NE - Imperial Legion Expansion.esp's 12 records are Imperial Legion Expansion.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\BTBGI - Necro Edit - Modular Patch-48955-5-4-0-1699288164\Off\avp BTBGI-NE - Imperial Legion Expansion\avp BTBGI-NE - Imperial Legion Expansion.esp
+;;       original: staging:BTBGI - Necro Edit - Modular Patch-48955-5-4-0-1699288164\Off\avp BTBGI-NE - Imperial Legion Expansion\avp BTBGI-NE - Imperial Legion Expansion.esp
 ;;   Banners With Sound.esp  +master  Cutting Room Floor - Sounds.esp   (content: 1 of Banners With Sound.esp's 2 records are Cutting Room Floor - Sounds.esp's; 2026-11-10 03:29:36)
-;;       original: G:\Vortex Mods\morrowind\Banners With Sound 0.3.1-45015-0-3-1\Off\added masters\Banners With Sound\Banners With Sound.esp
+;;       original: staging:Banners With Sound 0.3.1-45015-0-3-1\Off\added masters\Banners With Sound\Banners With Sound.esp
 ;;   Bow to the Daedra MDMD Add-on.ESP  +master  Bow to the Daedra.ESP   (content: 2 of Bow to the Daedra MDMD Add-on.ESP's 2 records are Bow to the Daedra.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Bow to the Daedra-49232-2-0-1670966993\Off\Bow to the Daedra OAAB Add-on\Bow to the Daedra MDMD Add-on.ESP
+;;       original: staging:Bow to the Daedra-49232-2-0-1670966993\Off\Bow to the Daedra OAAB Add-on\Bow to the Daedra MDMD Add-on.ESP
 ;;   Bow to the Daedra OAAB Add-on.ESP  +master  Bow to the Daedra.ESP   (content: 2 of Bow to the Daedra OAAB Add-on.ESP's 2 records are Bow to the Daedra.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Bow to the Daedra-49232-2-0-1670966993\Off\Bow to the Daedra OAAB Add-on\Bow to the Daedra OAAB Add-on.ESP
+;;       original: staging:Bow to the Daedra-49232-2-0-1670966993\Off\Bow to the Daedra OAAB Add-on\Bow to the Daedra OAAB Add-on.ESP
 ;;   BTBGI Creature Buffs.esp  +master  BTB's Game Improvements (Necro Edit).esp   (content rule; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\BTB's Game Improvements - Necro Edit-47129-2-0-15-1647851241\Off\BTBGI Creature Buffs\BTBGI Creature Buffs.esp
+;;       original: staging:BTB's Game Improvements - Necro Edit-47129-2-0-15-1647851241\Off\BTBGI Creature Buffs\BTBGI Creature Buffs.esp
 ;;   BTBGI Creature Buffs.esp  +master  There Can Be Only One (Alt Fyr).esp   (content rule; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\BTB's Game Improvements - Necro Edit-47129-2-0-15-1647851241\Off\BTBGI Creature Buffs\BTBGI Creature Buffs.esp
+;;       original: staging:BTB's Game Improvements - Necro Edit-47129-2-0-15-1647851241\Off\BTBGI Creature Buffs\BTBGI Creature Buffs.esp
 ;;   CAP_Door.ESP  +master  Concept art palace.ESP   (content: 1 of CAP_Door.ESP's 1 records are Concept art palace.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Concept Art Palace 48136 2.8.4 2026-10-07T21-37Z IzGqzKuh\Off\CAP_Interior_Cluttering\CAP_Door.ESP
+;;       original: staging:Concept Art Palace 48136 2.8.4 2026-10-07T21-37Z IzGqzKuh\Off\CAP_Interior_Cluttering\CAP_Door.ESP
 ;;   CAP_Interior_Cluttering.ESP  +master  Concept art palace.ESP   (content: 2 of CAP_Interior_Cluttering.ESP's 4 records are Concept art palace.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Concept Art Palace 48136 2.8.4 2026-10-07T21-37Z IzGqzKuh\Off\CAP_Interior_Cluttering\CAP_Interior_Cluttering.ESP
+;;       original: staging:Concept Art Palace 48136 2.8.4 2026-10-07T21-37Z IzGqzKuh\Off\CAP_Interior_Cluttering\CAP_Interior_Cluttering.ESP
 ;;   Clean_Ashirbadon.esp  +master  Clean_Mines and Caverns.esp   (content: 3 of Clean_Ashirbadon.esp's 5 records are Clean_Mines and Caverns.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Ashirbadon Overhaul 59467 1.0 2026-06-29T05-39Z oYkTYQqH\Off\Clean_Ashirbadon\Clean_Ashirbadon.esp
+;;       original: staging:Ashirbadon Overhaul 59467 1.0 2026-06-29T05-39Z oYkTYQqH\Off\Clean_Ashirbadon\Clean_Ashirbadon.esp
 ;;   Clean_KuniraiRefit2.esp  +master  Clean_Mines and Caverns.esp   (content: 3 of Clean_KuniraiRefit2.esp's 4 records are Clean_Mines and Caverns.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Kunirai Overhaul-58621-1-0-1775776453\Off\Clean_KuniraiRefit2\Clean_KuniraiRefit2.esp
+;;       original: staging:Kunirai Overhaul-58621-1-0-1775776453\Off\Clean_KuniraiRefit2\Clean_KuniraiRefit2.esp
 ;;   Clean_Piran.esp  +master  Clean_Mines and Caverns.esp   (content: 7 of Clean_Piran.esp's 9 records are Clean_Mines and Caverns.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Piran Overhaul 59346 1 2026-06-14T16-34Z hpVSpZWd\Off\Clean_Piran\Clean_Piran.esp
+;;       original: staging:Piran Overhaul 59346 1 2026-06-14T16-34Z hpVSpZWd\Off\Clean_Piran\Clean_Piran.esp
 ;;   Clean_Sinsibadon.esp  +master  Clean_Mines and Caverns.esp   (content: 1 of Clean_Sinsibadon.esp's 1 records are Clean_Mines and Caverns.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Sinsibadon Overhaul 60092 1 2026-09-03T10-48Z YUgrUbTU\Off\Clean_Sinsibadon\Clean_Sinsibadon.esp
+;;       original: staging:Sinsibadon Overhaul 60092 1 2026-09-03T10-48Z YUgrUbTU\Off\Clean_Sinsibadon\Clean_Sinsibadon.esp
 ;;   Clean_Zenarbael Overhaul.esp  +master  Clean_Mines and Caverns.esp   (content: 1 of Clean_Zenarbael Overhaul.esp's 1 records are Clean_Mines and Caverns.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Zenarbael Overhaul 59992 1 2026-08-26T01-47Z x2p02QKO\Off\Clean_Zenarbael Overhaul\Clean_Zenarbael Overhaul.esp
+;;       original: staging:Zenarbael Overhaul 59992 1 2026-08-26T01-47Z x2p02QKO\Off\Clean_Zenarbael Overhaul\Clean_Zenarbael Overhaul.esp
 ;;   Companions of Morrowind M&C.ESP  +master  Companions of Morrowind.ESP   (content: 1 of Companions of Morrowind M&C.ESP's 1 records are Companions of Morrowind.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Companions Of Morrowind MaC 60497 1.0 2026-10-25T14-15Z DBQdBe6E\Off\Companions of Morrowind M&C\Companions of Morrowind M&C.ESP
+;;       original: staging:Companions Of Morrowind MaC 60497 1.0 2026-10-25T14-15Z DBQdBe6E\Off\Companions of Morrowind M&C\Companions of Morrowind M&C.ESP
 ;;   Complete Armor Joints - OAAB.esp  +master  Complete Armor Joints - TD.esp   (content: 1 of Complete Armor Joints - OAAB.esp's 1 records are Complete Armor Joints - TD.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\CompleteArmorJointsAdditions 56176 0.7.5 2026-10-06T17-08Z yiwbiUDB\Off\Complete Armor Joints - OAAB\Complete Armor Joints - OAAB.esp
+;;       original: staging:CompleteArmorJointsAdditions 56176 0.7.5 2026-10-06T17-08Z yiwbiUDB\Off\Complete Armor Joints - OAAB\Complete Armor Joints - OAAB.esp
 ;;   Complete Armor Joints - OAAB.esp  +master  Cutting Room Floor - Items TR.esp   (content: 1 of Complete Armor Joints - OAAB.esp's 1 records are Cutting Room Floor - Items TR.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\CompleteArmorJointsAdditions 56176 0.7.5 2026-10-06T17-08Z yiwbiUDB\Off\Complete Armor Joints - OAAB\Complete Armor Joints - OAAB.esp
+;;       original: staging:CompleteArmorJointsAdditions 56176 0.7.5 2026-10-06T17-08Z yiwbiUDB\Off\Complete Armor Joints - OAAB\Complete Armor Joints - OAAB.esp
 ;;   Complete Armor Joints.esp  +master  Better Morrowind Armor.esp   (content: 23 of Complete Armor Joints.esp's 38 records are Better Morrowind Armor.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Better Morrowind Armor Fixes-47920-1-8-1762689715\Off\Complete Armor Joints\Complete Armor Joints.esp
+;;       original: staging:Better Morrowind Armor Fixes-47920-1-8-1762689715\Off\Complete Armor Joints\Complete Armor Joints.esp
 ;;   Concept Art Hlaalu Balconies - Suran.ESP  +master  Concept Art Hlaalu Balconies - Balmora.esp   (content: 9 of Concept Art Hlaalu Balconies - Suran.ESP's 9 records are Concept Art Hlaalu Balconies - Balmora.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Concept art Hlaalu Balconies-48667-2-1-1612729947\Off\Concept Art Hlaalu Balconies - Suran\Concept Art Hlaalu Balconies - Suran.ESP
+;;       original: staging:Concept art Hlaalu Balconies-48667-2-1-1612729947\Off\Concept Art Hlaalu Balconies - Suran\Concept Art Hlaalu Balconies - Suran.ESP
 ;;   Courtesy.ESP  +master  Morrowind Quests Redux All-In-One.esp   (content: 4 of Courtesy.ESP's 4 records are Morrowind Quests Redux All-In-One.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Courtesy-46781-1-0-1558318844\Off\Courtesy\Courtesy.ESP
+;;       original: staging:Courtesy-46781-1-0-1558318844\Off\Courtesy\Courtesy.ESP
 ;;   Creatures Restored - Bloodmoon Rebalance Patch.esp  +master  Cutting Room Floor - Creatures & Diseases TR.esp   (content: 2 of Creatures Restored - Bloodmoon Rebalance Patch.esp's 3 records are Cutting Room Floor - Creatures & Diseases TR.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\creatures_restored 56176 1.5 2026-08-24T09-08Z AbOYbyOv\Off\Creatures Restored\Creatures Restored - Bloodmoon Rebalance Patch.esp
+;;       original: staging:creatures_restored 56176 1.5 2026-08-24T09-08Z AbOYbyOv\Off\Creatures Restored\Creatures Restored - Bloodmoon Rebalance Patch.esp
 ;;   Creatures Restored.esp  +master  Cutting Room Floor - Creatures & Diseases TR.esp   (content: 3 of Creatures Restored.esp's 6 records are Cutting Room Floor - Creatures & Diseases TR.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\creatures_restored 56176 1.5 2026-08-24T09-08Z AbOYbyOv\Off\Creatures Restored\Creatures Restored.esp
+;;       original: staging:creatures_restored 56176 1.5 2026-08-24T09-08Z AbOYbyOv\Off\Creatures Restored\Creatures Restored.esp
 ;;   CRF - Better Clothes Definitive Edition.esp  +master  Cutting Room Floor - Items TR.esp   (content: 1 of CRF - Better Clothes Definitive Edition.esp's 1 records are Cutting Room Floor - Items TR.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\CRF Patches 56176 1.2.1 2026-08-22T16-23Z KH7cHJ0O\Off\CRF - Better Morrowind Armor\CRF - Better Clothes Definitive Edition.esp
+;;       original: staging:CRF Patches 56176 1.2.1 2026-08-22T16-23Z KH7cHJ0O\Off\CRF - Better Morrowind Armor\CRF - Better Clothes Definitive Edition.esp
 ;;   CRF - Better Morrowind Armor.esp  +master  Cutting Room Floor - Items TR.esp   (content: 9 of CRF - Better Morrowind Armor.esp's 9 records are Cutting Room Floor - Items TR.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\CRF Patches 56176 1.2.1 2026-08-22T16-23Z KH7cHJ0O\Off\CRF - Better Morrowind Armor\CRF - Better Morrowind Armor.esp
+;;       original: staging:CRF Patches 56176 1.2.1 2026-08-22T16-23Z KH7cHJ0O\Off\CRF - Better Morrowind Armor\CRF - Better Morrowind Armor.esp
 ;;   Cutting Room Floor - Taverns.esp  +master  Improved Inns Expanded.esp   (content: 12 of Cutting Room Floor - Taverns.esp's 21 records are Improved Inns Expanded.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Cutting Room Floor - Modular 47307 v1.8 2026-08-21T03-31Z 8MahMCdM\Off\Cutting Room Floor - Taverns\Cutting Room Floor - Taverns.esp
+;;       original: staging:Cutting Room Floor - Modular 47307 v1.8 2026-08-21T03-31Z 8MahMCdM\Off\Cutting Room Floor - Taverns\Cutting Room Floor - Taverns.esp
 ;;   DA_Sobitur_Facility_Clean - Script Fix.esp  +master  DA_Sobitur_Facility_Clean.ESP   (content: 20 of DA_Sobitur_Facility_Clean - Script Fix.esp's 20 records are DA_Sobitur_Facility_Clean.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Miscellaneous Patches-48955-1-15-2-1728814858\Off\DA_Sobitur_Facility_Clean - Script Fix\DA_Sobitur_Facility_Clean - Script Fix.esp
+;;       original: staging:Miscellaneous Patches-48955-1-15-2-1728814858\Off\DA_Sobitur_Facility_Clean - Script Fix\DA_Sobitur_Facility_Clean - Script Fix.esp
 ;;   DA_Sobitur_Quest_Part_1 Clean - Script Fix.esp  +master  DA_Sobitur_Quest_Part_1 Clean.esp   (content: 1 of DA_Sobitur_Quest_Part_1 Clean - Script Fix.esp's 1 records are DA_Sobitur_Quest_Part_1 Clean.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Miscellaneous Patches-48955-1-15-2-1728814858\Off\DA_Sobitur_Facility_Clean - Script Fix\DA_Sobitur_Quest_Part_1 Clean - Script Fix.esp
+;;       original: staging:Miscellaneous Patches-48955-1-15-2-1728814858\Off\DA_Sobitur_Facility_Clean - Script Fix\DA_Sobitur_Quest_Part_1 Clean - Script Fix.esp
 ;;   Dagoth Ur Voice Addon.esp  +master  DN-GDR BTB MRM-Non Pointy.esp   (content: 77 of Dagoth Ur Voice Addon.esp's 77 records are DN-GDR BTB MRM-Non Pointy.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Dagoth Ur Voice addon v1.0-592\Off\Dagoth Ur Voice Addon\Dagoth Ur Voice Addon.esp
+;;       original: staging:Dagoth Ur Voice addon v1.0-592\Off\Dagoth Ur Voice Addon\Dagoth Ur Voice Addon.esp
 ;;   DN-Lighted_Dwemer_Towers.ESP  +master  Dwemer Legacy Reforged - Arkngthunch-Sturdumz.esp   (content: 5 of DN-Lighted_Dwemer_Towers.ESP's 8 records are Dwemer Legacy Reforged - Arkngthunch-Sturdumz.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\DN-Lighted_Dwemer_Towers-51358-1-1-1656433739\Off\DN-Lighted_Dwemer_Towers\DN-Lighted_Dwemer_Towers.ESP
+;;       original: staging:DN-Lighted_Dwemer_Towers-51358-1-1-1656433739\Off\DN-Lighted_Dwemer_Towers\DN-Lighted_Dwemer_Towers.ESP
 ;;   DRPV1.9 - Script Fix.esp  +master  DRPV1.9.ESP   (content: 4 of DRPV1.9 - Script Fix.esp's 4 records are DRPV1.9.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Miscellaneous Patches-48955-1-15-2-1728814858\Off\DA_Sobitur_Facility_Clean - Script Fix\DRPV1.9 - Script Fix.esp
+;;       original: staging:Miscellaneous Patches-48955-1-15-2-1728814858\Off\DA_Sobitur_Facility_Clean - Script Fix\DRPV1.9 - Script Fix.esp
 ;;   Dwemer Airship_Exterior.ESP  +master  Dwemer Airship.ESP   (content: 6 of Dwemer Airship_Exterior.ESP's 6 records are Dwemer Airship.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\The Patchwork Airship-53133-1-3-1731836444\Off\Dwemer Airship_Exterior\Dwemer Airship_Exterior.ESP
+;;       original: staging:The Patchwork Airship-53133-1-3-1731836444\Off\Dwemer Airship_Exterior\Dwemer Airship_Exterior.ESP
 ;;   Dwemer Airship_Exterior.ESP  +master  Dwemer Legacy Reforged - Bthungthumz and Druscashti.esp   (content: 3 of Dwemer Airship_Exterior.ESP's 6 records are Dwemer Legacy Reforged - Bthungthumz and Druscashti.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\The Patchwork Airship-53133-1-3-1731836444\Off\Dwemer Airship_Exterior\Dwemer Airship_Exterior.ESP
+;;       original: staging:The Patchwork Airship-53133-1-3-1731836444\Off\Dwemer Airship_Exterior\Dwemer Airship_Exterior.ESP
 ;;   Expanded Sounds TLAD Patch v1.0.ESP  +master  Expanded Sounds.esp   (content: 1 of Expanded Sounds TLAD Patch v1.0.ESP's 1 records are Expanded Sounds.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Expanded Sounds Lighting Patch v1.0-48673-v1-0-1596928636\Off\Expanded Sounds TLAD Patch v1.0\Expanded Sounds TLAD Patch v1.0.ESP
+;;       original: staging:Expanded Sounds Lighting Patch v1.0-48673-v1-0-1596928636\Off\Expanded Sounds TLAD Patch v1.0\Expanded Sounds TLAD Patch v1.0.ESP
 ;;   Fargoth in Distress.ESP  +master  The_Vanilla_Quest_Tweaks_RP_Choices_Consequences_Super_Mega_Package_-_Ultimate_Edition.ESP   (content: 21 of Fargoth in Distress.ESP's 31 records are The_Vanilla_Quest_Tweaks_RP_Choices_Consequences_Super_Mega_Package_-_Ultimate_Edition.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Fargoth in Distress-45752-2-0-1633488222\Off\Fargoth in Distress\Fargoth in Distress.ESP
+;;       original: staging:Fargoth in Distress-45752-2-0-1633488222\Off\Fargoth in Distress\Fargoth in Distress.ESP
 ;;   Finished Morrowind - GRAPHICS AND SOUND.ESP  +master  Finished Morrowind - INCONSISTENCIES - Part 1.ESP   (content: 2 of Finished Morrowind - GRAPHICS AND SOUND.ESP's 3 records are Finished Morrowind - INCONSISTENCIES - Part 1.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\03 - FINISHED MORROWIND - GRAPHICS AND SOUND-55695-1-2-1770997084\Off\Finished Morrowind - GRAPHICS AND SOUND\Finished Morrowind - GRAPHICS AND SOUND.ESP
+;;       original: staging:03 - FINISHED MORROWIND - GRAPHICS AND SOUND-55695-1-2-1770997084\Off\Finished Morrowind - GRAPHICS AND SOUND\Finished Morrowind - GRAPHICS AND SOUND.ESP
 ;;   Finished Morrowind - GRAPHICS AND SOUND.ESP  +master  Idle Talk.ESP   (content: 2 of Finished Morrowind - GRAPHICS AND SOUND.ESP's 3 records are Idle Talk.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\03 - FINISHED MORROWIND - GRAPHICS AND SOUND-55695-1-2-1770997084\Off\Finished Morrowind - GRAPHICS AND SOUND\Finished Morrowind - GRAPHICS AND SOUND.ESP
+;;       original: staging:03 - FINISHED MORROWIND - GRAPHICS AND SOUND-55695-1-2-1770997084\Off\Finished Morrowind - GRAPHICS AND SOUND\Finished Morrowind - GRAPHICS AND SOUND.ESP
 ;;   FMI_GraveDust.ESP  +master  Finished Morrowind - INCONSISTENCIES - Part 1.ESP   (content: 1 of FMI_GraveDust.ESP's 1 records are Finished Morrowind - INCONSISTENCIES - Part 1.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\FMI_GraveDust-47637-1-0-1582918873\Off\FMI_GraveDust\FMI_GraveDust.ESP
+;;       original: staging:FMI_GraveDust-47637-1-0-1582918873\Off\FMI_GraveDust\FMI_GraveDust.ESP
 ;;   FMI_HulStop 1.6.ESP  +master  Animated_Morrowind - Danaes Edits - TR.esp   (content: 1 of FMI_HulStop 1.6.ESP's 2 records are Animated_Morrowind - Danaes Edits - TR.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\HulStop.-47121-1-6-1580756687\Off\FMI_HulStop 1.6\FMI_HulStop 1.6.ESP
+;;       original: staging:HulStop.-47121-1-6-1580756687\Off\FMI_HulStop 1.6\FMI_HulStop 1.6.ESP
 ;;   FMI_HulStop 1.6.ESP  +master  Animated_Morrowind - Danaes Edits - Vv.esp   (content: 1 of FMI_HulStop 1.6.ESP's 2 records are Animated_Morrowind - Danaes Edits - Vv.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\HulStop.-47121-1-6-1580756687\Off\FMI_HulStop 1.6\FMI_HulStop 1.6.ESP
+;;       original: staging:HulStop.-47121-1-6-1580756687\Off\FMI_HulStop 1.6\FMI_HulStop 1.6.ESP
 ;;   FMI_Legion_Dialogue.ESP  +master  Finished Morrowind - INCONSISTENCIES - Part 1.ESP   (content: 8 of FMI_Legion_Dialogue.ESP's 8 records are Finished Morrowind - INCONSISTENCIES - Part 1.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\FMI - Legion Dialogue-47318-1-3-1591781946\Off\FMI_Legion_Dialogue\FMI_Legion_Dialogue.ESP
+;;       original: staging:FMI - Legion Dialogue-47318-1-3-1591781946\Off\FMI_Legion_Dialogue\FMI_Legion_Dialogue.ESP
 ;;   KF's Misc Fixes.ESP  +master  Yet Another Better Sounds Patch.esp   (content: 5 of KF's Misc Fixes.ESP's 8 records are Yet Another Better Sounds Patch.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\KF's Misc. Fixes-54795-1-0-1717550591\Off\KF's Misc Fixes\KF's Misc Fixes.ESP
+;;       original: staging:KF's Misc. Fixes-54795-1-0-1717550591\Off\KF's Misc Fixes\KF's Misc Fixes.ESP
 ;;   LB_ImpBusiness_DRP.ESP  +master  DRPV1.9.ESP   (content: 4 of LB_ImpBusiness_DRP.ESP's 5 records are DRPV1.9.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Imperial Business - Dwemer Rebirth Patch-55685-1-0-1735524418\Off\LB_ImpBusiness_DRP\LB_ImpBusiness_DRP.ESP
+;;       original: staging:Imperial Business - Dwemer Rebirth Patch-55685-1-0-1735524418\Off\LB_ImpBusiness_DRP\LB_ImpBusiness_DRP.ESP
 ;;   LB_ImpBusiness_DRP.ESP  +master  EbonheartEastEmpireCo.esp   (content: 1 of LB_ImpBusiness_DRP.ESP's 1 records are EbonheartEastEmpireCo.esp's; 2026-11-07 14:48:53)
-;;       original: G:\Vortex Mods\morrowind\Imperial Business - Dwemer Rebirth Patch-55685-1-0-1735524418\Off\LB_ImpBusiness_DRP\LB_ImpBusiness_DRP.ESP
+;;       original: staging:Imperial Business - Dwemer Rebirth Patch-55685-1-0-1735524418\Off\LB_ImpBusiness_DRP\LB_ImpBusiness_DRP.ESP
 ;;   LDM - Vampire Talk.ESP  +master  LDM - Context Matters 1.7.ESP   (content: 26 of LDM - Vampire Talk.ESP's 26 records are LDM - Context Matters 1.7.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\LDM - Vampire Talk-47556-1-1-1589035389\Off\LDM - Vampire Talk\LDM - Vampire Talk.ESP
+;;       original: staging:LDM - Vampire Talk-47556-1-1-1589035389\Off\LDM - Vampire Talk\LDM - Vampire Talk.ESP
 ;;   LDM - Vampire Talk.ESP  +master  Vampire Masquerade - A Detailed Overhaul PTR.ESP   (content: 14 of LDM - Vampire Talk.ESP's 26 records are Vampire Masquerade - A Detailed Overhaul PTR.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\LDM - Vampire Talk-47556-1-1-1589035389\Off\LDM - Vampire Talk\LDM - Vampire Talk.ESP
+;;       original: staging:LDM - Vampire Talk-47556-1-1-1589035389\Off\LDM - Vampire Talk\LDM - Vampire Talk.ESP
 ;;   Libertarian Magical Services.ESP  +master  The_Vanilla_Quest_Tweaks_RP_Choices_Consequences_Super_Mega_Package_-_Ultimate_Edition.ESP   (content: 27 of Libertarian Magical Services.ESP's 27 records are The_Vanilla_Quest_Tweaks_RP_Choices_Consequences_Super_Mega_Package_-_Ultimate_Edition.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Libertarian Magical Services-46301-1-1-1633321620\Off\Libertarian Magical Services\Libertarian Magical Services.ESP
+;;       original: staging:Libertarian Magical Services-46301-1-1-1633321620\Off\Libertarian Magical Services\Libertarian Magical Services.ESP
 ;;   Logs on Fire Cyrodiil.esp  +master  Logs on Fire Tamriel Rebuilt.esp   (content: 5 of Logs on Fire Cyrodiil.esp's 5 records are Logs on Fire Tamriel Rebuilt.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Logs on Fire Cyrodiil 55647 1.2 2026-09-14T13-34Z sZJEZrhv\Off\Logs on Fire Cyrodiil\Logs on Fire Cyrodiil.esp
+;;       original: staging:Logs on Fire Cyrodiil 55647 1.2 2026-09-14T13-34Z sZJEZrhv\Off\Logs on Fire Cyrodiil\Logs on Fire Cyrodiil.esp
 ;;   logs on Fire.esp  +master  Logs on Fire Skyrim.esp   (content: 2 of logs on Fire.esp's 4 records are Logs on Fire Skyrim.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Logs on Fire-51752-1-1-1-1732050385\Off\logs on Fire\logs on Fire.esp
+;;       original: staging:Logs on Fire-51752-1-1-1-1732050385\Off\logs on Fire\logs on Fire.esp
 ;;   logs on Fire.esp  +master  Logs on Fire Tamriel Rebuilt.esp   (content: 2 of logs on Fire.esp's 4 records are Logs on Fire Tamriel Rebuilt.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Logs on Fire-51752-1-1-1-1732050385\Off\logs on Fire\logs on Fire.esp
+;;       original: staging:Logs on Fire-51752-1-1-1-1732050385\Off\logs on Fire\logs on Fire.esp
 ;;   MoonlightOnTheOdaiRiver - Script Fix.esp  +master  LuceEdit - BCOM - MoonlightOnTheOdaiRiver.esp   (content: 2 of MoonlightOnTheOdaiRiver - Script Fix.esp's 2 records are LuceEdit - BCOM - MoonlightOnTheOdaiRiver.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Miscellaneous Patches-48955-1-15-2-1728814858\Off\DA_Sobitur_Facility_Clean - Script Fix\MoonlightOnTheOdaiRiver - Script Fix.esp
+;;       original: staging:Miscellaneous Patches-48955-1-15-2-1728814858\Off\DA_Sobitur_Facility_Clean - Script Fix\MoonlightOnTheOdaiRiver - Script Fix.esp
 ;;   nibs_wshield_DRPV_patch.ESP  +master  nibs_wanderingshield.ESP   (content: 4 of nibs_wshield_DRPV_patch.ESP's 4 records are nibs_wanderingshield.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\The Wandering Shield (Patches)-56485-1-0-1769726270\Off\nibs_wshield_DRPV_patch\nibs_wshield_DRPV_patch.ESP
+;;       original: staging:The Wandering Shield (Patches)-56485-1-0-1769726270\Off\nibs_wshield_DRPV_patch\nibs_wshield_DRPV_patch.ESP
 ;;   Note from the Archcanon Fix.ESP  +master  Finished Morrowind - INCONSISTENCIES - Part 1.ESP   (content: 1 of Note from the Archcanon Fix.ESP's 2 records are Finished Morrowind - INCONSISTENCIES - Part 1.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Note from the Archcanon Fix-45778-1-0\Off\Note from the Archcanon Fix\Note from the Archcanon Fix.ESP
+;;       original: staging:Note from the Archcanon Fix-45778-1-0\Off\Note from the Archcanon Fix\Note from the Archcanon Fix.ESP
 ;;   NPC_Schedule(beta) - Patch.esp  +master  NPC_Schedule(beta).esp   (content: 8 of NPC_Schedule(beta) - Patch.esp's 14 records are NPC_Schedule(beta).esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\NPC_Schedule(beta) - Patch-48955-1-3-1636907427\Off\NPC_Schedule(beta) - Patch\NPC_Schedule(beta) - Patch.esp
+;;       original: staging:NPC_Schedule(beta) - Patch-48955-1-3-1636907427\Off\NPC_Schedule(beta) - Patch\NPC_Schedule(beta) - Patch.esp
 ;;   OAAB Brother Junipers Twin Lamps - Camonna Tong Compatibility Patch.esp  +master  OAAB Brother Junipers Twin Lamps.esp   (content: 1 of OAAB Brother Junipers Twin Lamps - Camonna Tong Compatibility Patch.esp's 1 records are OAAB Brother Junipers Twin Lamps.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Miscellaneous Patches-48955-1-15-2-1728814858\Off\DA_Sobitur_Facility_Clean - Script Fix\OAAB Brother Junipers Twin Lamps - Camonna Tong Compatibility Patch.esp
+;;       original: staging:Miscellaneous Patches-48955-1-15-2-1728814858\Off\DA_Sobitur_Facility_Clean - Script Fix\OAAB Brother Junipers Twin Lamps - Camonna Tong Compatibility Patch.esp
 ;;   OAAB Brother Junipers Twin Lamps - Script Fix.esp  +master  OAAB Brother Junipers Twin Lamps.esp   (content: 1 of OAAB Brother Junipers Twin Lamps - Script Fix.esp's 1 records are OAAB Brother Junipers Twin Lamps.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Miscellaneous Patches-48955-1-15-2-1728814858\Off\DA_Sobitur_Facility_Clean - Script Fix\OAAB Brother Junipers Twin Lamps - Script Fix.esp
+;;       original: staging:Miscellaneous Patches-48955-1-15-2-1728814858\Off\DA_Sobitur_Facility_Clean - Script Fix\OAAB Brother Junipers Twin Lamps - Script Fix.esp
 ;;   OAAB_Grazelands_Mines_and_Caverns_patch.esp  +master  OAAB_Grazelands.ESP   (content: 1 of OAAB_Grazelands_Mines_and_Caverns_patch.esp's 1 records are OAAB_Grazelands.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\momw-patches\Off\OAAB_Grazelands_Mines_and_Caverns_patch\OAAB_Grazelands_Mines_and_Caverns_patch.esp
+;;       original: staging:momw-patches\Off\OAAB_Grazelands_Mines_and_Caverns_patch\OAAB_Grazelands_Mines_and_Caverns_patch.esp
 ;;   Outdoor Banners With Sound.ESP  +master  Cutting Room Floor - Sounds.esp   (content: 1 of Outdoor Banners With Sound.ESP's 1 records are Cutting Room Floor - Sounds.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Outdoor Banners With Sound-47068-1-0-1582461148\Off\Outdoor Banners With Sound\Outdoor Banners With Sound.ESP
+;;       original: staging:Outdoor Banners With Sound-47068-1-0-1582461148\Off\Outdoor Banners With Sound\Outdoor Banners With Sound.ESP
 ;;   Privileges&Services - Bugs Patch only.esp  +master  Privileges&Services - Improvement Patch.esp   (content: 25 of Privileges&Services - Bugs Patch only.esp's 25 records are Privileges&Services - Improvement Patch.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Privileges And Services - Improvement Patch-52371-3-2-1781031434\Off\Privileges&Services - Improvement Patch\Privileges&Services - Bugs Patch only.esp
+;;       original: staging:Privileges And Services - Improvement Patch-52371-3-2-1781031434\Off\Privileges&Services - Improvement Patch\Privileges&Services - Bugs Patch only.esp
 ;;   Privileges&Services - Bugs Patch only.esp  +master  Privileges&Services 1.1.esp   (content: 25 of Privileges&Services - Bugs Patch only.esp's 25 records are Privileges&Services 1.1.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Privileges And Services - Improvement Patch-52371-3-2-1781031434\Off\Privileges&Services - Improvement Patch\Privileges&Services - Bugs Patch only.esp
+;;       original: staging:Privileges And Services - Improvement Patch-52371-3-2-1781031434\Off\Privileges&Services - Improvement Patch\Privileges&Services - Bugs Patch only.esp
 ;;   Privileges&Services - Improvement Patch.esp  +master  Privileges&Services 1.1.esp   (content: 124 of Privileges&Services - Improvement Patch.esp's 182 records are Privileges&Services 1.1.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Privileges And Services - Improvement Patch-52371-3-2-1781031434\Off\Privileges&Services - Improvement Patch\Privileges&Services - Improvement Patch.esp
+;;       original: staging:Privileges And Services - Improvement Patch-52371-3-2-1781031434\Off\Privileges&Services - Improvement Patch\Privileges&Services - Improvement Patch.esp
 ;;   Quest Voice Greetings.ESP  +master  Vampire Masquerade - A Detailed Overhaul PTR.ESP   (content: 127 of Quest Voice Greetings.ESP's 183 records are Vampire Masquerade - A Detailed Overhaul PTR.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Extra Patches-53570-2-1-1775675811\Off\Quest Voice Greetings\Quest Voice Greetings.ESP
+;;       original: staging:Extra Patches-53570-2-1-1775675811\Off\Quest Voice Greetings\Quest Voice Greetings.ESP
 ;;   Raym's Vampire Rumors - Patch for Purists.esp  +master  Raym's Vampire Rumors.esp   (content: 1 of Raym's Vampire Rumors - Patch for Purists.esp's 1 records are Raym's Vampire Rumors.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Raym's Vampire Rumors - Patch for Purists-48955-1-0-1652282311\Off\Raym's Vampire Rumors - Patch for Purists\Raym's Vampire Rumors - Patch for Purists.esp
+;;       original: staging:Raym's Vampire Rumors - Patch for Purists-48955-1-0-1652282311\Off\Raym's Vampire Rumors - Patch for Purists\Raym's Vampire Rumors - Patch for Purists.esp
 ;;   RMRDevil_Grazelandspatch.ESP  +master  DevilishRockyRedMountain.esp   (content: 1 of RMRDevil_Grazelandspatch.ESP's 1 records are DevilishRockyRedMountain.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\the patch-54428-1-0-1712536146\Off\RMRDevil_Grazelandspatch\RMRDevil_Grazelandspatch.ESP
+;;       original: staging:the patch-54428-1-0-1712536146\Off\RMRDevil_Grazelandspatch\RMRDevil_Grazelandspatch.ESP
 ;;   Robe'n'Hood.ESP  +master  Properly clothed NPCs.ESP   (content: 9 of Robe'n'Hood.ESP's 17 records are Properly clothed NPCs.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Robe'n'Hood-51474-2-1-1-1659053401\Off\Robe'n'Hood\Robe'n'Hood.ESP
+;;       original: staging:Robe'n'Hood-51474-2-1-1-1659053401\Off\Robe'n'Hood\Robe'n'Hood.ESP
 ;;   RR_Telvanni_Lighthouse_Tel Branora_Eng.ESP  +master  DM_TelvRRtoOAAB.ESP   (content: 3 of RR_Telvanni_Lighthouse_Tel Branora_Eng.ESP's 3 records are DM_TelvRRtoOAAB.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Vvardenfell Lighthouses Complete\Off\RR_Telvanni_Lighthouse_Tel Branora_Eng\RR_Telvanni_Lighthouse_Tel Branora_Eng.ESP
+;;       original: staging:Vvardenfell Lighthouses Complete\Off\RR_Telvanni_Lighthouse_Tel Branora_Eng\RR_Telvanni_Lighthouse_Tel Branora_Eng.ESP
 ;;   RR_Telvanni_Lighthouse_Tel Branora_Eng.ESP  +master  PortTelvannisRedux.ESP   (content: 3 of RR_Telvanni_Lighthouse_Tel Branora_Eng.ESP's 3 records are PortTelvannisRedux.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Vvardenfell Lighthouses Complete\Off\RR_Telvanni_Lighthouse_Tel Branora_Eng\RR_Telvanni_Lighthouse_Tel Branora_Eng.ESP
+;;       original: staging:Vvardenfell Lighthouses Complete\Off\RR_Telvanni_Lighthouse_Tel Branora_Eng\RR_Telvanni_Lighthouse_Tel Branora_Eng.ESP
 ;;   RR_Telvanni_Lighthouse_Tel Branora_Eng.ESP  +master  Sadrith Mora_Lighthouse.ESP   (content: 3 of RR_Telvanni_Lighthouse_Tel Branora_Eng.ESP's 3 records are Sadrith Mora_Lighthouse.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Vvardenfell Lighthouses Complete\Off\RR_Telvanni_Lighthouse_Tel Branora_Eng\RR_Telvanni_Lighthouse_Tel Branora_Eng.ESP
+;;       original: staging:Vvardenfell Lighthouses Complete\Off\RR_Telvanni_Lighthouse_Tel Branora_Eng\RR_Telvanni_Lighthouse_Tel Branora_Eng.ESP
 ;;   SadrithMoraMarketshroom.ESP  +master  DM_TelvRRtoOAAB.ESP   (content: 1 of SadrithMoraMarketshroom.ESP's 2 records are DM_TelvRRtoOAAB.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Sadrith Mora Market Mushroom-52248-1-1675173310\Off\SadrithMoraMarketshroom\SadrithMoraMarketshroom.ESP
+;;       original: staging:Sadrith Mora Market Mushroom-52248-1-1675173310\Off\SadrithMoraMarketshroom\SadrithMoraMarketshroom.ESP
 ;;   Shabby Seyda Neen.ESP  +master  Seyda Neen - Damp Little Squat - unshabby.ESP   (content: 15 of Shabby Seyda Neen.ESP's 24 records are Seyda Neen - Damp Little Squat - unshabby.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Shabby Seyda Neen-53086-1-3-1687383401\Off\Shabby Seyda Neen\Shabby Seyda Neen.ESP
+;;       original: staging:Shabby Seyda Neen-53086-1-3-1687383401\Off\Shabby Seyda Neen\Shabby Seyda Neen.ESP
 ;;   Shulki Ashunbabi Restoration.ESP  +master  Properly clothed NPCs.ESP   (content: 2 of Shulki Ashunbabi Restoration.ESP's 2 records are Properly clothed NPCs.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Shulki_Ashunbabi_Restoration-47608-1-0-1582020102\Off\Shulki Ashunbabi Restoration\Shulki Ashunbabi Restoration.ESP
+;;       original: staging:Shulki_Ashunbabi_Restoration-47608-1-0-1582020102\Off\Shulki Ashunbabi Restoration\Shulki Ashunbabi Restoration.ESP
 ;;   SloadicDialogue.ESP  +master  Sload and Slavers.ESP   (content: 8 of SloadicDialogue.ESP's 10 records are Sload and Slavers.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Sloadic Dialogue-57495-1-0-1761170851\Off\SloadicDialogue\SloadicDialogue.ESP
+;;       original: staging:Sloadic Dialogue-57495-1-0-1761170851\Off\SloadicDialogue\SloadicDialogue.ESP
 ;;   Sorrow Heart of Tel Fyr Doors of Oblivion 1.4 patch.ESP  +master  The Doors of Oblivion 1.4.esp   (content: 1 of Sorrow Heart of Tel Fyr Doors of Oblivion 1.4 patch.ESP's 1 records are The Doors of Oblivion 1.4.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Sorrow Heart of Tel Fyr Doors of Oblivion 1.4 patc-47224-1-0-1764516021\Off\Sorrow Heart of Tel Fyr Doors of Oblivion 1.4 patch\Sorrow Heart of Tel Fyr Doors of Oblivion 1.4 patch.ESP
+;;       original: staging:Sorrow Heart of Tel Fyr Doors of Oblivion 1.4 patc-47224-1-0-1764516021\Off\Sorrow Heart of Tel Fyr Doors of Oblivion 1.4 patch\Sorrow Heart of Tel Fyr Doors of Oblivion 1.4 patch.ESP
 ;;   Sotha Sil Expanded - Script Fix.esp  +master  Sotha Sil Expanded.ESP   (content: 2 of Sotha Sil Expanded - Script Fix.esp's 2 records are Sotha Sil Expanded.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Miscellaneous Patches-48955-1-15-2-1728814858\Off\DA_Sobitur_Facility_Clean - Script Fix\Sotha Sil Expanded - Script Fix.esp
+;;       original: staging:Miscellaneous Patches-48955-1-15-2-1728814858\Off\DA_Sobitur_Facility_Clean - Script Fix\Sotha Sil Expanded - Script Fix.esp
 ;;   Soulless Summons - Cutting Room Floor - Patch.ESP  +master  Cutting Room Floor - Conjuration.esp   (content: 2 of Soulless Summons - Cutting Room Floor - Patch.ESP's 2 records are Cutting Room Floor - Conjuration.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Soulless Summons-57706-1-0-0-1761734267\Off\Soulless Summons - Cutting Room Floor - Patch\Soulless Summons - Cutting Room Floor - Patch.ESP
+;;       original: staging:Soulless Summons-57706-1-0-0-1761734267\Off\Soulless Summons - Cutting Room Floor - Patch\Soulless Summons - Cutting Room Floor - Patch.ESP
 ;;   ST_Alchemy_Balance_Sri_1.5.esp  +master  ST_Alchemy_Base_1.5.esp   (content: 23 of ST_Alchemy_Balance_Sri_1.5.esp's 23 records are ST_Alchemy_Base_1.5.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\ST Alchemy-53097-1-6-1687378269\Off\ST_Alchemy_Balance_Sri_1.5\ST_Alchemy_Balance_Sri_1.5.esp
+;;       original: staging:ST Alchemy-53097-1-6-1687378269\Off\ST_Alchemy_Balance_Sri_1.5\ST_Alchemy_Balance_Sri_1.5.esp
 ;;   ST_Alchemy_Balance_Sri_1.5.esp  +master  Uvirith's Legacy_3.53.esp   (content: 19 of ST_Alchemy_Balance_Sri_1.5.esp's 23 records are Uvirith's Legacy_3.53.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\ST Alchemy-53097-1-6-1687378269\Off\ST_Alchemy_Balance_Sri_1.5\ST_Alchemy_Balance_Sri_1.5.esp
+;;       original: staging:ST Alchemy-53097-1-6-1687378269\Off\ST_Alchemy_Balance_Sri_1.5\ST_Alchemy_Balance_Sri_1.5.esp
 ;;   SU3fixes.ESP  +master  Suran_Underworld_v3.ESP   (content: 239 of SU3fixes.ESP's 239 records are Suran_Underworld_v3.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Suran Underworld Corrections and Fixes-44382-1-1\Off\SU3fixes\SU3fixes.ESP
+;;       original: staging:Suran Underworld Corrections and Fixes-44382-1-1\Off\SU3fixes\SU3fixes.ESP
 ;;   Supply Chests.ESP  +master  Imperial Legion Expansion.esp   (content: 1 of Supply Chests.ESP's 2 records are Imperial Legion Expansion.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Supply Chests-49232-1-0-1611244723\Off\Supply Chests\Supply Chests.ESP
+;;       original: staging:Supply Chests-49232-1-0-1611244723\Off\Supply Chests\Supply Chests.ESP
 ;;   TelFyrShroom.ESP  +master  DM_TelvRRtoOAAB.ESP   (content: 2 of TelFyrShroom.ESP's 3 records are DM_TelvRRtoOAAB.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Tel Fyr Beacon Mushroom-52248-1-01-1772782802\Off\TelFyrShroom\TelFyrShroom.ESP
+;;       original: staging:Tel Fyr Beacon Mushroom-52248-1-01-1772782802\Off\TelFyrShroom\TelFyrShroom.ESP
 ;;   TelRivusSKRIAK.ESP  +master  ShadeofTheRevenant.ESP   (content: 9 of TelRivusSKRIAK.ESP's 14 records are ShadeofTheRevenant.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\TelRivusSKRIAK 60378 1 2026-09-27T16-13Z 4vY6vj43\Off\TelRivusSKRIAK\TelRivusSKRIAK.ESP
+;;       original: staging:TelRivusSKRIAK 60378 1 2026-09-27T16-13Z 4vY6vj43\Off\TelRivusSKRIAK\TelRivusSKRIAK.ESP
 ;;   TelvanniSeaBeacons.ESP  +master  DM_TelvRRtoOAAB.ESP   (content: 2 of TelvanniSeaBeacons.ESP's 2 records are DM_TelvRRtoOAAB.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\TelvanniSeaBeacons-50957-1-01-1772782896\Off\TelvanniSeaBeacons\TelvanniSeaBeacons.ESP
+;;       original: staging:TelvanniSeaBeacons-50957-1-01-1772782896\Off\TelvanniSeaBeacons\TelvanniSeaBeacons.ESP
 ;;   TelvanniSeaBeacons.ESP  +master  PortTelvannisRedux.ESP   (content: 2 of TelvanniSeaBeacons.ESP's 2 records are PortTelvannisRedux.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\TelvanniSeaBeacons-50957-1-01-1772782896\Off\TelvanniSeaBeacons\TelvanniSeaBeacons.ESP
+;;       original: staging:TelvanniSeaBeacons-50957-1-01-1772782896\Off\TelvanniSeaBeacons\TelvanniSeaBeacons.ESP
 ;;   TGoD_DiverseBlood.ESP  +master  TheGardenOfDreams.esp   (content: 26 of TGoD_DiverseBlood.ESP's 26 records are TheGardenOfDreams.esp's; 2026-11-10 03:29:36)
-;;       original: G:\Vortex Mods\morrowind\The Garden of Dreams-57831-1-4-2-1778293643\Off\added masters\TGoD_DiverseBlood\TGoD_DiverseBlood.ESP
+;;       original: staging:The Garden of Dreams-57831-1-4-2-1778293643\Off\added masters\TGoD_DiverseBlood\TGoD_DiverseBlood.ESP
 ;;   The Doors of Oblivion 1.4 - Script Fix.esp  +master  The Doors of Oblivion 1.4.esp   (content: 2 of The Doors of Oblivion 1.4 - Script Fix.esp's 2 records are The Doors of Oblivion 1.4.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Miscellaneous Patches-48955-1-15-2-1728814858\Off\DA_Sobitur_Facility_Clean - Script Fix\The Doors of Oblivion 1.4 - Script Fix.esp
+;;       original: staging:Miscellaneous Patches-48955-1-15-2-1728814858\Off\DA_Sobitur_Facility_Clean - Script Fix\The Doors of Oblivion 1.4 - Script Fix.esp
 ;;   TMQR_Patch.ESP  +master  Tribunal Main Quest Reforged - SSE.esp   (content: 6 of TMQR_Patch.ESP's 9 records are Tribunal Main Quest Reforged - SSE.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Almalexia'S Chamber Overhaul 52737 1.95 2026-10-11T01-30Z OmEgmfDk\Off\TMQR_Patch\TMQR_Patch.ESP
+;;       original: staging:Almalexia'S Chamber Overhaul 52737 1.95 2026-10-11T01-30Z OmEgmfDk\Off\TMQR_Patch\TMQR_Patch.ESP
 ;;   Trainer Log - AEA.esp  +master  Trainer Log.esp   (content: 3 of Trainer Log - AEA.esp's 3 records are Trainer Log.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Trainer_Log-38391-1-0\Off\Trainer Log - AEA\Trainer Log - AEA.esp
+;;       original: staging:Trainer_Log-38391-1-0\Off\Trainer Log - AEA\Trainer Log - AEA.esp
 ;;   Trellis addon.ESP  +master  Vibrant Ivy.ESP   (content: 7 of Trellis addon.ESP's 7 records are Vibrant Ivy.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Vibrant Ivy and trellis additions-49863-1-3-2-1657438028\Off\Trellis addon\Trellis addon.ESP
+;;       original: staging:Vibrant Ivy and trellis additions-49863-1-3-2-1657438028\Off\Trellis addon\Trellis addon.ESP
 ;;   Unique Uniques - More Unique.ESP  +master  Unique Uniques.ESP   (content: 1 of Unique Uniques - More Unique.ESP's 1 records are Unique Uniques.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Unique Uniques 58990 1.12 2026-10-04T18-29Z YUgrUZGr\Off\Unique Uniques - More Unique\Unique Uniques - More Unique.ESP
+;;       original: staging:Unique Uniques 58990 1.12 2026-10-04T18-29Z YUgrUZGr\Off\Unique Uniques - More Unique\Unique Uniques - More Unique.ESP
 ;;   Uvirith's Legacy 3.53 Sorrow heart of tel fyr patch.ESP  +master  Uvirith's Legacy_3.53.esp   (content: 1 of Uvirith's Legacy 3.53 Sorrow heart of tel fyr patch.ESP's 1 records are Uvirith's Legacy_3.53.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Uviriths Legacy 3.53 Sorrow heart of tel fyr patc-47224-1-0-1764515772\Off\Uvirith's Legacy 3.53 Sorrow heart of tel fyr patch\Uvirith's Legacy 3.53 Sorrow heart of tel fyr patch.ESP
+;;       original: staging:Uviriths Legacy 3.53 Sorrow heart of tel fyr patc-47224-1-0-1764515772\Off\Uvirith's Legacy 3.53 Sorrow heart of tel fyr patch\Uvirith's Legacy 3.53 Sorrow heart of tel fyr patch.ESP
 ;;   Uvirith's Legacy_3.53 - Script Fix.esp  +master  Uvirith's Legacy_3.53.esp   (content: 9 of Uvirith's Legacy_3.53 - Script Fix.esp's 9 records are Uvirith's Legacy_3.53.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Miscellaneous Patches-48955-1-15-2-1728814858\Off\DA_Sobitur_Facility_Clean - Script Fix\Uvirith's Legacy_3.53 - Script Fix.esp
+;;       original: staging:Miscellaneous Patches-48955-1-15-2-1728814858\Off\DA_Sobitur_Facility_Clean - Script Fix\Uvirith's Legacy_3.53 - Script Fix.esp
 ;;   VampirePlayerHitSounds.ESP  +master  Melodies and Moonlight.esp   (content: 298 of VampirePlayerHitSounds.ESP's 298 records are Melodies and Moonlight.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Vampire Player Hit Sounds-53143-1-02-1688243437\Off\VampirePlayerHitSounds\VampirePlayerHitSounds.ESP
+;;       original: staging:Vampire Player Hit Sounds-53143-1-02-1688243437\Off\VampirePlayerHitSounds\VampirePlayerHitSounds.ESP
 ;;   VSD - Odibi.esp  +master  Clean_Mines and Caverns.esp   (content: 2 of VSD - Odibi.esp's 4 records are Clean_Mines and Caverns.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\VSD - Odibi-57528-1-0-1759445314\Off\VSD - Odibi\VSD - Odibi.esp
+;;       original: staging:VSD - Odibi-57528-1-0-1759445314\Off\VSD - Odibi\VSD - Odibi.esp
 ;;   VSD - Pabanat.esp  +master  Clean_Mines and Caverns.esp   (content: 1 of VSD - Pabanat.esp's 2 records are Clean_Mines and Caverns.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\VSD - Pabanat-57528-1-0-1759085826\Off\VSD - Pabanat\VSD - Pabanat.esp
+;;       original: staging:VSD - Pabanat-57528-1-0-1759085826\Off\VSD - Pabanat\VSD - Pabanat.esp
 ;;   VSD - Supulimassu.esp  +master  Clean_Mines & Caverns_Solstheim.esp   (content: 4 of VSD - Supulimassu.esp's 4 records are Clean_Mines & Caverns_Solstheim.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\VSD - Supulimassu-57528-1-0-1759085753\Off\VSD - Supulimassu\VSD - Supulimassu.esp
+;;       original: staging:VSD - Supulimassu-57528-1-0-1759085753\Off\VSD - Supulimassu\VSD - Supulimassu.esp
 ;;   VSD - Supulimassu.esp  +master  Clean_Mines and Caverns.esp   (content: 4 of VSD - Supulimassu.esp's 4 records are Clean_Mines and Caverns.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\VSD - Supulimassu-57528-1-0-1759085753\Off\VSD - Supulimassu\VSD - Supulimassu.esp
+;;       original: staging:VSD - Supulimassu-57528-1-0-1759085753\Off\VSD - Supulimassu\VSD - Supulimassu.esp
 ;;   VSD - Supulimassu.esp  +master  Clean_Piran.esp   (content: 4 of VSD - Supulimassu.esp's 4 records are Clean_Piran.esp's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\VSD - Supulimassu-57528-1-0-1759085753\Off\VSD - Supulimassu\VSD - Supulimassu.esp
+;;       original: staging:VSD - Supulimassu-57528-1-0-1759085753\Off\VSD - Supulimassu\VSD - Supulimassu.esp
 ;;   VSD - Supulimassu.esp  +master  Tel_Aruhn_Chronicles.ESP   (content: 4 of VSD - Supulimassu.esp's 4 records are Tel_Aruhn_Chronicles.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\VSD - Supulimassu-57528-1-0-1759085753\Off\VSD - Supulimassu\VSD - Supulimassu.esp
+;;       original: staging:VSD - Supulimassu-57528-1-0-1759085753\Off\VSD - Supulimassu\VSD - Supulimassu.esp
 ;;   Wares-base - Adamantium Armor - Rare.esp  +master  Robe'n'Hood.ESP   (content: 1 of Wares-base - Adamantium Armor - Rare.esp's 2 records are Robe'n'Hood.ESP's; 2026-11-07 13:45:41)
-;;       original: G:\Vortex Mods\morrowind\Miscellaneous Patches-48955-1-15-2-1728814858\Off\DA_Sobitur_Facility_Clean - Script Fix\Wares-base - Adamantium Armor - Rare.esp
+;;       original: staging:Miscellaneous Patches-48955-1-15-2-1728814858\Off\DA_Sobitur_Facility_Clean - Script Fix\Wares-base - Adamantium Armor - Rare.esp
 ;; ==== end of promoted content rules ====

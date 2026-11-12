@@ -154,7 +154,7 @@ def test_undo_and_no_second_shortening(game, capsys):
     assert json.load(open(g / lp.RECORD))["moves"] == first
     assert esp.read_bytes() == after_esp and (df / "Meshes/m/a.nif").read_bytes() == nif_after
     assert not list((df / "Meshes/lp").glob("*/lp"))
-    assert m.main([str(df), "--longpaths-undo"]) == 0
+    assert m.main([str(df), "--longpaths-undo", "--no-vortex"]) == 0
     for f in ("thing.nif", "xthing.nif", "xthing.kf"):
         assert (df / f"Meshes/{LONGDIR}/sub/{f}").exists()
     assert field(esp, "MISC", "mod_thing", "MODL") == long_model()

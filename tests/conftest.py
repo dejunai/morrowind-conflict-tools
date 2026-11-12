@@ -8,6 +8,8 @@ import sys
 import pytest
 
 SRC = os.environ.get("MW_SRC", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if SRC not in sys.path:
+    sys.path.insert(0, SRC)
 
 
 def _load(name):

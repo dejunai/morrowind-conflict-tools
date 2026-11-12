@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """vortex_tidy.py - tidy the mods in Vortex's Morrowind staging folder.
 
-For each mod folder in the staging folder (G:\\Vortex Mods\\morrowind):
+For each mod folder in Vortex's Morrowind staging folder (from Vortex's settings, or --staging):
 
   * Game folders stay where they are: meshes, textures, icons, sound, music, bookart, splash, fonts,
     video, distantland; and support folders: MWSE, MGE3, shaders (MGE XE's XEshaders), grass, mcpatch.
@@ -20,7 +20,7 @@ For each mod folder in the staging folder (G:\\Vortex Mods\\morrowind):
   * An .omwaddon with no .esp/.esm beside it: with no OpenMW scripts (no *.omwscripts, no scripts folder)
     it is renamed .esp, so Morrowind can load it. With scripts, the mod needs OpenMW: the plan flags it,
     and --apply stops at it, lets you open its folder, and offers to delete it (it is moved to
-    "G:\\Vortex Mods\\morrowind - deleted by vortex_tidy", so --undo can bring it back).
+    "<staging> - deleted by vortex_tidy" beside the staging folder, so --undo can bring it back).
   * Normal maps (textures\\...\\*_n / *_nm / *_normal / *_nrm, .dds/.tga/.bmp) all go to
     Off\\normal maps\\<mod name>\\ (never deployed): vanilla Morrowind with MGE XE doesn't use them (only OpenMW
     does). If a model names one, mwdialog_check.py --fix puts a flat stand-in normal map in its place, so
@@ -74,8 +74,8 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mwdialog_planfile as PF                   # noqa: E402
+import mwdialog_paths as MP                      # noqa: E402
 
-STAGING = r"G:\Vortex Mods\morrowind"
 HERE = os.path.dirname(os.path.abspath(__file__))
 JOURNAL = os.path.join(HERE, "vortex_tidy_journal.jsonl")
 PLAN = os.path.join(HERE, "vortex_tidy_plan.txt")
@@ -423,12 +423,9 @@ def plan_mod(mod_dir):
 
 
 REVIEW = {}            # mod folder -> (its .omwaddon files, the OpenMW scripts that make it OpenMW-only)
-DELETED = os.path.join(os.path.dirname(STAGING.rstrip("\\")), "morrowind - deleted by vortex_tidy")
-
 
 def deleted_dir(staging):
-    """Where deleted mods go: beside the staging folder in use (--staging), "<its name> - deleted by
-    vortex_tidy"; for the default staging folder that is DELETED, as before."""
+    """Where deleted mods go: beside the staging folder in use, "<its name> - deleted by vortex_tidy"."""
     staging = os.path.abspath(staging).rstrip("\\/")
     return os.path.join(os.path.dirname(staging), os.path.basename(staging) + " - deleted by vortex_tidy")
 
@@ -451,7 +448,7 @@ def openmw_scripts(mod_dir, entries):
 
 def review(staging, moves, assume_keep=False):
     """Mods with an .omwaddon, no .esp/.esm and OpenMW scripts don't work in Morrowind. Show each, let you look,
-    and delete it if you want: it goes to DELETED (outside the staging folder), so it can come back.
+    and delete it if you want: it goes to deleted_dir(staging) (beside the staging folder), so it can come back.
     Returns the moves without those of deleted mods, and the deletions (journaled like moves)."""
     gone = []
     for mod_dir, (addons, scripts) in sorted(REVIEW.items()):
@@ -708,7 +705,7 @@ def lua_check(args):
     cfg = lf.load_config(game_dir, data_dir)
     checker = lf.find_checker(getattr(args, "luajit", None), game_dir)
     print("\n" + "=" * 70 + "\nLUA CHECK (each mod's MWSE Lua files)\n" + "=" * 70)
-    print(f"  syntax check: {checker.name if checker else 'NONE (no LuaJIT/luac found: nothing is patched)'}")
+    print(f"  syntax check: {checker.name if checker else 'NONE (no LuaJIT/luac found: nothing is patched; ' + MP.describe_luajit_search(game_dir) + ')'}")
     out, total, reps = [], {}, []
     for d in mods:
         if any(fnmatch.fnmatch(d.lower(), pt.lower()) for pt in pats):
@@ -1008,7 +1005,8 @@ def assets_apply(args, ares, moved_mods=()):
 
 def main():
     ap = argparse.ArgumentParser(description="Tidy the mods in Vortex's Morrowind staging folder.")
-    ap.add_argument("--staging", default=STAGING, help=f"the staging folder (default {STAGING})")
+    ap.add_argument("--staging", default=None, metavar="DIR",
+                    help="Vortex Morrowind staging folder (default: Vortex's own setting)")
     ap.add_argument("--only", nargs="+", metavar="PATTERN", help="only these mod folders (wildcards allowed)")
     ap.add_argument("--skip", nargs="+", metavar="PATTERN",
                     help="leave these mod folders alone this time too (to always skip one, add it to "
@@ -1027,9 +1025,13 @@ def main():
     args = ap.parse_args()
     if args.undo:
         return undo()                                 # works from the journal; the plan file plays no part
-    if not os.path.isdir(args.staging):
-        print(f"Staging folder not found: {args.staging}", file=sys.stderr)
+    try:
+        args.staging = MP.resolve_staging(cli=args.staging, required=True)
+    except MP.VortexPathError as e:
+        print(str(e), file=sys.stderr)
         return 2
+    src = "--staging" if any(a == "--staging" or a.startswith("--staging=") for a in sys.argv[1:]) else "Vortex settings"
+    print(f"Vortex staging: {args.staging}  (from {src})")
     if not args.apply:
         return plan_main(args)
     return apply_main(args)

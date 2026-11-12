@@ -89,7 +89,7 @@ rem                                                 --play-anyway starts it rega
 rem    mwdialog_check.bat --sort --play            (sort the load order, then start the game)
 rem    mwdialog_check.bat --clean-up --dry-run     (list .bak backups that would be deleted)
 rem    mwdialog_check.bat --clean-up               (delete backups of removed plugins; keep 1 per plugin)
-rem    mwdialog_check.bat --merge "Merged.esp" "C:\some\folder" --dry-run   (preview a merge)
+rem    mwdialog_check.bat --merge "Merged.esp" "Extras\some-folder" --dry-run   (preview a merge)
 rem    mwdialog_check.bat --merge "Merged.esp" a.esp b.esp ...   (merge; inputs for uninstalled mods are left out)
 rem    mwdialog_check.bat --auto-merge --dry-run   (find small script-free plugins that can be merged)
 rem    mwdialog_check.bat --auto-merge             (merge them and deactivate the originals)

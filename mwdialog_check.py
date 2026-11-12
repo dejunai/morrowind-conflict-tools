@@ -25,11 +25,11 @@ checks the merged result for problems such as:
 
 Python 3.8+, standard library only.
 
-Usage examples (Windows):
-  python mwdialog_check.py "C:\\Games\\Morrowind\\Data Files"
-  python mwdialog_check.py "C:\\Games\\Morrowind\\Data Files" --only MyMod.esp
-  python mwdialog_check.py "...\\Data Files" --csv report.csv --min-severity WARN
-  python mwdialog_check.py "...\\Data Files" --openmw-cfg "%USERPROFILE%\\Documents\\My Games\\OpenMW\\openmw.cfg"
+Usage examples:
+  python mwdialog_check.py "Data Files"
+  python mwdialog_check.py "Data Files" --only MyMod.esp
+  python mwdialog_check.py "Data Files" --csv report.csv --min-severity WARN
+  python mwdialog_check.py "Data Files" --openmw-cfg "<openmw.cfg>"
 
 Load order, in priority:
   --plugins A.esm B.esp ...   exactly these files, in this order
@@ -59,6 +59,8 @@ import subprocess
 import sys
 import time
 from collections import Counter, OrderedDict, defaultdict
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import mwdialog_paths as MP  # noqa: E402
 
 # One module, whatever name it runs under: mwdialog_assets.py and vortex_tidy.py import it as
 # "mwdialog_check" and must see this run's settings (--encoding...), not a second fresh copy.
@@ -3844,8 +3846,9 @@ def reduce_textures(data_dir, game_dir, items, log):
                 f.write("; Textures mwdialog_check.py --fix reduced to 2048. One per line: path under Data Files,\n"
                         "; 'link' (the original is the Vortex staging file named) or 'backup' (moved there).\n"
                         "; --restore-textures puts the originals back.\n")
+            bases = record_bases(game_dir)
             for rel, kind, keep in done:
-                f.write(f"{rel}\t{kind}\t{keep}\n")
+                f.write(f"{rel}\t{kind}\t{MP.store_path(keep, bases)}\n")
     return len(done), saved
 
 
@@ -3864,6 +3867,7 @@ def run_restore_textures(args):
         if len(row) < 3:
             continue
         rel, kind, keep = row[0], row[1], row[2]
+        keep = MP.resolve_stored(keep, record_bases(os.path.dirname(data_dir)))
         dest = os.path.join(data_dir, rel)
         if not os.path.exists(keep):
             missing.append(rel)
@@ -4924,11 +4928,6 @@ def scan(args, plugins, bsas, data_dirs, report):
                                    generated=generated_rels(game_dir))
         world.ini_path = None if (args.plugins or args.openmw_cfg) else default_ini(args)
         vroot = getattr(args, "vortex_dir", None)
-        if vroot is None and not getattr(args, "no_vortex", False):
-            try:
-                vroot = find_vortex_root(os.path.abspath(args.data_dir))
-            except (OSError, AttributeError, ValueError):
-                vroot = None
         if vroot and os.path.isdir(vroot) and not getattr(args, "no_vortex", False):
             world.vortex = VortexRepo(vroot)
     world.args_data_dir = args.data_dir
@@ -10808,7 +10807,7 @@ def run_redundant(args):
     vroot = None
     if not getattr(args, "no_vortex", False):
         try:
-            vroot = args.vortex_dir or find_vortex_root(data_dir)
+            vroot = args.vortex_dir
         except (OSError, AttributeError):
             vroot = None
     N = res["names"]
@@ -11602,7 +11601,20 @@ def drop_vanished_added_masters(args):
         write_added_masters(game_dir, rec)
 
 
+def record_bases(game_dir, args=None):
+    """staging/downloads/game folders used to store and resolve tagged record paths."""
+    args = args or globals().get("TOP_ARGS")
+    return MP.path_bases(
+        game_dir,
+        staging=getattr(args, "vortex_dir", None) if args else None,
+        downloads=getattr(args, "vortex_downloads", None) if args else None,
+    )
+
+
 def write_added_masters(game_dir, rec):
+    bases = record_bases(game_dir)
+    if bases:
+        rec = MP.convert_added_masters(rec, bases)
     with open(os.path.join(game_dir, ADDED_MASTERS_RECORD), "w", encoding="utf-8") as f:
         json.dump({k: v for k, v in rec.items() if v}, f, indent=1, sort_keys=True)
     try:
@@ -12510,6 +12522,28 @@ def run_full(args):
     return 0
 
 
+def _ensure_vortex_paths(args):
+    """Fill args.vortex_dir and args.vortex_downloads from Vortex settings when the user did not pass
+    them. Errors out (VortexPathError) when they are needed and cannot be determined. --no-vortex
+    skips staging; --no-archive-lookup or --no-master-guard skips downloads."""
+    # explicit flags already set the attribute; resolve_staging/downloads still validate a given dir
+    want_staging = not getattr(args, "no_vortex", False)
+    # --no-vortex means "don't use Vortex" (staging and, unless --vortex-downloads is given, downloads)
+    want_downloads = (not getattr(args, "no_archive_lookup", False)
+                      and not getattr(args, "no_master_guard", False)
+                      and (want_staging or bool(getattr(args, "vortex_downloads", None))))
+    if want_staging:
+        cli = getattr(args, "vortex_dir", None)
+        args.vortex_dir = MP.resolve_staging(cli=cli, required=True)
+        src = "--vortex-dir" if cli else "Vortex settings"
+        print(f"Vortex staging: {args.vortex_dir}  (from {src})")
+    if want_downloads:
+        cli = getattr(args, "vortex_downloads", None)
+        args.vortex_downloads = MP.resolve_downloads(cli=cli, required=True)
+        src = "--vortex-downloads" if cli else "Vortex settings"
+        print(f"Vortex downloads: {args.vortex_downloads}  (from {src})")
+
+
 def _main(argv=None):
     global ENC
     ap = argparse.ArgumentParser(description="Scan a Morrowind Data Files folder for dialogue errors.")
@@ -12542,9 +12576,9 @@ def _main(argv=None):
                          "references that don't resolve, original header size) out of the load order")
     tc.add_argument("--mismatch-threshold", type=float, default=None, metavar="0-1",
                     help="confidence from which a master counts as a different mod (default 0.75)")
-    tc.add_argument("--vortex-downloads", default=None, metavar="DIR",
+    tc.add_argument("--vortex-downloads", "--downloads", default=None, dest="vortex_downloads", metavar="DIR",
                     help="Vortex download folder, to read a plugin's original header from its download archive "
-                         "when --fix has rewritten it (default: Vortex's setting, else K:\\downloads\\vortex\\morrowind)")
+                         "when --fix has rewritten it (default: Vortex's own setting)")
     tc.add_argument("--no-archive-lookup", action="store_true", help="don't open download archives for the master check")
     tc.add_argument("--no-master-guard", action="store_true", help="skip the master mismatch check")
     tc.add_argument("--longpaths-undo", action="store_true",
@@ -12665,7 +12699,7 @@ def _main(argv=None):
                          "(also the case when the output goes to a file)")
     tc.add_argument("--vortex-dir", metavar="PATH",
                     help="Vortex's mod staging folder, searched for files that exist there but were never deployed "
-                         "(found automatically through the hard links Vortex deploys)")
+                         "(default: Vortex's own setting)")
     tc.add_argument("--no-vortex", action="store_true", help="don't search the Vortex mod folders")
     tc.add_argument("--restore-textures", action="store_true",
                     help=f"put back the full-size textures --asset-check --fix reduced to {TEXTURE_MAX_EDGE} (see {REDUCED_RECORD})")
@@ -12713,6 +12747,11 @@ def _main(argv=None):
     fx.add_argument("--fix-log", default="mwdialog_fixes.log", help="where to append a record of fixes (default mwdialog_fixes.log)")
     args = ap.parse_args(argv)
     ENC = args.encoding
+    try:
+        _ensure_vortex_paths(args)
+    except (MP.VortexPathError, MP.ToolNotFoundError) as e:
+        print(str(e), file=sys.stderr)
+        return 2
     if MAIN_DEPTH == 1:
         global TOP_ARGS
         TOP_ARGS = args
