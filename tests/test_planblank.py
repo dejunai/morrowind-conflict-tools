@@ -46,6 +46,15 @@ def test_planfile_states_and_atomic_write(tmp_path):
     assert PF.state(p) == "pending" and "partially applied" in open(p).read()
 
 
+def test_planfile_write_falls_back_to_in_place_when_the_rename_is_refused(tmp_path, monkeypatch):
+    p = str(tmp_path / "plan.txt")
+    PF.write_atomic(p, "x plan\n    a -> b\n")
+    monkeypatch.setattr(os, "replace", lambda a, b: (_ for _ in ()).throw(PermissionError("held open")))
+    monkeypatch.setattr(PF.time, "sleep", lambda s: None)
+    PF.write_atomic(p, PF.blank_text("t.py"))
+    assert PF.state(p) == "applied" and not [f for f in os.listdir(tmp_path) if f.endswith(".tmp")]
+
+
 # ------------------------------------------------------------------------------------------- vortex_tidy
 @pytest.fixture
 def tidy(tmp_path, monkeypatch):
