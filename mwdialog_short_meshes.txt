@@ -1,0 +1,12 @@
+batd\tr_a_steel_pauldr_4684.nif	batd\tr_a_steel_pauldrons_ua_03.nif
+batd\tr_a_steel_pauldr_0ae3.nif	batd\tr_a_steel_pauldrons_ua_04.nif
+batd\tr_a_steel_pauldr_e2b5.nif	batd\tr_a_steel_pauldrons_ua_05.nif
+batd\tr_a_iron_pauldro_95e0.nif	batd\tr_a_iron_pauldron_ua_2.nif
+batd\tr_a_iron_pauldro_bd6c.nif	batd\tr_a_iron_pauldron_ua_3.nif
+lefty\tr_a_iron_bracer_29e6.nif	lefty\tr_a_iron_bracer_w_2_l.nif
+lefty\tr_a_iron_bracer_6c16.nif	lefty\tr_a_iron_bracer_w_3_l.nif
+lefty\tr_a_iron_pldron_02af.nif	lefty\tr_a_iron_pldron_cl_2_l.nif
+lefty\tr_a_iron_pldron_3d5c.nif	lefty\tr_a_iron_pldron_cl_3_l.nif
+lefty\tr_a_steel_pauld_b190.nif	lefty\tr_a_steel_pauldron_03_l.nif
+lefty\tr_a_steel_pauld_51a2.nif	lefty\tr_a_steel_pauldron_04_l.nif
+lefty\tr_a_steel_pauld_6cc8.nif	lefty\tr_a_steel_pauldron_05_l.nif

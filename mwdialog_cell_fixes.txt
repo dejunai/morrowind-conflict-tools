@@ -1,0 +1,166 @@
+; objects the Cell Fixes patch moves with the piece they were placed by, which another mod moved (rewritten by each --fix)
+abandoned shipwreck, cabin	2 of Uncharted Artifacts.esp's	moved by OAAB - Shipwrecks.esm
+abernanit	1 of Clean_Mines and Caverns.esp's	moved by Patch for Purists.esm
+abinabi	1 of Creatures and Critters.ESP's	moved by Clean_Mines and Caverns.esp
+abinabi	1 of DreamersExpansion.ESP's	moved by Clean_Mines and Caverns.esp
+addadshashanammu, shrine	1 of NOD - Core.esm's	moved by Daedric Shrine Overhaul FULL.esp
+addadshashanammu, shrine	1 of Uvirith's Legacy_3.53.esp's	moved by Daedric Shrine Overhaul FULL.esp
+aharnabi	1 of Expanded Sounds.esp's	moved by Clean_Mines and Caverns.esp
+akulakhan's chamber	6 of DN-GDR BTB MRM-Non Pointy.esp's	moved by ABCmod.esp
+akulakhan's chamber	1 of ABCmod.esp's	moved by DN-GDR BTB MRM-Non Pointy.esp
+ald-ruhn, bivale teneran: clothier	1 of Friends & Frens - Vvardenfell.ESP's	moved by VY_Under_Skar.esp
+ald-ruhn, cienne sintieve: alchemist	1 of RepopulatedMorrowind.ESM's	moved by VY_Under_Skar.esp
+ald-ruhn, llether vari: enchanter	1 of Uvirith's Legacy_3.53.esp's	moved by VY_Under_Skar.esp
+ald-ruhn, malpenix blonia: trader	1 of ST_Alchemy_Base_1.5.esp's	moved by VY_Under_Skar.esp
+ald-ruhn, redoran council entrance	1 of Better Bounties.esp's	moved by VY_Under_Skar.esp
+ald-ruhn, tuveso beleth: smith	1 of NOD - Core.esm's	moved by VY_Under_Skar.esp
+ald-ruhn, tuveso beleth: smith	1 of sb_smith.ESP's	moved by VY_Under_Skar.esp
+andasreth, upper level	1 of Expanded Sounds.esp's	moved by The Northern Strongholds.esp
+andules ancestral tomb	1 of Expanded Sounds.esp's	moved by OAAB - Tombs Extended.ESP
+assarnatamat, shrine	1 of NOD - Core.esm's	moved by Daedric Shrine Overhaul FULL.esp
+balmora, dralasa nithryon: pawnbroker	1 of Expanded Sounds.esp's	moved by Balmora Redecorated.ESP
+balmora, dralcea arethi's house	13 of Balmora Redecorated.ESP's	moved by Concept Art Hlaalu Balconies - Balmora.esp
+balmora, dralcea arethi's house	1 of Windows Glow.esp's	moved by Concept Art Hlaalu Balconies - Balmora.esp
+balmora, dralcea arethi's house	1 of Expanded Sounds.esp's	moved by Concept Art Hlaalu Balconies - Balmora.esp
+balmora, fast eddie's house	20 of Balmora Redecorated.ESP's	moved by Concept Art Hlaalu Balconies - Balmora.esp
+balmora, fast eddie's house	2 of Concept Art Hlaalu Balconies - Balmora.esp's	moved by Balmora Redecorated.ESP
+balmora, milie hastien: fine clothier	1 of Expanded Sounds.esp's	moved by Balmora Redecorated.ESP
+balmora, nalcarya of white haven: fine alchemist	1 of Uvirith's Legacy_3.53.esp's	moved by Balmora Redecorated.ESP
+balmora, tsiya's house	6 of Balmora Redecorated.ESP's	moved by Concept Art Hlaalu Balconies - Balmora.esp
+balmora, tsiya's house	1 of Windows Glow.esp's	moved by Concept Art Hlaalu Balconies - Balmora.esp
+berandas, keep, bottom level	1 of Something's Not Right - AS.ESP's	moved by The Sable Dragon 1.6 mmc.esp
+big head's shack	1 of Expanded Sounds.esp's	moved by Sheogorad - Groves of the North.esp
+caldera, falanaamo: clothier	1 of Store Entrance Chimes - Alt Ver.ESP's	moved by OAAB Better Caldera Interiors.ESP
+caldera, falanaamo: clothier	1 of Windows Glow.esp's	moved by OAAB Better Caldera Interiors.ESP
+caldera, falanaamo: clothier	1 of Friends & Frens - Vvardenfell.ESP's	moved by OAAB Better Caldera Interiors.ESP
+caldera, falanaamo: clothier	1 of Expanded Sounds.esp's	moved by OAAB Better Caldera Interiors.ESP
+caldera, guild of mages	25 of OikImmCalderaGuild.ESP's	moved by MasterIndexRedux.esp
+caldera, guild of mages	4 of MasterIndexRedux.esp's	moved by OikImmCalderaGuild.ESP
+caldera, guild of mages	2 of Privileges&Services 1.1.esp's	moved by OikImmCalderaGuild.ESP
+caldera, guild of mages	1 of RepopulatedMorrowind.ESM's	moved by MasterIndexRedux.esp
+caldera, guild of mages	1 of Supply Chests.ESP's	moved by OikImmCalderaGuild.ESP
+caldera, guild of mages	1 of Imperial Employment Office (MD edits).esp's	moved by MasterIndexRedux.esp
+caldera, guild of mages	1 of MGO Guild Halls Vanilla.esp's	moved by MasterIndexRedux.esp
+caldera, guild of mages	1 of Expanded Sounds.esp's	moved by MasterIndexRedux.esp
+caldera, hodlismod: armorer	4 of Adamantium Armor Naturalized.esp's	moved by OAAB Better Caldera Interiors.ESP
+caldera, hodlismod: armorer	1 of Store Entrance Chimes - Alt Ver.ESP's	moved by OAAB Better Caldera Interiors.ESP
+caldera, hodlismod: armorer	1 of Expanded Sounds.esp's	moved by OAAB Better Caldera Interiors.ESP
+caldera, irgola: pawnbroker	1 of Windows Glow.esp's	moved by OAAB Better Caldera Interiors.ESP
+corprusarium bowels	3 of Sotha Sil Expanded.ESP's	moved by Corprusarium - Sorrow Heart of Tel Fyr.ESP
+corprusarium bowels	1 of DA_Sobitur_Facility_Clean.ESP's	moved by Corprusarium - Sorrow Heart of Tel Fyr.ESP
+dagon fel, fanar fork-beard's house	1 of Expanded Sounds.esp's	moved by Sheogorad - Groves of the North.esp
+dagon fel, fjorrod's house	1 of Expanded Sounds.esp's	moved by Sheogorad - Groves of the North.esp
+dagon fel, itar the gentle's house	1 of Expanded Sounds.esp's	moved by Sheogorad - Groves of the North.esp
+dagon fel, mette's house	1 of Expanded Sounds.esp's	moved by Sheogorad - Groves of the North.esp
+dagon fel, onmi hard-mouth's house	1 of Expanded Sounds.esp's	moved by Sheogorad - Groves of the North.esp
+dagoth ur, facility cavern	1 of Something's Not Right - AS.ESP's	moved by DN-GDR BTB MRM-Non Pointy.esp
+dren plantation, shipping house	2 of Expanded Sounds.esp's	moved by Concept_Arts_plantations.esp
+dren plantation, shipping house	1 of Windows Glow.esp's	moved by Concept_Arts_plantations.esp
+druscashti, upper level	1 of DA_Sobitur_Facility_Clean.ESP's	moved by Vampire Clans - Clutter Monkey Overhaul.ESP
+druscashti, upper level	1 of Vampire Clans - Clutter Monkey Overhaul.ESP's	moved by DN-Lighted_Dwemer_Towers.ESP
+dubdilla	1 of Something's Not Right - AS.ESP's	moved by Dubdilla Remade.ESP
+ebonheart, east empire company hall	1 of Adamantium Armor Naturalized.esp's	moved by EbonheartEastEmpireCo.esp
+ebonheart, grand council chambers	1 of Expanded Sounds.esp's	moved by Dallara Ebonheart.esp
+ebonheart, hawkmoth legion garrison	1 of Expanded Sounds.esp's	moved by Dallara Ebonheart.esp
+ebonheart, imperial chapels	6 of Illy's Oh my Goddess.ESP's	moved by Dallara Ebonheart.esp
+ebonheart, imperial chapels	2 of Dallara Ebonheart.esp's	moved by Illy's Oh my Goddess.ESP
+ebonheart, imperial chapels	1 of DA_Sobitur_Facility_Clean.ESP's	moved by Dallara Ebonheart.esp
+ebonheart, imperial chapels	1 of Camonna Tong.esp's	moved by Illy's Oh my Goddess.ESP
+elf-skerring, upper level	1 of Expanded Sounds.esp's	moved by RR_Better_Ships_n_Boats_Eng.esp
+eluba-addon egg mine	1 of Expanded Sounds.esp's	moved by Of Gems and Geodes.ESP
+endusal, kagrenac's study	1 of Mage Robes.ESP's	moved by Clean_EndusalRedone.esp
+endusal, kagrenac's study	1 of Cutting Room Floor - Quests.esp's	moved by Clean_EndusalRedone.esp
+falas ancestral tomb	1 of Expanded Sounds.esp's	moved by OAAB - Tombs and Towers.esm
+falasmaryon, lower level	2 of RepopulatedMorrowind.ESM's	moved by The Northern Strongholds.esp
+falasmaryon, upper level	1 of Expanded Sounds.esp's	moved by The Northern Strongholds.esp
+falensarano, lower level	6 of The Northern Strongholds.esp's	moved by ruinsoffalensarano.ESP
+favel ancestral tomb	1 of Expanded Sounds.esp's	moved by OAAB - Tombs and Towers.esm
+fort frostmoth, curtain wall	1 of AnthologySolstheimPatched.esm's	moved by The Sable Dragon 1.6 mmc.esp
+fort frostmoth, imperial cult shrine	1 of AnthologySolstheimPatched.esm's	moved by Dallara Fort Frostmoth.esp
+galom daeus, entry	1 of Vampire Clans - Clutter Monkey Overhaul.ESP's	moved by DN-Lighted_Dwemer_Towers.ESP
+galom daeus, observatory	1 of Vampire Clans - Clutter Monkey Overhaul.ESP's	moved by DN_Dwemer_Tileset.esm
+galom daeus, observatory	1 of Expanded Sounds.esp's	moved by Vampire Clans - Clutter Monkey Overhaul.ESP
+gnisis, fort darius	13 of Gnisis Expanded Remaster.esp's	moved by Dallara Fort Darius.esp
+gnisis, fort darius	1 of RepopulatedMorrowind.ESM's	moved by Dallara Fort Darius.esp
+gnisis, fort darius	1 of Imperial Legion Expansion.esp's	moved by Dallara Fort Darius.esp
+gnisis, fort darius	1 of Supply Chests.ESP's	moved by Dallara Fort Darius.esp
+gnisis, fort darius	1 of Dallara Fort Darius.esp's	moved by Gnisis Expanded Remaster.esp
+heleran ancestral tomb	1 of Something's Not Right - AS.ESP's	moved by OAAB - Tombs Extended.ESP
+heran ancestral tomb	1 of Expanded Sounds.esp's	moved by OAAB - Tombs and Towers.esm
+kogoruhn, hall of maki	2 of Something's Not Right - AS.ESP's	moved by Kogoruhn - Extinct City of Ash and Sulfur.esp
+kogoruhn, hall of maki	1 of Mage Robes.ESP's	moved by Kogoruhn - Extinct City of Ash and Sulfur.esp
+llervu ancestral tomb	1 of Expanded Sounds.esp's	moved by Llervu Ancestral Tomb Expanded.ESP
+maar gan, shrine	1 of Memento Mori Buried.ESP's	moved by The_magic_rock_of_Maar_Gan.ESP
+maar gan, shrine	1 of Intervention Improved - Ghostgate - MG.ESP's	moved by The_magic_rock_of_Maar_Gan.ESP
+maar gan, shrine	1 of Expanded Sounds.esp's	moved by The_magic_rock_of_Maar_Gan.ESP
+mababi	1 of Camonna Tong.esp's	moved by OAAB - Tombs and Towers.esm
+molag mar, waistworks	3 of Molag Mar X.esp's	moved by Sload and Slavers.ESP
+molag mar, waistworks	2 of RepopulatedMorrowind.ESM's	moved by Molag Mar X.esp
+molag mar, waistworks	1 of NOD - Core.esm's	moved by Molag Mar X.esp
+molag mar, waistworks	1 of Yet Another Better Sounds Patch.esp's	moved by Molag Mar X.esp
+molag mar, waistworks	1 of Graffiti of Morrowind.ESP's	moved by Molag Mar X.esp
+mzahnch	1 of The Doors of Oblivion 1.4.esp's	moved by DRPV1.9.ESP
+mzahnch lower level	1 of The Doors of Oblivion 1.4.esp's	moved by DN_Dwemer_Tileset.esm
+mzanchend	1 of Patch for Purists.esm's	moved by DN_Dwemer_Tileset.esm
+mzuleft	1 of Something's Not Right - AS.ESP's	moved by DRPV1.9.ESP
+nallit	1 of Expanded Sounds.esp's	moved by Clean_Mines and Caverns.esp
+odrosal, dwemer training academy	1 of DN-GDR BTB MRM-Non Pointy.esp's	moved by DN-Lighted_Dwemer_Towers.ESP
+outer realms, pergamaea	1 of ROHT_2_0_8.ESP's	moved by Pergamaea_Overhaul.ESP
+pelagiad, fort pelagiad	1 of Morrowind Quests Redux All-In-One.esp's	moved by Dallara Pelagiad PFP.esp
+pelagiad, south wall	1 of Friends & Frens - Vvardenfell.ESP's	moved by Dallara Pelagiad PFP.esp
+pulk	1 of Bloated Morrowind Magnified Mines & Caverns compatible.esp's	moved by Clean_Mines and Caverns.esp
+pulk	1 of Expanded Sounds.esp's	moved by Clean_Mines and Caverns.esp
+punammu	2 of Bloated Morrowind Magnified Mines & Caverns compatible.esp's	moved by Clean_Mines and Caverns.esp
+ramimilk, shrine	1 of Expanded Sounds.esp's	moved by Daedric Shrine Overhaul FULL.esp
+raven rock, factor's estate	3 of factorestateimprovedv1.ESP's	moved by GITD_WL_RR_Interiors.esp
+raven rock, factor's estate	1 of Expanded Sounds.esp's	moved by factorestateimprovedv1.ESP
+raviro ancestral tomb	1 of Expanded Sounds.esp's	moved by OAAB - Tombs Extended.ESP
+rethan manor	1 of TR_Mainland.esm's	moved by OAAB Odai Plateau.esp
+rethan manor	1 of Expanded Sounds.esp's	moved by OAAB Odai Plateau.esp
+rethan manor, drelas' house	1 of Windows Glow.esp's	moved by OAAB Odai Plateau.esp
+rethan manor, drelas' house	1 of Expanded Sounds.esp's	moved by OAAB Odai Plateau.esp
+rotheran, propylon chamber	1 of Friends & Frens - Vvardenfell.ESP's	moved by The Northern Strongholds.esp
+sadrith mora, wolverine hall	2 of Rise of House Telvanni.esm's	moved by Dallara Wolverine Hall.esp
+sadrith mora, wolverine hall	1 of Expanded Sounds.esp's	moved by Dallara Wolverine Hall.esp
+sadrith mora, wolverine hall: fighter's guild	1 of Privileges&Services 1.1.esp's	moved by Dallara Wolverine Hall.esp
+sadrith mora, wolverine hall: imperial shrine	1 of RepopulatedMorrowind.ESM's	moved by Dallara Wolverine Hall.esp
+sadrith mora, wolverine hall: imperial shrine	1 of Tealpanda's Alchemy Essentials.esp's	moved by Dallara Wolverine Hall.esp
+salothran ancestral tomb	1 of Expanded Sounds.esp's	moved by OAAB - Tombs and Towers.esm
+sandas ancestral tomb	1 of Patch for Purists.esm's	moved by OAAB - Tombs and Towers.esm
+sandas ancestral tomb	1 of Expanded Sounds.esp's	moved by OAAB - Tombs and Towers.esm
+sarano ancestral tomb	1 of Expanded Sounds.esp's	moved by OAAB - Tombs and Towers.esm
+seyda neen, lighthouse	22 of Seyda Neen - Damp Little Squat - unshabby.ESP's	moved by HSN - Lighthouse Only.esp
+shulk egg mine, queen's lair	1 of RepopulatedMorrowind.ESM's	moved by Superb Shulk Eggmine.ESP
+sinarralit egg mine	1 of Expanded Sounds.esp's	moved by OAAB_Grazelands.ESP
+solstheim, thirsk	1 of AnthologySolstheimPatched.esm's	moved by Interiors_of_Solstheim_V2.1.esp
+sotha sil, dome of sotha sil	1 of KS_Julan_Ashlander Companion_3.0_beta.esp's	moved by Sotha Sil Expanded.ESP
+suran, guard tower	2 of Suran_Underworld_v3.ESP's	moved by Privileges&Services 1.1.esp
+suran, ralds oril: trader	2 of Expanded Sounds.esp's	moved by Concept Art Hlaalu Balconies - Suran.ESP
+suran, ralds oril: trader	1 of DM_SuranRoof.ESP's	moved by Concept Art Hlaalu Balconies - Suran.ESP
+suran, ralds oril: trader	1 of Windows Glow.esp's	moved by Concept Art Hlaalu Balconies - Suran.ESP
+suran, suran temple	1 of Holy Art.ESP's	moved by Temple Master.ESP
+suran, suran temple	1 of Intervention Improved - Ghostgate - MG.ESP's	moved by Temple Master.ESP
+suran, suran temple	1 of Windows Glow.esp's	moved by Temple Master.ESP
+suran, verara rendo: clothier	1 of Temple Master.ESP's	moved by Westly_Presents_FCOT.esp
+suran, verara rendo: clothier	1 of Friends & Frens - Vvardenfell.ESP's	moved by Westly_Presents_FCOT.esp
+tel aruhn, maren uvaren: enchanter	1 of GITD_Telvanni_Dormers.ESP's	moved by Tel_Aruhn_Chronicles.ESP
+tel aruhn, upper tower	1 of sm_tel_robe.ESP's	moved by Tel_Aruhn_Chronicles.ESP
+tel aruhn, upper tower	1 of Uvirith's Legacy_3.53.esp's	moved by Tel_Aruhn_Chronicles.ESP
+tel aruhn, upper tower	1 of Expanded Sounds.esp's	moved by Tel_Aruhn_Chronicles.ESP
+tel mora, upper tower	1 of Uvirith's Legacy_3.53.esp's	moved by OAAB_Tel Mora.esm
+tel uvirith, tower upper	2 of Telvanni Teleport Network.ESP's	moved by Uvirith's Legacy_3.53.esp
+tel uvirith, tower upper	1 of Uvirith's Legacy_3.53.esp's	moved by Telvanni Teleport Network.ESP
+tel vos, jail	1 of Privileges&Services 1.1.esp's	moved by OAAB_Grazelands.ESP
+tel vos, services tower	1 of Expanded Sounds.esp's	moved by OAAB_Grazelands.ESP
+thelas ancestral tomb	1 of Expanded Sounds.esp's	moved by OAAB - Tombs and Towers.esm
+tower of tel fyr, hall of fyr	1 of DA_Sobitur_Facility_Clean.ESP's	moved by Corprusarium - Sorrow Heart of Tel Fyr.ESP
+tower of tel fyr, hall of fyr	1 of The Doors of Oblivion 1.4.esp's	moved by Corprusarium - Sorrow Heart of Tel Fyr.ESP
+tower of tel fyr, onyx hall	1 of Uvirith's Legacy_3.53.esp's	moved by Corprusarium - Sorrow Heart of Tel Fyr.ESP
+unknown shipwreck, cabin	1 of Shipyards of Vvardenfell.esp's	moved by RR_Better_Ships_n_Boats_Eng.esp
+vivec, arena hidden area	10 of Morag Tong Polished.esp's	moved by Stav_WebofMephala.ESP
+vivec, arena hidden area	3 of RepopulatedMorrowind.ESM's	moved by Stav_WebofMephala.ESP
+vivec, aurane frernis: apothecary	2 of Quests for Clans and Vampire Legends.ESP's	moved by Aurane Frernis Apothecary.ESP
+vos, vos chapel	1 of OAAB_Grazelands.ESP's	moved by Intervention Improved - Ghostgate - MG.ESP
+zaintiraris, shrine	1 of Uvirith's Legacy_3.53.esp's	moved by Daedric Shrine Overhaul FULL.esp
+zenarbael	1 of Bloated Morrowind Magnified Mines & Caverns compatible.esp's	moved by Clean_Zenarbael Overhaul.esp
+zenarbael	1 of Expanded Sounds.esp's	moved by Clean_Zenarbael Overhaul.esp

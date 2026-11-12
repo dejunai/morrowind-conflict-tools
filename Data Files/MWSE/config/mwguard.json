@@ -1,0 +1,19 @@
+{
+  "enabled": true,
+  "costMs": 0.75,
+  "reportSeconds": 30,
+  "reportTop": 10,
+  "sampleEvery": 8,
+  "priorityLimit": 10000,
+  "logNoticeToMWSE": true,
+  "exemptMods": [
+    "mwguard",
+    "mwhangwatch",
+    "mwfloatfix",
+    "mwstranded",
+    "mwcollide",
+    "mwperformers",
+    "mwinfoloop",
+    "mwsoundguard"
+  ]
+}

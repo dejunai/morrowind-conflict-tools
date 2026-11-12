@@ -1,0 +1,122 @@
+; Plugins merged by mwdialog_check.py. Each [section] is a merged plugin; the names under it
+; are the plugins it replaces. --add-all-esp and --sort leave those out while the merged
+; plugin exists. --unmerge NAME (or --unmerge with no name for all) puts them back.
+
+[mwdialog_check AutoMerge.esp]
+Bow to the Daedra OAAB Add-on.ESP
+Bow to the Daedra MDMD Add-on.ESP
+KingsOathFix.ESP
+AF_Kishni_fix.ESP
+FMI_Current_Councilors.ESP
+Abundant Adamantium.ESP
+Fast Eddie fix.esp
+Flora Glow.esp
+Vampire-tolerant Duke Vedam Dren.ESP
+Height & Weight.ESP
+Sorry We're Closed.ESP
+Wares-base - Adamantium Armor - Rare.esp
+avp BTBGI-NE - OAAB Tombs and Towers.esp
+avp BTBGI-NE - Imperial Legion Expansion.esp
+avp BTBGI-NE - Game Settings - Merged.esp
+MuseumQuestFix.esp
+Brighter Torches.esp
+avp BTBGI-NE - Factions.esp
+Expanded Sounds TLAD Patch v1.0.ESP
+Missing Dialoge Additions TR.ESP
+Larrius Varro fix.ESP
+No Idles for Outskirts.ESP
+OAAB Wild Strider Fixed Sound.ESP
+Note from the Archcanon Fix.ESP
+TR_PlantLightRadiusIncrease.esp
+Friends & Frens - Prim & Proper.esp
+Diverse Blood - Tamriel Rebuilt.esp
+Grave Goods.esp
+Barb Fix.esp
+Better Banner Signs + Expanded Sounds.esp
+MW Containers Animated + LeFemmArmor.esp
+MW Containers Animated + Adamantium Armor.esp
+TR Guard fix.esp
+Hircine's Artifacts.ESP
+YARR - yet another race revamp v1.2.ESP
+Dwemer Double Doors.ESP
+immersivetravel.esp
+Diverse Blood - Project Cyrodiil.ESP
+Diverse Blood - SHotN.ESP
+Restocking Alchemy Essentials PoisonCrafting Patch.ESP
+Tel_Aruhn_Chronicles - Tamriel_Data Patch.esp
+Soulless Summons - Cutting Room Floor - Patch.ESP
+Dwemer Loot Wares .esp
+Entertainers Expanded Again.ESP
+avp BTBGI-NE - Bloodmoon Rebalance.esp
+OAAB - Tombs and Towers - Diverse Blood Patch.esp
+LW - Regional Weather Tweaks.ESP
+avp There Can Be Only One - tribunal rebalance.esp
+OAAB - Bloodmoon Rebalance Patch.ESP
+RepopulatedMorrowind_CamonnaTongChitin.ESP
+WEP - Name Patch.esp
+RepopulatedMorrowind_IndorilRoninArmor.ESP
+RepopulatedMorrowind_MageRobes.ESP
+avp BTBGI-NE - Better Sounds.esp
+Diverse Corprus Stalkers - Beware the Sixth House Patch.esp
+TCCult_ILExpansionAmuletPatch.ESP
+Creatures Restored - Bloodmoon Rebalance Patch.esp
+nibs_buffedwanderingshield.ESP
+NerevarineServiceRefusalPfP.esp
+InconsistenciesFixedHalberdDmg.esp
+Raym's Vampire Rumors - Patch for Purists.esp
+Skeletons - OAAB - Tombs and Towers Patch.esp
+FMI_GraveDust.ESP
+FGI_MDMD_Patch.esp
+DrathaVampire.ESP
+OAAB_DarkTemptations.ESP
+Alternate Open Helmets.esp
+OAAB Classes.ESP
+CRF - Better Robes.esp
+MCA - Westly's FCOT Addon.esp
+Criminal Scum.ESP
+CRF - Better Morrowind Armor.esp
+MCA - BB Peasant Gowns Addon.esp
+OAAB Brother Junipers Twin Lamps - Tamriel_Data Patch.esp
+Diverse Draugrs - Bloodmoon Rebalance Patch.esp
+avp BTBGI-NE - Creature Buffs - DA_Sobitur_Facility_Clean.esp
+Diverse Draugrs - TD Patch.esp
+avp BTBGI-NE - Creature Buffs - DRPV1.9.esp
+SloadicDialogue.ESP
+FM - Unique Items v1.0 - Shield Patch.esp
+AEA-Compatibility.esp
+DM_DB Armor Replacer.esp
+Finished Morrowind - BASE PATCH - Part 4 - More Audio Dialogue for Service NPCs.ESP
+AATL Alternate Necromantic Skull of Corruption.ESP
+AATL Unique Uniques All.ESP
+Diverse Dagoths.esp
+AATL Tamriel Rebuilt Interop.ESP
+AATL Alternate Oblivionesque Chillrend.ESP
+AATL FTHOG Interop.ESP
+AATL Alternate Oblivionesque Blade of Woe.ESP
+Templar Armor Replacer.esp
+CRF - Better Clothes Definitive Edition.esp
+CC6 Optional - GLG Mesh Revert.ESP
+Sotha Sil Expanded - Increased Merchant Gold.ESP
+Morag Tong Equipment.esp
+MDMD - TD Creatures Add-On.esp
+Unique Uniques - TD Patch.esp
+DeathWarrantTweak.esp
+avp BTBGI-NE - Factions - TR_Factions.esp
+Complete Armor Joints - Additions.esp
+Complete Armor Joints - OAAB.esp
+Diverse Scribs.esp
+Ajira Deflowered - Patch for Purists.esp
+chuzei_helm_no_neck - BTBGI.esp
+FMI - Alice's Package - Entertainers Expanded.esp
+RP_Louis Beauchamp.ESP
+DiverseDreamers.esp
+ST_Alchemy_Balance_Sri_1.5.esp
+Courtesy.ESP
+Fargoth in Distress.ESP
+MCA - Illy's OMG Addon.esp
+TGoD_DiverseBlood.ESP
+Glowing Flames - NoMoreLightlessFlames v1.1.ESP
+Glowing Flames - TrueLightsAndDarkness Tweaks.ESP
+Rational Names Merged.esp
+The Doors of Oblivion 1.4 - Script Fix.esp
+AliceL93 Vanilla Quest Tweaks - Script Fix.esp

@@ -1,0 +1,465 @@
+; Files mwdialog_check.py --fix put in Data Files: copies of files found in Vortex mod folders but
+; never deployed, silent stand-ins for sounds and music, and placeholder textures, under the plugin
+; that needs them (indented: path<TAB>size). --remove-generated deletes them.
+[BardicInspiration.esp]
+  Music\lute1.mp3	3336
+  Music\lute10.mp3	3336
+  Music\lute2.mp3	3336
+  Music\lute3.mp3	3336
+  Music\lute4.mp3	3336
+  Music\lute5.mp3	3336
+  Music\lute6.mp3	3336
+  Music\lute7.mp3	3336
+  Music\lute8.mp3	3336
+  Music\lute9.mp3	3336
+  Music\silent.mid	8864
+[Better Heads.esm]
+  Textures\bh\bh_b_v_im_head01.dds	192
+  Textures\bh\bh_b_v_im_m_head01.dds	192
+  Textures\bh\bh_don_de_m_vamp.dds	192
+  Textures\bh\bh_ds_orcwc_f_v01.dds	192
+  Textures\bh\bh_ds_orcwc_m_v02.dds	192
+  Textures\bh\bh_ds_rg_f_vamp_h_01.dds	192
+  Textures\bh\bh_ds_rg_m_vamp_h01.dds	192
+  Textures\bh\bh_fp_br_f_vamp_01.dds	192
+  Textures\bh\bh_fp_br_m_vamp_01.dds	192
+  Textures\bh\bh_fp_de_f_vamp_01.dds	192
+  Textures\bh\bh_fp_he_f_vamp_01.dds	192
+  Textures\bh\bh_fp_he_m_vamp_01.dds	192
+  Textures\bh\bh_fp_no_f_vamp_01.dds	192
+  Textures\bh\bh_fp_no_m_vamp_01.dds	192
+  Textures\bh\bh_fp_we_f_vamp_01.dds	192
+  Textures\bh\bh_fp_we_m_vamp_01.dds	192
+[Bloodmoon.esm]
+  Sound\cr\sggn\sggn magic.wav	8864
+[Clean_TureynulalRedone.esp]
+  Textures\bookart\divinemetaphysics.dds	192
+  Textures\bookart\eggoftime_illust2.dds	192
+  Textures\bookart\eggoftime_illust4.dds	192
+  Textures\bookart\secret_of_dwemer1.dds	192
+  Textures\bookart\secret_of_dwemer2.dds	192
+  Textures\bookart\secret_of_dwemer3.dds	192
+[Creatures and Critters.ESP]
+  Textures\tx_creature_saint_face2.dds	192
+  Textures\tx_creature_saint_face2_g.dds	192
+  Textures\tx_creature_saint_hair01.dds	192
+[Cyr_Main.ESM]
+  Icons\m\misc_com_coatofarms_01.dds	4224
+[DN-GDR BTB MRM-Non Pointy.esp]
+  Sound\darknut\bring wraithg.wav	8864
+  Sound\darknut\dn-gag.wav	8864
+  Sound\darknut\dn_dwrv_amb.wav	8864
+  Sound\darknut\dn_laugh.wav	8864
+  Sound\darknut\dn_lava_fall-97.wav	8864
+  Sound\darknut\dn_lift_ambient.wav	8864
+  Sound\darknut\dn_lift_trap.wav	8864
+  Sound\darknut\dn_spheremech.wav	8864
+  Sound\darknut\dn_wind.wav	8864
+  Sound\darknut\dno_floorfall.wav	8864
+  Sound\darknut\dno_lava_fall.wav	8864
+  Sound\darknut\dnv_ball_roll.wav	8864
+  Sound\darknut\dnv_ball_start.wav	8864
+  Sound\darknut\dnv_demon.wav	8864
+  Sound\darknut\dnv_lift01_impact.wav	8864
+  Sound\darknut\dnv_lift_all_ambi.wav	8864
+  Sound\darknut\dnv_rock_impact.wav	8864
+  Sound\darknut\dnv_shaftnoise.wav	8864
+  Sound\darknut\dnv_shaftnoise5.0.wav	8864
+  Sound\darknut\dnv_torque_bar_ambi.wav	8864
+  Sound\darknut\dnv_torque_bar_swsh.wav	8864
+  Sound\darknut\dnv_torque_hall_amb.wav	8864
+  Textures\dn_a_dwemer_02.dds	192
+  Textures\dn_astral_dagoth_mask.dds	192
+  Textures\dn_astral_dagoth_prong.dds	192
+  Textures\dn_astral_dagoth_ur.dds	192
+  Textures\dn_black.dds	192
+  Textures\dn_blood.dds	192
+  Textures\dn_dwrv_grip.dds	192
+  Textures\dn_dwrv_hammer.dds	192
+  Textures\dn_dwrv_staff.dds	192
+  Textures\dn_dwrv_staffbladew.dds	192
+  Textures\dn_dwrv_staffbodyw.dds	192
+  Textures\dn_dwrv_stafftrim.dds	192
+  Textures\dn_dwrv_stafftrimw.dds	192
+  Textures\dn_dwrv_staffw.dds	192
+  Textures\dn_dwrv_trimcenter.dds	192
+  Textures\dn_lava.dds	192
+  Textures\dn_lava_01.dds	192
+  Textures\dn_rope_heavy.dds	192
+  Textures\dn_steam_centurion_15.dds	192
+  Textures\dn_wood_01.dds	192
+  Textures\dn_wood_02.dds	192
+  Textures\dn_wood_dock_rings.dds	192
+  Textures\dn_wood_docks_01.dds	192
+  Textures\dn_wood_weathered.dds	192
+  Textures\dn_wood_wethered.dds	192
+  Textures\dno_oil_puddle.dds	192
+  Textures\dnv_ball_glow00.dds	192
+  Textures\dnv_lava_cloud.dds	192
+  Textures\tx_creature_ashberserker.dds	192
+[DrathaVampire.ESP]
+  Textures\mkbh\dunmer\female\mk_femhead_de_vampire.dds	192
+  Textures\mkbh\dunmer\female\mk_femhead_de_vampire_d.dds	192
+[Dwemer Legacy Reforged - Arkngthunch-Sturdumz.esp]
+  Sound\dem\demvidsnd.wav	8864
+  Sound\dem\spinningsuspenseriser.wav	8864
+[Friends & Frens - Prim & Proper.esp]
+  Textures\mel hair\rockstar hair\battler_blood.dds	192
+[Hall of the Last Ember_Sorkvild the Raven.ESP]
+  Textures\bookart\theempire_377_253.dds	192
+[imperialcultexpansionv1.esp]
+  Textures\tx_a_shield_daedric_glow.dds	192
+  Textures\tx_a_towershield_daedric_glow.dds	192
+[Ineone the Buoyant Armiger.ESP]
+  Textures\tx_a_glass_c_side_g.dds	699192
+[KS_Julan_Ashlander Companion_3.0_beta.esp]
+  Textures\tlr\1em_papfilt2.dds	192
+  Textures\tlr\bebecou.dds	192
+  Textures\tlr\bebeface.dds	192
+[Liar yes Idiot no.ESP]
+  Textures\fishystick\fishystick.dds	192
+[MCA.esm]
+  Textures\mk_khajiit\heads\female\mk_femhead_kh_vamp.dds	192
+  Textures\mk_khajiit\heads\male\mk_manhead_kh_vamp.dds	192
+  Textures\mkbh\altmer\female\mk_femhead_he_vampire.dds	192
+  Textures\mkbh\altmer\female\mk_femhead_he_vampire_d.dds	192
+  Textures\mkbh\altmer\male\mk_manhead_he_vampire.dds	192
+  Textures\mkbh\altmer\male\mk_manhead_he_vampire_d.dds	192
+  Textures\mkbh\bosmer\female\mk_femhead_we_vampire.dds	192
+  Textures\mkbh\bosmer\female\mk_femhead_we_vampire_d.dds	192
+  Textures\mkbh\bosmer\male\mk_manhead_we_vampire.dds	192
+  Textures\mkbh\breton\female\mkbh_femhead_bret_vampire.dds	192
+  Textures\mkbh\breton\female\mkbh_femhead_bret_vampire_d.dds	192
+  Textures\mkbh\breton\male\mkbh_manhead_vampire.dds	192
+  Textures\mkbh\breton\male\mkbh_manhead_vampire_d.dds	192
+  Textures\mkbh\imperial\female\mkbh_femhead_imp_vampire.dds	192
+  Textures\mkbh\imperial\female\mkbh_femhead_imp_vampire_d.dds	192
+  Textures\mkbh\imperial\male\mkbh_manhead_imp_vampire.dds	192
+  Textures\mkbh\imperial\male\mkbh_manhead_imp_vampire_d.dds	192
+  Textures\mkbh\nord\female\mk_femhead_nord_vampire.dds	192
+  Textures\mkbh\nord\female\mk_femhead_nord_vampire_d.dds	192
+  Textures\mkbh\nord\male\mkbh_manhead_nord_vampire.dds	192
+  Textures\mkbh\nord\male\mkbh_manhead_nord_vampire_d.dds	192
+  Textures\mkbh\orsimer\female\mk_femhead_orc_vampire.dds	192
+  Textures\mkbh\orsimer\female\mk_femhead_orc_vampire_d.dds	192
+  Textures\mkbh\orsimer\male\mk_manhead_orc_vampire.dds	192
+  Textures\mkbh\orsimer\male\mk_manhead_orc_vampire_d.dds	192
+  Textures\mkbh\redguard\female\mk_femhead_redguard_vampire.dds	192
+  Textures\mkbh\redguard\female\mk_femhead_redguard_vampire_d.dds	192
+  Textures\mkbh\redguard\male\mk_manhead_redguard_vamp.dds	192
+  Textures\mkbh\redguard\male\mk_manhead_redguard_vamp_d.dds	192
+[MDMD - More Deadly Morrowind Denizens.ESP]
+  Textures\tx_a_indoril_armorpc00_nrm.dds	192
+  Textures\tx_a_indoril_shield_nrm.dds	192
+[Morrowind.esm]
+  Music\conantheme.mp3	3336
+  Sound\fx\jetsons doorbell.wav	8864
+[Mudcrab Island TLAD.esp]
+  Textures\iron_strap_tx_metal_strip_02.dds	192
+  Textures\iron_tx_rustedmetal00.dds	192
+  Textures\wax_tx_wax_tan_03.dds	192
+[MWSE Lanterns.esm]
+  Icons\syanide\lanterns\ash1.dds	4224
+  Icons\syanide\lanterns\ash2.dds	4224
+  Icons\syanide\lanterns\ash3.dds	4224
+  Icons\syanide\lanterns\ash4.dds	4224
+  Icons\syanide\lanterns\ash5.dds	4224
+  Icons\syanide\lanterns\ash6.dds	4224
+  Icons\syanide\lanterns\ash7.dds	4224
+[New Windhelm - city of kings.ESP]
+  Textures\dt_tx_a_gauntlet.dds	192
+[NOD - Core.esm]
+  Textures\pl\2pl_desertrobe_m_a.dds	192
+  Textures\pl\2pl_desertshirt_gnd_r.dds	192
+[OAAB - Foyada Mamaea.ESP]
+  Textures\tx_distortion.dds	192
+[OAAB Odai Plateau.esp]
+  Sound\vo\ek\rm\comedian\cd1.mp3	3336
+  Sound\vo\ek\rm\comedian\cd10.mp3	3336
+  Sound\vo\ek\rm\comedian\cd11.mp3	3336
+  Sound\vo\ek\rm\comedian\cd12.mp3	3336
+  Sound\vo\ek\rm\comedian\cd13.mp3	3336
+  Sound\vo\ek\rm\comedian\cd14.mp3	3336
+  Sound\vo\ek\rm\comedian\cd15.mp3	3336
+  Sound\vo\ek\rm\comedian\cd16.mp3	3336
+  Sound\vo\ek\rm\comedian\cd17.mp3	3336
+  Sound\vo\ek\rm\comedian\cd18.mp3	3336
+  Sound\vo\ek\rm\comedian\cd19.mp3	3336
+  Sound\vo\ek\rm\comedian\cd2.mp3	3336
+  Sound\vo\ek\rm\comedian\cd20.mp3	3336
+  Sound\vo\ek\rm\comedian\cd21.mp3	3336
+  Sound\vo\ek\rm\comedian\cd22.mp3	3336
+  Sound\vo\ek\rm\comedian\cd23.mp3	3336
+  Sound\vo\ek\rm\comedian\cd24.mp3	3336
+  Sound\vo\ek\rm\comedian\cd3.mp3	3336
+  Sound\vo\ek\rm\comedian\cd4.mp3	3336
+  Sound\vo\ek\rm\comedian\cd5.mp3	3336
+  Sound\vo\ek\rm\comedian\cd6.mp3	3336
+  Sound\vo\ek\rm\comedian\cd7.mp3	3336
+  Sound\vo\ek\rm\comedian\cd8.mp3	3336
+  Sound\vo\ek\rm\comedian\cd9.mp3	3336
+  Sound\vo\ek\rm\comedian\silence.mp3	3336
+  Textures\tx_b_dremora_head00_glow.dds	192
+  Textures\tx_daedra_glove2_glow.dds	192
+  Textures\w_wakizashi_steel.dds	192
+[OAAB_Data.esm]
+  Textures\bookart\cyrodiil_377_253.dds	192
+  Textures\bookart\hammerfell_377_253.dds	192
+  Textures\bookart\highrock_377_253.dds	192
+  Textures\bookart\morrowind_377_253.dds	192
+  Textures\bookart\oaab\blackmarsh_377_253.dds	174928
+  Textures\bookart\skyrim_377_253.dds	192
+  Textures\bookart\valenwood_377_253.dds	192
+[OldEbonheartSkriak.ESP]
+  Icons\rv\duke's blade.dds	4224
+  Meshes\rv\dukes_blade.nif	2357
+[Pergamaea_Overhaul.ESP]
+  Sound\cr\meridia\meridiasbeacon.wav	8864
+[Price Balance - Merged.esp]
+  Textures\hr\ing_lich_dust.dds	192
+[Quest Voice Greetings.ESP]
+  Sound\vo\vdquest\raltmer.mp3	3336
+  Sound\vo\vdquest\rargonian.mp3	3336
+  Sound\vo\vdquest\rbosmer.mp3	3336
+  Sound\vo\vdquest\rbreton.mp3	3336
+  Sound\vo\vdquest\rdelf.mp3	3336
+  Sound\vo\vdquest\rimperial.mp3	3336
+  Sound\vo\vdquest\rkhajiit.mp3	3336
+  Sound\vo\vdquest\rnord.mp3	3336
+  Sound\vo\vdquest\rorc.mp3	3336
+  Sound\vo\vdquest\rredguard.mp3	3336
+[Sabrina.esp]
+  Textures\rv\rv_redoexile plate.dds	192
+[Sheogorad - Groves of the North.esp]
+  Textures\oaab\tx_roots_rock.dds	192
+[Sotha Sil Expanded.ESP]
+  Textures\daedric_ref.dds	192
+  Textures\frame2.dds	192
+[ST_Alchemy_Balance_Sri_1.5.esp]
+  Textures\vurt_wgpinebark01.dds	192
+[Suran_Underworld_v3.ESP]
+  Icons\krs\sfg\ic_a_sfg_gaunt.dds	4224
+  Textures\tx_a_sfg_cuir_bag.dds	192
+  Textures\tx_a_sfg_cuir_belt.dds	192
+  Textures\tx_a_sfg_cuir_buckle.dds	192
+  Textures\tx_a_sfg_cuir_c.dds	192
+  Textures\tx_a_sfg_cuir_scarf.dds	192
+[Tamriel_Data.esm]
+  Textures\c.dds	192
+[The Doors of Oblivion 1.4.esp]
+  Textures\ter02.dds	192
+[The Sanguine Rose.ESP]
+  Sound\mdsr\xivilai_moan.wav	8864
+  Sound\mdsr\xivilai_roar.wav	8864
+  Sound\mdsr\xivilai_scream.wav	8864
+[TheGardenOfDreams.esp]
+  Textures\bookart\moragtong.dds	192
+  Textures\material_texture.dds_texture.dds	192
+[TR Guard fix.esp]
+  Textures\tr_a_nec_forearm.dds	192
+[TR_Mainland.esm]
+  Textures\mkbh\dunmer\male\mk_manhead_de_vampire.dds	192
+  Textures\mkbh\dunmer\male\mk_manhead_de_vampire_d.dds	192
+  Textures\tx_gel.dds	192
+[Troxulgia.esp]
+  Music\trox\silent.mp3	3336
+  Sound\trox\funk finesse-premiumbeat.w	8864
+[Wyrmhaven.esm]
+  Textures\bamboo_02.dds	192
+  Textures\iron_strap_tx_metal_strip_01.dds	192
+[normal maps - Morrowind itself never draws these; placeholders only stop the missing-file warnings]
+  Textures\#heartwights\ur gear_n.dds	192
+  Textures\1pl_razor_ob_nm.dds	192
+  Textures\6th\6th_armor01_n.dds	192
+  Textures\6th\6th_metal_n.dds	192
+  Textures\6th\6th_pauldron_n.dds	192
+  Textures\@_atronachfire_toparmor_nm.dds	192
+  Textures\@_b_cloth_2_nm.dds	192
+  Textures\@_b_cloth_3_nm.dds	192
+  Textures\@_b_cloth_8_nm.dds	192
+  Textures\@_b_item_05_nm.dds	192
+  Textures\@_b_item_05a_nm.dds	192
+  Textures\@_b_item_08_nm.dds	192
+  Textures\@_b_item_10_nm.dds	192
+  Textures\@_b_item_17_nm.dds	192
+  Textures\@_b_item_18_nm.dds	192
+  Textures\@_b_item_20_nm.dds	192
+  Textures\@_b_item_22_nm.dds	192
+  Textures\@_b_item_25_nm.dds	192
+  Textures\@_b_item_57_nm.dds	192
+  Textures\@_b_item_66_nm.dds	192
+  Textures\@_bonearm01b_nm.dds	192
+  Textures\@_creature_shalk06_nm.dds	192
+  Textures\@w_arowb23_nm.dds	192
+  Textures\@w_marbpart5_nm.dds	192
+  Textures\@w_sword70_nm.dds	192
+  Textures\@w_sword78_nm.dds	192
+  Textures\@w_wodpart4_nm.dds	192
+  Textures\apel_iron_strip_01_nm.dds	192
+  Textures\betcreat\tx_crts_tooth_nm.dds	192
+  Textures\blank_nm.dds	136
+  Textures\bn\bn_banner_holeinwall_nm.dds	192
+  Textures\bn\bn_sign_dirtymuriel_nm.dds	192
+  Textures\bn\bn_sign_endofworld_nm.dds	192
+  Textures\bn\bn_sign_halfway_nm.dds	192
+  Textures\bn\bn_sign_shovel_nm.dds	192
+  Textures\bn\bn_sign_sixfishes_nm.dds	192
+  Textures\bn\tx_metal_strip_01_nm.dds	192
+  Textures\bn\tx_wood_brown_posts_02_nm.dds	192
+  Textures\coi\ci_s_01_n.dds	192
+  Textures\coi\spikeplant_n.dds	192
+  Textures\coi\stargazerlily01_n.dds	192
+  Textures\coi\stargazerlily02_n.dds	192
+  Textures\coin01_n.dds	192
+  Textures\dr\dr_ingr_fishegg_nm.dds	192
+  Textures\dr\dr_tx_crystal_peach_01_n.dds	192
+  Textures\dr\dr_tx_crystal_plum_01_n.dds	192
+  Textures\dr\dr_tx_crystal_teal_01_n.dds	192
+  Textures\jer_a_aka_cui_f_n.dds	192
+  Textures\jer_a_aka_cui_m_n.dds	192
+  Textures\kafeid\bandcop_n.dds	192
+  Textures\kafeid\bandgold_n.dds	192
+  Textures\kafeid\bandmithril_n.dds	192
+  Textures\kafeid\bandorc_n.dds	192
+  Textures\kafeid\chainblack_n.dds	192
+  Textures\kafeid\circletb_n.dds	192
+  Textures\kb\kb_metal_silver_n.dds	192
+  Textures\kb\kb_metal_silver_plate_01_n.dds	192
+  Textures\kb\kb_metal_silver_strip_02_n.dds	192
+  Textures\mct\ko_powder_keg_nm.dds	192
+  Textures\mct\mct_rope_brown_nm.dds	192
+  Textures\morgana\tx_t_display_trim_nm.dds	192
+  Textures\morgana\tx_t_sign_telvanni_nm.dds	192
+  Textures\morgana\tx_t_symbol_stone_nm.dds	192
+  Textures\morgana\tx_t_symbol_stone_slim_nm.dds	192
+  Textures\nb\hair_azura_statue_n.dds	192
+  Textures\oaab\water\tr_water00_n.dds	192
+  Textures\oaab\water\tr_water01_n.dds	192
+  Textures\oaab\water\tr_water02_n.dds	192
+  Textures\oaab\water\tr_water03_n.dds	192
+  Textures\oaab\water\tr_water04_n.dds	192
+  Textures\oaab\water\tr_water05_n.dds	192
+  Textures\oaab\water\tr_water06_n.dds	192
+  Textures\oaab\water\tr_water07_n.dds	192
+  Textures\oaab\water\tr_water08_n.dds	192
+  Textures\oaab\water\tr_water09_n.dds	192
+  Textures\oaab\water\tr_water10_n.dds	192
+  Textures\oaab\water\tr_water11_n.dds	192
+  Textures\oaab\water\tr_water12_n.dds	192
+  Textures\oaab\water\tr_water13_n.dds	192
+  Textures\oaab\water\tr_water14_n.dds	192
+  Textures\oaab\water\tr_water15_n.dds	192
+  Textures\oaab\water\tr_water16_n.dds	192
+  Textures\oaab\water\tr_water17_n.dds	192
+  Textures\oaab\water\tr_water18_n.dds	192
+  Textures\oaab\water\tr_water19_n.dds	192
+  Textures\oaab\water\tr_water20_n.dds	192
+  Textures\oaab\water\tr_water21_n.dds	192
+  Textures\oaab\water\tr_water22_n.dds	192
+  Textures\oaab\water\tr_water23_n.dds	192
+  Textures\oaab\water\tr_water24_n.dds	192
+  Textures\oaab\water\tr_water25_n.dds	192
+  Textures\oaab\water\tr_water26_n.dds	192
+  Textures\oaab\water\tr_water27_n.dds	192
+  Textures\oaab\water\tr_water28_n.dds	192
+  Textures\oaab\water\tr_water29_n.dds	192
+  Textures\oaab\water\tr_water30_n.dds	192
+  Textures\oaab\water\tr_water31_n.dds	192
+  Textures\pc_galleon_window_n.dds	192
+  Textures\slf\cp\nb\worldstone_n.dds	192
+  Textures\slf\cp\tx_gh_brain_n.dds	192
+  Textures\sn_coin_back_01_n.dds	192
+  Textures\sn_coin_side_01_n.dds	192
+  Textures\sn_coin_top_01_n.dds	192
+  Textures\sotonhorian\boots_n.dds	192
+  Textures\sotonhorian\bracers_n.dds	192
+  Textures\sotonhorian\cuirass f hiha_n.dds	192
+  Textures\sotonhorian\cuirass f_n.dds	192
+  Textures\sotonhorian\cuirass m paldron_n.dds	192
+  Textures\sotonhorian\cuirass m_n.dds	192
+  Textures\sotonhorian\greaves m_n.dds	192
+  Textures\sotonhorian\helmet_n.dds	192
+  Textures\sotonhorian\hood_n.dds	192
+  Textures\st_teatin_redlacquer_nm.dds	192
+  Textures\st_teatin_silverdragon_nm.dds	192
+  Textures\tr\a\tr_a_bone_indoril_shield_n.dds	192
+  Textures\tr\tr_flask_shakhal_n.dds	192
+  Textures\tx_6th_lamp3_nm.dds	192
+  Textures\tx_6th_stall2_nm.dds	192
+  Textures\tx_6th_stall_nm.dds	192
+  Textures\tx_6th_wp_all_nm.dds	192
+  Textures\tx_a_daedric_boot00_nm.dds	192
+  Textures\tx_a_daedric_codpiece00_nm.dds	192
+  Textures\tx_a_daedric_cuirass00_nm.dds	192
+  Textures\tx_a_daedric_fountain_00_nm.dds	192
+  Textures\tx_a_daedric_fountain_01_nm.dds	192
+  Textures\tx_a_daedric_fountain_02_nm.dds	192
+  Textures\tx_a_daedric_god_00_nm.dds	192
+  Textures\tx_a_daedric_god_01_nm.dds	192
+  Textures\tx_a_daedric_grieves00_nm.dds	192
+  Textures\tx_a_daedric_pauldron00_nm.dds	192
+  Textures\tx_a_daedric_shoe00_nm.dds	192
+  Textures\tx_a_daedric_spike00_nm.dds	192
+  Textures\tx_a_daedric_terrifying00_nm.dds	192
+  Textures\tx_a_daedric_terrifying01_nm.dds	192
+  Textures\tx_a_daedric_upperarm00_nm.dds	192
+  Textures\tx_a_glass_bootb_nm.dds	192
+  Textures\tx_a_glass_bracer_nm.dds	192
+  Textures\tx_a_glass_c_front_nm.dds	192
+  Textures\tx_a_glass_c_side_nm.dds	192
+  Textures\tx_a_glass_curiass00_nm.dds	192
+  Textures\tx_a_glass_curiass01_nm.dds	192
+  Textures\tx_a_glass_fa_nm.dds	192
+  Textures\tx_a_glass_greaves_nm.dds	192
+  Textures\tx_a_glass_h00_nm.dds	192
+  Textures\tx_a_glass_h02_nm.dds	192
+  Textures\tx_a_glass_h03_nm.dds	192
+  Textures\tx_a_glass_h_back_nm.dds	192
+  Textures\tx_a_glass_h_sideside_nm.dds	192
+  Textures\tx_a_glass_pauldron_nm.dds	192
+  Textures\tx_a_glass_shield_nm.dds	192
+  Textures\tx_a_glass_towershield_nm.dds	192
+  Textures\tx_a_glass_ua_p_nm.dds	192
+  Textures\tx_a_glass_ul_nm.dds	192
+  Textures\tx_a_indoril_beltcloth_nm.dds	192
+  Textures\tx_a_indoril_boot_a_nm.dds	192
+  Textures\tx_a_indoril_c_belt_nm.dds	192
+  Textures\tx_a_indoril_c_currais2_nm.dds	192
+  Textures\tx_a_indoril_f_boot_nm.dds	192
+  Textures\tx_a_indoril_helmetcrest_nm.dds	192
+  Textures\tx_a_indoril_helmetear_nm.dds	192
+  Textures\tx_a_indoril_helmetmask_nm.dds	192
+  Textures\tx_a_indoril_hfinger_nm.dds	192
+  Textures\tx_a_indoril_hpalm_nm.dds	192
+  Textures\tx_a_indoril_hthumb_nm.dds	192
+  Textures\tx_a_indoril_pauldron_cl_nm.dds	192
+  Textures\tx_a_indoril_pauldron_nm.dds	192
+  Textures\tx_a_indoril_ua_mail_nm.dds	192
+  Textures\tx_a_mail_lord_01_nm.dds	192
+  Textures\tx_a_n_nord_m_n.dds	192
+  Textures\tx_a_templar_helmet_n.dds	192
+  Textures\tx_ashpile_zen1_n.dds	192
+  Textures\tx_blind_boot_a2_nm.dds	192
+  Textures\tx_blind_boot_a_nm.dds	192
+  Textures\tx_blind_boot_armor_nm.dds	192
+  Textures\tx_blind_boot_strips_nm.dds	192
+  Textures\tx_bloodworm_helm01_nm.dds	192
+  Textures\tx_bloodworm_jaw01_nm.dds	192
+  Textures\tx_bloodworm_teeth_nm.dds	192
+  Textures\tx_daedra_glove2_nm.dds	192
+  Textures\tx_eggmine_metal00_n.dds	192
+  Textures\tx_fist_randagulf_01_nm.dds	192
+  Textures\tx_fist_randagulf_02_nm.dds	192
+  Textures\tx_fist_randagulf_03_nm.dds	192
+  Textures\tx_fist_randagulf_04_nm.dds	192
+  Textures\tx_metal_strip_01_n.dds	192
+  Textures\tx_t_display_trim_nm.dds	192
+  Textures\tx_t_sign_telvanni_nm.dds	192
+  Textures\tx_t_symbol_stone_nm.dds	192
+  Textures\tx_t_symbol_stone_slim_nm.dds	192
+  Textures\tx_w_staff_daedric_02_nm.dds	192
+  Textures\tx_w_waraxe_glass_00_nm.dds	192
+  Textures\tx_waterfall_01_nm.dds	192
+  Textures\tx_waterfall_02_nm.dds	192
+  Textures\v_brainstarcoral_n.dds	192
+  Textures\x32\e\x32_e_gold_scraped_metal00_n.dds	192

@@ -1,0 +1,7 @@
+; mwdialog_redundant.txt: what --redundant decided about plugins that do the same job as another.
+; off<TAB>plugin<TAB>kept plugin<TAB>why: turned off (--add-all-esp leaves it out; it comes back on by
+;   itself when the kept plugin is gone). --redundant-undo NAME (or no name: all) turns it back on.
+; both<TAB>A<TAB>B: you chose to keep both; --redundant doesn't ask about the pair again
+;   (--redundant-undo with no name forgets these too). --full keeps all of this.
+
+both	Trainer Log - AEA.esp	Trainer Log.esp

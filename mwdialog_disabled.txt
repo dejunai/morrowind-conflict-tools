@@ -1,0 +1,3 @@
+; Plugins mwdialog_check.py --fix turned off because another active plugin already places the
+; same objects in the same spots (two versions of one mod). --add-all-esp leaves them out.
+; --reenable NAME (or --reenable with no name for all) turns them back on. One per line: name<TAB>reason

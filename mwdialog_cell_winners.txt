@@ -1,0 +1,36 @@
+; interiors two mods rebuilt, and whose version is used (chosen in --cell-conflicts; --fix builds
+; mwdialog_check Cell Fixes.esp from this; --full starts over without it)
+; interior<TAB>winning plugin<TAB>losing plugin
+Abaesen-Pulu Egg Mine	BitterAndBlightedRemastered.ESP	Abaesen-Pulu_exp EN.ESP
+Alas Ancestral Tomb	Clan Aundae Vampire Dungeons.ESP	OAAB - Tombs and Towers.esm
+Ald Velothi, Outpost	URH_Ald_Velothi.esp	MCA.esm
+Ald-ruhn, Guild of Mages	MGO Guild Halls Vanilla.esp	Rise of House Telvanni.esm
+Ald-ruhn, Redoran Council Hall	VY_Under_Skar.esp	RepopulatedMorrowind.ESM
+Ald-ruhn, The Rat In The Pot	LB_RatPot.ESP	MCA.esm
+Alen Ancestral Tomb	Quests for Clans and Vampire Legends.ESP	OAAB - Tombs Extended.ESP
+Ashmelech	Vampire Clans - Clutter Monkey Overhaul.ESP	Clean_Mines and Caverns.esp
+Balmora, Guild of Mages	MGO Guild Halls Vanilla.esp	Rise of House Telvanni.esm
+Balmora, Lucky Lockup	Livelier Lucky Lockup.ESP	MCA.esm
+Balmora, South Wall Cornerclub	South Wall_TG_Hideout.esp	MCA.esm
+Balmora, Temple	LB_TempleBalmora.ESP	RepopulatedMorrowind.ESM
+Caldera, Shenk's Shovel	Better Bounties.esp	MCA.esm
+Dren Plantation, Dren's Villa	Camonna Tong.esp	Concept_Arts_plantations.esp
+Ebonheart, Argonian Mission	LB_EbonheartArgonianMission.ESP	Rise of House Telvanni.esm
+Ebonheart, Six Fishes	OAAB Ebonheart Six Fishes.ESP	RepopulatedMorrowind.ESM
+Falensarano, Upper Level	ruinsoffalensarano.ESP	The Northern Strongholds.esp
+Hla Oad, Fatleg's Drop Off	Clean DR115_TheDropoff_HlaOadDocks.ESP	OAAB Odai Plateau.esp
+Khuul, Thongar's Tradehouse	URH_Khuul.esp	MCA.esm
+Mount Kand, Cavern	The Mountain of Fear.ESP	Pilgrims in Peril.esp
+Mournhold Temple: High Chapel	RPNR_Almalexia_Chamber.ESP	Tribunal Main Quest Reforged - SSE.esp
+Mournhold, The Winged Guar	Interiors_of_Mournhold_V2.3.esp	MCA.esm
+Rotheran, Arena	OAAB Odai Plateau.esp	The Northern Strongholds.esp
+Sadrith Mora, Wolverine Hall: Mage's Guild	Tealpanda's Alchemy Essentials.esp	Dallara Wolverine Hall.esp
+Samarys Ancestral Tomb	Samarys - The Sunken Tomb.esp	AFFresh.esm
+Seyda Neen, Arrille's Tradehouse	Improved Inns Expanded.esp	Better Bounties.esp
+Suran, Ibarnadad Assirnarari: Apothecary	Botanical Haven - Suran Apothecary Redux.esp	The Scent of Suspicion.esp
+Tel Aruhn, Plot and Plaster	Tel_Aruhn_Chronicles.ESP	MCA.esm
+Tel Aruhn, Underground	Tel_Aruhn_Chronicles.ESP	RepopulatedMorrowind.ESM
+Telasero, Lower Level	The Northern Strongholds.esp	Rise of House Telvanni.esm
+Telasero, Upper Level	The Northern Strongholds.esp	Rise of House Telvanni.esm
+Tureynulal, Kagrenac's Library	Clean_TureynulalRedone.esp	Rise of House Telvanni.esm
+Vivec, Guild of Mages	Vivec_Mages_Guild_Expanded.ESP	Rise of House Telvanni.esm

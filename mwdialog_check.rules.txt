@@ -1,0 +1,2250 @@
+[Context]
+; Written by --sort on 2026-11-10 03:36. For reading only: every line here is
+; a comment, and --sort rewrites this section each time. Edit the rules below it instead.
+;
+; These are the patch-after-mod rules --sort works out from what the plugins change: when most of
+; the records a small .esp changes are records a much bigger .esp adds (not counting anything an
+; .esm defines), the small one is a patch for the big one and loads after it.
+; They rank below the rules in this file and above mlox's. To override one, add an [Order] rule
+; below; to turn them all off, use --no-content-order.
+;
+; 1 rule(s) found:
+;
+;   Clean_Dagon Fel - Mages Adventures.ESP
+;     -> Utseeva's_DagonFel_MagesGuild.ESP   [6 of its 12 records are the mod's]
+; ---- end of [Context] ----
+
+; mwdialog_check.rules.txt: load order rules for mwdialog_check.py --sort
+;
+; The same format as mlox rules (mlox_user.txt / mlox_base.txt). Rules here win over mlox's own:
+; files are read in this order, and a rule that contradicts an earlier one is skipped.
+;
+;   [Order]          each plugin listed loads before the next one
+;   [Exact]          each plugin listed loads in the defined exact order
+;   [NearStart]      these plugins load as early as their masters allow (in this order)
+;   [NearEnd]        these plugins load as late as possible; the FIRST one listed loads LAST
+;                    (mlox's convention, so the patch that must win goes first)
+;
+; One plugin per line; ";" starts a comment. Names are not case-sensitive and may use
+; the wildcards * and ? and mlox's <VER> (a version number). A plugin always loads after its
+; masters, and every .esm before every .esp, whatever the rules say.
+
+[NearEnd]
+XE Sky Variations.esp
+
+[NearEnd]
+Rational Names Merged.esp
+
+[NearEnd]
+*Script Fix.esp
+
+[NearEnd]
+Tamriel Rebuilt - Alternate Start.esp
+
+[Order]
+Rational Names Merged.esp
+*Script Fix.esp
+XE Sky Variations.esp
+
+[Exact]
+Utseeva's_DagonFel_MagesGuild.ESP
+Clean_Dagon Fel - Mages Adventures.ESP
+
+[Order]
+OAAB_Data.esm
+OAAB*
+
+[Order]
+DA_Sorbitur_Quest_Part_1_Clean.esp
+DA_Sorbitur_Quest_Part_2_Clean.esp
+DA_Sorbitur_Facility_Clean.esp
+
+[Order]
+Camonna Tong.esp
+CT-TR Patch.esp
+
+[Order]
+KS_Julan_Ashlander Companion_3.0_beta.esp
+The Doors of Oblivion 1.4.esp
+Ebonheart_Underworks.esp
+Memento Mori Buried.ESP
+OAAB Brother Junipers Twin Lamps.esp
+Sotha Sil Expanded.ESP
+SecretsOfTheCrystalCity.esp
+Julan Companion - Merged.esp
+
+[NearStart]
+Ports Of Vvardenfell V1.6 - Aggressively Compatible.esp
+WoM 4.0v Compatibility for TR Version 24.12.ESP
+Rocky_WG_Base_1.1.esp
+DN-GDR BTB MRM-Non Pointy.esp
+spines of madness 1.13.esp
+RockyAzurasCoast.ESP
+Vibrant Ivy.ESP
+Trellis addon.ESP
+
+[Order]
+AATL_Data.esm
+Unique Uniques.esp
+Unique Uniques - More Unique.ESP
+AATL Unique Uniques All.ESP
+AATL Alternate Oblivionesque Chillrend.ESP
+AATL Alternate Oblivionesque Blade of Woe.ESP
+
+[Order]
+New Khajiit Diversity*
+MCA - Khajiit Diversity Revamped Addon.esp
+
+[Order]
+LuceEdit - Ships of the Imperial Navy.esp
+Ships of the Imperial Navy (TR addon).esp
+Hidden Sea Loot.esp
+
+[Order]
+Seyda Neen - Damp Little Squat - Unshabby.ESP
+HSN - Lighthouse Only.esp
+Shabby Seyda Neen.ESP
+Shipyards of Vvardenfell.esp
+Shabby Interiors.ESP
+
+[Order]
+OAAB_Grazelands.ESP
+Landscape Waterfalls MW (OTR).ESP
+
+[Order]
+The Doors of Oblivion 1.4.esp
+Daedric Shrine Overhaul FULL.esp
+
+[Order]
+MCA.esm
+Friends & Frens - base.esm
+
+[Order]
+Uvirith's Legacy_3.53.esp
+Corprusarium - Sorrow Heart of Tel Fyr.ESP
+Uvirith's Legacy 3.53 Sorrow heart of tel fyr patch.ESP
+
+[Order]
+Quests for Clans and Vampire Legends.esp
+Vampire Clans - Clutter Monkey Overhaul.ESP
+Quests for Clans and Vampire Legends - Vampire Clans - Clutter Monkey Overhaul.esp
+
+[Exact]
+OAAB Brother Junipers Twin Lamps - Script Fix.esp
+Sotha Sil Expanded - Script Fix.esp
+Uvirith's Legacy_3.53 - Script Fix.esp
+DA_Sobitur_Quest_Part_1 Clean - Script Fix.esp
+DA_Sobitur_Facility_Clean - Script Fix.esp
+DRPV1.9 - Script Fix.esp
+MoonlightOnTheOdaiRiver - Script Fix.esp
+Wyrmhaven - Script Fix.esp
+The Doors of Oblivion 1.4 - Script Fix.esp
+DD_Caldera_Expansion - Script Fix.esp
+AliceL93 Vanilla Quest Tweaks - Script Fix.esp
+
+; ==== rules added 2026-11-11 after the AutoMerge object-merge review (mwdialog_check.py 193FAE0F) ====
+; Checked against the records of the active plugins; none of these goes against a master or an earlier
+; rule (simulated with mwdialog_check's own sort before writing).
+
+; Prison-ship lantern (light_com_lantern_02_200_Boat) and nothing else: these two share only that record.
+; The Expanded Sounds TLAD patch carries TLAD's radius (300) with Expanded Sounds' SignRotate script and
+; rope sound; Glowing Flames' TLAD tweaks (header: "Must load after TL&D") sets radius 375 but still has the
+; vanilla Float script. Glowing Flames loads second so its brightness wins; the Multipatch's object merge
+; (fixed today) keeps Expanded Sounds' script and sound. Already the current order; this keeps it.
+[Order]
+Expanded Sounds TLAD Patch v1.0.ESP
+Glowing Flames - TrueLightsAndDarkness Tweaks.ESP
+
+; Great-faction records (Redoran, Hlaalu, Telvanni, Temple, Imperial Cult, the guilds...): factions are
+; not merged field by field, the last plugin wins the whole record. TR_Factions.esp is active, so the
+; BTBGI-NE TR_Factions variant is the one made for this setup; it must load after the plain one (it does
+; now; this keeps it).
+[Order]
+avp BTBGI-NE - Factions.esp
+avp BTBGI-NE - Factions - TR_Factions.esp
+
+; Unique items both change: FM - Unique Items (PfP) loads after the BTBGI-NE Uvirith's Legacy edits, so
+; its versions win (approved 2026-11-11 with the two rules above).
+[Order]
+avp BTBGI-NE - Uvirith's Legacy.esp
+FM - Unique Items v1.0 - PfP.ESP
+
+; ---- added by --cell-conflicts 2026-11-11 17:07 ----
+
+[Order]
+Sheogorad - Groves of the North.esp
+ST_Alchemy_Replacer_1.3.esp
+; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+
+[Order]
+Dallara Pelagiad PFP.esp
+Imperial Stables.esp
+; keep Imperial Stables.esp winning where they conflict
+
+[Order]
+BalmoraDocks.ESP
+Clean_Waterfowl_Of_Morrowind_Expanded.esp
+; keep Clean_Waterfowl_Of_Morrowind_Expanded.esp winning where they conflict
+
+[Order]
+Unique and balanced easter eggs.ESP
+Casimir's Legacy.esp
+; keep Casimir's Legacy.esp winning where they conflict
+
+[Order]
+Concept_Arts_plantations.esp
+Cait's Critters Unleashed 2.0.esp
+; keep Cait's Critters Unleashed 2.0.esp winning where they conflict
+
+[Order]
+Clan Aundae Vampire Dungeons.ESP
+Quests for Clans and Vampire Legends.ESP
+; keep Quests for Clans and Vampire Legends.ESP winning where they conflict
+
+[Order]
+Liar yes Idiot no.ESP
+Sheogorad - Groves of the North.esp
+; keep Sheogorad - Groves of the North.esp winning where they conflict
+
+[Order]
+OAAB Ebonheart Six Fishes.ESP
+Windows Glow.esp
+; keep Windows Glow.esp winning where they conflict
+
+[Order]
+TASG.ESP
+Tel_Aruhn_Chronicles.ESP
+; keep Tel_Aruhn_Chronicles.ESP winning where they conflict
+
+[Order]
+Imperial Stables.esp
+Dallara Fort Moonmoth.esp
+; keep Dallara Fort Moonmoth.esp winning where they conflict
+
+[Order]
+Dallara Fort Frostmoth.esp
+Suran_Underworld_v3.ESP
+; keep Suran_Underworld_v3.ESP winning where they conflict
+
+[Order]
+Unique and balanced easter eggs.ESP
+Mudcrab Island TLAD.esp
+; keep Mudcrab Island TLAD.esp winning where they conflict
+
+[Order]
+OAAB Market.ESP
+Animated_Morrowind - Danaes Edits - Vv.esp
+; keep Animated_Morrowind - Danaes Edits - Vv.esp winning where they conflict
+
+[Order]
+Creatures and Critters.ESP
+DreamersExpansion.ESP
+; keep DreamersExpansion.ESP winning where they conflict
+
+[Order]
+Hanging Gardens of Suran.esp
+Windows Glow.esp
+; keep Windows Glow.esp winning where they conflict
+
+[Order]
+Balmora Redecorated.ESP
+Concept Art Hlaalu Balconies - Balmora.esp
+; keep Concept Art Hlaalu Balconies - Balmora.esp winning where they conflict
+
+[Order]
+The Northern Strongholds.esp
+Creatures and Critters.ESP
+; keep Creatures and Critters.ESP winning where they conflict
+
+[Order]
+Dallara Pelagiad PFP.esp
+Cait's Critters Unleashed 2.0.esp
+; keep Cait's Critters Unleashed 2.0.esp winning where they conflict
+
+[Order]
+Dallara Ebonheart.esp
+Ebonheart Lighthouse.ESP
+; keep Ebonheart Lighthouse.ESP winning where they conflict
+
+[Order]
+New Arenthia 1.2.ESP
+OAAB Brother Junipers Twin Lamps.esp
+; keep OAAB Brother Junipers Twin Lamps.esp winning where they conflict
+
+[Order]
+Hla Odai.esp
+The Sable Dragon 1.6 mmc.esp
+; keep The Sable Dragon 1.6 mmc.esp winning where they conflict
+
+[Order]
+Hanging Gardens of Suran.esp
+OAAB Brother Junipers Twin Lamps.esp
+; keep OAAB Brother Junipers Twin Lamps.esp winning where they conflict
+
+[Order]
+VY_Under_Skar.esp
+abotRedoranCouncilEntrancePlanters.esp
+; keep abotRedoranCouncilEntrancePlanters.esp winning where they conflict
+
+[Order]
+Fields of Humility.ESP
+Creatures and Critters.ESP
+; keep Creatures and Critters.ESP winning where they conflict
+
+[Order]
+Rise of House Telvanni.esm
+RepopulatedMorrowind.ESM
+; keep RepopulatedMorrowind.ESM winning where they conflict
+
+[Order]
+HelnimREDUXskriak.ESP
+abotWindowsGlowTR1912.esp
+; keep abotWindowsGlowTR1912.esp winning where they conflict
+
+[Order]
+Sotha Sil Expanded.ESP
+ST_Alchemy_Replacer_1.3.esp
+; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+
+[Order]
+BB2_Peasant_Gowns.esp
+Dallara Pelagiad PFP.esp
+; keep Dallara Pelagiad PFP.esp winning where they conflict
+
+[Order]
+Seyda Neen - Damp Little Squat - unshabby.ESP
+Cait's Critters Unleashed 2.0.esp
+; keep Cait's Critters Unleashed 2.0.esp winning where they conflict
+
+[Order]
+BB2_Peasant_Gowns.esp
+Cait's Critters Unleashed 2.0.esp
+; keep Cait's Critters Unleashed 2.0.esp winning where they conflict
+
+[Order]
+Hanging Gardens of Suran.esp
+Animated_Morrowind - Danaes Edits - Vv.esp
+; keep Animated_Morrowind - Danaes Edits - Vv.esp winning where they conflict
+
+[Order]
+Gnisis Docks v1.0.esp
+Clean_Waterfowl_Of_Morrowind_Expanded.esp
+; keep Clean_Waterfowl_Of_Morrowind_Expanded.esp winning where they conflict
+
+[Order]
+Dallara Fort Frostmoth.esp
+Mudcrab Island TLAD.esp
+; keep Mudcrab Island TLAD.esp winning where they conflict
+
+[Order]
+DM_SuranRoof.ESP
+Hanging Gardens of Suran.esp
+; keep Hanging Gardens of Suran.esp winning where they conflict
+
+[Order]
+Dallara Ebonheart.esp
+The_Vanilla_Quest_Tweaks_RP_Choices_Consequences_Super_Mega_Package_-_Ultimate_Edition.ESP
+; keep The_Vanilla_Quest_Tweaks_RP_Choices_Consequences_Super_Mega_Package_-_Ultimate_Edition.ESP winning where they conflict
+
+[Order]
+Better Bounties.esp
+Windows Glow - Tribunal Eng.esp
+; keep Windows Glow - Tribunal Eng.esp winning where they conflict
+
+[Order]
+Tel_Aruhn_Chronicles.ESP
+GITD_Telvanni_Dormers.ESP
+; keep GITD_Telvanni_Dormers.ESP winning where they conflict
+
+[Order]
+The Scent of Suspicion.esp
+Creatures and Critters.ESP
+; keep Creatures and Critters.ESP winning where they conflict
+
+[Order]
+Dallara Fort Buckmoth.esp
+Imperial Stables.esp
+; keep Imperial Stables.esp winning where they conflict
+
+[Order]
+Molag Mar X.esp
+Windows Glow.esp
+; keep Windows Glow.esp winning where they conflict
+
+[Order]
+OAAB_Grazelands.ESP
+RR_Better_Ships_n_Boats_Eng.esp
+; keep RR_Better_Ships_n_Boats_Eng.esp winning where they conflict
+
+[Order]
+Interiors_of_Mournhold_V2.3.esp
+Animated_Morrowind - Danaes Edits - Vv.esp
+; keep Animated_Morrowind - Danaes Edits - Vv.esp winning where they conflict
+
+[Order]
+Seyda Neen - Damp Little Squat - unshabby.ESP
+mistify.ESP
+; keep mistify.ESP winning where they conflict
+
+[Order]
+Clean_Mines and Caverns.esp
+Expanded Sounds.esp
+; keep Expanded Sounds.esp winning where they conflict
+
+[Order]
+URH_Ald_Velothi.esp
+Cait's Critters Unleashed 2.0.esp
+; keep Cait's Critters Unleashed 2.0.esp winning where they conflict
+
+[Order]
+Seyda Neen - Damp Little Squat - unshabby.ESP
+Imperial Stables.esp
+; keep Imperial Stables.esp winning where they conflict
+
+[Order]
+The Vestiges of Tukushapal.ESP
+MinorTukushapalRefit.esp
+; keep MinorTukushapalRefit.esp winning where they conflict
+
+[Order]
+DN_Dwemer_Tileset_TR.esp
+TR_DarkDungeons.esp
+; keep TR_DarkDungeons.esp winning where they conflict
+
+[Order]
+Dallara Ebonheart.esp
+RR_Better_Ships_n_Boats_Eng.esp
+; keep RR_Better_Ships_n_Boats_Eng.esp winning where they conflict
+
+[Order]
+Creatures and Critters.ESP
+Antares' Undead Redux.esp
+; keep Antares' Undead Redux.esp winning where they conflict
+
+[Order]
+Mudcrab Island TLAD.esp
+RR_Better_Ships_n_Boats_Eng.esp
+; keep RR_Better_Ships_n_Boats_Eng.esp winning where they conflict
+
+[Order]
+New Ilunibi.ESP
+logs on Fire.esp
+; keep logs on Fire.esp winning where they conflict
+
+[Order]
+DRPV1.9.ESP
+DN-Lighted_Dwemer_Towers.ESP
+; keep DN-Lighted_Dwemer_Towers.ESP winning where they conflict
+
+[Order]
+Gnisis Expanded Remaster.esp
+Dallara Fort Darius.esp
+; keep Dallara Fort Darius.esp winning where they conflict
+
+[Order]
+Almalexia_Placeholder.ESP
+Tamriel Rebuilt - Yet Another Border Fix.esp
+; keep Tamriel Rebuilt - Yet Another Border Fix.esp winning where they conflict
+
+[Order]
+Clean_Mines and Caverns.esp
+logs on Fire.esp
+; keep logs on Fire.esp winning where they conflict
+
+[Order]
+OikImmCalderaGuild.ESP
+MasterIndexRedux.esp
+; keep MasterIndexRedux.esp winning where they conflict
+
+[Order]
+Clean_KuniraiRefit2.esp
+logs on Fire.esp
+; keep logs on Fire.esp winning where they conflict
+
+[Order]
+Morag Tong Polished.esp
+Stav_WebofMephala.ESP
+; keep Stav_WebofMephala.ESP winning where they conflict
+
+[Order]
+Clean_Mines and Caverns.esp
+SecretsOfTheCrystalCity.esp
+; keep SecretsOfTheCrystalCity.esp winning where they conflict
+
+[Order]
+MinorTukushapalRefit.esp
+RR_Better_Ships_n_Boats_Eng.esp
+; keep RR_Better_Ships_n_Boats_Eng.esp winning where they conflict
+
+[Order]
+The Northern Strongholds.esp
+ruinsoffalensarano.ESP
+; keep ruinsoffalensarano.ESP winning where they conflict
+
+[Order]
+Seyda Neen - Damp Little Squat - unshabby.ESP
+Expanded Sounds.esp
+; keep Expanded Sounds.esp winning where they conflict
+
+[Order]
+Cutting Room Floor - Stronghold Homes.esp
+The Northern Strongholds.esp
+; keep The Northern Strongholds.esp winning where they conflict
+
+[Order]
+ForestMaarGan.ESP
+ST_Alchemy_Replacer_1.3.esp
+; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+
+[Order]
+Sheogorad - Groves of the North.esp
+logs on Fire.esp
+; keep logs on Fire.esp winning where they conflict
+
+[Order]
+OAAB - Tombs Extended.ESP
+Quests for Clans and Vampire Legends.ESP
+; keep Quests for Clans and Vampire Legends.ESP winning where they conflict
+
+[Order]
+Clean_Mines and Caverns.esp
+The Mountain of Fear.ESP
+; keep The Mountain of Fear.ESP winning where they conflict
+
+[Order]
+Clean_Mines and Caverns.esp
+OAAB_Grazelands.ESP
+; keep OAAB_Grazelands.ESP winning where they conflict
+
+[Order]
+Great Seawall of Vivec.ESP
+ST_Alchemy_Replacer_1.3.esp
+; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+
+[Order]
+Molag Mar X.esp
+Sload and Slavers.ESP
+; keep Sload and Slavers.ESP winning where they conflict
+
+[Order]
+Better Landscapes Stonewood Pass (RP Edit).esp
+LuceEdit - BCOM - MoonlightOnTheOdaiRiver.esp
+; keep LuceEdit - BCOM - MoonlightOnTheOdaiRiver.esp winning where they conflict
+
+[Order]
+Skar_face.ESP
+VY_Under_Skar.esp
+; keep VY_Under_Skar.esp winning where they conflict
+
+[Order]
+OAAB_Shipwrecks_JFK_patch.esp
+RR_Better_Ships_n_Boats_Eng.esp
+; keep RR_Better_Ships_n_Boats_Eng.esp winning where they conflict
+
+[Order]
+Dallara Ebonheart.esp
+Illy's Oh my Goddess.ESP
+; keep Illy's Oh my Goddess.ESP winning where they conflict
+
+[Order]
+Dallara Ebonheart.esp
+logs on Fire.esp
+; keep logs on Fire.esp winning where they conflict
+
+[Order]
+Concept Art Hlaalu Balconies - Balmora.esp
+Windows Glow.esp
+; keep Windows Glow.esp winning where they conflict
+
+[Order]
+Concept_Arts_plantations.esp
+Windows Glow.esp
+; keep Windows Glow.esp winning where they conflict
+
+[Order]
+Uncharted Artifacts.esp
+RR_Better_Ships_n_Boats_Eng.esp
+; keep RR_Better_Ships_n_Boats_Eng.esp winning where they conflict
+
+[Order]
+Mudcrab Island TLAD.esp
+Dallara Ebonheart.esp
+; keep Dallara Ebonheart.esp winning where they conflict
+
+[Order]
+Sheogorad - Groves of the North.esp
+Landscape Waterfalls MW (OTR).ESP
+; keep Landscape Waterfalls MW (OTR).ESP winning where they conflict
+
+[Order]
+factorestateimprovedv1.ESP
+GITD_WL_RR_Interiors.esp
+; keep GITD_WL_RR_Interiors.esp winning where they conflict
+
+[Order]
+Dallara Fort Frostmoth.esp
+RR_Better_Ships_n_Boats_Eng.esp
+; keep RR_Better_Ships_n_Boats_Eng.esp winning where they conflict
+
+[Order]
+URH_Ald_Velothi.esp
+Animated_Morrowind - Danaes Edits - Vv.esp
+; keep Animated_Morrowind - Danaes Edits - Vv.esp winning where they conflict
+
+[Order]
+OAAB_Grazelands.ESP
+Clean_Waterfowl_Of_Morrowind_Expanded.esp
+; keep Clean_Waterfowl_Of_Morrowind_Expanded.esp winning where they conflict
+
+[Order]
+OAAB - Tel Raloran - Immersive Tables.ESP
+TheGardenOfDreams.esp
+; keep TheGardenOfDreams.esp winning where they conflict
+
+[Order]
+Suran_Underworld_v3.ESP
+RR_Better_Ships_n_Boats_Eng.esp
+; keep RR_Better_Ships_n_Boats_Eng.esp winning where they conflict
+
+[Order]
+Clean_Sinsibadon.esp
+logs on Fire.esp
+; keep logs on Fire.esp winning where they conflict
+
+[Order]
+ruinsoffalensarano.ESP
+Vurt's Grazelands Unique Trees.ESP
+; keep Vurt's Grazelands Unique Trees.ESP winning where they conflict
+
+[Order]
+OAAB_Grazelands.ESP
+Yet Another Guard Diversity - Regular.ESP
+; keep Yet Another Guard Diversity - Regular.ESP winning where they conflict
+
+[Order]
+Justice4Khartag.esp
+OAAB_Shipwrecks_JFK_patch.esp
+; keep OAAB_Shipwrecks_JFK_patch.esp winning where they conflict
+
+[Order]
+Interiors_of_Mournhold_V2.3.esp
+TR_MuseumofArtifacts.esp
+; keep TR_MuseumofArtifacts.esp winning where they conflict
+
+[Order]
+The Northern Strongholds.esp
+DreamersExpansion.ESP
+; keep DreamersExpansion.ESP winning where they conflict
+
+[Order]
+Creatures and Critters.ESP
+Daedric Shrine Overhaul FULL.esp
+; keep Daedric Shrine Overhaul FULL.esp winning where they conflict
+
+[Order]
+TR_DarkDungeons.esp
+Animated_Morrowind - Danaes Edits - TR.esp
+; keep Animated_Morrowind - Danaes Edits - TR.esp winning where they conflict
+
+[Order]
+Concept Art Hlaalu Balconies - Suran.ESP
+Windows Glow.esp
+; keep Windows Glow.esp winning where they conflict
+
+[Order]
+Dallara Ebonheart.esp
+OAAB Odai Plateau.esp
+; keep OAAB Odai Plateau.esp winning where they conflict
+
+[Order]
+GAMA.esp
+Dallara Ebonheart.esp
+; keep Dallara Ebonheart.esp winning where they conflict
+
+[Order]
+Odai River Upper Overhaul.esp
+BalmoraDocks.ESP
+; keep BalmoraDocks.ESP winning where they conflict
+
+[Order]
+RepopulatedMainland.ESP
+Logs on Fire Tamriel Rebuilt.esp
+; keep Logs on Fire Tamriel Rebuilt.esp winning where they conflict
+
+[Order]
+Nice Telvanni Council House.ESP
+logs on Fire.esp
+; keep logs on Fire.esp winning where they conflict
+
+[Order]
+HSN - Lighthouse Only.esp
+Expanded Sounds.esp
+; keep Expanded Sounds.esp winning where they conflict
+
+[Order]
+Clean_Mines and Caverns.esp
+Yet Another Guard Diversity - Regular.ESP
+; keep Yet Another Guard Diversity - Regular.ESP winning where they conflict
+
+[Order]
+DD_Caldera_Expansion.esp
+Expanded Sounds.esp
+; keep Expanded Sounds.esp winning where they conflict
+
+[Order]
+Seyda Neen - Damp Little Squat - unshabby.ESP
+Quests for Clans and Vampire Legends.ESP
+; keep Quests for Clans and Vampire Legends.ESP winning where they conflict
+
+[Order]
+Tel Morgana.esp
+DA_Sobitur_Facility_Clean.ESP
+; keep DA_Sobitur_Facility_Clean.ESP winning where they conflict
+
+[Order]
+TR_DarkDungeons.esp
+Animated_Morrowind - Danaes Edits - Vv.esp
+; keep Animated_Morrowind - Danaes Edits - Vv.esp winning where they conflict
+
+[Order]
+TASG.ESP
+logs on Fire.esp
+; keep logs on Fire.esp winning where they conflict
+
+[Order]
+Tel_Aruhn_Chronicles.ESP
+logs on Fire.esp
+; keep logs on Fire.esp winning where they conflict
+
+[Order]
+Sheogorad - Groves of the North.esp
+RR_Better_Ships_n_Boats_Eng.esp
+; keep RR_Better_Ships_n_Boats_Eng.esp winning where they conflict
+
+[Order]
+GreymarchDawn.esp
+Expanded Sounds.esp
+; keep Expanded Sounds.esp winning where they conflict
+
+[Order]
+Dallara Wolverine Hall.esp
+logs on Fire.esp
+; keep logs on Fire.esp winning where they conflict
+
+[Order]
+BLLDV_ALL.esp
+VY_Under_Skar.esp
+; keep VY_Under_Skar.esp winning where they conflict
+
+[Order]
+RR_Ghost_Gate_Fortress_Eng.ESP
+logs on Fire.esp
+; keep logs on Fire.esp winning where they conflict
+
+[Order]
+Justice4Khartag.esp
+RR_Better_Ships_n_Boats_Eng.esp
+; keep RR_Better_Ships_n_Boats_Eng.esp winning where they conflict
+
+[Order]
+DwemerTall.ESP
+DN-Lighted_Dwemer_Towers.ESP
+; keep DN-Lighted_Dwemer_Towers.ESP winning where they conflict
+
+[Order]
+Dallara Fort Buckmoth.esp
+Yet Another Guard Diversity - Regular.ESP
+; keep Yet Another Guard Diversity - Regular.ESP winning where they conflict
+
+[Order]
+RR_Better_Ships_n_Boats_Eng.esp
+MAH.ESP
+; keep MAH.ESP winning where they conflict
+
+[Order]
+New Ilunibi.ESP
+DreamersExpansion.ESP
+; keep DreamersExpansion.ESP winning where they conflict
+
+[Order]
+Dallara Pelagiad PFP.esp
+Yet Another Guard Diversity - Regular.ESP
+; keep Yet Another Guard Diversity - Regular.ESP winning where they conflict
+
+[Order]
+Clean_Mines and Caverns.esp
+RepopulatedCreatures.ESP
+; keep RepopulatedCreatures.ESP winning where they conflict
+
+[Order]
+Shipyards of Vvardenfell.esp
+RR_Better_Ships_n_Boats_Eng.esp
+; keep RR_Better_Ships_n_Boats_Eng.esp winning where they conflict
+
+[Order]
+Sheogorad - Groves of the North.esp
+DN-Lighted_Dwemer_Towers.ESP
+; keep DN-Lighted_Dwemer_Towers.ESP winning where they conflict
+
+[Order]
+Sheogorad - Groves of the North.esp
+Expanded Sounds.esp
+; keep Expanded Sounds.esp winning where they conflict
+
+[Order]
+Sheogorad - Groves of the North.esp
+Suran_Underworld_v3.ESP
+; keep Suran_Underworld_v3.ESP winning where they conflict
+
+[Order]
+The Northern Strongholds.esp
+ST_Alchemy_Replacer_1.3.esp
+; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+
+[Order]
+The Northern Strongholds.esp
+logs on Fire.esp
+; keep logs on Fire.esp winning where they conflict
+
+[Order]
+New Ilunibi.ESP
+Expansions Integrated - Fewer BM Creatures.esp
+; keep Expansions Integrated - Fewer BM Creatures.esp winning where they conflict
+
+[Order]
+VY_Under_Skar.esp
+Yet Another Guard Diversity - Regular.ESP
+; keep Yet Another Guard Diversity - Regular.ESP winning where they conflict
+
+[Order]
+Dallara Ebonheart.esp
+Yet Another Guard Diversity - Regular.ESP
+; keep Yet Another Guard Diversity - Regular.ESP winning where they conflict
+
+[Order]
+Dallara Fort Moonmoth.esp
+Yet Another Guard Diversity - Regular.ESP
+; keep Yet Another Guard Diversity - Regular.ESP winning where they conflict
+
+[Order]
+Sotha Sil Expanded.ESP
+Tribunal Main Quest Reforged - SSE.esp
+; keep Tribunal Main Quest Reforged - SSE.esp winning where they conflict
+
+[Order]
+RepopulatedMainland.ESP
+abotWindowsGlowTR1912.esp
+; keep abotWindowsGlowTR1912.esp winning where they conflict
+
+[Order]
+Vvardenfell Distribution - Seyda Neen Coast Guard.ESP
+Yet Another Guard Diversity - Regular.ESP
+; keep Yet Another Guard Diversity - Regular.ESP winning where they conflict
+
+[Order]
+Vivec Striderport.ESP
+Expanded Sounds.esp
+; keep Expanded Sounds.esp winning where they conflict
+
+[Order]
+TelAhini.ESP
+Expanded Sounds.esp
+; keep Expanded Sounds.esp winning where they conflict
+
+[Order]
+Koal Cave Overhaul.ESP
+RepopulatedCreatures.ESP
+; keep RepopulatedCreatures.ESP winning where they conflict
+
+[Order]
+OAAB - Tombs Extended.ESP
+ST_Alchemy_Replacer_1.3.esp
+; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+
+[Order]
+Cutting Room Floor - Stronghold Homes.esp
+Creatures and Critters.ESP
+; keep Creatures and Critters.ESP winning where they conflict
+
+[Order]
+Hla Odai.esp
+PR Perfect Scum.esp
+; keep PR Perfect Scum.esp winning where they conflict
+
+[Order]
+Clean_Mines and Caverns.esp
+Creatures and Critters.ESP
+; keep Creatures and Critters.ESP winning where they conflict
+
+[Order]
+Clean_Mines and Caverns.esp
+DreamersExpansion.ESP
+; keep DreamersExpansion.ESP winning where they conflict
+
+[Order]
+Shabby Seyda Neen.ESP
+abotWindowsGlow.esp
+; keep abotWindowsGlow.esp winning where they conflict
+
+[Order]
+The Mountain of Fear.ESP
+logs on Fire.esp
+; keep logs on Fire.esp winning where they conflict
+
+[Order]
+KS_Julan_Ashlander Companion_3.0_beta.esp
+logs on Fire.esp
+; keep logs on Fire.esp winning where they conflict
+
+[Order]
+RR_Ghost_Gate_Fortress_Eng.ESP
+RepopulatedCreatures.ESP
+; keep RepopulatedCreatures.ESP winning where they conflict
+
+[Order]
+Sheogorad - Groves of the North.esp
+Daedric Shrine Overhaul FULL.esp
+; keep Daedric Shrine Overhaul FULL.esp winning where they conflict
+
+[Order]
+Sheogorad - Groves of the North.esp
+MAH.ESP
+; keep MAH.ESP winning where they conflict
+
+[Order]
+OAAB_Grazelands.ESP
+MAH.ESP
+; keep MAH.ESP winning where they conflict
+
+[Order]
+Clean_EndusalRedone.esp
+DN-Lighted_Dwemer_Towers.ESP
+; keep DN-Lighted_Dwemer_Towers.ESP winning where they conflict
+
+[Order]
+Cutting Room Floor - Free Slaves.esp
+Unlock All Slaves.esp
+; keep Unlock All Slaves.esp winning where they conflict
+
+[Order]
+GreymarchDawn.esp
+RepopulatedCreatures.ESP
+; keep RepopulatedCreatures.ESP winning where they conflict
+
+[Order]
+MGO Guild Halls Vanilla.esp
+logs on Fire.esp
+; keep logs on Fire.esp winning where they conflict
+
+[Order]
+VY_Under_Skar.esp
+logs on Fire.esp
+; keep logs on Fire.esp winning where they conflict
+
+[Order]
+Justice4Khartag.esp
+Uncharted Artifacts.esp
+; keep Uncharted Artifacts.esp winning where they conflict
+
+[Order]
+DRPV1.9.ESP
+Of Eggs and Dwarves.ESP
+; keep Of Eggs and Dwarves.ESP winning where they conflict
+
+[Order]
+DRPV1.9.ESP
+Suran_Underworld_v3.ESP
+; keep Suran_Underworld_v3.ESP winning where they conflict
+
+[Order]
+URH_Ald_Velothi.esp
+Improved Inns Expanded.esp
+; keep Improved Inns Expanded.esp winning where they conflict
+
+[Order]
+ROHT_2_0_8.ESP
+Pergamaea_Overhaul.ESP
+; keep Pergamaea_Overhaul.ESP winning where they conflict
+
+[Order]
+Gnisis Docks v1.0.esp
+ST_Alchemy_Replacer_1.3.esp
+; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+
+[Order]
+Interiors_of_Mournhold_V2.3.esp
+BTB's Game Improvements (Necro Edit).esp
+; keep BTB's Game Improvements (Necro Edit).esp winning where they conflict
+
+[Order]
+BTB's Game Improvements (Necro Edit).esp
+Cutting Room Floor - Items TR.esp
+; keep Cutting Room Floor - Items TR.esp winning where they conflict
+
+[Order]
+Suran Fix.ESP
+Concept_Arts_plantations.esp
+; keep Concept_Arts_plantations.esp winning where they conflict
+
+[Order]
+Bal'laku - The Lonely Towers.esp
+ST_Alchemy_Replacer_1.3.esp
+; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+
+[Order]
+Cutting Room Floor - Creatures & Diseases TR.esp
+Of Eggs and Dwarves.ESP
+; keep Of Eggs and Dwarves.ESP winning where they conflict
+
+[Order]
+Cutting Room Floor - Creatures & Diseases TR.esp
+Superb Shulk Eggmine.ESP
+; keep Superb Shulk Eggmine.ESP winning where they conflict
+
+[Order]
+Clean_Mines and Caverns.esp
+MAH.ESP
+; keep MAH.ESP winning where they conflict
+
+[Order]
+Clean_KuniraiRefit2.esp
+Expanded Sounds.esp
+; keep Expanded Sounds.esp winning where they conflict
+
+[Order]
+RepopulatedMorrowind.ESP
+MGO Guild Halls Vanilla.esp
+; keep MGO Guild Halls Vanilla.esp winning where they conflict
+
+[Order]
+Daedric Shrine Overhaul FULL.esp
+ST_Alchemy_Replacer_1.3.esp
+; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+
+[Order]
+Daedric Shrine Overhaul FULL.esp
+Daedric Ruin Expansion - Ramimilk - No Chrysamere.ESP
+; keep Daedric Ruin Expansion - Ramimilk - No Chrysamere.ESP winning where they conflict
+
+[Order]
+OAAB Better Caldera Interiors.ESP
+Windows Glow.esp
+; keep Windows Glow.esp winning where they conflict
+
+[Order]
+Windows Glow.esp
+abotWindowsGlowTR1912.esp
+; keep abotWindowsGlowTR1912.esp winning where they conflict
+
+[Order]
+RR_Ghost_Gate_Fortress_Eng.ESP
+ST_Alchemy_Replacer_1.3.esp
+; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+
+[Order]
+Better Landscapes Stonewood Pass (RP Edit).esp
+DD_Caldera_Expansion.esp
+; keep DD_Caldera_Expansion.esp winning where they conflict
+
+[Order]
+RevampedDarkBrotherhood.ESP
+Clean_Severa Magia Fix.ESP
+; keep Clean_Severa Magia Fix.ESP winning where they conflict
+
+[Order]
+Ald'Ruhn Outskirts - Ancestral Refuge.ESP
+Ineone the Buoyant Armiger.ESP
+; keep Ineone the Buoyant Armiger.ESP winning where they conflict
+
+[Order]
+Urshilaku Outskirts - Glass and Shalk.ESP
+Ineone the Buoyant Armiger.ESP
+; keep Ineone the Buoyant Armiger.ESP winning where they conflict
+
+[Order]
+SecretsOfTheCrystalCity.esp
+DM_MassamaDarkness.ESP
+; keep DM_MassamaDarkness.ESP winning where they conflict
+
+[Order]
+Mudcrab Island TLAD.esp
+Suran_Underworld_v3.ESP
+; keep Suran_Underworld_v3.ESP winning where they conflict
+
+[Order]
+Dallara Fort Frostmoth.esp
+The Sable Dragon 1.6 mmc.esp
+; keep The Sable Dragon 1.6 mmc.esp winning where they conflict
+
+[Order]
+Silt_strider_placement.ESP
+Local Lore - Silt Striders and Caravaners.ESP
+; keep Local Lore - Silt Striders and Caravaners.ESP winning where they conflict
+
+[Order]
+Ashlander Travel.ESP
+KS_Julan_Ashlander Companion_3.0_beta.esp
+; keep KS_Julan_Ashlander Companion_3.0_beta.esp winning where they conflict
+
+[Order]
+Seyda Neen - Damp Little Squat - unshabby.ESP
+Yet Another Guard Diversity - Regular.ESP
+; keep Yet Another Guard Diversity - Regular.ESP winning where they conflict
+
+[Order]
+Seyda Neen - Damp Little Squat - unshabby.ESP
+abotWindowsGlow.esp
+; keep abotWindowsGlow.esp winning where they conflict
+
+[Order]
+Justice4Khartag.esp
+ST_Alchemy_Replacer_1.3.esp
+; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+
+[Order]
+OAAB_Shipwrecks_JFK_patch.esp
+Uncharted Artifacts.esp
+; keep Uncharted Artifacts.esp winning where they conflict
+
+[Order]
+Dwemer Legacy Reforged - Bthungthumz and Druscashti.esp
+DN-Lighted_Dwemer_Towers.ESP
+; keep DN-Lighted_Dwemer_Towers.ESP winning where they conflict
+
+[Order]
+DRPV1.9.ESP
+DLR_DRP_Compatibility_Patch.esp
+; keep DLR_DRP_Compatibility_Patch.esp winning where they conflict
+
+[Order]
+DN-Lighted_Dwemer_Towers.ESP
+DLR_DRP_Compatibility_Patch.esp
+; keep DLR_DRP_Compatibility_Patch.esp winning where they conflict
+
+[Order]
+Vvardenfell Distribution - Andrethi Ancestral Tomb.ESP
+Quests for Clans and Vampire Legends.ESP
+; keep Quests for Clans and Vampire Legends.ESP winning where they conflict
+
+[Order]
+Kogoruhn - Extinct City of Ash and Sulfur.esp
+DreamersExpansion.ESP
+; keep DreamersExpansion.ESP winning where they conflict
+
+[Order]
+Kogoruhn - Extinct City of Ash and Sulfur.esp
+ST_Alchemy_Replacer_1.3.esp
+; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+
+[Order]
+Snug Suran - Oran Manor Upgrade.ESP
+GreymarchDawn.esp
+; keep GreymarchDawn.esp winning where they conflict
+
+[Order]
+ROHT_2_0_8.ESP
+Pergamaea_Overhaul_ROHT_2_0_8-patch.ESP
+; keep Pergamaea_Overhaul_ROHT_2_0_8-patch.ESP winning where they conflict
+
+[Order]
+Molag Mar X.esp
+ST_Alchemy_Replacer_1.3.esp
+; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+
+[Order]
+Temple Master.ESP
+Suran Temple Door Fix.esp
+; keep Suran Temple Door Fix.esp winning where they conflict
+
+[Order]
+Temple Master.ESP
+Windows Glow.esp
+; keep Windows Glow.esp winning where they conflict
+
+[Order]
+Liar yes Idiot no.ESP
+ST_Alchemy_Replacer_1.3.esp
+; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+
+[Order]
+The Wanderers Stash.esp
+ST_Alchemy_Replacer_1.3.esp
+; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+
+[Order]
+Baan_Binif.ESP
+ST_Alchemy_Replacer_1.3.esp
+; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+
+[Order]
+Uvirith's Legacy_3.53.esp
+ST_Alchemy_Replacer_1.3.esp
+; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+
+[Order]
+Cutting Room Floor - Creatures & Diseases TR.esp
+Clean_Mines and Caverns.esp
+; keep Clean_Mines and Caverns.esp winning where they conflict
+
+[Order]
+Clean_Mines and Caverns.esp
+ST_Alchemy_Replacer_1.3.esp
+; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+
+[Order]
+Clean_Piran.esp
+Creatures and Critters.ESP
+; keep Creatures and Critters.ESP winning where they conflict
+
+[Order]
+Clean_Piran.esp
+DreamersExpansion.ESP
+; keep DreamersExpansion.ESP winning where they conflict
+
+[Order]
+RepopulatedMorrowind.ESP
+Dallara Ebonheart.esp
+; keep Dallara Ebonheart.esp winning where they conflict
+
+[Order]
+Unique Uniques.ESP
+TR_MuseumofArtifacts.esp
+; keep TR_MuseumofArtifacts.esp winning where they conflict
+
+[Order]
+ALBlindingSpeed.ESP
+ST_Alchemy_Replacer_1.3.esp
+; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+
+[Order]
+Sheogorad - Groves of the North.esp
+Portal to Catalepsy.ESP
+; keep Portal to Catalepsy.ESP winning where they conflict
+
+[Order]
+OAAB_Grazelands.ESP
+RepopulatedCreatures.ESP
+; keep RepopulatedCreatures.ESP winning where they conflict
+
+[Order]
+OAAB_Grazelands.ESP
+Odirniran Fix-V1.esp
+; keep Odirniran Fix-V1.esp winning where they conflict
+
+[Order]
+OAAB_Grazelands.ESP
+Suran_Underworld_v3.ESP
+; keep Suran_Underworld_v3.ESP winning where they conflict
+
+[Order]
+OAAB_Grazelands.ESP
+Cutting Room Floor - Free Slaves.esp
+; keep Cutting Room Floor - Free Slaves.esp winning where they conflict
+
+[Order]
+OAAB_Grazelands.ESP
+BLLDV_ALL.esp
+; keep BLLDV_ALL.esp winning where they conflict
+
+[Order]
+Molten Glass.ESP
+Yet Another Guard Diversity - Regular.ESP
+; keep Yet Another Guard Diversity - Regular.ESP winning where they conflict
+
+[Order]
+Molten Glass.ESP
+Expanded Sounds.esp
+; keep Expanded Sounds.esp winning where they conflict
+
+[Order]
+Suran_Underworld_v3.ESP
+Privileges&Services 1.1.esp
+; keep Privileges&Services 1.1.esp winning where they conflict
+
+[Order]
+Of Gems and Geodes.ESP
+RepopulatedCreatures.ESP
+; keep RepopulatedCreatures.ESP winning where they conflict
+
+[Order]
+Dallara Wolverine Hall.esp
+Yet Another Guard Diversity - Regular.ESP
+; keep Yet Another Guard Diversity - Regular.ESP winning where they conflict
+
+[Order]
+Mills of Morrowind.esp
+ST_Alchemy_Replacer_1.3.esp
+; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+
+[Order]
+Cutting Room Floor - Items TR.esp
+Dallara Ebonheart.esp
+; keep Dallara Ebonheart.esp winning where they conflict
+
+[Order]
+Bards of Bardenfell.esp
+South Wall_TG_Hideout.esp
+; keep South Wall_TG_Hideout.esp winning where they conflict
+
+[Order]
+OAAB Better Caldera Interiors.ESP
+MasterIndexRedux.esp
+; keep MasterIndexRedux.esp winning where they conflict
+
+[Order]
+OAAB Better Caldera Interiors.ESP
+Yet Another Guard Diversity - Regular.ESP
+; keep Yet Another Guard Diversity - Regular.ESP winning where they conflict
+
+[Order]
+Windows Glow.esp
+Concept art palace.ESP
+; keep Concept art palace.ESP winning where they conflict
+
+[Order]
+Windows Glow.esp
+RR_Ghost_Gate_Fortress_Eng.ESP
+; keep RR_Ghost_Gate_Fortress_Eng.ESP winning where they conflict
+
+[Order]
+Windows Glow.esp
+Dallara Ebonheart.esp
+; keep Dallara Ebonheart.esp winning where they conflict
+
+[Order]
+Windows Glow.esp
+OAAB Odai Plateau.esp
+; keep OAAB Odai Plateau.esp winning where they conflict
+
+[Order]
+OAAB Brother Junipers Twin Lamps.esp
+Yet Another Guard Diversity - Regular.ESP
+; keep Yet Another Guard Diversity - Regular.ESP winning where they conflict
+
+[Order]
+Yet Another Guard Diversity - Regular.ESP
+OAAB_Tel Mora_Female Guards.ESP
+; keep OAAB_Tel Mora_Female Guards.ESP winning where they conflict
+
+[Order]
+MaiqMainland.esp
+Great Seawall of Vivec.ESP
+; keep Great Seawall of Vivec.ESP winning where they conflict
+
+[Order]
+Hidden Sea Loot.ESP
+The_Old_Lie.esp
+; keep The_Old_Lie.esp winning where they conflict
+
+[Order]
+Hidden Sea Loot.ESP
+RepopulatedMainland.ESP
+; keep RepopulatedMainland.ESP winning where they conflict
+
+[Order]
+Hidden Sea Loot.ESP
+abotWindowsGlowTR1912.esp
+; keep abotWindowsGlowTR1912.esp winning where they conflict
+
+[Order]
+The_Old_Lie.esp
+abotWindowsGlowTR1912.esp
+; keep abotWindowsGlowTR1912.esp winning where they conflict
+
+[Order]
+Animated_Morrowind - Danaes Edits - Vv.esp
+Imperial Factions.esp
+; keep Imperial Factions.esp winning where they conflict
+
+[Order]
+Animated_Morrowind - Danaes Edits - Vv.esp
+South Wall_TG_Hideout.esp
+; keep South Wall_TG_Hideout.esp winning where they conflict
+
+[Order]
+TR_DarkDungeons.esp
+CompletePropylonNetworkForTR.ESP
+; keep CompletePropylonNetworkForTR.ESP winning where they conflict
+
+[Order]
+Animated_Morrowind - Danaes Edits - TR.esp
+abotWindowsGlowTR1912.esp
+; keep abotWindowsGlowTR1912.esp winning where they conflict
+
+[Order]
+Bal'laku - The Lonely Towers.esp
+Ineone the Buoyant Armiger.ESP
+; keep Ineone the Buoyant Armiger.ESP winning where they conflict
+
+[Order]
+Memento Mori Buried.ESP
+Ineone the Buoyant Armiger.ESP
+; keep Ineone the Buoyant Armiger.ESP winning where they conflict
+
+[Order]
+RR_Holamayan_Eng.ESP
+Dissident_Ordinators.ESP
+; keep Dissident_Ordinators.ESP winning where they conflict
+
+[Order]
+Nice Telvanni Council House.ESP
+MAH.ESP
+; keep MAH.ESP winning where they conflict
+
+[Order]
+Seyda Neen - Damp Little Squat - unshabby.ESP
+Vvardenfell Distribution - Seyda Neen Coast Guard.ESP
+; keep Vvardenfell Distribution - Seyda Neen Coast Guard.ESP winning where they conflict
+
+[Order]
+Seyda Neen - Damp Little Squat - unshabby.ESP
+Local Lore - Silt Striders and Caravaners.ESP
+; keep Local Lore - Silt Striders and Caravaners.ESP winning where they conflict
+
+[Order]
+The_Stolen_Sweetrolls.esp
+Expanded Sounds.esp
+; keep Expanded Sounds.esp winning where they conflict
+
+[Order]
+Seyda Neen - Damp Little Squat - unshabby.ESP
+PR Perfect Scum.esp
+; keep PR Perfect Scum.esp winning where they conflict
+
+[Order]
+Seyda Neen - Damp Little Squat - unshabby.ESP
+Animated_Morrowind - Danaes Edits - Vv.esp
+; keep Animated_Morrowind - Danaes Edits - Vv.esp winning where they conflict
+
+[Order]
+Fighters Guild Improved.esp
+Yet Another Guard Diversity - Regular.ESP
+; keep Yet Another Guard Diversity - Regular.ESP winning where they conflict
+
+[Order]
+Molag Mar Outskirts - Bonesaint Guardians.ESP
+RepopulatedCreatures.ESP
+; keep RepopulatedCreatures.ESP winning where they conflict
+
+[Order]
+Shrine of Boethiah Expanded.ESP
+ST_Alchemy_Replacer_1.3.esp
+; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+
+[Order]
+Cutting Room Floor - Extra Additions.esp
+Daedric Shrine Overhaul FULL.esp
+; keep Daedric Shrine Overhaul FULL.esp winning where they conflict
+
+[Order]
+Cutting Room Floor - Extra Additions.esp
+OAAB Huleen's Hut Overhaul.ESP
+; keep OAAB Huleen's Hut Overhaul.ESP winning where they conflict
+
+[Order]
+Tel_Aruhn_Chronicles.ESP
+RepopulatedCreatures.ESP
+; keep RepopulatedCreatures.ESP winning where they conflict
+
+[Order]
+Tel_Aruhn_Chronicles.ESP
+BulwarkAmulet.ESP
+; keep BulwarkAmulet.ESP winning where they conflict
+
+[Order]
+Tel_Aruhn_Chronicles.ESP
+sm_tel_robe.ESP
+; keep sm_tel_robe.ESP winning where they conflict
+
+[Order]
+Balmora Redecorated.ESP
+Uvirith's Legacy_3.53.esp
+; keep Uvirith's Legacy_3.53.esp winning where they conflict
+
+[Order]
+OAAB_-_Winged_Twilight_Companion_Ari-Ari.esp
+ST_Alchemy_Replacer_1.3.esp
+; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+
+[Order]
+Cutting Room Floor - Shrine Blessings.esp
+MGO Guild Halls Vanilla.esp
+; keep MGO Guild Halls Vanilla.esp winning where they conflict
+
+[Order]
+Cutting Room Floor - Shrine Blessings.esp
+Dallara Ebonheart.esp
+; keep Dallara Ebonheart.esp winning where they conflict
+
+[Order]
+Cutting Room Floor - Shrine Blessings.esp
+Talos Cult Conspiracy.esp
+; keep Talos Cult Conspiracy.esp winning where they conflict
+
+[Order]
+Cutting Room Floor - Shrine Blessings.esp
+Dallara Fort Darius.esp
+; keep Dallara Fort Darius.esp winning where they conflict
+
+[Order]
+Cutting Room Floor - Shrine Blessings.esp
+Dallara Wolverine Hall.esp
+; keep Dallara Wolverine Hall.esp winning where they conflict
+
+[Order]
+Dwemer Legacy Reforged - Bthungthumz and Druscashti.esp
+ST_Alchemy_Replacer_1.3.esp
+; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+
+[Order]
+RPNR_Decorated_Cantons.ESP
+Yet Another Guard Diversity - Regular.ESP
+; keep Yet Another Guard Diversity - Regular.ESP winning where they conflict
+
+[Order]
+DRPV1.9.ESP
+Dwemer Legacy Reforged - Arkngthunch-Sturdumz.esp
+; keep Dwemer Legacy Reforged - Arkngthunch-Sturdumz.esp winning where they conflict
+
+[Order]
+Dwemer Legacy Reforged - Arkngthunch-Sturdumz.esp
+DLR_DRP_Compatibility_Patch.esp
+; keep DLR_DRP_Compatibility_Patch.esp winning where they conflict
+
+[Order]
+Of Musk and Mer A Sadrith Mora Tale.esp
+RepopulatedCreatures.ESP
+; keep RepopulatedCreatures.ESP winning where they conflict
+
+[Order]
+Of Musk and Mer A Sadrith Mora Tale.esp
+Yet Another Guard Diversity - Regular.ESP
+; keep Yet Another Guard Diversity - Regular.ESP winning where they conflict
+
+[Order]
+Of Musk and Mer A Sadrith Mora Tale.esp
+Of_Murk_and_Mussels.esp
+; keep Of_Murk_and_Mussels.esp winning where they conflict
+
+[Order]
+Vvardenfell Distribution - Andrano Ancestral Tomb.ESP
+Antares' Undead Redux.esp
+; keep Antares' Undead Redux.esp winning where they conflict
+
+[Order]
+Kogoruhn - Extinct City of Ash and Sulfur.esp
+Creatures and Critters.ESP
+; keep Creatures and Critters.ESP winning where they conflict
+
+[Order]
+Kogoruhn - Extinct City of Ash and Sulfur.esp
+Expansions Integrated - Fewer BM Creatures.esp
+; keep Expansions Integrated - Fewer BM Creatures.esp winning where they conflict
+
+[Order]
+URH_Khuul.esp
+Improved Inns Expanded.esp
+; keep Improved Inns Expanded.esp winning where they conflict
+
+[Order]
+LB_EbonheartArgonianMission.ESP
+Unlock All Slaves.esp
+; keep Unlock All Slaves.esp winning where they conflict
+
+[Order]
+URH_Ald_Velothi.esp
+Privileges&Services 1.1.esp
+; keep Privileges&Services 1.1.esp winning where they conflict
+
+[Order]
+URH_Ald_Velothi.esp
+ST_Alchemy_Replacer_1.3.esp
+; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+
+[Order]
+Odai River Upper Overhaul.esp
+Expanded Sounds.esp
+; keep Expanded Sounds.esp winning where they conflict
+
+[Order]
+ForestMaarGan.ESP
+VSD - Odibi.esp
+; keep VSD - Odibi.esp winning where they conflict
+
+[Order]
+ForestMaarGan.ESP
+Sabrina.esp
+; keep Sabrina.esp winning where they conflict
+
+[Order]
+Clean_TureynulalRedone.esp
+Hall of the Last Ember_Sorkvild the Raven.ESP
+; keep Hall of the Last Ember_Sorkvild the Raven.ESP winning where they conflict
+
+[Order]
+Yul Marshee and the Visage of Mzund.ESP
+Yet Another Guard Diversity - Regular.ESP
+; keep Yet Another Guard Diversity - Regular.ESP winning where they conflict
+
+[Order]
+Clean DR115_TheDropoff_HlaOadDocks.ESP
+RepopulatedCreatures.ESP
+; keep RepopulatedCreatures.ESP winning where they conflict
+
+[Order]
+Pergamaea_Overhaul.ESP
+Pergamaea_Overhaul_ROHT_2_0_8-patch.ESP
+; keep Pergamaea_Overhaul_ROHT_2_0_8-patch.ESP winning where they conflict
+
+[Order]
+DaedricBeacons.ESP
+Daedric Shrine Overhaul FULL.esp
+; keep Daedric Shrine Overhaul FULL.esp winning where they conflict
+
+[Order]
+OAAB - Tombs Extended.ESP
+Holy Art.ESP
+; keep Holy Art.ESP winning where they conflict
+
+[Order]
+Livelier Lucky Lockup.ESP
+Improved Inns Expanded.esp
+; keep Improved Inns Expanded.esp winning where they conflict
+
+[Order]
+Cutting Room Floor - Items TR.esp
+Interiors_of_Mournhold_V2.3.esp
+; make Interiors_of_Mournhold_V2.3.esp win where they conflict
+
+[Order]
+Llervu Ancestral Tomb Expanded.ESP
+ST_Alchemy_Replacer_1.3.esp
+; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+
+[Order]
+Cutting Room Floor - Stronghold Homes.esp
+DreamersExpansion.ESP
+; keep DreamersExpansion.ESP winning where they conflict
+
+[Order]
+imperialcultexpansionv1.esp
+Daedric Shrine Overhaul FULL.esp
+; keep Daedric Shrine Overhaul FULL.esp winning where they conflict
+
+[Order]
+Suran Fix.ESP
+Concept Art Hlaalu Balconies - Suran.ESP
+; keep Concept Art Hlaalu Balconies - Suran.ESP winning where they conflict
+
+[Order]
+Suran Fix.ESP
+Temple Master.ESP
+; keep Temple Master.ESP winning where they conflict
+
+[Order]
+Suran Fix.ESP
+Suran Temple Door Fix.esp
+; keep Suran Temple Door Fix.esp winning where they conflict
+
+[Order]
+Suran Fix.ESP
+Windows Glow.esp
+; keep Windows Glow.esp winning where they conflict
+
+[Order]
+Suran Temple Door Fix.esp
+Windows Glow.esp
+; keep Windows Glow.esp winning where they conflict
+
+[Order]
+Suran Fix.ESP
+Suran_Underworld_v3.ESP
+; keep Suran_Underworld_v3.ESP winning where they conflict
+
+[Order]
+Strider Burial.esp
+ST_Alchemy_Replacer_1.3.esp
+; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+
+[Order]
+Clean Tales of Seyda Neen.esp
+MAH.ESP
+; keep MAH.ESP winning where they conflict
+
+[Order]
+OAABandoned Shack Mad Hermit.ESP
+MAH.ESP
+; keep MAH.ESP winning where they conflict
+
+[Order]
+DM_CrownOfUrshilaku.ESP
+ST_Alchemy_Replacer_1.3.esp
+; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+
+[Order]
+Mudcrab Imports.esp
+ST_Alchemy_Replacer_1.3.esp
+; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+
+[Order]
+OAAB Pomegranates.ESP
+ST_Alchemy_Replacer_1.3.esp
+; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+
+[Order]
+Curio Manor - OAAB and Hlaaluified.ESP
+Windows Glow.esp
+; keep Windows Glow.esp winning where they conflict
+
+[Order]
+Temple Master.ESP
+Holy Art.ESP
+; keep Holy Art.ESP winning where they conflict
+
+[Order]
+BB2_Peasant_Gowns.esp
+Yet Another Guard Diversity - Regular.ESP
+; keep Yet Another Guard Diversity - Regular.ESP winning where they conflict
+
+[Order]
+Uvirith's Legacy_3.53.esp
+MAH.ESP
+; keep MAH.ESP winning where they conflict
+
+[Order]
+Uvirith's Legacy_3.53.esp
+Holy Art.ESP
+; keep Holy Art.ESP winning where they conflict
+
+[Order]
+Corprusarium - Sorrow Heart of Tel Fyr.ESP
+RR_Better_Ships_n_Boats_Eng.esp
+; keep RR_Better_Ships_n_Boats_Eng.esp winning where they conflict
+
+[Order]
+Corprusarium - Sorrow Heart of Tel Fyr.ESP
+ST_Alchemy_Replacer_1.3.esp
+; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+
+[Order]
+OAAB - Foyada Mamaea.ESP
+ST_Alchemy_Replacer_1.3.esp
+; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+
+[Order]
+Clean_Mines and Caverns.esp
+Join All Vampire Clans.esp
+; keep Join All Vampire Clans.esp winning where they conflict
+
+[Order]
+Clean_Mines and Caverns.esp
+Sheogorad - Groves of the North.esp
+; keep Sheogorad - Groves of the North.esp winning where they conflict
+
+[Order]
+Clean_Mines and Caverns.esp
+BLLDV_ALL.esp
+; keep BLLDV_ALL.esp winning where they conflict
+
+[Order]
+SecretsOfTheCrystalCity.esp
+Expanded Sounds.esp
+; keep Expanded Sounds.esp winning where they conflict
+
+[Order]
+Clean_Mines and Caverns.esp
+Camonna Tong.esp
+; keep Camonna Tong.esp winning where they conflict
+
+[Order]
+Camonna Tong.esp
+RR_Better_Ships_n_Boats_Eng.esp
+; keep RR_Better_Ships_n_Boats_Eng.esp winning where they conflict
+
+[Order]
+Clean_Ashirbadon.esp
+Expanded Sounds.esp
+; keep Expanded Sounds.esp winning where they conflict
+
+[Order]
+Clean_KuniraiRefit2.esp
+Expansions Integrated - Fewer BM Creatures.esp
+; keep Expansions Integrated - Fewer BM Creatures.esp winning where they conflict
+
+[Order]
+Temple Throat Singers.esp
+The_magic_rock_of_Maar_Gan.ESP
+; keep The_magic_rock_of_Maar_Gan.ESP winning where they conflict
+
+[Order]
+RepopulatedMorrowind.ESP
+Animated_Morrowind - Danaes Edits - Vv.esp
+; keep Animated_Morrowind - Danaes Edits - Vv.esp winning where they conflict
+
+[Order]
+Unique Uniques.ESP
+BLLDV_ALL.esp
+; keep BLLDV_ALL.esp winning where they conflict
+
+[Order]
+Unique Uniques.ESP
+Pilgrimage of Storm and War.esp
+; keep Pilgrimage of Storm and War.esp winning where they conflict
+
+[Order]
+AATL Saturan Depths.ESP
+GreymarchDawn.esp
+; keep GreymarchDawn.esp winning where they conflict
+
+[Order]
+The Mountain of Fear.ESP
+ST_Alchemy_Replacer_1.3.esp
+; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+
+[Order]
+Better Bounties.esp
+abotWindowsGlow.esp
+; keep abotWindowsGlow.esp winning where they conflict
+
+[Order]
+The Sable Dragon 1.6 mmc.esp
+ST_Alchemy_Replacer_1.3.esp
+; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+
+[Order]
+Dallara Pelagiad PFP.esp
+abotWindowsGlow.esp
+; keep abotWindowsGlow.esp winning where they conflict
+
+[Order]
+Dallara Pelagiad PFP.esp
+Friends & Frens - Vvardenfell.ESP
+; keep Friends & Frens - Vvardenfell.ESP winning where they conflict
+
+[Order]
+Dallara Pelagiad PFP.esp
+Casimir's Legacy.esp
+; keep Casimir's Legacy.esp winning where they conflict
+
+[Order]
+Friends & Frens - Vvardenfell.ESP
+Casimir's Legacy.esp
+; keep Casimir's Legacy.esp winning where they conflict
+
+[Order]
+KS_Julan_Ashlander Companion_3.0_beta.esp
+RR_Ghost_Gate_Fortress_Eng.ESP
+; keep RR_Ghost_Gate_Fortress_Eng.ESP winning where they conflict
+
+[Order]
+KS_Julan_Ashlander Companion_3.0_beta.esp
+RepopulatedCreatures.ESP
+; keep RepopulatedCreatures.ESP winning where they conflict
+
+[Order]
+Sheogorad - Groves of the North.esp
+Clan Aundae Vampire Dungeons.ESP
+; keep Clan Aundae Vampire Dungeons.ESP winning where they conflict
+
+[Order]
+Sheogorad - Groves of the North.esp
+Quests for Clans and Vampire Legends.ESP
+; keep Quests for Clans and Vampire Legends.ESP winning where they conflict
+
+[Order]
+Sheogorad - Groves of the North.esp
+Windows Glow.esp
+; keep Windows Glow.esp winning where they conflict
+
+[Order]
+RepopulatedCreatures.ESP
+Clean_Waterfowl_Of_Morrowind_Expanded.esp
+; keep Clean_Waterfowl_Of_Morrowind_Expanded.esp winning where they conflict
+
+[Order]
+OAAB_Grazelands.ESP
+Hall of the Last Ember_Sorkvild the Raven.ESP
+; keep Hall of the Last Ember_Sorkvild the Raven.ESP winning where they conflict
+
+[Order]
+OAAB_Grazelands.ESP
+Cutting Room Floor - Quests.esp
+; keep Cutting Room Floor - Quests.esp winning where they conflict
+
+[Order]
+OAAB_Grazelands.ESP
+Cutting Room Floor - Keys.esp
+; keep Cutting Room Floor - Keys.esp winning where they conflict
+
+[Order]
+OAAB_Grazelands.ESP
+Improved Inns Expanded.esp
+; keep Improved Inns Expanded.esp winning where they conflict
+
+[Order]
+The Northern Strongholds.esp
+BLLDV_ALL.esp
+; keep BLLDV_ALL.esp winning where they conflict
+
+[Order]
+Cutting Room Floor - Quests.esp
+Clean_EndusalRedone.esp
+; keep Clean_EndusalRedone.esp winning where they conflict
+
+[Order]
+Hall of the Last Ember_Sorkvild the Raven.ESP
+RPNR_Library.ESP
+; keep RPNR_Library.ESP winning where they conflict
+
+[Order]
+Cutting Room Floor - Keys.esp
+VY_Under_Skar.esp
+; keep VY_Under_Skar.esp winning where they conflict
+
+[Order]
+Cutting Room Floor - Free Slaves.esp
+Friends & Frens - Vvardenfell.ESP
+; keep Friends & Frens - Vvardenfell.ESP winning where they conflict
+
+[Order]
+Cutting Room Floor - Free Slaves.esp
+GreymarchDawn.esp
+; keep GreymarchDawn.esp winning where they conflict
+
+[Order]
+GreymarchDawn.esp
+Unlock All Slaves.esp
+; keep Unlock All Slaves.esp winning where they conflict
+
+[Order]
+GreymarchDawn.esp
+MAH.ESP
+; keep MAH.ESP winning where they conflict
+
+[Order]
+Vampire Clans - Clutter Monkey Overhaul.ESP
+Vampire Clan Services.ESP
+; keep Vampire Clan Services.ESP winning where they conflict
+
+[Order]
+Vampire Clans - Clutter Monkey Overhaul.ESP
+DN-Lighted_Dwemer_Towers.ESP
+; keep DN-Lighted_Dwemer_Towers.ESP winning where they conflict
+
+[Order]
+Cutting Room Floor - Taverns.esp
+Suran_Underworld_v3.ESP
+; keep Suran_Underworld_v3.ESP winning where they conflict
+
+[Order]
+EbonheartEastEmpireCo.esp
+Molten Glass.ESP
+; keep Molten Glass.ESP winning where they conflict
+
+[Order]
+Suran_Underworld_v3.ESP
+RR_Gnisis_Arch_Eng.ESP
+; keep RR_Gnisis_Arch_Eng.ESP winning where they conflict
+
+[Order]
+RR_Gnisis_Arch_Eng.ESP
+Windows Glow.esp
+; keep Windows Glow.esp winning where they conflict
+
+[Order]
+Memento Mori Buried.ESP
+ST_Alchemy_Replacer_1.3.esp
+; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+
+[Order]
+Memento Mori Buried.ESP
+The_magic_rock_of_Maar_Gan.ESP
+; keep The_magic_rock_of_Maar_Gan.ESP winning where they conflict
+
+[Order]
+New Ilunibi.ESP
+Creatures and Critters.ESP
+; keep Creatures and Critters.ESP winning where they conflict
+
+[Order]
+Daedric Shrine Overhaul FULL.esp
+Helm of Tohan Naturalized.esp
+; keep Helm of Tohan Naturalized.esp winning where they conflict
+
+[Order]
+TelRivusSKRIAK.ESP
+Logs on Fire Tamriel Rebuilt.esp
+; keep Logs on Fire Tamriel Rebuilt.esp winning where they conflict
+
+[Order]
+MGO Guild Halls Vanilla.esp
+Thieves Guild Quest Revisions.esp
+; keep Thieves Guild Quest Revisions.esp winning where they conflict
+
+[Order]
+MGO Guild Halls Vanilla.esp
+BLLDV_ALL.esp
+; keep BLLDV_ALL.esp winning where they conflict
+
+[Order]
+MGO Guild Halls Vanilla.esp
+Windows Glow.esp
+; keep Windows Glow.esp winning where they conflict
+
+[Order]
+OldEbonheartSkriak.ESP
+OAAB Better Caldera Interiors.ESP
+; keep OAAB Better Caldera Interiors.ESP winning where they conflict
+
+[Order]
+OldEbonheartSkriak.ESP
+Morrowind Quests Redux All-In-One.esp
+; keep Morrowind Quests Redux All-In-One.esp winning where they conflict
+
+[Order]
+OAAB Better Caldera Interiors.ESP
+Morrowind Quests Redux All-In-One.esp
+; keep Morrowind Quests Redux All-In-One.esp winning where they conflict
+
+[Order]
+Dallara Ebonheart.esp
+seamus_TraitorKings.ESP
+; keep seamus_TraitorKings.ESP winning where they conflict
+
+[Order]
+OAAB Brother Junipers Twin Lamps.esp
+ST_Alchemy_Replacer_1.3.esp
+; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+
+[Order]
+OAAB Brother Junipers Twin Lamps.esp
+RevampedDarkBrotherhood.ESP
+; keep RevampedDarkBrotherhood.ESP winning where they conflict
+
+[Order]
+OAAB Brother Junipers Twin Lamps.esp
+DD_Caldera_Expansion.esp
+; keep DD_Caldera_Expansion.esp winning where they conflict
+
+[Order]
+DD_Caldera_Expansion.esp
+Animated_Morrowind - Danaes Edits - Vv.esp
+; keep Animated_Morrowind - Danaes Edits - Vv.esp winning where they conflict
+
+[Order]
+Animated_Morrowind - Danaes Edits - Vv.esp
+RPNR_Library.ESP
+; keep RPNR_Library.ESP winning where they conflict
+
+[Order]
+Yet Another Guard Diversity - Regular.ESP
+mwse_Containers.esp
+; keep mwse_Containers.esp winning where they conflict
+
+;; ==== content rules promoted to masters (written by mwdialog_check --sort; don't edit) ====
+;; Each was an [Order] rule found from what the patch changes; the patch now lists the mod as a
+;; master, so it always loads after it. A rule of yours putting the patch first takes the master
+;; out again (the original plugin is kept where 'original' says).
+;;   AATL Doors of Oblivion Interop.ESP  +master  The Doors of Oblivion 1.4.esp   (content: 7 of AATL Doors of Oblivion Interop.ESP's 9 records are The Doors of Oblivion 1.4.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\AATL Compatibility Patches FOMOD 55361 1.5.4 2026-08-25T04-30Z FsqlsTWU\Off\AATL FTHOG Interop\AATL Doors of Oblivion Interop.ESP
+;;   AATL FTHOG Interop.ESP  +master  From the Hand of God.ESP   (content: 1 of AATL FTHOG Interop.ESP's 1 records are From the Hand of God.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\AATL Compatibility Patches FOMOD 55361 1.5.4 2026-08-25T04-30Z FsqlsTWU\Off\AATL FTHOG Interop\AATL FTHOG Interop.ESP
+;;   abotWindowsGlow.esp  +master  abotWindowsGlowTR1912.esp   (content: 33 of abotWindowsGlow.esp's 35 records are abotWindowsGlowTR1912.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\abotWindowsGlow119-42271-1-19-1577970461\Off\abotWindowsGlow\abotWindowsGlow.esp
+;;   AEA-Compatibility.esp  +master  Area Effect Projectiles Integrated (PAR Edit).esp   (content rule; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Main file-47749-4-1585592699\Off\AEA-Compatibility\AEA-Compatibility.esp
+;;   avp BTBGI-NE - Imperial Legion Expansion.esp  +master  Imperial Legion Expansion.esp   (content: 11 of avp BTBGI-NE - Imperial Legion Expansion.esp's 12 records are Imperial Legion Expansion.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\BTBGI - Necro Edit - Modular Patch-48955-5-4-0-1699288164\Off\avp BTBGI-NE - Imperial Legion Expansion\avp BTBGI-NE - Imperial Legion Expansion.esp
+;;   Banners With Sound.esp  +master  Cutting Room Floor - Sounds.esp   (content: 1 of Banners With Sound.esp's 2 records are Cutting Room Floor - Sounds.esp's; 2026-11-10 03:29:36)
+;;       original: G:\Vortex Mods\morrowind\Banners With Sound 0.3.1-45015-0-3-1\Off\added masters\Banners With Sound\Banners With Sound.esp
+;;   Bow to the Daedra MDMD Add-on.ESP  +master  Bow to the Daedra.ESP   (content: 2 of Bow to the Daedra MDMD Add-on.ESP's 2 records are Bow to the Daedra.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Bow to the Daedra-49232-2-0-1670966993\Off\Bow to the Daedra OAAB Add-on\Bow to the Daedra MDMD Add-on.ESP
+;;   Bow to the Daedra OAAB Add-on.ESP  +master  Bow to the Daedra.ESP   (content: 2 of Bow to the Daedra OAAB Add-on.ESP's 2 records are Bow to the Daedra.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Bow to the Daedra-49232-2-0-1670966993\Off\Bow to the Daedra OAAB Add-on\Bow to the Daedra OAAB Add-on.ESP
+;;   BTBGI Creature Buffs.esp  +master  BTB's Game Improvements (Necro Edit).esp   (content rule; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\BTB's Game Improvements - Necro Edit-47129-2-0-15-1647851241\Off\BTBGI Creature Buffs\BTBGI Creature Buffs.esp
+;;   BTBGI Creature Buffs.esp  +master  There Can Be Only One (Alt Fyr).esp   (content rule; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\BTB's Game Improvements - Necro Edit-47129-2-0-15-1647851241\Off\BTBGI Creature Buffs\BTBGI Creature Buffs.esp
+;;   CAP_Door.ESP  +master  Concept art palace.ESP   (content: 1 of CAP_Door.ESP's 1 records are Concept art palace.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Concept Art Palace 48136 2.8.4 2026-10-07T21-37Z IzGqzKuh\Off\CAP_Interior_Cluttering\CAP_Door.ESP
+;;   CAP_Interior_Cluttering.ESP  +master  Concept art palace.ESP   (content: 2 of CAP_Interior_Cluttering.ESP's 4 records are Concept art palace.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Concept Art Palace 48136 2.8.4 2026-10-07T21-37Z IzGqzKuh\Off\CAP_Interior_Cluttering\CAP_Interior_Cluttering.ESP
+;;   Clean_Ashirbadon.esp  +master  Clean_Mines and Caverns.esp   (content: 3 of Clean_Ashirbadon.esp's 5 records are Clean_Mines and Caverns.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Ashirbadon Overhaul 59467 1.0 2026-06-29T05-39Z oYkTYQqH\Off\Clean_Ashirbadon\Clean_Ashirbadon.esp
+;;   Clean_KuniraiRefit2.esp  +master  Clean_Mines and Caverns.esp   (content: 3 of Clean_KuniraiRefit2.esp's 4 records are Clean_Mines and Caverns.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Kunirai Overhaul-58621-1-0-1775776453\Off\Clean_KuniraiRefit2\Clean_KuniraiRefit2.esp
+;;   Clean_Piran.esp  +master  Clean_Mines and Caverns.esp   (content: 7 of Clean_Piran.esp's 9 records are Clean_Mines and Caverns.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Piran Overhaul 59346 1 2026-06-14T16-34Z hpVSpZWd\Off\Clean_Piran\Clean_Piran.esp
+;;   Clean_Sinsibadon.esp  +master  Clean_Mines and Caverns.esp   (content: 1 of Clean_Sinsibadon.esp's 1 records are Clean_Mines and Caverns.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Sinsibadon Overhaul 60092 1 2026-09-03T10-48Z YUgrUbTU\Off\Clean_Sinsibadon\Clean_Sinsibadon.esp
+;;   Clean_Zenarbael Overhaul.esp  +master  Clean_Mines and Caverns.esp   (content: 1 of Clean_Zenarbael Overhaul.esp's 1 records are Clean_Mines and Caverns.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Zenarbael Overhaul 59992 1 2026-08-26T01-47Z x2p02QKO\Off\Clean_Zenarbael Overhaul\Clean_Zenarbael Overhaul.esp
+;;   Companions of Morrowind M&C.ESP  +master  Companions of Morrowind.ESP   (content: 1 of Companions of Morrowind M&C.ESP's 1 records are Companions of Morrowind.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Companions Of Morrowind MaC 60497 1.0 2026-10-25T14-15Z DBQdBe6E\Off\Companions of Morrowind M&C\Companions of Morrowind M&C.ESP
+;;   Complete Armor Joints - OAAB.esp  +master  Complete Armor Joints - TD.esp   (content: 1 of Complete Armor Joints - OAAB.esp's 1 records are Complete Armor Joints - TD.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\CompleteArmorJointsAdditions 56176 0.7.5 2026-10-06T17-08Z yiwbiUDB\Off\Complete Armor Joints - OAAB\Complete Armor Joints - OAAB.esp
+;;   Complete Armor Joints - OAAB.esp  +master  Cutting Room Floor - Items TR.esp   (content: 1 of Complete Armor Joints - OAAB.esp's 1 records are Cutting Room Floor - Items TR.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\CompleteArmorJointsAdditions 56176 0.7.5 2026-10-06T17-08Z yiwbiUDB\Off\Complete Armor Joints - OAAB\Complete Armor Joints - OAAB.esp
+;;   Complete Armor Joints.esp  +master  Better Morrowind Armor.esp   (content: 23 of Complete Armor Joints.esp's 38 records are Better Morrowind Armor.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Better Morrowind Armor Fixes-47920-1-8-1762689715\Off\Complete Armor Joints\Complete Armor Joints.esp
+;;   Concept Art Hlaalu Balconies - Suran.ESP  +master  Concept Art Hlaalu Balconies - Balmora.esp   (content: 9 of Concept Art Hlaalu Balconies - Suran.ESP's 9 records are Concept Art Hlaalu Balconies - Balmora.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Concept art Hlaalu Balconies-48667-2-1-1612729947\Off\Concept Art Hlaalu Balconies - Suran\Concept Art Hlaalu Balconies - Suran.ESP
+;;   Courtesy.ESP  +master  Morrowind Quests Redux All-In-One.esp   (content: 4 of Courtesy.ESP's 4 records are Morrowind Quests Redux All-In-One.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Courtesy-46781-1-0-1558318844\Off\Courtesy\Courtesy.ESP
+;;   Creatures Restored - Bloodmoon Rebalance Patch.esp  +master  Cutting Room Floor - Creatures & Diseases TR.esp   (content: 2 of Creatures Restored - Bloodmoon Rebalance Patch.esp's 3 records are Cutting Room Floor - Creatures & Diseases TR.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\creatures_restored 56176 1.5 2026-08-24T09-08Z AbOYbyOv\Off\Creatures Restored\Creatures Restored - Bloodmoon Rebalance Patch.esp
+;;   Creatures Restored.esp  +master  Cutting Room Floor - Creatures & Diseases TR.esp   (content: 3 of Creatures Restored.esp's 6 records are Cutting Room Floor - Creatures & Diseases TR.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\creatures_restored 56176 1.5 2026-08-24T09-08Z AbOYbyOv\Off\Creatures Restored\Creatures Restored.esp
+;;   CRF - Better Clothes Definitive Edition.esp  +master  Cutting Room Floor - Items TR.esp   (content: 1 of CRF - Better Clothes Definitive Edition.esp's 1 records are Cutting Room Floor - Items TR.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\CRF Patches 56176 1.2.1 2026-08-22T16-23Z KH7cHJ0O\Off\CRF - Better Morrowind Armor\CRF - Better Clothes Definitive Edition.esp
+;;   CRF - Better Morrowind Armor.esp  +master  Cutting Room Floor - Items TR.esp   (content: 9 of CRF - Better Morrowind Armor.esp's 9 records are Cutting Room Floor - Items TR.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\CRF Patches 56176 1.2.1 2026-08-22T16-23Z KH7cHJ0O\Off\CRF - Better Morrowind Armor\CRF - Better Morrowind Armor.esp
+;;   Cutting Room Floor - Taverns.esp  +master  Improved Inns Expanded.esp   (content: 12 of Cutting Room Floor - Taverns.esp's 21 records are Improved Inns Expanded.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Cutting Room Floor - Modular 47307 v1.8 2026-08-21T03-31Z 8MahMCdM\Off\Cutting Room Floor - Taverns\Cutting Room Floor - Taverns.esp
+;;   DA_Sobitur_Facility_Clean - Script Fix.esp  +master  DA_Sobitur_Facility_Clean.ESP   (content: 20 of DA_Sobitur_Facility_Clean - Script Fix.esp's 20 records are DA_Sobitur_Facility_Clean.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Miscellaneous Patches-48955-1-15-2-1728814858\Off\DA_Sobitur_Facility_Clean - Script Fix\DA_Sobitur_Facility_Clean - Script Fix.esp
+;;   DA_Sobitur_Quest_Part_1 Clean - Script Fix.esp  +master  DA_Sobitur_Quest_Part_1 Clean.esp   (content: 1 of DA_Sobitur_Quest_Part_1 Clean - Script Fix.esp's 1 records are DA_Sobitur_Quest_Part_1 Clean.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Miscellaneous Patches-48955-1-15-2-1728814858\Off\DA_Sobitur_Facility_Clean - Script Fix\DA_Sobitur_Quest_Part_1 Clean - Script Fix.esp
+;;   Dagoth Ur Voice Addon.esp  +master  DN-GDR BTB MRM-Non Pointy.esp   (content: 77 of Dagoth Ur Voice Addon.esp's 77 records are DN-GDR BTB MRM-Non Pointy.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Dagoth Ur Voice addon v1.0-592\Off\Dagoth Ur Voice Addon\Dagoth Ur Voice Addon.esp
+;;   DN-Lighted_Dwemer_Towers.ESP  +master  Dwemer Legacy Reforged - Arkngthunch-Sturdumz.esp   (content: 5 of DN-Lighted_Dwemer_Towers.ESP's 8 records are Dwemer Legacy Reforged - Arkngthunch-Sturdumz.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\DN-Lighted_Dwemer_Towers-51358-1-1-1656433739\Off\DN-Lighted_Dwemer_Towers\DN-Lighted_Dwemer_Towers.ESP
+;;   DRPV1.9 - Script Fix.esp  +master  DRPV1.9.ESP   (content: 4 of DRPV1.9 - Script Fix.esp's 4 records are DRPV1.9.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Miscellaneous Patches-48955-1-15-2-1728814858\Off\DA_Sobitur_Facility_Clean - Script Fix\DRPV1.9 - Script Fix.esp
+;;   Dwemer Airship_Exterior.ESP  +master  Dwemer Airship.ESP   (content: 6 of Dwemer Airship_Exterior.ESP's 6 records are Dwemer Airship.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\The Patchwork Airship-53133-1-3-1731836444\Off\Dwemer Airship_Exterior\Dwemer Airship_Exterior.ESP
+;;   Dwemer Airship_Exterior.ESP  +master  Dwemer Legacy Reforged - Bthungthumz and Druscashti.esp   (content: 3 of Dwemer Airship_Exterior.ESP's 6 records are Dwemer Legacy Reforged - Bthungthumz and Druscashti.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\The Patchwork Airship-53133-1-3-1731836444\Off\Dwemer Airship_Exterior\Dwemer Airship_Exterior.ESP
+;;   Expanded Sounds TLAD Patch v1.0.ESP  +master  Expanded Sounds.esp   (content: 1 of Expanded Sounds TLAD Patch v1.0.ESP's 1 records are Expanded Sounds.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Expanded Sounds Lighting Patch v1.0-48673-v1-0-1596928636\Off\Expanded Sounds TLAD Patch v1.0\Expanded Sounds TLAD Patch v1.0.ESP
+;;   Fargoth in Distress.ESP  +master  The_Vanilla_Quest_Tweaks_RP_Choices_Consequences_Super_Mega_Package_-_Ultimate_Edition.ESP   (content: 21 of Fargoth in Distress.ESP's 31 records are The_Vanilla_Quest_Tweaks_RP_Choices_Consequences_Super_Mega_Package_-_Ultimate_Edition.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Fargoth in Distress-45752-2-0-1633488222\Off\Fargoth in Distress\Fargoth in Distress.ESP
+;;   Finished Morrowind - GRAPHICS AND SOUND.ESP  +master  Finished Morrowind - INCONSISTENCIES - Part 1.ESP   (content: 2 of Finished Morrowind - GRAPHICS AND SOUND.ESP's 3 records are Finished Morrowind - INCONSISTENCIES - Part 1.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\03 - FINISHED MORROWIND - GRAPHICS AND SOUND-55695-1-2-1770997084\Off\Finished Morrowind - GRAPHICS AND SOUND\Finished Morrowind - GRAPHICS AND SOUND.ESP
+;;   Finished Morrowind - GRAPHICS AND SOUND.ESP  +master  Idle Talk.ESP   (content: 2 of Finished Morrowind - GRAPHICS AND SOUND.ESP's 3 records are Idle Talk.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\03 - FINISHED MORROWIND - GRAPHICS AND SOUND-55695-1-2-1770997084\Off\Finished Morrowind - GRAPHICS AND SOUND\Finished Morrowind - GRAPHICS AND SOUND.ESP
+;;   FMI_GraveDust.ESP  +master  Finished Morrowind - INCONSISTENCIES - Part 1.ESP   (content: 1 of FMI_GraveDust.ESP's 1 records are Finished Morrowind - INCONSISTENCIES - Part 1.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\FMI_GraveDust-47637-1-0-1582918873\Off\FMI_GraveDust\FMI_GraveDust.ESP
+;;   FMI_HulStop 1.6.ESP  +master  Animated_Morrowind - Danaes Edits - TR.esp   (content: 1 of FMI_HulStop 1.6.ESP's 2 records are Animated_Morrowind - Danaes Edits - TR.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\HulStop.-47121-1-6-1580756687\Off\FMI_HulStop 1.6\FMI_HulStop 1.6.ESP
+;;   FMI_HulStop 1.6.ESP  +master  Animated_Morrowind - Danaes Edits - Vv.esp   (content: 1 of FMI_HulStop 1.6.ESP's 2 records are Animated_Morrowind - Danaes Edits - Vv.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\HulStop.-47121-1-6-1580756687\Off\FMI_HulStop 1.6\FMI_HulStop 1.6.ESP
+;;   FMI_Legion_Dialogue.ESP  +master  Finished Morrowind - INCONSISTENCIES - Part 1.ESP   (content: 8 of FMI_Legion_Dialogue.ESP's 8 records are Finished Morrowind - INCONSISTENCIES - Part 1.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\FMI - Legion Dialogue-47318-1-3-1591781946\Off\FMI_Legion_Dialogue\FMI_Legion_Dialogue.ESP
+;;   KF's Misc Fixes.ESP  +master  Yet Another Better Sounds Patch.esp   (content: 5 of KF's Misc Fixes.ESP's 8 records are Yet Another Better Sounds Patch.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\KF's Misc. Fixes-54795-1-0-1717550591\Off\KF's Misc Fixes\KF's Misc Fixes.ESP
+;;   LB_ImpBusiness_DRP.ESP  +master  DRPV1.9.ESP   (content: 4 of LB_ImpBusiness_DRP.ESP's 5 records are DRPV1.9.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Imperial Business - Dwemer Rebirth Patch-55685-1-0-1735524418\Off\LB_ImpBusiness_DRP\LB_ImpBusiness_DRP.ESP
+;;   LB_ImpBusiness_DRP.ESP  +master  EbonheartEastEmpireCo.esp   (content: 1 of LB_ImpBusiness_DRP.ESP's 1 records are EbonheartEastEmpireCo.esp's; 2026-11-07 14:48:53)
+;;       original: G:\Vortex Mods\morrowind\Imperial Business - Dwemer Rebirth Patch-55685-1-0-1735524418\Off\LB_ImpBusiness_DRP\LB_ImpBusiness_DRP.ESP
+;;   LDM - Vampire Talk.ESP  +master  LDM - Context Matters 1.7.ESP   (content: 26 of LDM - Vampire Talk.ESP's 26 records are LDM - Context Matters 1.7.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\LDM - Vampire Talk-47556-1-1-1589035389\Off\LDM - Vampire Talk\LDM - Vampire Talk.ESP
+;;   LDM - Vampire Talk.ESP  +master  Vampire Masquerade - A Detailed Overhaul PTR.ESP   (content: 14 of LDM - Vampire Talk.ESP's 26 records are Vampire Masquerade - A Detailed Overhaul PTR.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\LDM - Vampire Talk-47556-1-1-1589035389\Off\LDM - Vampire Talk\LDM - Vampire Talk.ESP
+;;   Libertarian Magical Services.ESP  +master  The_Vanilla_Quest_Tweaks_RP_Choices_Consequences_Super_Mega_Package_-_Ultimate_Edition.ESP   (content: 27 of Libertarian Magical Services.ESP's 27 records are The_Vanilla_Quest_Tweaks_RP_Choices_Consequences_Super_Mega_Package_-_Ultimate_Edition.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Libertarian Magical Services-46301-1-1-1633321620\Off\Libertarian Magical Services\Libertarian Magical Services.ESP
+;;   Logs on Fire Cyrodiil.esp  +master  Logs on Fire Tamriel Rebuilt.esp   (content: 5 of Logs on Fire Cyrodiil.esp's 5 records are Logs on Fire Tamriel Rebuilt.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Logs on Fire Cyrodiil 55647 1.2 2026-09-14T13-34Z sZJEZrhv\Off\Logs on Fire Cyrodiil\Logs on Fire Cyrodiil.esp
+;;   logs on Fire.esp  +master  Logs on Fire Skyrim.esp   (content: 2 of logs on Fire.esp's 4 records are Logs on Fire Skyrim.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Logs on Fire-51752-1-1-1-1732050385\Off\logs on Fire\logs on Fire.esp
+;;   logs on Fire.esp  +master  Logs on Fire Tamriel Rebuilt.esp   (content: 2 of logs on Fire.esp's 4 records are Logs on Fire Tamriel Rebuilt.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Logs on Fire-51752-1-1-1-1732050385\Off\logs on Fire\logs on Fire.esp
+;;   MoonlightOnTheOdaiRiver - Script Fix.esp  +master  LuceEdit - BCOM - MoonlightOnTheOdaiRiver.esp   (content: 2 of MoonlightOnTheOdaiRiver - Script Fix.esp's 2 records are LuceEdit - BCOM - MoonlightOnTheOdaiRiver.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Miscellaneous Patches-48955-1-15-2-1728814858\Off\DA_Sobitur_Facility_Clean - Script Fix\MoonlightOnTheOdaiRiver - Script Fix.esp
+;;   nibs_wshield_DRPV_patch.ESP  +master  nibs_wanderingshield.ESP   (content: 4 of nibs_wshield_DRPV_patch.ESP's 4 records are nibs_wanderingshield.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\The Wandering Shield (Patches)-56485-1-0-1769726270\Off\nibs_wshield_DRPV_patch\nibs_wshield_DRPV_patch.ESP
+;;   Note from the Archcanon Fix.ESP  +master  Finished Morrowind - INCONSISTENCIES - Part 1.ESP   (content: 1 of Note from the Archcanon Fix.ESP's 2 records are Finished Morrowind - INCONSISTENCIES - Part 1.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Note from the Archcanon Fix-45778-1-0\Off\Note from the Archcanon Fix\Note from the Archcanon Fix.ESP
+;;   NPC_Schedule(beta) - Patch.esp  +master  NPC_Schedule(beta).esp   (content: 8 of NPC_Schedule(beta) - Patch.esp's 14 records are NPC_Schedule(beta).esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\NPC_Schedule(beta) - Patch-48955-1-3-1636907427\Off\NPC_Schedule(beta) - Patch\NPC_Schedule(beta) - Patch.esp
+;;   OAAB Brother Junipers Twin Lamps - Camonna Tong Compatibility Patch.esp  +master  OAAB Brother Junipers Twin Lamps.esp   (content: 1 of OAAB Brother Junipers Twin Lamps - Camonna Tong Compatibility Patch.esp's 1 records are OAAB Brother Junipers Twin Lamps.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Miscellaneous Patches-48955-1-15-2-1728814858\Off\DA_Sobitur_Facility_Clean - Script Fix\OAAB Brother Junipers Twin Lamps - Camonna Tong Compatibility Patch.esp
+;;   OAAB Brother Junipers Twin Lamps - Script Fix.esp  +master  OAAB Brother Junipers Twin Lamps.esp   (content: 1 of OAAB Brother Junipers Twin Lamps - Script Fix.esp's 1 records are OAAB Brother Junipers Twin Lamps.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Miscellaneous Patches-48955-1-15-2-1728814858\Off\DA_Sobitur_Facility_Clean - Script Fix\OAAB Brother Junipers Twin Lamps - Script Fix.esp
+;;   OAAB_Grazelands_Mines_and_Caverns_patch.esp  +master  OAAB_Grazelands.ESP   (content: 1 of OAAB_Grazelands_Mines_and_Caverns_patch.esp's 1 records are OAAB_Grazelands.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\momw-patches\Off\OAAB_Grazelands_Mines_and_Caverns_patch\OAAB_Grazelands_Mines_and_Caverns_patch.esp
+;;   Outdoor Banners With Sound.ESP  +master  Cutting Room Floor - Sounds.esp   (content: 1 of Outdoor Banners With Sound.ESP's 1 records are Cutting Room Floor - Sounds.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Outdoor Banners With Sound-47068-1-0-1582461148\Off\Outdoor Banners With Sound\Outdoor Banners With Sound.ESP
+;;   Privileges&Services - Bugs Patch only.esp  +master  Privileges&Services - Improvement Patch.esp   (content: 25 of Privileges&Services - Bugs Patch only.esp's 25 records are Privileges&Services - Improvement Patch.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Privileges And Services - Improvement Patch-52371-3-2-1781031434\Off\Privileges&Services - Improvement Patch\Privileges&Services - Bugs Patch only.esp
+;;   Privileges&Services - Bugs Patch only.esp  +master  Privileges&Services 1.1.esp   (content: 25 of Privileges&Services - Bugs Patch only.esp's 25 records are Privileges&Services 1.1.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Privileges And Services - Improvement Patch-52371-3-2-1781031434\Off\Privileges&Services - Improvement Patch\Privileges&Services - Bugs Patch only.esp
+;;   Privileges&Services - Improvement Patch.esp  +master  Privileges&Services 1.1.esp   (content: 124 of Privileges&Services - Improvement Patch.esp's 182 records are Privileges&Services 1.1.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Privileges And Services - Improvement Patch-52371-3-2-1781031434\Off\Privileges&Services - Improvement Patch\Privileges&Services - Improvement Patch.esp
+;;   Quest Voice Greetings.ESP  +master  Vampire Masquerade - A Detailed Overhaul PTR.ESP   (content: 127 of Quest Voice Greetings.ESP's 183 records are Vampire Masquerade - A Detailed Overhaul PTR.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Extra Patches-53570-2-1-1775675811\Off\Quest Voice Greetings\Quest Voice Greetings.ESP
+;;   Raym's Vampire Rumors - Patch for Purists.esp  +master  Raym's Vampire Rumors.esp   (content: 1 of Raym's Vampire Rumors - Patch for Purists.esp's 1 records are Raym's Vampire Rumors.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Raym's Vampire Rumors - Patch for Purists-48955-1-0-1652282311\Off\Raym's Vampire Rumors - Patch for Purists\Raym's Vampire Rumors - Patch for Purists.esp
+;;   RMRDevil_Grazelandspatch.ESP  +master  DevilishRockyRedMountain.esp   (content: 1 of RMRDevil_Grazelandspatch.ESP's 1 records are DevilishRockyRedMountain.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\the patch-54428-1-0-1712536146\Off\RMRDevil_Grazelandspatch\RMRDevil_Grazelandspatch.ESP
+;;   Robe'n'Hood.ESP  +master  Properly clothed NPCs.ESP   (content: 9 of Robe'n'Hood.ESP's 17 records are Properly clothed NPCs.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Robe'n'Hood-51474-2-1-1-1659053401\Off\Robe'n'Hood\Robe'n'Hood.ESP
+;;   RR_Telvanni_Lighthouse_Tel Branora_Eng.ESP  +master  DM_TelvRRtoOAAB.ESP   (content: 3 of RR_Telvanni_Lighthouse_Tel Branora_Eng.ESP's 3 records are DM_TelvRRtoOAAB.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Vvardenfell Lighthouses Complete\Off\RR_Telvanni_Lighthouse_Tel Branora_Eng\RR_Telvanni_Lighthouse_Tel Branora_Eng.ESP
+;;   RR_Telvanni_Lighthouse_Tel Branora_Eng.ESP  +master  PortTelvannisRedux.ESP   (content: 3 of RR_Telvanni_Lighthouse_Tel Branora_Eng.ESP's 3 records are PortTelvannisRedux.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Vvardenfell Lighthouses Complete\Off\RR_Telvanni_Lighthouse_Tel Branora_Eng\RR_Telvanni_Lighthouse_Tel Branora_Eng.ESP
+;;   RR_Telvanni_Lighthouse_Tel Branora_Eng.ESP  +master  Sadrith Mora_Lighthouse.ESP   (content: 3 of RR_Telvanni_Lighthouse_Tel Branora_Eng.ESP's 3 records are Sadrith Mora_Lighthouse.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Vvardenfell Lighthouses Complete\Off\RR_Telvanni_Lighthouse_Tel Branora_Eng\RR_Telvanni_Lighthouse_Tel Branora_Eng.ESP
+;;   SadrithMoraMarketshroom.ESP  +master  DM_TelvRRtoOAAB.ESP   (content: 1 of SadrithMoraMarketshroom.ESP's 2 records are DM_TelvRRtoOAAB.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Sadrith Mora Market Mushroom-52248-1-1675173310\Off\SadrithMoraMarketshroom\SadrithMoraMarketshroom.ESP
+;;   Shabby Seyda Neen.ESP  +master  Seyda Neen - Damp Little Squat - unshabby.ESP   (content: 15 of Shabby Seyda Neen.ESP's 24 records are Seyda Neen - Damp Little Squat - unshabby.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Shabby Seyda Neen-53086-1-3-1687383401\Off\Shabby Seyda Neen\Shabby Seyda Neen.ESP
+;;   Shulki Ashunbabi Restoration.ESP  +master  Properly clothed NPCs.ESP   (content: 2 of Shulki Ashunbabi Restoration.ESP's 2 records are Properly clothed NPCs.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Shulki_Ashunbabi_Restoration-47608-1-0-1582020102\Off\Shulki Ashunbabi Restoration\Shulki Ashunbabi Restoration.ESP
+;;   SloadicDialogue.ESP  +master  Sload and Slavers.ESP   (content: 8 of SloadicDialogue.ESP's 10 records are Sload and Slavers.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Sloadic Dialogue-57495-1-0-1761170851\Off\SloadicDialogue\SloadicDialogue.ESP
+;;   Sorrow Heart of Tel Fyr Doors of Oblivion 1.4 patch.ESP  +master  The Doors of Oblivion 1.4.esp   (content: 1 of Sorrow Heart of Tel Fyr Doors of Oblivion 1.4 patch.ESP's 1 records are The Doors of Oblivion 1.4.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Sorrow Heart of Tel Fyr Doors of Oblivion 1.4 patc-47224-1-0-1764516021\Off\Sorrow Heart of Tel Fyr Doors of Oblivion 1.4 patch\Sorrow Heart of Tel Fyr Doors of Oblivion 1.4 patch.ESP
+;;   Sotha Sil Expanded - Script Fix.esp  +master  Sotha Sil Expanded.ESP   (content: 2 of Sotha Sil Expanded - Script Fix.esp's 2 records are Sotha Sil Expanded.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Miscellaneous Patches-48955-1-15-2-1728814858\Off\DA_Sobitur_Facility_Clean - Script Fix\Sotha Sil Expanded - Script Fix.esp
+;;   Soulless Summons - Cutting Room Floor - Patch.ESP  +master  Cutting Room Floor - Conjuration.esp   (content: 2 of Soulless Summons - Cutting Room Floor - Patch.ESP's 2 records are Cutting Room Floor - Conjuration.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Soulless Summons-57706-1-0-0-1761734267\Off\Soulless Summons - Cutting Room Floor - Patch\Soulless Summons - Cutting Room Floor - Patch.ESP
+;;   ST_Alchemy_Balance_Sri_1.5.esp  +master  ST_Alchemy_Base_1.5.esp   (content: 23 of ST_Alchemy_Balance_Sri_1.5.esp's 23 records are ST_Alchemy_Base_1.5.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\ST Alchemy-53097-1-6-1687378269\Off\ST_Alchemy_Balance_Sri_1.5\ST_Alchemy_Balance_Sri_1.5.esp
+;;   ST_Alchemy_Balance_Sri_1.5.esp  +master  Uvirith's Legacy_3.53.esp   (content: 19 of ST_Alchemy_Balance_Sri_1.5.esp's 23 records are Uvirith's Legacy_3.53.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\ST Alchemy-53097-1-6-1687378269\Off\ST_Alchemy_Balance_Sri_1.5\ST_Alchemy_Balance_Sri_1.5.esp
+;;   SU3fixes.ESP  +master  Suran_Underworld_v3.ESP   (content: 239 of SU3fixes.ESP's 239 records are Suran_Underworld_v3.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Suran Underworld Corrections and Fixes-44382-1-1\Off\SU3fixes\SU3fixes.ESP
+;;   Supply Chests.ESP  +master  Imperial Legion Expansion.esp   (content: 1 of Supply Chests.ESP's 2 records are Imperial Legion Expansion.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Supply Chests-49232-1-0-1611244723\Off\Supply Chests\Supply Chests.ESP
+;;   TelFyrShroom.ESP  +master  DM_TelvRRtoOAAB.ESP   (content: 2 of TelFyrShroom.ESP's 3 records are DM_TelvRRtoOAAB.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Tel Fyr Beacon Mushroom-52248-1-01-1772782802\Off\TelFyrShroom\TelFyrShroom.ESP
+;;   TelRivusSKRIAK.ESP  +master  ShadeofTheRevenant.ESP   (content: 9 of TelRivusSKRIAK.ESP's 14 records are ShadeofTheRevenant.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\TelRivusSKRIAK 60378 1 2026-09-27T16-13Z 4vY6vj43\Off\TelRivusSKRIAK\TelRivusSKRIAK.ESP
+;;   TelvanniSeaBeacons.ESP  +master  DM_TelvRRtoOAAB.ESP   (content: 2 of TelvanniSeaBeacons.ESP's 2 records are DM_TelvRRtoOAAB.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\TelvanniSeaBeacons-50957-1-01-1772782896\Off\TelvanniSeaBeacons\TelvanniSeaBeacons.ESP
+;;   TelvanniSeaBeacons.ESP  +master  PortTelvannisRedux.ESP   (content: 2 of TelvanniSeaBeacons.ESP's 2 records are PortTelvannisRedux.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\TelvanniSeaBeacons-50957-1-01-1772782896\Off\TelvanniSeaBeacons\TelvanniSeaBeacons.ESP
+;;   TGoD_DiverseBlood.ESP  +master  TheGardenOfDreams.esp   (content: 26 of TGoD_DiverseBlood.ESP's 26 records are TheGardenOfDreams.esp's; 2026-11-10 03:29:36)
+;;       original: G:\Vortex Mods\morrowind\The Garden of Dreams-57831-1-4-2-1778293643\Off\added masters\TGoD_DiverseBlood\TGoD_DiverseBlood.ESP
+;;   The Doors of Oblivion 1.4 - Script Fix.esp  +master  The Doors of Oblivion 1.4.esp   (content: 2 of The Doors of Oblivion 1.4 - Script Fix.esp's 2 records are The Doors of Oblivion 1.4.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Miscellaneous Patches-48955-1-15-2-1728814858\Off\DA_Sobitur_Facility_Clean - Script Fix\The Doors of Oblivion 1.4 - Script Fix.esp
+;;   TMQR_Patch.ESP  +master  Tribunal Main Quest Reforged - SSE.esp   (content: 6 of TMQR_Patch.ESP's 9 records are Tribunal Main Quest Reforged - SSE.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Almalexia'S Chamber Overhaul 52737 1.95 2026-10-11T01-30Z OmEgmfDk\Off\TMQR_Patch\TMQR_Patch.ESP
+;;   Trainer Log - AEA.esp  +master  Trainer Log.esp   (content: 3 of Trainer Log - AEA.esp's 3 records are Trainer Log.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Trainer_Log-38391-1-0\Off\Trainer Log - AEA\Trainer Log - AEA.esp
+;;   Trellis addon.ESP  +master  Vibrant Ivy.ESP   (content: 7 of Trellis addon.ESP's 7 records are Vibrant Ivy.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Vibrant Ivy and trellis additions-49863-1-3-2-1657438028\Off\Trellis addon\Trellis addon.ESP
+;;   Unique Uniques - More Unique.ESP  +master  Unique Uniques.ESP   (content: 1 of Unique Uniques - More Unique.ESP's 1 records are Unique Uniques.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Unique Uniques 58990 1.12 2026-10-04T18-29Z YUgrUZGr\Off\Unique Uniques - More Unique\Unique Uniques - More Unique.ESP
+;;   Uvirith's Legacy 3.53 Sorrow heart of tel fyr patch.ESP  +master  Uvirith's Legacy_3.53.esp   (content: 1 of Uvirith's Legacy 3.53 Sorrow heart of tel fyr patch.ESP's 1 records are Uvirith's Legacy_3.53.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Uviriths Legacy 3.53 Sorrow heart of tel fyr patc-47224-1-0-1764515772\Off\Uvirith's Legacy 3.53 Sorrow heart of tel fyr patch\Uvirith's Legacy 3.53 Sorrow heart of tel fyr patch.ESP
+;;   Uvirith's Legacy_3.53 - Script Fix.esp  +master  Uvirith's Legacy_3.53.esp   (content: 9 of Uvirith's Legacy_3.53 - Script Fix.esp's 9 records are Uvirith's Legacy_3.53.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Miscellaneous Patches-48955-1-15-2-1728814858\Off\DA_Sobitur_Facility_Clean - Script Fix\Uvirith's Legacy_3.53 - Script Fix.esp
+;;   VampirePlayerHitSounds.ESP  +master  Melodies and Moonlight.esp   (content: 298 of VampirePlayerHitSounds.ESP's 298 records are Melodies and Moonlight.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Vampire Player Hit Sounds-53143-1-02-1688243437\Off\VampirePlayerHitSounds\VampirePlayerHitSounds.ESP
+;;   VSD - Odibi.esp  +master  Clean_Mines and Caverns.esp   (content: 2 of VSD - Odibi.esp's 4 records are Clean_Mines and Caverns.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\VSD - Odibi-57528-1-0-1759445314\Off\VSD - Odibi\VSD - Odibi.esp
+;;   VSD - Pabanat.esp  +master  Clean_Mines and Caverns.esp   (content: 1 of VSD - Pabanat.esp's 2 records are Clean_Mines and Caverns.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\VSD - Pabanat-57528-1-0-1759085826\Off\VSD - Pabanat\VSD - Pabanat.esp
+;;   VSD - Supulimassu.esp  +master  Clean_Mines & Caverns_Solstheim.esp   (content: 4 of VSD - Supulimassu.esp's 4 records are Clean_Mines & Caverns_Solstheim.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\VSD - Supulimassu-57528-1-0-1759085753\Off\VSD - Supulimassu\VSD - Supulimassu.esp
+;;   VSD - Supulimassu.esp  +master  Clean_Mines and Caverns.esp   (content: 4 of VSD - Supulimassu.esp's 4 records are Clean_Mines and Caverns.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\VSD - Supulimassu-57528-1-0-1759085753\Off\VSD - Supulimassu\VSD - Supulimassu.esp
+;;   VSD - Supulimassu.esp  +master  Clean_Piran.esp   (content: 4 of VSD - Supulimassu.esp's 4 records are Clean_Piran.esp's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\VSD - Supulimassu-57528-1-0-1759085753\Off\VSD - Supulimassu\VSD - Supulimassu.esp
+;;   VSD - Supulimassu.esp  +master  Tel_Aruhn_Chronicles.ESP   (content: 4 of VSD - Supulimassu.esp's 4 records are Tel_Aruhn_Chronicles.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\VSD - Supulimassu-57528-1-0-1759085753\Off\VSD - Supulimassu\VSD - Supulimassu.esp
+;;   Wares-base - Adamantium Armor - Rare.esp  +master  Robe'n'Hood.ESP   (content: 1 of Wares-base - Adamantium Armor - Rare.esp's 2 records are Robe'n'Hood.ESP's; 2026-11-07 13:45:41)
+;;       original: G:\Vortex Mods\morrowind\Miscellaneous Patches-48955-1-15-2-1728814858\Off\DA_Sobitur_Facility_Clean - Script Fix\Wares-base - Adamantium Armor - Rare.esp
+;; ==== end of promoted content rules ====

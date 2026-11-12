@@ -1,0 +1,3 @@
+; vortex_tidy blacklist: mods it never touches. One mod folder name per line; * and ? work.
+; Morrowind Code Patch and NIFZER0EDIT are built in. Add tools and other odd layouts here.
+*Breezify*

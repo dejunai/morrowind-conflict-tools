@@ -1,0 +1,4001 @@
+{
+ "about": "your answers in mwdialog_check --cell-conflicts, offered as the default next time (Enter takes it). Delete an entry, or the file, to be asked fresh.",
+ "answers": {
+  "aatl saturan depths.esp|greymarchdawn.esp": {
+   "do": "order",
+   "plugin": "AATL Saturan Depths.ESP",
+   "pair": [
+    "AATL Saturan Depths.ESP",
+    "GreymarchDawn.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "abaesen-pulu_exp en.esp|bitterandblightedremastered.esp": {
+   "do": "cell",
+   "plugin": "BitterAndBlightedRemastered.ESP",
+   "pair": [
+    "Abaesen-Pulu_exp EN.ESP",
+    "BitterAndBlightedRemastered.ESP"
+   ],
+   "when": "2026-11-09 12:23"
+  },
+  "abcmod.esp|dn-gdr btb mrm-non pointy.esp": {
+   "do": "order",
+   "plugin": "DN-GDR BTB MRM-Non Pointy.esp",
+   "pair": [
+    "DN-GDR BTB MRM-Non Pointy.esp",
+    "ABCmod.esp"
+   ],
+   "when": "2026-11-09 19:03"
+  },
+  "abotredorancouncilentranceplanters.esp|vy_under_skar.esp": {
+   "do": "order",
+   "plugin": "VY_Under_Skar.esp",
+   "pair": [
+    "VY_Under_Skar.esp",
+    "abotRedoranCouncilEntrancePlanters.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "abotwindowsglow.esp|better bounties.esp": {
+   "do": "order",
+   "plugin": "Better Bounties.esp",
+   "pair": [
+    "Better Bounties.esp",
+    "abotWindowsGlow.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "abotwindowsglow.esp|dallara pelagiad pfp.esp": {
+   "do": "order",
+   "plugin": "Dallara Pelagiad PFP.esp",
+   "pair": [
+    "Dallara Pelagiad PFP.esp",
+    "abotWindowsGlow.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "abotwindowsglow.esp|seyda neen - damp little squat - unshabby.esp": {
+   "do": "order",
+   "plugin": "Seyda Neen - Damp Little Squat - unshabby.ESP",
+   "pair": [
+    "Seyda Neen - Damp Little Squat - unshabby.ESP",
+    "abotWindowsGlow.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "abotwindowsglow.esp|shabby seyda neen.esp": {
+   "do": "order",
+   "plugin": "Shabby Seyda Neen.ESP",
+   "pair": [
+    "Shabby Seyda Neen.ESP",
+    "abotWindowsGlow.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "abotwindowsglowtr1912.esp|animated_morrowind - danaes edits - tr.esp": {
+   "do": "order",
+   "plugin": "Animated_Morrowind - Danaes Edits - TR.esp",
+   "pair": [
+    "Animated_Morrowind - Danaes Edits - TR.esp",
+    "abotWindowsGlowTR1912.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "abotwindowsglowtr1912.esp|helnimreduxskriak.esp": {
+   "do": "order",
+   "plugin": "HelnimREDUXskriak.ESP",
+   "pair": [
+    "HelnimREDUXskriak.ESP",
+    "abotWindowsGlowTR1912.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "abotwindowsglowtr1912.esp|hidden sea loot.esp": {
+   "do": "order",
+   "plugin": "Hidden Sea Loot.ESP",
+   "pair": [
+    "Hidden Sea Loot.ESP",
+    "abotWindowsGlowTR1912.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "abotwindowsglowtr1912.esp|repopulatedmainland.esp": {
+   "do": "order",
+   "plugin": "RepopulatedMainland.ESP",
+   "pair": [
+    "RepopulatedMainland.ESP",
+    "abotWindowsGlowTR1912.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "abotwindowsglowtr1912.esp|the_old_lie.esp": {
+   "do": "order",
+   "plugin": "The_Old_Lie.esp",
+   "pair": [
+    "The_Old_Lie.esp",
+    "abotWindowsGlowTR1912.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "abotwindowsglowtr1912.esp|windows glow.esp": {
+   "do": "order",
+   "plugin": "Windows Glow.esp",
+   "pair": [
+    "Windows Glow.esp",
+    "abotWindowsGlowTR1912.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "affresh.esm|samarys - the sunken tomb.esp": {
+   "do": "cell",
+   "plugin": "Samarys - The Sunken Tomb.esp",
+   "pair": [
+    "AFFresh.esm",
+    "Samarys - The Sunken Tomb.esp"
+   ],
+   "when": "2026-11-09 12:23"
+  },
+  "alblindingspeed.esp|st_alchemy_replacer_1.3.esp": {
+   "do": "order",
+   "plugin": "ALBlindingSpeed.ESP",
+   "pair": [
+    "ALBlindingSpeed.ESP",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "ald'ruhn outskirts - ancestral refuge.esp|ineone the buoyant armiger.esp": {
+   "do": "order",
+   "plugin": "Ald'Ruhn Outskirts - Ancestral Refuge.ESP",
+   "pair": [
+    "Ald'Ruhn Outskirts - Ancestral Refuge.ESP",
+    "Ineone the Buoyant Armiger.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "almalexia_placeholder.esp|tamriel rebuilt - yet another border fix.esp": {
+   "do": "order",
+   "plugin": "Almalexia_Placeholder.ESP",
+   "pair": [
+    "Almalexia_Placeholder.ESP",
+    "Tamriel Rebuilt - Yet Another Border Fix.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "animated_morrowind - danaes edits - tr.esp|tr_darkdungeons.esp": {
+   "do": "order",
+   "plugin": "TR_DarkDungeons.esp",
+   "pair": [
+    "TR_DarkDungeons.esp",
+    "Animated_Morrowind - Danaes Edits - TR.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "animated_morrowind - danaes edits - vv.esp|dd_caldera_expansion.esp": {
+   "do": "order",
+   "plugin": "DD_Caldera_Expansion.esp",
+   "pair": [
+    "DD_Caldera_Expansion.esp",
+    "Animated_Morrowind - Danaes Edits - Vv.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "animated_morrowind - danaes edits - vv.esp|hanging gardens of suran.esp": {
+   "do": "order",
+   "plugin": "Hanging Gardens of Suran.esp",
+   "pair": [
+    "Hanging Gardens of Suran.esp",
+    "Animated_Morrowind - Danaes Edits - Vv.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "animated_morrowind - danaes edits - vv.esp|imperial factions.esp": {
+   "do": "order",
+   "plugin": "Animated_Morrowind - Danaes Edits - Vv.esp",
+   "pair": [
+    "Animated_Morrowind - Danaes Edits - Vv.esp",
+    "Imperial Factions.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "animated_morrowind - danaes edits - vv.esp|interiors_of_mournhold_v2.3.esp": {
+   "do": "order",
+   "plugin": "Interiors_of_Mournhold_V2.3.esp",
+   "pair": [
+    "Interiors_of_Mournhold_V2.3.esp",
+    "Animated_Morrowind - Danaes Edits - Vv.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "animated_morrowind - danaes edits - vv.esp|oaab market.esp": {
+   "do": "order",
+   "plugin": "OAAB Market.ESP",
+   "pair": [
+    "OAAB Market.ESP",
+    "Animated_Morrowind - Danaes Edits - Vv.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "animated_morrowind - danaes edits - vv.esp|repopulatedmorrowind.esp": {
+   "do": "order",
+   "plugin": "RepopulatedMorrowind.ESP",
+   "pair": [
+    "RepopulatedMorrowind.ESP",
+    "Animated_Morrowind - Danaes Edits - Vv.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "animated_morrowind - danaes edits - vv.esp|rpnr_library.esp": {
+   "do": "order",
+   "plugin": "Animated_Morrowind - Danaes Edits - Vv.esp",
+   "pair": [
+    "Animated_Morrowind - Danaes Edits - Vv.esp",
+    "RPNR_Library.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "animated_morrowind - danaes edits - vv.esp|seyda neen - damp little squat - unshabby.esp": {
+   "do": "order",
+   "plugin": "Seyda Neen - Damp Little Squat - unshabby.ESP",
+   "pair": [
+    "Seyda Neen - Damp Little Squat - unshabby.ESP",
+    "Animated_Morrowind - Danaes Edits - Vv.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "animated_morrowind - danaes edits - vv.esp|south wall_tg_hideout.esp": {
+   "do": "order",
+   "plugin": "Animated_Morrowind - Danaes Edits - Vv.esp",
+   "pair": [
+    "Animated_Morrowind - Danaes Edits - Vv.esp",
+    "South Wall_TG_Hideout.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "animated_morrowind - danaes edits - vv.esp|tr_darkdungeons.esp": {
+   "do": "order",
+   "plugin": "TR_DarkDungeons.esp",
+   "pair": [
+    "TR_DarkDungeons.esp",
+    "Animated_Morrowind - Danaes Edits - Vv.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "animated_morrowind - danaes edits - vv.esp|urh_ald_velothi.esp": {
+   "do": "order",
+   "plugin": "URH_Ald_Velothi.esp",
+   "pair": [
+    "URH_Ald_Velothi.esp",
+    "Animated_Morrowind - Danaes Edits - Vv.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "antares' undead redux.esp|creatures and critters.esp": {
+   "do": "order",
+   "plugin": "Creatures and Critters.ESP",
+   "pair": [
+    "Creatures and Critters.ESP",
+    "Antares' Undead Redux.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "antares' undead redux.esp|dn-gdr btb mrm-non pointy.esp": {
+   "do": "order",
+   "plugin": "DN-GDR BTB MRM-Non Pointy.esp",
+   "pair": [
+    "DN-GDR BTB MRM-Non Pointy.esp",
+    "Antares' Undead Redux.esp"
+   ],
+   "when": "2026-11-09 19:03"
+  },
+  "antares' undead redux.esp|vvardenfell distribution - andrano ancestral tomb.esp": {
+   "do": "order",
+   "plugin": "Vvardenfell Distribution - Andrano Ancestral Tomb.ESP",
+   "pair": [
+    "Vvardenfell Distribution - Andrano Ancestral Tomb.ESP",
+    "Antares' Undead Redux.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "ashlander travel.esp|ks_julan_ashlander companion_3.0_beta.esp": {
+   "do": "order",
+   "plugin": "Ashlander Travel.ESP",
+   "pair": [
+    "Ashlander Travel.ESP",
+    "KS_Julan_Ashlander Companion_3.0_beta.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "baan_binif.esp|st_alchemy_replacer_1.3.esp": {
+   "do": "order",
+   "plugin": "Baan_Binif.ESP",
+   "pair": [
+    "Baan_Binif.ESP",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "bal'laku - the lonely towers.esp|ineone the buoyant armiger.esp": {
+   "do": "order",
+   "plugin": "Bal'laku - The Lonely Towers.esp",
+   "pair": [
+    "Bal'laku - The Lonely Towers.esp",
+    "Ineone the Buoyant Armiger.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "bal'laku - the lonely towers.esp|st_alchemy_replacer_1.3.esp": {
+   "do": "order",
+   "plugin": "Bal'laku - The Lonely Towers.esp",
+   "pair": [
+    "Bal'laku - The Lonely Towers.esp",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "balmora redecorated.esp|concept art hlaalu balconies - balmora.esp": {
+   "do": "order",
+   "plugin": "Balmora Redecorated.ESP",
+   "pair": [
+    "Balmora Redecorated.ESP",
+    "Concept Art Hlaalu Balconies - Balmora.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "balmora redecorated.esp|uvirith's legacy_3.53.esp": {
+   "do": "order",
+   "plugin": "Balmora Redecorated.ESP",
+   "pair": [
+    "Balmora Redecorated.ESP",
+    "Uvirith's Legacy_3.53.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "balmoradocks.esp|clean_waterfowl_of_morrowind_expanded.esp": {
+   "do": "order",
+   "plugin": "BalmoraDocks.ESP",
+   "pair": [
+    "BalmoraDocks.ESP",
+    "Clean_Waterfowl_Of_Morrowind_Expanded.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "balmoradocks.esp|odai river upper overhaul.esp": {
+   "do": "order",
+   "plugin": "Odai River Upper Overhaul.esp",
+   "pair": [
+    "Odai River Upper Overhaul.esp",
+    "BalmoraDocks.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "banners with sound.esp|of eggs and dwarves.esp": {
+   "do": "order",
+   "plugin": "Banners With Sound.esp",
+   "pair": [
+    "Of Eggs and Dwarves.ESP",
+    "Banners With Sound.esp"
+   ],
+   "when": "2026-11-10 04:33"
+  },
+  "bards of bardenfell.esp|south wall_tg_hideout.esp": {
+   "do": "order",
+   "plugin": "Bards of Bardenfell.esp",
+   "pair": [
+    "Bards of Bardenfell.esp",
+    "South Wall_TG_Hideout.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "bb2_peasant_gowns.esp|cait's critters unleashed 2.0.esp": {
+   "do": "order",
+   "plugin": "BB2_Peasant_Gowns.esp",
+   "pair": [
+    "BB2_Peasant_Gowns.esp",
+    "Cait's Critters Unleashed 2.0.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "bb2_peasant_gowns.esp|dallara pelagiad pfp.esp": {
+   "do": "order",
+   "plugin": "BB2_Peasant_Gowns.esp",
+   "pair": [
+    "BB2_Peasant_Gowns.esp",
+    "Dallara Pelagiad PFP.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "bb2_peasant_gowns.esp|yet another guard diversity - regular.esp": {
+   "do": "order",
+   "plugin": "BB2_Peasant_Gowns.esp",
+   "pair": [
+    "BB2_Peasant_Gowns.esp",
+    "Yet Another Guard Diversity - Regular.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "better bounties.esp|improved inns expanded.esp": {
+   "do": "cell",
+   "plugin": "Improved Inns Expanded.esp",
+   "pair": [
+    "Better Bounties.esp",
+    "Improved Inns Expanded.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "better bounties.esp|mca.esm": {
+   "do": "cell",
+   "plugin": "Better Bounties.esp",
+   "pair": [
+    "MCA.esm",
+    "Better Bounties.esp"
+   ],
+   "when": "2026-11-07 15:26"
+  },
+  "better bounties.esp|oaab ebonheart six fishes.esp": {
+   "do": "cell",
+   "plugin": "OAAB Ebonheart Six Fishes.ESP",
+   "pair": [
+    "OAAB Ebonheart Six Fishes.ESP",
+    "Better Bounties.esp"
+   ],
+   "when": "2026-11-11 13:43"
+  },
+  "better bounties.esp|south wall_tg_hideout.esp": {
+   "do": "cell",
+   "plugin": "South Wall_TG_Hideout.esp",
+   "pair": [
+    "Better Bounties.esp",
+    "South Wall_TG_Hideout.esp"
+   ],
+   "when": "2026-11-11 13:43"
+  },
+  "better bounties.esp|windows glow - tribunal eng.esp": {
+   "do": "order",
+   "plugin": "Better Bounties.esp",
+   "pair": [
+    "Better Bounties.esp",
+    "Windows Glow - Tribunal Eng.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "better landscapes stonewood pass (rp edit).esp|dd_caldera_expansion.esp": {
+   "do": "order",
+   "plugin": "Better Landscapes Stonewood Pass (RP Edit).esp",
+   "pair": [
+    "Better Landscapes Stonewood Pass (RP Edit).esp",
+    "DD_Caldera_Expansion.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "better landscapes stonewood pass (rp edit).esp|luceedit - bcom - moonlightontheodairiver.esp": {
+   "do": "order",
+   "plugin": "Better Landscapes Stonewood Pass (RP Edit).esp",
+   "pair": [
+    "Better Landscapes Stonewood Pass (RP Edit).esp",
+    "LuceEdit - BCOM - MoonlightOnTheOdaiRiver.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "better landscapes stonewood pass (rp edit).esp|rocky_wg_base_1.1.esp": {
+   "do": "order",
+   "plugin": "Rocky_WG_Base_1.1.esp",
+   "pair": [
+    "Rocky_WG_Base_1.1.esp",
+    "Better Landscapes Stonewood Pass (RP Edit).esp"
+   ],
+   "when": "2026-11-09 10:01"
+  },
+  "beware the sixth house.esp|dn-gdr btb mrm-non pointy.esp": {
+   "do": "order",
+   "plugin": "DN-GDR BTB MRM-Non Pointy.esp",
+   "pair": [
+    "DN-GDR BTB MRM-Non Pointy.esp",
+    "Beware the Sixth House.ESP"
+   ],
+   "when": "2026-11-09 19:03"
+  },
+  "blldv_all.esp|clean_mines and caverns.esp": {
+   "do": "order",
+   "plugin": "Clean_Mines and Caverns.esp",
+   "pair": [
+    "Clean_Mines and Caverns.esp",
+    "BLLDV_ALL.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "blldv_all.esp|mgo guild halls vanilla.esp": {
+   "do": "order",
+   "plugin": "MGO Guild Halls Vanilla.esp",
+   "pair": [
+    "MGO Guild Halls Vanilla.esp",
+    "BLLDV_ALL.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "blldv_all.esp|oaab_grazelands.esp": {
+   "do": "order",
+   "plugin": "OAAB_Grazelands.ESP",
+   "pair": [
+    "OAAB_Grazelands.ESP",
+    "BLLDV_ALL.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "blldv_all.esp|the northern strongholds.esp": {
+   "do": "order",
+   "plugin": "The Northern Strongholds.esp",
+   "pair": [
+    "The Northern Strongholds.esp",
+    "BLLDV_ALL.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "blldv_all.esp|unique uniques.esp": {
+   "do": "order",
+   "plugin": "Unique Uniques.ESP",
+   "pair": [
+    "Unique Uniques.ESP",
+    "BLLDV_ALL.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "blldv_all.esp|vy_under_skar.esp": {
+   "do": "order",
+   "plugin": "BLLDV_ALL.esp",
+   "pair": [
+    "BLLDV_ALL.esp",
+    "VY_Under_Skar.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "botanical haven - suran apothecary redux.esp|the scent of suspicion.esp": {
+   "do": "cell",
+   "plugin": "Botanical Haven - Suran Apothecary Redux.esp",
+   "pair": [
+    "The Scent of Suspicion.esp",
+    "Botanical Haven - Suran Apothecary Redux.esp"
+   ],
+   "when": "2026-11-09 12:21"
+  },
+  "btb's game improvements (necro edit).esp|cutting room floor - items tr.esp": {
+   "do": "order",
+   "plugin": "BTB's Game Improvements (Necro Edit).esp",
+   "pair": [
+    "BTB's Game Improvements (Necro Edit).esp",
+    "Cutting Room Floor - Items TR.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "btb's game improvements (necro edit).esp|interiors_of_mournhold_v2.3.esp": {
+   "do": "order",
+   "plugin": "Interiors_of_Mournhold_V2.3.esp",
+   "pair": [
+    "Interiors_of_Mournhold_V2.3.esp",
+    "BTB's Game Improvements (Necro Edit).esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "bulwarkamulet.esp|tel_aruhn_chronicles.esp": {
+   "do": "order",
+   "plugin": "Tel_Aruhn_Chronicles.ESP",
+   "pair": [
+    "Tel_Aruhn_Chronicles.ESP",
+    "BulwarkAmulet.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "cait's critters unleashed 2.0.esp|concept_arts_plantations.esp": {
+   "do": "order",
+   "plugin": "Concept_Arts_plantations.esp",
+   "pair": [
+    "Concept_Arts_plantations.esp",
+    "Cait's Critters Unleashed 2.0.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "cait's critters unleashed 2.0.esp|dallara pelagiad pfp.esp": {
+   "do": "order",
+   "plugin": "Dallara Pelagiad PFP.esp",
+   "pair": [
+    "Dallara Pelagiad PFP.esp",
+    "Cait's Critters Unleashed 2.0.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "cait's critters unleashed 2.0.esp|seyda neen - damp little squat - unshabby.esp": {
+   "do": "order",
+   "plugin": "Seyda Neen - Damp Little Squat - unshabby.ESP",
+   "pair": [
+    "Seyda Neen - Damp Little Squat - unshabby.ESP",
+    "Cait's Critters Unleashed 2.0.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "cait's critters unleashed 2.0.esp|urh_ald_velothi.esp": {
+   "do": "order",
+   "plugin": "URH_Ald_Velothi.esp",
+   "pair": [
+    "URH_Ald_Velothi.esp",
+    "Cait's Critters Unleashed 2.0.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "caldera priory.esp|rocky_wg_base_1.1.esp": {
+   "do": "skip",
+   "plugin": "",
+   "pair": [
+    "Rocky_WG_Base_1.1.esp",
+    "Caldera Priory.ESP"
+   ],
+   "when": "2026-11-09 10:01"
+  },
+  "camonna tong.esp|clean_mines and caverns.esp": {
+   "do": "order",
+   "plugin": "Clean_Mines and Caverns.esp",
+   "pair": [
+    "Clean_Mines and Caverns.esp",
+    "Camonna Tong.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "camonna tong.esp|concept_arts_plantations.esp": {
+   "do": "cell",
+   "plugin": "Camonna Tong.esp",
+   "pair": [
+    "Concept_Arts_plantations.esp",
+    "Camonna Tong.esp"
+   ],
+   "when": "2026-11-09 12:21"
+  },
+  "camonna tong.esp|rr_better_ships_n_boats_eng.esp": {
+   "do": "order",
+   "plugin": "Camonna Tong.esp",
+   "pair": [
+    "Camonna Tong.esp",
+    "RR_Better_Ships_n_Boats_Eng.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "casimir's legacy.esp|dallara pelagiad pfp.esp": {
+   "do": "order",
+   "plugin": "Dallara Pelagiad PFP.esp",
+   "pair": [
+    "Dallara Pelagiad PFP.esp",
+    "Casimir's Legacy.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "casimir's legacy.esp|friends & frens - vvardenfell.esp": {
+   "do": "order",
+   "plugin": "Friends & Frens - Vvardenfell.ESP",
+   "pair": [
+    "Friends & Frens - Vvardenfell.ESP",
+    "Casimir's Legacy.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "casimir's legacy.esp|unique and balanced easter eggs.esp": {
+   "do": "order",
+   "plugin": "Unique and balanced easter eggs.ESP",
+   "pair": [
+    "Unique and balanced easter eggs.ESP",
+    "Casimir's Legacy.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "clan aundae vampire dungeons.esp|oaab - tombs and towers.esm": {
+   "do": "cell",
+   "plugin": "Clan Aundae Vampire Dungeons.ESP",
+   "pair": [
+    "OAAB - Tombs and Towers.esm",
+    "Clan Aundae Vampire Dungeons.ESP"
+   ],
+   "when": "2026-11-09 12:20"
+  },
+  "clan aundae vampire dungeons.esp|quests for clans and vampire legends.esp": {
+   "do": "order",
+   "plugin": "Clan Aundae Vampire Dungeons.ESP",
+   "pair": [
+    "Clan Aundae Vampire Dungeons.ESP",
+    "Quests for Clans and Vampire Legends.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "clan aundae vampire dungeons.esp|sheogorad - groves of the north.esp": {
+   "do": "order",
+   "plugin": "Sheogorad - Groves of the North.esp",
+   "pair": [
+    "Sheogorad - Groves of the North.esp",
+    "Clan Aundae Vampire Dungeons.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "clean dr115_thedropoff_hlaoaddocks.esp|oaab odai plateau.esp": {
+   "do": "cell",
+   "plugin": "Clean DR115_TheDropoff_HlaOadDocks.ESP",
+   "pair": [
+    "Clean DR115_TheDropoff_HlaOadDocks.ESP",
+    "OAAB Odai Plateau.esp"
+   ],
+   "when": "2026-11-09 12:25"
+  },
+  "clean dr115_thedropoff_hlaoaddocks.esp|repopulatedcreatures.esp": {
+   "do": "order",
+   "plugin": "Clean DR115_TheDropoff_HlaOadDocks.ESP",
+   "pair": [
+    "Clean DR115_TheDropoff_HlaOadDocks.ESP",
+    "RepopulatedCreatures.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "clean tales of seyda neen.esp|mah.esp": {
+   "do": "order",
+   "plugin": "Clean Tales of Seyda Neen.esp",
+   "pair": [
+    "Clean Tales of Seyda Neen.esp",
+    "MAH.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "clean_ashirbadon.esp|expanded sounds.esp": {
+   "do": "order",
+   "plugin": "Clean_Ashirbadon.esp",
+   "pair": [
+    "Clean_Ashirbadon.esp",
+    "Expanded Sounds.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "clean_endusalredone.esp|cutting room floor - quests.esp": {
+   "do": "order",
+   "plugin": "Cutting Room Floor - Quests.esp",
+   "pair": [
+    "Cutting Room Floor - Quests.esp",
+    "Clean_EndusalRedone.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "clean_endusalredone.esp|dn-lighted_dwemer_towers.esp": {
+   "do": "order",
+   "plugin": "Clean_EndusalRedone.esp",
+   "pair": [
+    "Clean_EndusalRedone.esp",
+    "DN-Lighted_Dwemer_Towers.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "clean_kunirairefit2.esp|expanded sounds.esp": {
+   "do": "order",
+   "plugin": "Clean_KuniraiRefit2.esp",
+   "pair": [
+    "Clean_KuniraiRefit2.esp",
+    "Expanded Sounds.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "clean_kunirairefit2.esp|expansions integrated - fewer bm creatures.esp": {
+   "do": "order",
+   "plugin": "Clean_KuniraiRefit2.esp",
+   "pair": [
+    "Clean_KuniraiRefit2.esp",
+    "Expansions Integrated - Fewer BM Creatures.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "clean_kunirairefit2.esp|logs on fire.esp": {
+   "do": "order",
+   "plugin": "Clean_KuniraiRefit2.esp",
+   "pair": [
+    "Clean_KuniraiRefit2.esp",
+    "logs on Fire.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "clean_mines and caverns.esp|creatures and critters.esp": {
+   "do": "order",
+   "plugin": "Clean_Mines and Caverns.esp",
+   "pair": [
+    "Clean_Mines and Caverns.esp",
+    "Creatures and Critters.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "clean_mines and caverns.esp|cutting room floor - creatures & diseases tr.esp": {
+   "do": "order",
+   "plugin": "Cutting Room Floor - Creatures & Diseases TR.esp",
+   "pair": [
+    "Cutting Room Floor - Creatures & Diseases TR.esp",
+    "Clean_Mines and Caverns.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "clean_mines and caverns.esp|dreamersexpansion.esp": {
+   "do": "order",
+   "plugin": "Clean_Mines and Caverns.esp",
+   "pair": [
+    "Clean_Mines and Caverns.esp",
+    "DreamersExpansion.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "clean_mines and caverns.esp|expanded sounds.esp": {
+   "do": "order",
+   "plugin": "Clean_Mines and Caverns.esp",
+   "pair": [
+    "Clean_Mines and Caverns.esp",
+    "Expanded Sounds.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "clean_mines and caverns.esp|join all vampire clans.esp": {
+   "do": "order",
+   "plugin": "Clean_Mines and Caverns.esp",
+   "pair": [
+    "Clean_Mines and Caverns.esp",
+    "Join All Vampire Clans.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "clean_mines and caverns.esp|logs on fire.esp": {
+   "do": "order",
+   "plugin": "Clean_Mines and Caverns.esp",
+   "pair": [
+    "Clean_Mines and Caverns.esp",
+    "logs on Fire.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "clean_mines and caverns.esp|mah.esp": {
+   "do": "order",
+   "plugin": "Clean_Mines and Caverns.esp",
+   "pair": [
+    "Clean_Mines and Caverns.esp",
+    "MAH.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "clean_mines and caverns.esp|oaab_grazelands.esp": {
+   "do": "order",
+   "plugin": "Clean_Mines and Caverns.esp",
+   "pair": [
+    "Clean_Mines and Caverns.esp",
+    "OAAB_Grazelands.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "clean_mines and caverns.esp|repopulatedcreatures.esp": {
+   "do": "order",
+   "plugin": "Clean_Mines and Caverns.esp",
+   "pair": [
+    "Clean_Mines and Caverns.esp",
+    "RepopulatedCreatures.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "clean_mines and caverns.esp|secretsofthecrystalcity.esp": {
+   "do": "order",
+   "plugin": "Clean_Mines and Caverns.esp",
+   "pair": [
+    "Clean_Mines and Caverns.esp",
+    "SecretsOfTheCrystalCity.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "clean_mines and caverns.esp|sheogorad - groves of the north.esp": {
+   "do": "order",
+   "plugin": "Clean_Mines and Caverns.esp",
+   "pair": [
+    "Clean_Mines and Caverns.esp",
+    "Sheogorad - Groves of the North.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "clean_mines and caverns.esp|st_alchemy_replacer_1.3.esp": {
+   "do": "order",
+   "plugin": "Clean_Mines and Caverns.esp",
+   "pair": [
+    "Clean_Mines and Caverns.esp",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "clean_mines and caverns.esp|the mountain of fear.esp": {
+   "do": "order",
+   "plugin": "Clean_Mines and Caverns.esp",
+   "pair": [
+    "Clean_Mines and Caverns.esp",
+    "The Mountain of Fear.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "clean_mines and caverns.esp|vampire clans - clutter monkey overhaul.esp": {
+   "do": "cell",
+   "plugin": "Vampire Clans - Clutter Monkey Overhaul.ESP",
+   "pair": [
+    "Clean_Mines and Caverns.esp",
+    "Vampire Clans - Clutter Monkey Overhaul.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "clean_mines and caverns.esp|yet another guard diversity - regular.esp": {
+   "do": "order",
+   "plugin": "Clean_Mines and Caverns.esp",
+   "pair": [
+    "Clean_Mines and Caverns.esp",
+    "Yet Another Guard Diversity - Regular.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "clean_piran.esp|creatures and critters.esp": {
+   "do": "order",
+   "plugin": "Clean_Piran.esp",
+   "pair": [
+    "Clean_Piran.esp",
+    "Creatures and Critters.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "clean_piran.esp|dreamersexpansion.esp": {
+   "do": "order",
+   "plugin": "Clean_Piran.esp",
+   "pair": [
+    "Clean_Piran.esp",
+    "DreamersExpansion.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "clean_severa magia fix.esp|revampeddarkbrotherhood.esp": {
+   "do": "order",
+   "plugin": "RevampedDarkBrotherhood.ESP",
+   "pair": [
+    "RevampedDarkBrotherhood.ESP",
+    "Clean_Severa Magia Fix.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "clean_sinsibadon.esp|logs on fire.esp": {
+   "do": "order",
+   "plugin": "Clean_Sinsibadon.esp",
+   "pair": [
+    "Clean_Sinsibadon.esp",
+    "logs on Fire.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "clean_tureynulalredone.esp|hall of the last ember_sorkvild the raven.esp": {
+   "do": "order",
+   "plugin": "Clean_TureynulalRedone.esp",
+   "pair": [
+    "Clean_TureynulalRedone.esp",
+    "Hall of the Last Ember_Sorkvild the Raven.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "clean_tureynulalredone.esp|rise of house telvanni.esm": {
+   "do": "cell",
+   "plugin": "Clean_TureynulalRedone.esp",
+   "pair": [
+    "Rise of House Telvanni.esm",
+    "Clean_TureynulalRedone.esp"
+   ],
+   "when": "2026-11-09 12:25"
+  },
+  "clean_waterfowl_of_morrowind_expanded.esp|gnisis docks v1.0.esp": {
+   "do": "order",
+   "plugin": "Gnisis Docks v1.0.esp",
+   "pair": [
+    "Gnisis Docks v1.0.esp",
+    "Clean_Waterfowl_Of_Morrowind_Expanded.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "clean_waterfowl_of_morrowind_expanded.esp|holamayan island.esp": {
+   "do": "order",
+   "plugin": "Holamayan Island.esp",
+   "pair": [
+    "Holamayan Island.esp",
+    "Clean_Waterfowl_Of_Morrowind_Expanded.esp"
+   ],
+   "when": "2026-11-09 13:55"
+  },
+  "clean_waterfowl_of_morrowind_expanded.esp|oaab brother junipers twin lamps.esp": {
+   "do": "order",
+   "plugin": "OAAB Brother Junipers Twin Lamps.esp",
+   "pair": [
+    "OAAB Brother Junipers Twin Lamps.esp",
+    "Clean_Waterfowl_Of_Morrowind_Expanded.esp"
+   ],
+   "when": "2026-11-10 04:26"
+  },
+  "clean_waterfowl_of_morrowind_expanded.esp|oaab_grazelands.esp": {
+   "do": "order",
+   "plugin": "OAAB_Grazelands.ESP",
+   "pair": [
+    "OAAB_Grazelands.ESP",
+    "Clean_Waterfowl_Of_Morrowind_Expanded.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "clean_waterfowl_of_morrowind_expanded.esp|repopulatedcreatures.esp": {
+   "do": "order",
+   "plugin": "RepopulatedCreatures.ESP",
+   "pair": [
+    "RepopulatedCreatures.ESP",
+    "Clean_Waterfowl_Of_Morrowind_Expanded.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "completepropylonnetworkfortr.esp|tr_darkdungeons.esp": {
+   "do": "order",
+   "plugin": "TR_DarkDungeons.esp",
+   "pair": [
+    "TR_DarkDungeons.esp",
+    "CompletePropylonNetworkForTR.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "concept art hlaalu balconies - balmora.esp|windows glow.esp": {
+   "do": "order",
+   "plugin": "Concept Art Hlaalu Balconies - Balmora.esp",
+   "pair": [
+    "Concept Art Hlaalu Balconies - Balmora.esp",
+    "Windows Glow.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "concept art hlaalu balconies - suran.esp|hanging gardens of suran.esp": {
+   "do": "order",
+   "plugin": "Concept Art Hlaalu Balconies - Suran.ESP",
+   "pair": [
+    "Hanging Gardens of Suran.esp",
+    "Concept Art Hlaalu Balconies - Suran.ESP"
+   ],
+   "when": "2026-11-09 13:35"
+  },
+  "concept art hlaalu balconies - suran.esp|suran fix.esp": {
+   "do": "order",
+   "plugin": "Suran Fix.ESP",
+   "pair": [
+    "Suran Fix.ESP",
+    "Concept Art Hlaalu Balconies - Suran.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "concept art hlaalu balconies - suran.esp|windows glow.esp": {
+   "do": "order",
+   "plugin": "Concept Art Hlaalu Balconies - Suran.ESP",
+   "pair": [
+    "Concept Art Hlaalu Balconies - Suran.ESP",
+    "Windows Glow.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "concept art palace.esp|windows glow.esp": {
+   "do": "order",
+   "plugin": "Windows Glow.esp",
+   "pair": [
+    "Windows Glow.esp",
+    "Concept art palace.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "concept_arts_plantations.esp|suran fix.esp": {
+   "do": "order",
+   "plugin": "Suran Fix.ESP",
+   "pair": [
+    "Suran Fix.ESP",
+    "Concept_Arts_plantations.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "concept_arts_plantations.esp|there can be only one (alt fyr).esp": {
+   "do": "order",
+   "plugin": "Concept_Arts_plantations.esp",
+   "pair": [
+    "Concept_Arts_plantations.esp",
+    "There Can Be Only One (Alt Fyr).esp"
+   ],
+   "when": "2026-11-09 13:20"
+  },
+  "concept_arts_plantations.esp|windows glow.esp": {
+   "do": "order",
+   "plugin": "Concept_Arts_plantations.esp",
+   "pair": [
+    "Concept_Arts_plantations.esp",
+    "Windows Glow.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "corprusarium - sorrow heart of tel fyr.esp|rr_better_ships_n_boats_eng.esp": {
+   "do": "order",
+   "plugin": "Corprusarium - Sorrow Heart of Tel Fyr.ESP",
+   "pair": [
+    "Corprusarium - Sorrow Heart of Tel Fyr.ESP",
+    "RR_Better_Ships_n_Boats_Eng.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "corprusarium - sorrow heart of tel fyr.esp|st_alchemy_replacer_1.3.esp": {
+   "do": "order",
+   "plugin": "Corprusarium - Sorrow Heart of Tel Fyr.ESP",
+   "pair": [
+    "Corprusarium - Sorrow Heart of Tel Fyr.ESP",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "correctuv ore replacer_respawning.esp|molten glass.esp": {
+   "do": "off",
+   "plugin": "correctUV Ore Replacer_respawning.esp",
+   "pair": [
+    "Molten Glass.ESP",
+    "correctUV Ore Replacer_respawning.esp"
+   ],
+   "when": "2026-11-09 13:55"
+  },
+  "creatures and critters.esp|cutting room floor - stronghold homes.esp": {
+   "do": "order",
+   "plugin": "Cutting Room Floor - Stronghold Homes.esp",
+   "pair": [
+    "Cutting Room Floor - Stronghold Homes.esp",
+    "Creatures and Critters.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "creatures and critters.esp|daedric shrine overhaul full.esp": {
+   "do": "order",
+   "plugin": "Creatures and Critters.ESP",
+   "pair": [
+    "Creatures and Critters.ESP",
+    "Daedric Shrine Overhaul FULL.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "creatures and critters.esp|dn-gdr btb mrm-non pointy.esp": {
+   "do": "order",
+   "plugin": "DN-GDR BTB MRM-Non Pointy.esp",
+   "pair": [
+    "DN-GDR BTB MRM-Non Pointy.esp",
+    "Creatures and Critters.ESP"
+   ],
+   "when": "2026-11-09 19:03"
+  },
+  "creatures and critters.esp|dreamersexpansion.esp": {
+   "do": "order",
+   "plugin": "Creatures and Critters.ESP",
+   "pair": [
+    "Creatures and Critters.ESP",
+    "DreamersExpansion.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "creatures and critters.esp|fields of humility.esp": {
+   "do": "order",
+   "plugin": "Fields of Humility.ESP",
+   "pair": [
+    "Fields of Humility.ESP",
+    "Creatures and Critters.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "creatures and critters.esp|kogoruhn - extinct city of ash and sulfur.esp": {
+   "do": "order",
+   "plugin": "Kogoruhn - Extinct City of Ash and Sulfur.esp",
+   "pair": [
+    "Kogoruhn - Extinct City of Ash and Sulfur.esp",
+    "Creatures and Critters.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "creatures and critters.esp|new ilunibi.esp": {
+   "do": "order",
+   "plugin": "New Ilunibi.ESP",
+   "pair": [
+    "New Ilunibi.ESP",
+    "Creatures and Critters.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "creatures and critters.esp|the northern strongholds.esp": {
+   "do": "order",
+   "plugin": "The Northern Strongholds.esp",
+   "pair": [
+    "The Northern Strongholds.esp",
+    "Creatures and Critters.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "creatures and critters.esp|the scent of suspicion.esp": {
+   "do": "order",
+   "plugin": "The Scent of Suspicion.esp",
+   "pair": [
+    "The Scent of Suspicion.esp",
+    "Creatures and Critters.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "curio manor - oaab and hlaaluified.esp|windows glow.esp": {
+   "do": "order",
+   "plugin": "Curio Manor - OAAB and Hlaaluified.ESP",
+   "pair": [
+    "Curio Manor - OAAB and Hlaaluified.ESP",
+    "Windows Glow.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "cutting room floor - ald redaynia.esp|sheogorad - groves of the north.esp": {
+   "do": "order",
+   "plugin": "Cutting Room Floor - Ald Redaynia.esp",
+   "pair": [
+    "Cutting Room Floor - Ald Redaynia.esp",
+    "Sheogorad - Groves of the North.esp"
+   ],
+   "when": "2026-11-06 18:14"
+  },
+  "cutting room floor - anthology solstheim.esp|cutting room floor - solstheim travel.esp": {
+   "do": "off",
+   "plugin": "Cutting Room Floor - Solstheim Travel.esp",
+   "pair": [
+    "Cutting Room Floor - Solstheim Travel.esp",
+    "Cutting Room Floor - Anthology Solstheim.esp"
+   ],
+   "when": "2026-11-09 13:55"
+  },
+  "cutting room floor - creatures & diseases tr.esp|of eggs and dwarves.esp": {
+   "do": "order",
+   "plugin": "Cutting Room Floor - Creatures & Diseases TR.esp",
+   "pair": [
+    "Cutting Room Floor - Creatures & Diseases TR.esp",
+    "Of Eggs and Dwarves.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "cutting room floor - creatures & diseases tr.esp|superb shulk eggmine.esp": {
+   "do": "order",
+   "plugin": "Cutting Room Floor - Creatures & Diseases TR.esp",
+   "pair": [
+    "Cutting Room Floor - Creatures & Diseases TR.esp",
+    "Superb Shulk Eggmine.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "cutting room floor - extra additions.esp|daedric shrine overhaul full.esp": {
+   "do": "order",
+   "plugin": "Cutting Room Floor - Extra Additions.esp",
+   "pair": [
+    "Cutting Room Floor - Extra Additions.esp",
+    "Daedric Shrine Overhaul FULL.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "cutting room floor - extra additions.esp|oaab huleen's hut overhaul.esp": {
+   "do": "order",
+   "plugin": "Cutting Room Floor - Extra Additions.esp",
+   "pair": [
+    "Cutting Room Floor - Extra Additions.esp",
+    "OAAB Huleen's Hut Overhaul.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "cutting room floor - free slaves.esp|friends & frens - vvardenfell.esp": {
+   "do": "order",
+   "plugin": "Cutting Room Floor - Free Slaves.esp",
+   "pair": [
+    "Cutting Room Floor - Free Slaves.esp",
+    "Friends & Frens - Vvardenfell.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "cutting room floor - free slaves.esp|greymarchdawn.esp": {
+   "do": "order",
+   "plugin": "Cutting Room Floor - Free Slaves.esp",
+   "pair": [
+    "Cutting Room Floor - Free Slaves.esp",
+    "GreymarchDawn.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "cutting room floor - free slaves.esp|oaab_grazelands.esp": {
+   "do": "order",
+   "plugin": "OAAB_Grazelands.ESP",
+   "pair": [
+    "OAAB_Grazelands.ESP",
+    "Cutting Room Floor - Free Slaves.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "cutting room floor - free slaves.esp|unlock all slaves.esp": {
+   "do": "order",
+   "plugin": "Cutting Room Floor - Free Slaves.esp",
+   "pair": [
+    "Cutting Room Floor - Free Slaves.esp",
+    "Unlock All Slaves.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "cutting room floor - items tr.esp|dallara ebonheart.esp": {
+   "do": "order",
+   "plugin": "Cutting Room Floor - Items TR.esp",
+   "pair": [
+    "Cutting Room Floor - Items TR.esp",
+    "Dallara Ebonheart.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "cutting room floor - items tr.esp|interiors_of_mournhold_v2.3.esp": {
+   "do": "order",
+   "plugin": "Cutting Room Floor - Items TR.esp",
+   "pair": [
+    "Interiors_of_Mournhold_V2.3.esp",
+    "Cutting Room Floor - Items TR.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "cutting room floor - keys.esp|oaab_grazelands.esp": {
+   "do": "order",
+   "plugin": "OAAB_Grazelands.ESP",
+   "pair": [
+    "OAAB_Grazelands.ESP",
+    "Cutting Room Floor - Keys.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "cutting room floor - keys.esp|vy_under_skar.esp": {
+   "do": "order",
+   "plugin": "Cutting Room Floor - Keys.esp",
+   "pair": [
+    "Cutting Room Floor - Keys.esp",
+    "VY_Under_Skar.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "cutting room floor - quests.esp|oaab_grazelands.esp": {
+   "do": "order",
+   "plugin": "OAAB_Grazelands.ESP",
+   "pair": [
+    "OAAB_Grazelands.ESP",
+    "Cutting Room Floor - Quests.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "cutting room floor - shrine blessings.esp|dallara ebonheart.esp": {
+   "do": "order",
+   "plugin": "Cutting Room Floor - Shrine Blessings.esp",
+   "pair": [
+    "Cutting Room Floor - Shrine Blessings.esp",
+    "Dallara Ebonheart.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "cutting room floor - shrine blessings.esp|dallara fort darius.esp": {
+   "do": "order",
+   "plugin": "Cutting Room Floor - Shrine Blessings.esp",
+   "pair": [
+    "Cutting Room Floor - Shrine Blessings.esp",
+    "Dallara Fort Darius.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "cutting room floor - shrine blessings.esp|dallara wolverine hall.esp": {
+   "do": "order",
+   "plugin": "Cutting Room Floor - Shrine Blessings.esp",
+   "pair": [
+    "Cutting Room Floor - Shrine Blessings.esp",
+    "Dallara Wolverine Hall.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "cutting room floor - shrine blessings.esp|mgo guild halls vanilla.esp": {
+   "do": "order",
+   "plugin": "Cutting Room Floor - Shrine Blessings.esp",
+   "pair": [
+    "Cutting Room Floor - Shrine Blessings.esp",
+    "MGO Guild Halls Vanilla.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "cutting room floor - shrine blessings.esp|talos cult conspiracy.esp": {
+   "do": "order",
+   "plugin": "Cutting Room Floor - Shrine Blessings.esp",
+   "pair": [
+    "Cutting Room Floor - Shrine Blessings.esp",
+    "Talos Cult Conspiracy.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "cutting room floor - stronghold homes.esp|dreamersexpansion.esp": {
+   "do": "order",
+   "plugin": "Cutting Room Floor - Stronghold Homes.esp",
+   "pair": [
+    "Cutting Room Floor - Stronghold Homes.esp",
+    "DreamersExpansion.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "cutting room floor - stronghold homes.esp|the northern strongholds.esp": {
+   "do": "order",
+   "plugin": "Cutting Room Floor - Stronghold Homes.esp",
+   "pair": [
+    "Cutting Room Floor - Stronghold Homes.esp",
+    "The Northern Strongholds.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "cutting room floor - taverns.esp|suran_underworld_v3.esp": {
+   "do": "order",
+   "plugin": "Cutting Room Floor - Taverns.esp",
+   "pair": [
+    "Cutting Room Floor - Taverns.esp",
+    "Suran_Underworld_v3.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "da_sobitur_facility_clean.esp|tel morgana.esp": {
+   "do": "order",
+   "plugin": "Tel Morgana.esp",
+   "pair": [
+    "Tel Morgana.esp",
+    "DA_Sobitur_Facility_Clean.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "daedric ruin expansion - ramimilk - no chrysamere.esp|daedric shrine overhaul full.esp": {
+   "do": "order",
+   "plugin": "Daedric Shrine Overhaul FULL.esp",
+   "pair": [
+    "Daedric Shrine Overhaul FULL.esp",
+    "Daedric Ruin Expansion - Ramimilk - No Chrysamere.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "daedric shrine overhaul full.esp|daedricbeacons.esp": {
+   "do": "order",
+   "plugin": "DaedricBeacons.ESP",
+   "pair": [
+    "DaedricBeacons.ESP",
+    "Daedric Shrine Overhaul FULL.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "daedric shrine overhaul full.esp|helm of tohan naturalized.esp": {
+   "do": "order",
+   "plugin": "Daedric Shrine Overhaul FULL.esp",
+   "pair": [
+    "Daedric Shrine Overhaul FULL.esp",
+    "Helm of Tohan Naturalized.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "daedric shrine overhaul full.esp|imperialcultexpansionv1.esp": {
+   "do": "order",
+   "plugin": "imperialcultexpansionv1.esp",
+   "pair": [
+    "imperialcultexpansionv1.esp",
+    "Daedric Shrine Overhaul FULL.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "daedric shrine overhaul full.esp|sheogorad - groves of the north.esp": {
+   "do": "order",
+   "plugin": "Sheogorad - Groves of the North.esp",
+   "pair": [
+    "Sheogorad - Groves of the North.esp",
+    "Daedric Shrine Overhaul FULL.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "daedric shrine overhaul full.esp|st_alchemy_replacer_1.3.esp": {
+   "do": "order",
+   "plugin": "Daedric Shrine Overhaul FULL.esp",
+   "pair": [
+    "Daedric Shrine Overhaul FULL.esp",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dallara ebonheart.esp|ebonheart lighthouse.esp": {
+   "do": "order",
+   "plugin": "Dallara Ebonheart.esp",
+   "pair": [
+    "Dallara Ebonheart.esp",
+    "Ebonheart Lighthouse.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dallara ebonheart.esp|gama.esp": {
+   "do": "order",
+   "plugin": "GAMA.esp",
+   "pair": [
+    "GAMA.esp",
+    "Dallara Ebonheart.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dallara ebonheart.esp|illy's oh my goddess.esp": {
+   "do": "order",
+   "plugin": "Dallara Ebonheart.esp",
+   "pair": [
+    "Dallara Ebonheart.esp",
+    "Illy's Oh my Goddess.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dallara ebonheart.esp|imperial stables.esp": {
+   "do": "order",
+   "plugin": "Dallara Ebonheart.esp",
+   "pair": [
+    "Imperial Stables.esp",
+    "Dallara Ebonheart.esp"
+   ],
+   "when": "2026-11-10 04:26"
+  },
+  "dallara ebonheart.esp|logs on fire.esp": {
+   "do": "order",
+   "plugin": "Dallara Ebonheart.esp",
+   "pair": [
+    "Dallara Ebonheart.esp",
+    "logs on Fire.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dallara ebonheart.esp|mudcrab island tlad.esp": {
+   "do": "order",
+   "plugin": "Mudcrab Island TLAD.esp",
+   "pair": [
+    "Mudcrab Island TLAD.esp",
+    "Dallara Ebonheart.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dallara ebonheart.esp|oaab odai plateau.esp": {
+   "do": "order",
+   "plugin": "Dallara Ebonheart.esp",
+   "pair": [
+    "Dallara Ebonheart.esp",
+    "OAAB Odai Plateau.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dallara ebonheart.esp|ports of vvardenfell v1.6 - aggressively compatible.esp": {
+   "do": "order",
+   "plugin": "Ports Of Vvardenfell V1.6 - Aggressively Compatible.esp",
+   "pair": [
+    "Ports Of Vvardenfell V1.6 - Aggressively Compatible.esp",
+    "Dallara Ebonheart.esp"
+   ],
+   "when": "2026-11-09 10:01"
+  },
+  "dallara ebonheart.esp|repopulatedmorrowind.esp": {
+   "do": "order",
+   "plugin": "RepopulatedMorrowind.ESP",
+   "pair": [
+    "RepopulatedMorrowind.ESP",
+    "Dallara Ebonheart.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dallara ebonheart.esp|rr_better_ships_n_boats_eng.esp": {
+   "do": "order",
+   "plugin": "Dallara Ebonheart.esp",
+   "pair": [
+    "Dallara Ebonheart.esp",
+    "RR_Better_Ships_n_Boats_Eng.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dallara ebonheart.esp|seamus_traitorkings.esp": {
+   "do": "order",
+   "plugin": "Dallara Ebonheart.esp",
+   "pair": [
+    "Dallara Ebonheart.esp",
+    "seamus_TraitorKings.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dallara ebonheart.esp|the_vanilla_quest_tweaks_rp_choices_consequences_super_mega_package_-_ultimate_edition.esp": {
+   "do": "order",
+   "plugin": "Dallara Ebonheart.esp",
+   "pair": [
+    "Dallara Ebonheart.esp",
+    "The_Vanilla_Quest_Tweaks_RP_Choices_Consequences_Super_Mega_Package_-_Ultimate_Edition.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dallara ebonheart.esp|windows glow.esp": {
+   "do": "order",
+   "plugin": "Windows Glow.esp",
+   "pair": [
+    "Windows Glow.esp",
+    "Dallara Ebonheart.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dallara ebonheart.esp|yet another guard diversity - regular.esp": {
+   "do": "order",
+   "plugin": "Dallara Ebonheart.esp",
+   "pair": [
+    "Dallara Ebonheart.esp",
+    "Yet Another Guard Diversity - Regular.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dallara fort buckmoth.esp|imperial stables.esp": {
+   "do": "order",
+   "plugin": "Dallara Fort Buckmoth.esp",
+   "pair": [
+    "Dallara Fort Buckmoth.esp",
+    "Imperial Stables.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dallara fort buckmoth.esp|yet another guard diversity - regular.esp": {
+   "do": "order",
+   "plugin": "Dallara Fort Buckmoth.esp",
+   "pair": [
+    "Dallara Fort Buckmoth.esp",
+    "Yet Another Guard Diversity - Regular.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dallara fort darius.esp|gnisis expanded remaster.esp": {
+   "do": "order",
+   "plugin": "Gnisis Expanded Remaster.esp",
+   "pair": [
+    "Gnisis Expanded Remaster.esp",
+    "Dallara Fort Darius.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dallara fort frostmoth.esp|mudcrab island tlad.esp": {
+   "do": "order",
+   "plugin": "Dallara Fort Frostmoth.esp",
+   "pair": [
+    "Dallara Fort Frostmoth.esp",
+    "Mudcrab Island TLAD.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dallara fort frostmoth.esp|rr_better_ships_n_boats_eng.esp": {
+   "do": "order",
+   "plugin": "Dallara Fort Frostmoth.esp",
+   "pair": [
+    "Dallara Fort Frostmoth.esp",
+    "RR_Better_Ships_n_Boats_Eng.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dallara fort frostmoth.esp|suran_underworld_v3.esp": {
+   "do": "order",
+   "plugin": "Dallara Fort Frostmoth.esp",
+   "pair": [
+    "Dallara Fort Frostmoth.esp",
+    "Suran_Underworld_v3.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dallara fort frostmoth.esp|the sable dragon 1.6 mmc.esp": {
+   "do": "order",
+   "plugin": "Dallara Fort Frostmoth.esp",
+   "pair": [
+    "Dallara Fort Frostmoth.esp",
+    "The Sable Dragon 1.6 mmc.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dallara fort moonmoth.esp|imperial stables.esp": {
+   "do": "order",
+   "plugin": "Imperial Stables.esp",
+   "pair": [
+    "Imperial Stables.esp",
+    "Dallara Fort Moonmoth.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dallara fort moonmoth.esp|yet another guard diversity - regular.esp": {
+   "do": "order",
+   "plugin": "Dallara Fort Moonmoth.esp",
+   "pair": [
+    "Dallara Fort Moonmoth.esp",
+    "Yet Another Guard Diversity - Regular.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dallara pelagiad pfp.esp|friends & frens - vvardenfell.esp": {
+   "do": "order",
+   "plugin": "Dallara Pelagiad PFP.esp",
+   "pair": [
+    "Dallara Pelagiad PFP.esp",
+    "Friends & Frens - Vvardenfell.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dallara pelagiad pfp.esp|imperial stables.esp": {
+   "do": "order",
+   "plugin": "Dallara Pelagiad PFP.esp",
+   "pair": [
+    "Dallara Pelagiad PFP.esp",
+    "Imperial Stables.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dallara pelagiad pfp.esp|yet another guard diversity - regular.esp": {
+   "do": "order",
+   "plugin": "Dallara Pelagiad PFP.esp",
+   "pair": [
+    "Dallara Pelagiad PFP.esp",
+    "Yet Another Guard Diversity - Regular.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dallara wolverine hall.esp|logs on fire.esp": {
+   "do": "order",
+   "plugin": "Dallara Wolverine Hall.esp",
+   "pair": [
+    "Dallara Wolverine Hall.esp",
+    "logs on Fire.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dallara wolverine hall.esp|rise of house telvanni.esm": {
+   "do": "cell",
+   "plugin": "Dallara Wolverine Hall.esp",
+   "pair": [
+    "Rise of House Telvanni.esm",
+    "Dallara Wolverine Hall.esp"
+   ],
+   "when": "2026-11-09 12:21"
+  },
+  "dallara wolverine hall.esp|tealpanda's alchemy essentials.esp": {
+   "do": "cell",
+   "plugin": "Tealpanda's Alchemy Essentials.esp",
+   "pair": [
+    "Tealpanda's Alchemy Essentials.esp",
+    "Dallara Wolverine Hall.esp"
+   ],
+   "when": "2026-11-09 12:22"
+  },
+  "dallara wolverine hall.esp|yet another guard diversity - regular.esp": {
+   "do": "order",
+   "plugin": "Dallara Wolverine Hall.esp",
+   "pair": [
+    "Dallara Wolverine Hall.esp",
+    "Yet Another Guard Diversity - Regular.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dd_caldera_expansion.esp|expanded sounds.esp": {
+   "do": "order",
+   "plugin": "DD_Caldera_Expansion.esp",
+   "pair": [
+    "DD_Caldera_Expansion.esp",
+    "Expanded Sounds.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dd_caldera_expansion.esp|oaab brother junipers twin lamps.esp": {
+   "do": "order",
+   "plugin": "OAAB Brother Junipers Twin Lamps.esp",
+   "pair": [
+    "OAAB Brother Junipers Twin Lamps.esp",
+    "DD_Caldera_Expansion.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "devilishrockyredmountain.esp|repopulatedcreatures.esp": {
+   "do": "order",
+   "plugin": "DevilishRockyRedMountain.esp",
+   "pair": [
+    "DevilishRockyRedMountain.esp",
+    "RepopulatedCreatures.ESP"
+   ],
+   "when": "2026-11-09 10:01"
+  },
+  "devilishrockyredmountain.esp|st_alchemy_replacer_1.3.esp": {
+   "do": "order",
+   "plugin": "DevilishRockyRedMountain.esp",
+   "pair": [
+    "DevilishRockyRedMountain.esp",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-09 10:01"
+  },
+  "dissident_ordinators.esp|rr_holamayan_eng.esp": {
+   "do": "order",
+   "plugin": "RR_Holamayan_Eng.ESP",
+   "pair": [
+    "RR_Holamayan_Eng.ESP",
+    "Dissident_Ordinators.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dlr_drp_compatibility_patch.esp|dn-lighted_dwemer_towers.esp": {
+   "do": "order",
+   "plugin": "DN-Lighted_Dwemer_Towers.ESP",
+   "pair": [
+    "DN-Lighted_Dwemer_Towers.ESP",
+    "DLR_DRP_Compatibility_Patch.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dlr_drp_compatibility_patch.esp|drpv1.9.esp": {
+   "do": "order",
+   "plugin": "DRPV1.9.ESP",
+   "pair": [
+    "DRPV1.9.ESP",
+    "DLR_DRP_Compatibility_Patch.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dlr_drp_compatibility_patch.esp|dwemer legacy reforged - arkngthunch-sturdumz.esp": {
+   "do": "order",
+   "plugin": "Dwemer Legacy Reforged - Arkngthunch-Sturdumz.esp",
+   "pair": [
+    "Dwemer Legacy Reforged - Arkngthunch-Sturdumz.esp",
+    "DLR_DRP_Compatibility_Patch.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dm_crownofurshilaku.esp|st_alchemy_replacer_1.3.esp": {
+   "do": "order",
+   "plugin": "DM_CrownOfUrshilaku.ESP",
+   "pair": [
+    "DM_CrownOfUrshilaku.ESP",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dm_massamadarkness.esp|secretsofthecrystalcity.esp": {
+   "do": "order",
+   "plugin": "SecretsOfTheCrystalCity.esp",
+   "pair": [
+    "SecretsOfTheCrystalCity.esp",
+    "DM_MassamaDarkness.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dm_stonewoodlanterns.esp|luceedit - bcom - moonlightontheodairiver.esp": {
+   "do": "order",
+   "plugin": "DM_StonewoodLanterns.ESP",
+   "pair": [
+    "LuceEdit - BCOM - MoonlightOnTheOdaiRiver.esp",
+    "DM_StonewoodLanterns.ESP"
+   ],
+   "when": "2026-11-09 12:18"
+  },
+  "dm_suranroof.esp|hanging gardens of suran.esp": {
+   "do": "order",
+   "plugin": "DM_SuranRoof.ESP",
+   "pair": [
+    "DM_SuranRoof.ESP",
+    "Hanging Gardens of Suran.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dn-gdr btb mrm-non pointy.esp|dn-lighted_dwemer_towers.esp": {
+   "do": "order",
+   "plugin": "DN-GDR BTB MRM-Non Pointy.esp",
+   "pair": [
+    "DN-GDR BTB MRM-Non Pointy.esp",
+    "DN-Lighted_Dwemer_Towers.ESP"
+   ],
+   "when": "2026-11-09 19:03"
+  },
+  "dn-gdr btb mrm-non pointy.esp|dreamersexpansion.esp": {
+   "do": "order",
+   "plugin": "DN-GDR BTB MRM-Non Pointy.esp",
+   "pair": [
+    "DN-GDR BTB MRM-Non Pointy.esp",
+    "DreamersExpansion.ESP"
+   ],
+   "when": "2026-11-09 19:03"
+  },
+  "dn-lighted_dwemer_towers.esp|drpv1.9.esp": {
+   "do": "order",
+   "plugin": "DRPV1.9.ESP",
+   "pair": [
+    "DRPV1.9.ESP",
+    "DN-Lighted_Dwemer_Towers.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dn-lighted_dwemer_towers.esp|dwemer legacy reforged - bthungthumz and druscashti.esp": {
+   "do": "order",
+   "plugin": "Dwemer Legacy Reforged - Bthungthumz and Druscashti.esp",
+   "pair": [
+    "Dwemer Legacy Reforged - Bthungthumz and Druscashti.esp",
+    "DN-Lighted_Dwemer_Towers.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dn-lighted_dwemer_towers.esp|dwemertall.esp": {
+   "do": "order",
+   "plugin": "DwemerTall.ESP",
+   "pair": [
+    "DwemerTall.ESP",
+    "DN-Lighted_Dwemer_Towers.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dn-lighted_dwemer_towers.esp|sheogorad - groves of the north.esp": {
+   "do": "order",
+   "plugin": "Sheogorad - Groves of the North.esp",
+   "pair": [
+    "Sheogorad - Groves of the North.esp",
+    "DN-Lighted_Dwemer_Towers.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dn-lighted_dwemer_towers.esp|vampire clans - clutter monkey overhaul.esp": {
+   "do": "order",
+   "plugin": "Vampire Clans - Clutter Monkey Overhaul.ESP",
+   "pair": [
+    "Vampire Clans - Clutter Monkey Overhaul.ESP",
+    "DN-Lighted_Dwemer_Towers.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dn_dwemer_tileset_tr.esp|tr_darkdungeons.esp": {
+   "do": "order",
+   "plugin": "DN_Dwemer_Tileset_TR.esp",
+   "pair": [
+    "DN_Dwemer_Tileset_TR.esp",
+    "TR_DarkDungeons.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dreamersexpansion.esp|kogoruhn - extinct city of ash and sulfur.esp": {
+   "do": "order",
+   "plugin": "Kogoruhn - Extinct City of Ash and Sulfur.esp",
+   "pair": [
+    "Kogoruhn - Extinct City of Ash and Sulfur.esp",
+    "DreamersExpansion.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dreamersexpansion.esp|new ilunibi.esp": {
+   "do": "order",
+   "plugin": "New Ilunibi.ESP",
+   "pair": [
+    "New Ilunibi.ESP",
+    "DreamersExpansion.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dreamersexpansion.esp|the northern strongholds.esp": {
+   "do": "order",
+   "plugin": "The Northern Strongholds.esp",
+   "pair": [
+    "The Northern Strongholds.esp",
+    "DreamersExpansion.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "drpv1.9.esp|dwemer legacy reforged - arkngthunch-sturdumz.esp": {
+   "do": "order",
+   "plugin": "DRPV1.9.ESP",
+   "pair": [
+    "DRPV1.9.ESP",
+    "Dwemer Legacy Reforged - Arkngthunch-Sturdumz.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "drpv1.9.esp|of eggs and dwarves.esp": {
+   "do": "order",
+   "plugin": "DRPV1.9.ESP",
+   "pair": [
+    "DRPV1.9.ESP",
+    "Of Eggs and Dwarves.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "drpv1.9.esp|stranded doors - drpv patch.esp": {
+   "do": "off",
+   "plugin": "Stranded Doors - DRPV Patch.esp",
+   "pair": [
+    "DRPV1.9.ESP",
+    "Stranded Doors - DRPV Patch.esp"
+   ],
+   "when": "2026-11-09 13:55"
+  },
+  "drpv1.9.esp|suran_underworld_v3.esp": {
+   "do": "order",
+   "plugin": "DRPV1.9.ESP",
+   "pair": [
+    "DRPV1.9.ESP",
+    "Suran_Underworld_v3.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "dwemer legacy reforged - bthungthumz and druscashti.esp|st_alchemy_replacer_1.3.esp": {
+   "do": "order",
+   "plugin": "Dwemer Legacy Reforged - Bthungthumz and Druscashti.esp",
+   "pair": [
+    "Dwemer Legacy Reforged - Bthungthumz and Druscashti.esp",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "ebonhearteastempireco.esp|molten glass.esp": {
+   "do": "order",
+   "plugin": "EbonheartEastEmpireCo.esp",
+   "pair": [
+    "EbonheartEastEmpireCo.esp",
+    "Molten Glass.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "expanded sounds.esp|greymarchdawn.esp": {
+   "do": "order",
+   "plugin": "GreymarchDawn.esp",
+   "pair": [
+    "GreymarchDawn.esp",
+    "Expanded Sounds.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "expanded sounds.esp|hsn - lighthouse only.esp": {
+   "do": "order",
+   "plugin": "HSN - Lighthouse Only.esp",
+   "pair": [
+    "HSN - Lighthouse Only.esp",
+    "Expanded Sounds.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "expanded sounds.esp|molten glass.esp": {
+   "do": "order",
+   "plugin": "Molten Glass.ESP",
+   "pair": [
+    "Molten Glass.ESP",
+    "Expanded Sounds.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "expanded sounds.esp|odai river upper overhaul.esp": {
+   "do": "order",
+   "plugin": "Odai River Upper Overhaul.esp",
+   "pair": [
+    "Odai River Upper Overhaul.esp",
+    "Expanded Sounds.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "expanded sounds.esp|secretsofthecrystalcity.esp": {
+   "do": "order",
+   "plugin": "SecretsOfTheCrystalCity.esp",
+   "pair": [
+    "SecretsOfTheCrystalCity.esp",
+    "Expanded Sounds.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "expanded sounds.esp|seyda neen - damp little squat - unshabby.esp": {
+   "do": "order",
+   "plugin": "Seyda Neen - Damp Little Squat - unshabby.ESP",
+   "pair": [
+    "Seyda Neen - Damp Little Squat - unshabby.ESP",
+    "Expanded Sounds.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "expanded sounds.esp|sheogorad - groves of the north.esp": {
+   "do": "order",
+   "plugin": "Sheogorad - Groves of the North.esp",
+   "pair": [
+    "Sheogorad - Groves of the North.esp",
+    "Expanded Sounds.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "expanded sounds.esp|telahini.esp": {
+   "do": "order",
+   "plugin": "TelAhini.ESP",
+   "pair": [
+    "TelAhini.ESP",
+    "Expanded Sounds.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "expanded sounds.esp|the_stolen_sweetrolls.esp": {
+   "do": "order",
+   "plugin": "The_Stolen_Sweetrolls.esp",
+   "pair": [
+    "The_Stolen_Sweetrolls.esp",
+    "Expanded Sounds.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "expanded sounds.esp|vivec striderport.esp": {
+   "do": "order",
+   "plugin": "Vivec Striderport.ESP",
+   "pair": [
+    "Vivec Striderport.ESP",
+    "Expanded Sounds.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "expansions integrated - fewer bm creatures.esp|kogoruhn - extinct city of ash and sulfur.esp": {
+   "do": "order",
+   "plugin": "Kogoruhn - Extinct City of Ash and Sulfur.esp",
+   "pair": [
+    "Kogoruhn - Extinct City of Ash and Sulfur.esp",
+    "Expansions Integrated - Fewer BM Creatures.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "expansions integrated - fewer bm creatures.esp|new ilunibi.esp": {
+   "do": "order",
+   "plugin": "New Ilunibi.ESP",
+   "pair": [
+    "New Ilunibi.ESP",
+    "Expansions Integrated - Fewer BM Creatures.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "factorestateimprovedv1.esp|gitd_wl_rr_interiors.esp": {
+   "do": "order",
+   "plugin": "factorestateimprovedv1.ESP",
+   "pair": [
+    "factorestateimprovedv1.ESP",
+    "GITD_WL_RR_Interiors.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "fighters guild improved.esp|yet another guard diversity - regular.esp": {
+   "do": "order",
+   "plugin": "Fighters Guild Improved.esp",
+   "pair": [
+    "Fighters Guild Improved.esp",
+    "Yet Another Guard Diversity - Regular.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "forestmaargan.esp|sabrina.esp": {
+   "do": "order",
+   "plugin": "ForestMaarGan.ESP",
+   "pair": [
+    "ForestMaarGan.ESP",
+    "Sabrina.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "forestmaargan.esp|st_alchemy_replacer_1.3.esp": {
+   "do": "order",
+   "plugin": "ForestMaarGan.ESP",
+   "pair": [
+    "ForestMaarGan.ESP",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "forestmaargan.esp|vsd - odibi.esp": {
+   "do": "order",
+   "plugin": "ForestMaarGan.ESP",
+   "pair": [
+    "ForestMaarGan.ESP",
+    "VSD - Odibi.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "gitd_telvanni_dormers.esp|tel_aruhn_chronicles.esp": {
+   "do": "order",
+   "plugin": "Tel_Aruhn_Chronicles.ESP",
+   "pair": [
+    "Tel_Aruhn_Chronicles.ESP",
+    "GITD_Telvanni_Dormers.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "gnisis docks v1.0.esp|st_alchemy_replacer_1.3.esp": {
+   "do": "order",
+   "plugin": "Gnisis Docks v1.0.esp",
+   "pair": [
+    "Gnisis Docks v1.0.esp",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "great seawall of vivec.esp|maiqmainland.esp": {
+   "do": "order",
+   "plugin": "MaiqMainland.esp",
+   "pair": [
+    "MaiqMainland.esp",
+    "Great Seawall of Vivec.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "great seawall of vivec.esp|st_alchemy_replacer_1.3.esp": {
+   "do": "order",
+   "plugin": "Great Seawall of Vivec.ESP",
+   "pair": [
+    "Great Seawall of Vivec.ESP",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "greater samarys.esp|samarys - the sunken tomb.esp": {
+   "do": "off",
+   "plugin": "Greater Samarys.esp",
+   "pair": [
+    "Samarys - The Sunken Tomb.esp",
+    "Greater Samarys.esp"
+   ],
+   "when": "2026-11-09 13:55"
+  },
+  "greymarchdawn.esp|mah.esp": {
+   "do": "order",
+   "plugin": "GreymarchDawn.esp",
+   "pair": [
+    "GreymarchDawn.esp",
+    "MAH.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "greymarchdawn.esp|repopulatedcreatures.esp": {
+   "do": "order",
+   "plugin": "GreymarchDawn.esp",
+   "pair": [
+    "GreymarchDawn.esp",
+    "RepopulatedCreatures.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "greymarchdawn.esp|snug suran - oran manor upgrade.esp": {
+   "do": "order",
+   "plugin": "Snug Suran - Oran Manor Upgrade.ESP",
+   "pair": [
+    "Snug Suran - Oran Manor Upgrade.ESP",
+    "GreymarchDawn.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "greymarchdawn.esp|unlock all slaves.esp": {
+   "do": "order",
+   "plugin": "GreymarchDawn.esp",
+   "pair": [
+    "GreymarchDawn.esp",
+    "Unlock All Slaves.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "hall of the last ember_sorkvild the raven.esp|oaab_grazelands.esp": {
+   "do": "order",
+   "plugin": "OAAB_Grazelands.ESP",
+   "pair": [
+    "OAAB_Grazelands.ESP",
+    "Hall of the Last Ember_Sorkvild the Raven.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "hall of the last ember_sorkvild the raven.esp|rpnr_library.esp": {
+   "do": "order",
+   "plugin": "Hall of the Last Ember_Sorkvild the Raven.ESP",
+   "pair": [
+    "Hall of the Last Ember_Sorkvild the Raven.ESP",
+    "RPNR_Library.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "hanging gardens of suran.esp|oaab brother junipers twin lamps.esp": {
+   "do": "order",
+   "plugin": "Hanging Gardens of Suran.esp",
+   "pair": [
+    "Hanging Gardens of Suran.esp",
+    "OAAB Brother Junipers Twin Lamps.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "hanging gardens of suran.esp|windows glow.esp": {
+   "do": "order",
+   "plugin": "Hanging Gardens of Suran.esp",
+   "pair": [
+    "Hanging Gardens of Suran.esp",
+    "Windows Glow.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "hidden sea loot.esp|repopulatedmainland.esp": {
+   "do": "order",
+   "plugin": "Hidden Sea Loot.ESP",
+   "pair": [
+    "Hidden Sea Loot.ESP",
+    "RepopulatedMainland.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "hidden sea loot.esp|the_old_lie.esp": {
+   "do": "order",
+   "plugin": "Hidden Sea Loot.ESP",
+   "pair": [
+    "Hidden Sea Loot.ESP",
+    "The_Old_Lie.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "hla odai.esp|pr perfect scum.esp": {
+   "do": "order",
+   "plugin": "Hla Odai.esp",
+   "pair": [
+    "Hla Odai.esp",
+    "PR Perfect Scum.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "hla odai.esp|the sable dragon 1.6 mmc.esp": {
+   "do": "order",
+   "plugin": "Hla Odai.esp",
+   "pair": [
+    "Hla Odai.esp",
+    "The Sable Dragon 1.6 mmc.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "holamayan island.esp|rr_holamayan_eng.esp": {
+   "do": "off",
+   "plugin": "Holamayan Island.esp",
+   "pair": [
+    "RR_Holamayan_Eng.ESP",
+    "Holamayan Island.esp"
+   ],
+   "when": "2026-11-09 13:55"
+  },
+  "holy art.esp|oaab - tombs extended.esp": {
+   "do": "order",
+   "plugin": "OAAB - Tombs Extended.ESP",
+   "pair": [
+    "OAAB - Tombs Extended.ESP",
+    "Holy Art.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "holy art.esp|temple master.esp": {
+   "do": "order",
+   "plugin": "Temple Master.ESP",
+   "pair": [
+    "Temple Master.ESP",
+    "Holy Art.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "holy art.esp|uvirith's legacy_3.53.esp": {
+   "do": "order",
+   "plugin": "Uvirith's Legacy_3.53.esp",
+   "pair": [
+    "Uvirith's Legacy_3.53.esp",
+    "Holy Art.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "imperial stables.esp|seyda neen - damp little squat - unshabby.esp": {
+   "do": "order",
+   "plugin": "Seyda Neen - Damp Little Squat - unshabby.ESP",
+   "pair": [
+    "Seyda Neen - Damp Little Squat - unshabby.ESP",
+    "Imperial Stables.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "imperial stables.esp|sheogorad - groves of the north.esp": {
+   "do": "order",
+   "plugin": "Sheogorad - Groves of the North.esp",
+   "pair": [
+    "Imperial Stables.esp",
+    "Sheogorad - Groves of the North.esp"
+   ],
+   "when": "2026-11-09 12:21"
+  },
+  "improved inns expanded.esp|livelier lucky lockup.esp": {
+   "do": "order",
+   "plugin": "Livelier Lucky Lockup.ESP",
+   "pair": [
+    "Livelier Lucky Lockup.ESP",
+    "Improved Inns Expanded.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "improved inns expanded.esp|oaab_grazelands.esp": {
+   "do": "order",
+   "plugin": "OAAB_Grazelands.ESP",
+   "pair": [
+    "OAAB_Grazelands.ESP",
+    "Improved Inns Expanded.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "improved inns expanded.esp|urh_ald_velothi.esp": {
+   "do": "order",
+   "plugin": "URH_Ald_Velothi.esp",
+   "pair": [
+    "URH_Ald_Velothi.esp",
+    "Improved Inns Expanded.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "improved inns expanded.esp|urh_khuul.esp": {
+   "do": "order",
+   "plugin": "URH_Khuul.esp",
+   "pair": [
+    "URH_Khuul.esp",
+    "Improved Inns Expanded.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "ineone the buoyant armiger.esp|memento mori buried.esp": {
+   "do": "order",
+   "plugin": "Memento Mori Buried.ESP",
+   "pair": [
+    "Memento Mori Buried.ESP",
+    "Ineone the Buoyant Armiger.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "ineone the buoyant armiger.esp|urshilaku outskirts - glass and shalk.esp": {
+   "do": "order",
+   "plugin": "Urshilaku Outskirts - Glass and Shalk.ESP",
+   "pair": [
+    "Urshilaku Outskirts - Glass and Shalk.ESP",
+    "Ineone the Buoyant Armiger.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "interiors_of_mournhold_v2.3.esp|mca.esm": {
+   "do": "cell",
+   "plugin": "Interiors_of_Mournhold_V2.3.esp",
+   "pair": [
+    "MCA.esm",
+    "Interiors_of_Mournhold_V2.3.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "interiors_of_mournhold_v2.3.esp|repopulatedmorrowind.esm": {
+   "do": "cell",
+   "plugin": "Interiors_of_Mournhold_V2.3.esp",
+   "pair": [
+    "RepopulatedMorrowind.ESM",
+    "Interiors_of_Mournhold_V2.3.esp"
+   ],
+   "when": "2026-11-11 13:43"
+  },
+  "interiors_of_mournhold_v2.3.esp|tr_museumofartifacts.esp": {
+   "do": "order",
+   "plugin": "Interiors_of_Mournhold_V2.3.esp",
+   "pair": [
+    "Interiors_of_Mournhold_V2.3.esp",
+    "TR_MuseumofArtifacts.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "justice4khartag.esp|oaab_shipwrecks_jfk_patch.esp": {
+   "do": "order",
+   "plugin": "Justice4Khartag.esp",
+   "pair": [
+    "Justice4Khartag.esp",
+    "OAAB_Shipwrecks_JFK_patch.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "justice4khartag.esp|rr_better_ships_n_boats_eng.esp": {
+   "do": "order",
+   "plugin": "Justice4Khartag.esp",
+   "pair": [
+    "Justice4Khartag.esp",
+    "RR_Better_Ships_n_Boats_Eng.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "justice4khartag.esp|st_alchemy_replacer_1.3.esp": {
+   "do": "order",
+   "plugin": "Justice4Khartag.esp",
+   "pair": [
+    "Justice4Khartag.esp",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "justice4khartag.esp|uncharted artifacts.esp": {
+   "do": "order",
+   "plugin": "Justice4Khartag.esp",
+   "pair": [
+    "Justice4Khartag.esp",
+    "Uncharted Artifacts.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "koal cave overhaul.esp|repopulatedcreatures.esp": {
+   "do": "order",
+   "plugin": "Koal Cave Overhaul.ESP",
+   "pair": [
+    "Koal Cave Overhaul.ESP",
+    "RepopulatedCreatures.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "kogoruhn - extinct city of ash and sulfur.esp|st_alchemy_replacer_1.3.esp": {
+   "do": "order",
+   "plugin": "Kogoruhn - Extinct City of Ash and Sulfur.esp",
+   "pair": [
+    "Kogoruhn - Extinct City of Ash and Sulfur.esp",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "ks_julan_ashlander companion_3.0_beta.esp|logs on fire.esp": {
+   "do": "order",
+   "plugin": "KS_Julan_Ashlander Companion_3.0_beta.esp",
+   "pair": [
+    "KS_Julan_Ashlander Companion_3.0_beta.esp",
+    "logs on Fire.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "ks_julan_ashlander companion_3.0_beta.esp|repopulatedcreatures.esp": {
+   "do": "order",
+   "plugin": "KS_Julan_Ashlander Companion_3.0_beta.esp",
+   "pair": [
+    "KS_Julan_Ashlander Companion_3.0_beta.esp",
+    "RepopulatedCreatures.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "ks_julan_ashlander companion_3.0_beta.esp|rr_ghost_gate_fortress_eng.esp": {
+   "do": "order",
+   "plugin": "KS_Julan_Ashlander Companion_3.0_beta.esp",
+   "pair": [
+    "KS_Julan_Ashlander Companion_3.0_beta.esp",
+    "RR_Ghost_Gate_Fortress_Eng.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "landscape waterfalls mw (otr).esp|sheogorad - groves of the north.esp": {
+   "do": "order",
+   "plugin": "Sheogorad - Groves of the North.esp",
+   "pair": [
+    "Sheogorad - Groves of the North.esp",
+    "Landscape Waterfalls MW (OTR).ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "lb_ebonheartargonianmission.esp|rise of house telvanni.esm": {
+   "do": "cell",
+   "plugin": "LB_EbonheartArgonianMission.ESP",
+   "pair": [
+    "Rise of House Telvanni.esm",
+    "LB_EbonheartArgonianMission.ESP"
+   ],
+   "when": "2026-11-09 12:17"
+  },
+  "lb_ebonheartargonianmission.esp|unlock all slaves.esp": {
+   "do": "order",
+   "plugin": "LB_EbonheartArgonianMission.ESP",
+   "pair": [
+    "LB_EbonheartArgonianMission.ESP",
+    "Unlock All Slaves.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "lb_ratpot.esp|mca.esm": {
+   "do": "cell",
+   "plugin": "LB_RatPot.ESP",
+   "pair": [
+    "MCA.esm",
+    "LB_RatPot.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "lb_ratpot.esp|repopulatedmorrowind.esm": {
+   "do": "cell",
+   "plugin": "LB_RatPot.ESP",
+   "pair": [
+    "RepopulatedMorrowind.ESM",
+    "LB_RatPot.ESP"
+   ],
+   "when": "2026-11-11 13:43"
+  },
+  "lb_templebalmora.esp|repopulatedmorrowind.esm": {
+   "do": "cell",
+   "plugin": "LB_TempleBalmora.ESP",
+   "pair": [
+    "RepopulatedMorrowind.ESM",
+    "LB_TempleBalmora.ESP"
+   ],
+   "when": "2026-11-09 12:20"
+  },
+  "liar yes idiot no.esp|sheogorad - groves of the north.esp": {
+   "do": "order",
+   "plugin": "Liar yes Idiot no.ESP",
+   "pair": [
+    "Liar yes Idiot no.ESP",
+    "Sheogorad - Groves of the North.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "liar yes idiot no.esp|st_alchemy_replacer_1.3.esp": {
+   "do": "order",
+   "plugin": "Liar yes Idiot no.ESP",
+   "pair": [
+    "Liar yes Idiot no.ESP",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "livelier lucky lockup.esp|mca.esm": {
+   "do": "cell",
+   "plugin": "Livelier Lucky Lockup.ESP",
+   "pair": [
+    "MCA.esm",
+    "Livelier Lucky Lockup.ESP"
+   ],
+   "when": "2026-11-09 12:21"
+  },
+  "llervu ancestral tomb expanded.esp|st_alchemy_replacer_1.3.esp": {
+   "do": "order",
+   "plugin": "Llervu Ancestral Tomb Expanded.ESP",
+   "pair": [
+    "Llervu Ancestral Tomb Expanded.ESP",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "local lore - silt striders and caravaners.esp|seyda neen - damp little squat - unshabby.esp": {
+   "do": "order",
+   "plugin": "Seyda Neen - Damp Little Squat - unshabby.ESP",
+   "pair": [
+    "Seyda Neen - Damp Little Squat - unshabby.ESP",
+    "Local Lore - Silt Striders and Caravaners.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "local lore - silt striders and caravaners.esp|silt_strider_placement.esp": {
+   "do": "order",
+   "plugin": "Silt_strider_placement.ESP",
+   "pair": [
+    "Silt_strider_placement.ESP",
+    "Local Lore - Silt Striders and Caravaners.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "logs on fire tamriel rebuilt.esp|repopulatedmainland.esp": {
+   "do": "order",
+   "plugin": "RepopulatedMainland.ESP",
+   "pair": [
+    "RepopulatedMainland.ESP",
+    "Logs on Fire Tamriel Rebuilt.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "logs on fire tamriel rebuilt.esp|telrivusskriak.esp": {
+   "do": "order",
+   "plugin": "TelRivusSKRIAK.ESP",
+   "pair": [
+    "TelRivusSKRIAK.ESP",
+    "Logs on Fire Tamriel Rebuilt.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "logs on fire.esp|mgo guild halls vanilla.esp": {
+   "do": "order",
+   "plugin": "MGO Guild Halls Vanilla.esp",
+   "pair": [
+    "MGO Guild Halls Vanilla.esp",
+    "logs on Fire.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "logs on fire.esp|new ilunibi.esp": {
+   "do": "order",
+   "plugin": "New Ilunibi.ESP",
+   "pair": [
+    "New Ilunibi.ESP",
+    "logs on Fire.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "logs on fire.esp|nice telvanni council house.esp": {
+   "do": "order",
+   "plugin": "Nice Telvanni Council House.ESP",
+   "pair": [
+    "Nice Telvanni Council House.ESP",
+    "logs on Fire.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "logs on fire.esp|rr_ghost_gate_fortress_eng.esp": {
+   "do": "order",
+   "plugin": "RR_Ghost_Gate_Fortress_Eng.ESP",
+   "pair": [
+    "RR_Ghost_Gate_Fortress_Eng.ESP",
+    "logs on Fire.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "logs on fire.esp|sheogorad - groves of the north.esp": {
+   "do": "order",
+   "plugin": "Sheogorad - Groves of the North.esp",
+   "pair": [
+    "Sheogorad - Groves of the North.esp",
+    "logs on Fire.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "logs on fire.esp|tasg.esp": {
+   "do": "order",
+   "plugin": "TASG.ESP",
+   "pair": [
+    "TASG.ESP",
+    "logs on Fire.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "logs on fire.esp|tel_aruhn_chronicles.esp": {
+   "do": "order",
+   "plugin": "Tel_Aruhn_Chronicles.ESP",
+   "pair": [
+    "Tel_Aruhn_Chronicles.ESP",
+    "logs on Fire.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "logs on fire.esp|the mountain of fear.esp": {
+   "do": "order",
+   "plugin": "The Mountain of Fear.ESP",
+   "pair": [
+    "The Mountain of Fear.ESP",
+    "logs on Fire.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "logs on fire.esp|the northern strongholds.esp": {
+   "do": "order",
+   "plugin": "The Northern Strongholds.esp",
+   "pair": [
+    "The Northern Strongholds.esp",
+    "logs on Fire.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "logs on fire.esp|vy_under_skar.esp": {
+   "do": "order",
+   "plugin": "VY_Under_Skar.esp",
+   "pair": [
+    "VY_Under_Skar.esp",
+    "logs on Fire.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "mah.esp|nice telvanni council house.esp": {
+   "do": "order",
+   "plugin": "Nice Telvanni Council House.ESP",
+   "pair": [
+    "Nice Telvanni Council House.ESP",
+    "MAH.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "mah.esp|oaab_grazelands.esp": {
+   "do": "order",
+   "plugin": "OAAB_Grazelands.ESP",
+   "pair": [
+    "OAAB_Grazelands.ESP",
+    "MAH.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "mah.esp|oaabandoned shack mad hermit.esp": {
+   "do": "order",
+   "plugin": "OAABandoned Shack Mad Hermit.ESP",
+   "pair": [
+    "OAABandoned Shack Mad Hermit.ESP",
+    "MAH.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "mah.esp|rr_better_ships_n_boats_eng.esp": {
+   "do": "order",
+   "plugin": "RR_Better_Ships_n_Boats_Eng.esp",
+   "pair": [
+    "RR_Better_Ships_n_Boats_Eng.esp",
+    "MAH.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "mah.esp|sheogorad - groves of the north.esp": {
+   "do": "order",
+   "plugin": "Sheogorad - Groves of the North.esp",
+   "pair": [
+    "Sheogorad - Groves of the North.esp",
+    "MAH.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "mah.esp|uvirith's legacy_3.53.esp": {
+   "do": "order",
+   "plugin": "Uvirith's Legacy_3.53.esp",
+   "pair": [
+    "Uvirith's Legacy_3.53.esp",
+    "MAH.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "masterindexredux.esp|oaab better caldera interiors.esp": {
+   "do": "order",
+   "plugin": "OAAB Better Caldera Interiors.ESP",
+   "pair": [
+    "OAAB Better Caldera Interiors.ESP",
+    "MasterIndexRedux.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "masterindexredux.esp|oikimmcalderaguild.esp": {
+   "do": "order",
+   "plugin": "OikImmCalderaGuild.ESP",
+   "pair": [
+    "OikImmCalderaGuild.ESP",
+    "MasterIndexRedux.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "mca.esm|mgo guild halls vanilla.esp": {
+   "do": "cell",
+   "plugin": "MGO Guild Halls Vanilla.esp",
+   "pair": [
+    "MCA.esm",
+    "MGO Guild Halls Vanilla.esp"
+   ],
+   "when": "2026-11-11 13:43"
+  },
+  "mca.esm|oaab ebonheart six fishes.esp": {
+   "do": "cell",
+   "plugin": "OAAB Ebonheart Six Fishes.ESP",
+   "pair": [
+    "MCA.esm",
+    "OAAB Ebonheart Six Fishes.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "mca.esm|repopulatedmorrowind.esm": {
+   "do": "order",
+   "plugin": "MCA.esm",
+   "pair": [
+    "MCA.esm",
+    "RepopulatedMorrowind.ESM"
+   ],
+   "when": "2026-11-09 06:07"
+  },
+  "mca.esm|seyda neen - damp little squat - unshabby.esp": {
+   "do": "cell",
+   "plugin": "Seyda Neen - Damp Little Squat - unshabby.ESP",
+   "pair": [
+    "MCA.esm",
+    "Seyda Neen - Damp Little Squat - unshabby.ESP"
+   ],
+   "when": "2026-11-11 13:43"
+  },
+  "mca.esm|shabby interiors.esp": {
+   "do": "cell",
+   "plugin": "Shabby Interiors.ESP",
+   "pair": [
+    "MCA.esm",
+    "Shabby Interiors.ESP"
+   ],
+   "when": "2026-11-11 13:43"
+  },
+  "mca.esm|south wall_tg_hideout.esp": {
+   "do": "cell",
+   "plugin": "South Wall_TG_Hideout.esp",
+   "pair": [
+    "MCA.esm",
+    "South Wall_TG_Hideout.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "mca.esm|tel_aruhn_chronicles.esp": {
+   "do": "cell",
+   "plugin": "Tel_Aruhn_Chronicles.ESP",
+   "pair": [
+    "MCA.esm",
+    "Tel_Aruhn_Chronicles.ESP"
+   ],
+   "when": "2026-11-09 12:23"
+  },
+  "mca.esm|urh_ald_velothi.esp": {
+   "do": "cell",
+   "plugin": "URH_Ald_Velothi.esp",
+   "pair": [
+    "MCA.esm",
+    "URH_Ald_Velothi.esp"
+   ],
+   "when": "2026-11-09 12:19"
+  },
+  "mca.esm|urh_khuul.esp": {
+   "do": "cell",
+   "plugin": "URH_Khuul.esp",
+   "pair": [
+    "MCA.esm",
+    "URH_Khuul.esp"
+   ],
+   "when": "2026-11-09 12:21"
+  },
+  "memento mori buried.esp|st_alchemy_replacer_1.3.esp": {
+   "do": "order",
+   "plugin": "Memento Mori Buried.ESP",
+   "pair": [
+    "Memento Mori Buried.ESP",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "memento mori buried.esp|the_magic_rock_of_maar_gan.esp": {
+   "do": "order",
+   "plugin": "Memento Mori Buried.ESP",
+   "pair": [
+    "Memento Mori Buried.ESP",
+    "The_magic_rock_of_Maar_Gan.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "mgo guild halls vanilla.esp|repopulatedmorrowind.esp": {
+   "do": "order",
+   "plugin": "RepopulatedMorrowind.ESP",
+   "pair": [
+    "RepopulatedMorrowind.ESP",
+    "MGO Guild Halls Vanilla.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "mgo guild halls vanilla.esp|rise of house telvanni.esm": {
+   "do": "cell",
+   "plugin": "MGO Guild Halls Vanilla.esp",
+   "pair": [
+    "Rise of House Telvanni.esm",
+    "MGO Guild Halls Vanilla.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "mgo guild halls vanilla.esp|thieves guild quest revisions.esp": {
+   "do": "order",
+   "plugin": "MGO Guild Halls Vanilla.esp",
+   "pair": [
+    "MGO Guild Halls Vanilla.esp",
+    "Thieves Guild Quest Revisions.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "mgo guild halls vanilla.esp|vivec_mages_guild_expanded.esp": {
+   "do": "cell",
+   "plugin": "MGO Guild Halls Vanilla.esp",
+   "pair": [
+    "Vivec_Mages_Guild_Expanded.ESP",
+    "MGO Guild Halls Vanilla.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "mgo guild halls vanilla.esp|windows glow.esp": {
+   "do": "order",
+   "plugin": "MGO Guild Halls Vanilla.esp",
+   "pair": [
+    "MGO Guild Halls Vanilla.esp",
+    "Windows Glow.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "mills of morrowind.esp|st_alchemy_replacer_1.3.esp": {
+   "do": "order",
+   "plugin": "Mills of Morrowind.esp",
+   "pair": [
+    "Mills of Morrowind.esp",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "minortukushapalrefit.esp|rr_better_ships_n_boats_eng.esp": {
+   "do": "order",
+   "plugin": "MinorTukushapalRefit.esp",
+   "pair": [
+    "MinorTukushapalRefit.esp",
+    "RR_Better_Ships_n_Boats_Eng.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "minortukushapalrefit.esp|the vestiges of tukushapal.esp": {
+   "do": "order",
+   "plugin": "The Vestiges of Tukushapal.ESP",
+   "pair": [
+    "The Vestiges of Tukushapal.ESP",
+    "MinorTukushapalRefit.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "mistify.esp|seyda neen - damp little squat - unshabby.esp": {
+   "do": "order",
+   "plugin": "Seyda Neen - Damp Little Squat - unshabby.ESP",
+   "pair": [
+    "Seyda Neen - Damp Little Squat - unshabby.ESP",
+    "mistify.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "molag mar outskirts - bonesaint guardians.esp|repopulatedcreatures.esp": {
+   "do": "order",
+   "plugin": "Molag Mar Outskirts - Bonesaint Guardians.ESP",
+   "pair": [
+    "Molag Mar Outskirts - Bonesaint Guardians.ESP",
+    "RepopulatedCreatures.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "molag mar x.esp|sload and slavers.esp": {
+   "do": "order",
+   "plugin": "Molag Mar X.esp",
+   "pair": [
+    "Molag Mar X.esp",
+    "Sload and Slavers.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "molag mar x.esp|st_alchemy_replacer_1.3.esp": {
+   "do": "order",
+   "plugin": "Molag Mar X.esp",
+   "pair": [
+    "Molag Mar X.esp",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "molag mar x.esp|windows glow.esp": {
+   "do": "order",
+   "plugin": "Molag Mar X.esp",
+   "pair": [
+    "Molag Mar X.esp",
+    "Windows Glow.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "molten glass.esp|yet another guard diversity - regular.esp": {
+   "do": "order",
+   "plugin": "Molten Glass.ESP",
+   "pair": [
+    "Molten Glass.ESP",
+    "Yet Another Guard Diversity - Regular.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "morag tong polished.esp|stav_webofmephala.esp": {
+   "do": "order",
+   "plugin": "Morag Tong Polished.esp",
+   "pair": [
+    "Morag Tong Polished.esp",
+    "Stav_WebofMephala.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "morrowind quests redux all-in-one.esp|oaab better caldera interiors.esp": {
+   "do": "order",
+   "plugin": "OAAB Better Caldera Interiors.ESP",
+   "pair": [
+    "OAAB Better Caldera Interiors.ESP",
+    "Morrowind Quests Redux All-In-One.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "morrowind quests redux all-in-one.esp|oldebonheartskriak.esp": {
+   "do": "order",
+   "plugin": "OldEbonheartSkriak.ESP",
+   "pair": [
+    "OldEbonheartSkriak.ESP",
+    "Morrowind Quests Redux All-In-One.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "mudcrab imports.esp|st_alchemy_replacer_1.3.esp": {
+   "do": "order",
+   "plugin": "Mudcrab Imports.esp",
+   "pair": [
+    "Mudcrab Imports.esp",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "mudcrab island tlad.esp|rr_better_ships_n_boats_eng.esp": {
+   "do": "order",
+   "plugin": "Mudcrab Island TLAD.esp",
+   "pair": [
+    "Mudcrab Island TLAD.esp",
+    "RR_Better_Ships_n_Boats_Eng.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "mudcrab island tlad.esp|suran_underworld_v3.esp": {
+   "do": "order",
+   "plugin": "Mudcrab Island TLAD.esp",
+   "pair": [
+    "Mudcrab Island TLAD.esp",
+    "Suran_Underworld_v3.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "mudcrab island tlad.esp|unique and balanced easter eggs.esp": {
+   "do": "order",
+   "plugin": "Unique and balanced easter eggs.ESP",
+   "pair": [
+    "Unique and balanced easter eggs.ESP",
+    "Mudcrab Island TLAD.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "mwse_containers.esp|yet another guard diversity - regular.esp": {
+   "do": "order",
+   "plugin": "Yet Another Guard Diversity - Regular.ESP",
+   "pair": [
+    "Yet Another Guard Diversity - Regular.ESP",
+    "mwse_Containers.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "new arenthia 1.2.esp|oaab brother junipers twin lamps.esp": {
+   "do": "order",
+   "plugin": "New Arenthia 1.2.ESP",
+   "pair": [
+    "New Arenthia 1.2.ESP",
+    "OAAB Brother Junipers Twin Lamps.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "oaab - foyada mamaea.esp|st_alchemy_replacer_1.3.esp": {
+   "do": "order",
+   "plugin": "OAAB - Foyada Mamaea.ESP",
+   "pair": [
+    "OAAB - Foyada Mamaea.ESP",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "oaab - tel raloran - immersive tables.esp|thegardenofdreams.esp": {
+   "do": "order",
+   "plugin": "OAAB - Tel Raloran - Immersive Tables.ESP",
+   "pair": [
+    "OAAB - Tel Raloran - Immersive Tables.ESP",
+    "TheGardenOfDreams.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "oaab - tombs extended.esp|quests for clans and vampire legends.esp": {
+   "do": "order",
+   "plugin": "OAAB - Tombs Extended.ESP",
+   "pair": [
+    "OAAB - Tombs Extended.ESP",
+    "Quests for Clans and Vampire Legends.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "oaab - tombs extended.esp|st_alchemy_replacer_1.3.esp": {
+   "do": "order",
+   "plugin": "OAAB - Tombs Extended.ESP",
+   "pair": [
+    "OAAB - Tombs Extended.ESP",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "oaab better caldera interiors.esp|oldebonheartskriak.esp": {
+   "do": "order",
+   "plugin": "OldEbonheartSkriak.ESP",
+   "pair": [
+    "OldEbonheartSkriak.ESP",
+    "OAAB Better Caldera Interiors.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "oaab better caldera interiors.esp|windows glow.esp": {
+   "do": "order",
+   "plugin": "OAAB Better Caldera Interiors.ESP",
+   "pair": [
+    "OAAB Better Caldera Interiors.ESP",
+    "Windows Glow.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "oaab better caldera interiors.esp|yet another guard diversity - regular.esp": {
+   "do": "order",
+   "plugin": "OAAB Better Caldera Interiors.ESP",
+   "pair": [
+    "OAAB Better Caldera Interiors.ESP",
+    "Yet Another Guard Diversity - Regular.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "oaab brother junipers twin lamps.esp|revampeddarkbrotherhood.esp": {
+   "do": "order",
+   "plugin": "OAAB Brother Junipers Twin Lamps.esp",
+   "pair": [
+    "OAAB Brother Junipers Twin Lamps.esp",
+    "RevampedDarkBrotherhood.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "oaab brother junipers twin lamps.esp|st_alchemy_replacer_1.3.esp": {
+   "do": "order",
+   "plugin": "OAAB Brother Junipers Twin Lamps.esp",
+   "pair": [
+    "OAAB Brother Junipers Twin Lamps.esp",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "oaab brother junipers twin lamps.esp|yet another guard diversity - regular.esp": {
+   "do": "order",
+   "plugin": "OAAB Brother Junipers Twin Lamps.esp",
+   "pair": [
+    "OAAB Brother Junipers Twin Lamps.esp",
+    "Yet Another Guard Diversity - Regular.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "oaab ebonheart six fishes.esp|repopulatedmorrowind.esm": {
+   "do": "cell",
+   "plugin": "OAAB Ebonheart Six Fishes.ESP",
+   "pair": [
+    "RepopulatedMorrowind.ESM",
+    "OAAB Ebonheart Six Fishes.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "oaab ebonheart six fishes.esp|windows glow.esp": {
+   "do": "order",
+   "plugin": "OAAB Ebonheart Six Fishes.ESP",
+   "pair": [
+    "OAAB Ebonheart Six Fishes.ESP",
+    "Windows Glow.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "oaab odai plateau.esp|the northern strongholds.esp": {
+   "do": "cell",
+   "plugin": "OAAB Odai Plateau.esp",
+   "pair": [
+    "The Northern Strongholds.esp",
+    "OAAB Odai Plateau.esp"
+   ],
+   "when": "2026-11-09 12:17"
+  },
+  "oaab odai plateau.esp|windows glow.esp": {
+   "do": "order",
+   "plugin": "Windows Glow.esp",
+   "pair": [
+    "Windows Glow.esp",
+    "OAAB Odai Plateau.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "oaab pomegranates.esp|st_alchemy_replacer_1.3.esp": {
+   "do": "order",
+   "plugin": "OAAB Pomegranates.ESP",
+   "pair": [
+    "OAAB Pomegranates.ESP",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "oaab_-_winged_twilight_companion_ari-ari.esp|st_alchemy_replacer_1.3.esp": {
+   "do": "order",
+   "plugin": "OAAB_-_Winged_Twilight_Companion_Ari-Ari.esp",
+   "pair": [
+    "OAAB_-_Winged_Twilight_Companion_Ari-Ari.esp",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "oaab_grazelands.esp|odirniran fix-v1.esp": {
+   "do": "order",
+   "plugin": "OAAB_Grazelands.ESP",
+   "pair": [
+    "OAAB_Grazelands.ESP",
+    "Odirniran Fix-V1.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "oaab_grazelands.esp|repopulatedcreatures.esp": {
+   "do": "order",
+   "plugin": "OAAB_Grazelands.ESP",
+   "pair": [
+    "OAAB_Grazelands.ESP",
+    "RepopulatedCreatures.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "oaab_grazelands.esp|rr_better_ships_n_boats_eng.esp": {
+   "do": "order",
+   "plugin": "OAAB_Grazelands.ESP",
+   "pair": [
+    "OAAB_Grazelands.ESP",
+    "RR_Better_Ships_n_Boats_Eng.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "oaab_grazelands.esp|suran_underworld_v3.esp": {
+   "do": "order",
+   "plugin": "OAAB_Grazelands.ESP",
+   "pair": [
+    "OAAB_Grazelands.ESP",
+    "Suran_Underworld_v3.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "oaab_grazelands.esp|yet another guard diversity - regular.esp": {
+   "do": "order",
+   "plugin": "OAAB_Grazelands.ESP",
+   "pair": [
+    "OAAB_Grazelands.ESP",
+    "Yet Another Guard Diversity - Regular.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "oaab_shipwrecks_jfk_patch.esp|rr_better_ships_n_boats_eng.esp": {
+   "do": "order",
+   "plugin": "OAAB_Shipwrecks_JFK_patch.esp",
+   "pair": [
+    "OAAB_Shipwrecks_JFK_patch.esp",
+    "RR_Better_Ships_n_Boats_Eng.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "oaab_shipwrecks_jfk_patch.esp|uncharted artifacts.esp": {
+   "do": "order",
+   "plugin": "OAAB_Shipwrecks_JFK_patch.esp",
+   "pair": [
+    "OAAB_Shipwrecks_JFK_patch.esp",
+    "Uncharted Artifacts.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "oaab_tel mora_female guards.esp|yet another guard diversity - regular.esp": {
+   "do": "order",
+   "plugin": "Yet Another Guard Diversity - Regular.ESP",
+   "pair": [
+    "Yet Another Guard Diversity - Regular.ESP",
+    "OAAB_Tel Mora_Female Guards.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "of gems and geodes.esp|repopulatedcreatures.esp": {
+   "do": "order",
+   "plugin": "Of Gems and Geodes.ESP",
+   "pair": [
+    "Of Gems and Geodes.ESP",
+    "RepopulatedCreatures.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "of musk and mer a sadrith mora tale.esp|of_murk_and_mussels.esp": {
+   "do": "order",
+   "plugin": "Of Musk and Mer A Sadrith Mora Tale.esp",
+   "pair": [
+    "Of Musk and Mer A Sadrith Mora Tale.esp",
+    "Of_Murk_and_Mussels.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "of musk and mer a sadrith mora tale.esp|repopulatedcreatures.esp": {
+   "do": "order",
+   "plugin": "Of Musk and Mer A Sadrith Mora Tale.esp",
+   "pair": [
+    "Of Musk and Mer A Sadrith Mora Tale.esp",
+    "RepopulatedCreatures.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "of musk and mer a sadrith mora tale.esp|yet another guard diversity - regular.esp": {
+   "do": "order",
+   "plugin": "Of Musk and Mer A Sadrith Mora Tale.esp",
+   "pair": [
+    "Of Musk and Mer A Sadrith Mora Tale.esp",
+    "Yet Another Guard Diversity - Regular.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "pergamaea_overhaul.esp|pergamaea_overhaul_roht_2_0_8-patch.esp": {
+   "do": "order",
+   "plugin": "Pergamaea_Overhaul.ESP",
+   "pair": [
+    "Pergamaea_Overhaul.ESP",
+    "Pergamaea_Overhaul_ROHT_2_0_8-patch.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "pergamaea_overhaul.esp|roht_2_0_8.esp": {
+   "do": "order",
+   "plugin": "ROHT_2_0_8.ESP",
+   "pair": [
+    "ROHT_2_0_8.ESP",
+    "Pergamaea_Overhaul.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "pergamaea_overhaul_roht_2_0_8-patch.esp|roht_2_0_8.esp": {
+   "do": "order",
+   "plugin": "ROHT_2_0_8.ESP",
+   "pair": [
+    "ROHT_2_0_8.ESP",
+    "Pergamaea_Overhaul_ROHT_2_0_8-patch.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "pilgrimage of storm and war.esp|unique uniques.esp": {
+   "do": "order",
+   "plugin": "Unique Uniques.ESP",
+   "pair": [
+    "Unique Uniques.ESP",
+    "Pilgrimage of Storm and War.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "pilgrims in peril.esp|the mountain of fear.esp": {
+   "do": "cell",
+   "plugin": "The Mountain of Fear.ESP",
+   "pair": [
+    "Pilgrims in Peril.esp",
+    "The Mountain of Fear.ESP"
+   ],
+   "when": "2026-11-09 12:23"
+  },
+  "portal to catalepsy.esp|sheogorad - groves of the north.esp": {
+   "do": "order",
+   "plugin": "Sheogorad - Groves of the North.esp",
+   "pair": [
+    "Sheogorad - Groves of the North.esp",
+    "Portal to Catalepsy.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "ports of vvardenfell v1.6 - aggressively compatible.esp|rr_better_ships_n_boats_eng.esp": {
+   "do": "order",
+   "plugin": "Ports Of Vvardenfell V1.6 - Aggressively Compatible.esp",
+   "pair": [
+    "Ports Of Vvardenfell V1.6 - Aggressively Compatible.esp",
+    "RR_Better_Ships_n_Boats_Eng.esp"
+   ],
+   "when": "2026-11-09 10:01"
+  },
+  "ports of vvardenfell v1.6 - aggressively compatible.esp|seyda neen - damp little squat - unshabby.esp": {
+   "do": "order",
+   "plugin": "Ports Of Vvardenfell V1.6 - Aggressively Compatible.esp",
+   "pair": [
+    "Ports Of Vvardenfell V1.6 - Aggressively Compatible.esp",
+    "Seyda Neen - Damp Little Squat - unshabby.ESP"
+   ],
+   "when": "2026-11-09 10:01"
+  },
+  "pr perfect scum.esp|seyda neen - damp little squat - unshabby.esp": {
+   "do": "order",
+   "plugin": "Seyda Neen - Damp Little Squat - unshabby.ESP",
+   "pair": [
+    "Seyda Neen - Damp Little Squat - unshabby.ESP",
+    "PR Perfect Scum.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "privileges&services 1.1.esp|suran_underworld_v3.esp": {
+   "do": "order",
+   "plugin": "Suran_Underworld_v3.ESP",
+   "pair": [
+    "Suran_Underworld_v3.ESP",
+    "Privileges&Services 1.1.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "privileges&services 1.1.esp|urh_ald_velothi.esp": {
+   "do": "order",
+   "plugin": "URH_Ald_Velothi.esp",
+   "pair": [
+    "URH_Ald_Velothi.esp",
+    "Privileges&Services 1.1.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "quests for clans and vampire legends.esp|seyda neen - damp little squat - unshabby.esp": {
+   "do": "order",
+   "plugin": "Seyda Neen - Damp Little Squat - unshabby.ESP",
+   "pair": [
+    "Seyda Neen - Damp Little Squat - unshabby.ESP",
+    "Quests for Clans and Vampire Legends.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "quests for clans and vampire legends.esp|sheogorad - groves of the north.esp": {
+   "do": "order",
+   "plugin": "Sheogorad - Groves of the North.esp",
+   "pair": [
+    "Sheogorad - Groves of the North.esp",
+    "Quests for Clans and Vampire Legends.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "quests for clans and vampire legends.esp|vvardenfell distribution - andrethi ancestral tomb.esp": {
+   "do": "order",
+   "plugin": "Vvardenfell Distribution - Andrethi Ancestral Tomb.ESP",
+   "pair": [
+    "Vvardenfell Distribution - Andrethi Ancestral Tomb.ESP",
+    "Quests for Clans and Vampire Legends.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "repopulatedcreatures.esp|rr_ghost_gate_fortress_eng.esp": {
+   "do": "order",
+   "plugin": "RR_Ghost_Gate_Fortress_Eng.ESP",
+   "pair": [
+    "RR_Ghost_Gate_Fortress_Eng.ESP",
+    "RepopulatedCreatures.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "repopulatedcreatures.esp|tel_aruhn_chronicles.esp": {
+   "do": "order",
+   "plugin": "Tel_Aruhn_Chronicles.ESP",
+   "pair": [
+    "Tel_Aruhn_Chronicles.ESP",
+    "RepopulatedCreatures.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "repopulatedcreatures.esp|wom 4.0v compatibility for tr version 24.12.esp": {
+   "do": "order",
+   "plugin": "WoM 4.0v Compatibility for TR Version 24.12.ESP",
+   "pair": [
+    "WoM 4.0v Compatibility for TR Version 24.12.ESP",
+    "RepopulatedCreatures.ESP"
+   ],
+   "when": "2026-11-10 03:35"
+  },
+  "repopulatedmorrowind.esm|rise of house telvanni.esm": {
+   "do": "order",
+   "plugin": "Rise of House Telvanni.esm",
+   "pair": [
+    "Rise of House Telvanni.esm",
+    "RepopulatedMorrowind.ESM"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "repopulatedmorrowind.esm|tel_aruhn_chronicles.esp": {
+   "do": "cell",
+   "plugin": "Tel_Aruhn_Chronicles.ESP",
+   "pair": [
+    "RepopulatedMorrowind.ESM",
+    "Tel_Aruhn_Chronicles.ESP"
+   ],
+   "when": "2026-11-07 15:26"
+  },
+  "repopulatedmorrowind.esm|vy_under_skar.esp": {
+   "do": "cell",
+   "plugin": "VY_Under_Skar.esp",
+   "pair": [
+    "RepopulatedMorrowind.ESM",
+    "VY_Under_Skar.esp"
+   ],
+   "when": "2026-11-09 12:20"
+  },
+  "rise of house telvanni.esm|the northern strongholds.esp": {
+   "do": "cell",
+   "plugin": "The Northern Strongholds.esp",
+   "pair": [
+    "Rise of House Telvanni.esm",
+    "The Northern Strongholds.esp"
+   ],
+   "when": "2026-11-07 15:25"
+  },
+  "rise of house telvanni.esm|vampire clans - clutter monkey overhaul.esp": {
+   "do": "cell",
+   "plugin": "Vampire Clans - Clutter Monkey Overhaul.ESP",
+   "pair": [
+    "Rise of House Telvanni.esm",
+    "Vampire Clans - Clutter Monkey Overhaul.ESP"
+   ],
+   "when": "2026-11-11 13:43"
+  },
+  "rise of house telvanni.esm|vivec_mages_guild_expanded.esp": {
+   "do": "cell",
+   "plugin": "Vivec_Mages_Guild_Expanded.ESP",
+   "pair": [
+    "Rise of House Telvanni.esm",
+    "Vivec_Mages_Guild_Expanded.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "rpnr_almalexia_chamber.esp|tribunal main quest reforged - sse.esp": {
+   "do": "cell",
+   "plugin": "RPNR_Almalexia_Chamber.ESP",
+   "pair": [
+    "RPNR_Almalexia_Chamber.ESP",
+    "Tribunal Main Quest Reforged - SSE.esp"
+   ],
+   "when": "2026-11-09 12:19"
+  },
+  "rpnr_decorated_cantons.esp|yet another guard diversity - regular.esp": {
+   "do": "order",
+   "plugin": "RPNR_Decorated_Cantons.ESP",
+   "pair": [
+    "RPNR_Decorated_Cantons.ESP",
+    "Yet Another Guard Diversity - Regular.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "rr_better_ships_n_boats_eng.esp|sheogorad - groves of the north.esp": {
+   "do": "order",
+   "plugin": "Sheogorad - Groves of the North.esp",
+   "pair": [
+    "Sheogorad - Groves of the North.esp",
+    "RR_Better_Ships_n_Boats_Eng.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "rr_better_ships_n_boats_eng.esp|shipyards of vvardenfell.esp": {
+   "do": "order",
+   "plugin": "Shipyards of Vvardenfell.esp",
+   "pair": [
+    "Shipyards of Vvardenfell.esp",
+    "RR_Better_Ships_n_Boats_Eng.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "rr_better_ships_n_boats_eng.esp|suran_underworld_v3.esp": {
+   "do": "order",
+   "plugin": "Suran_Underworld_v3.ESP",
+   "pair": [
+    "Suran_Underworld_v3.ESP",
+    "RR_Better_Ships_n_Boats_Eng.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "rr_better_ships_n_boats_eng.esp|uncharted artifacts.esp": {
+   "do": "order",
+   "plugin": "Uncharted Artifacts.esp",
+   "pair": [
+    "Uncharted Artifacts.esp",
+    "RR_Better_Ships_n_Boats_Eng.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "rr_ghost_gate_fortress_eng.esp|st_alchemy_replacer_1.3.esp": {
+   "do": "order",
+   "plugin": "RR_Ghost_Gate_Fortress_Eng.ESP",
+   "pair": [
+    "RR_Ghost_Gate_Fortress_Eng.ESP",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "rr_ghost_gate_fortress_eng.esp|windows glow.esp": {
+   "do": "order",
+   "plugin": "Windows Glow.esp",
+   "pair": [
+    "Windows Glow.esp",
+    "RR_Ghost_Gate_Fortress_Eng.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "rr_gnisis_arch_eng.esp|suran_underworld_v3.esp": {
+   "do": "order",
+   "plugin": "Suran_Underworld_v3.ESP",
+   "pair": [
+    "Suran_Underworld_v3.ESP",
+    "RR_Gnisis_Arch_Eng.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "rr_gnisis_arch_eng.esp|windows glow.esp": {
+   "do": "order",
+   "plugin": "RR_Gnisis_Arch_Eng.ESP",
+   "pair": [
+    "RR_Gnisis_Arch_Eng.ESP",
+    "Windows Glow.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "ruinsoffalensarano.esp|the northern strongholds.esp": {
+   "do": "order",
+   "plugin": "The Northern Strongholds.esp",
+   "pair": [
+    "The Northern Strongholds.esp",
+    "ruinsoffalensarano.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "ruinsoffalensarano.esp|vurt's grazelands unique trees.esp": {
+   "do": "order",
+   "plugin": "ruinsoffalensarano.ESP",
+   "pair": [
+    "ruinsoffalensarano.ESP",
+    "Vurt's Grazelands Unique Trees.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "seyda neen - damp little squat - unshabby.esp|vvardenfell distribution - seyda neen coast guard.esp": {
+   "do": "order",
+   "plugin": "Seyda Neen - Damp Little Squat - unshabby.ESP",
+   "pair": [
+    "Seyda Neen - Damp Little Squat - unshabby.ESP",
+    "Vvardenfell Distribution - Seyda Neen Coast Guard.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "seyda neen - damp little squat - unshabby.esp|yet another guard diversity - regular.esp": {
+   "do": "order",
+   "plugin": "Seyda Neen - Damp Little Squat - unshabby.ESP",
+   "pair": [
+    "Seyda Neen - Damp Little Squat - unshabby.ESP",
+    "Yet Another Guard Diversity - Regular.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "sheogorad - groves of the north.esp|st_alchemy_replacer_1.3.esp": {
+   "do": "order",
+   "plugin": "Sheogorad - Groves of the North.esp",
+   "pair": [
+    "Sheogorad - Groves of the North.esp",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "sheogorad - groves of the north.esp|suran_underworld_v3.esp": {
+   "do": "order",
+   "plugin": "Sheogorad - Groves of the North.esp",
+   "pair": [
+    "Sheogorad - Groves of the North.esp",
+    "Suran_Underworld_v3.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "sheogorad - groves of the north.esp|windows glow.esp": {
+   "do": "order",
+   "plugin": "Sheogorad - Groves of the North.esp",
+   "pair": [
+    "Sheogorad - Groves of the North.esp",
+    "Windows Glow.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "shrine of boethiah expanded.esp|st_alchemy_replacer_1.3.esp": {
+   "do": "order",
+   "plugin": "Shrine of Boethiah Expanded.ESP",
+   "pair": [
+    "Shrine of Boethiah Expanded.ESP",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "skar_face.esp|vy_under_skar.esp": {
+   "do": "order",
+   "plugin": "Skar_face.ESP",
+   "pair": [
+    "Skar_face.ESP",
+    "VY_Under_Skar.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "sm_tel_robe.esp|tel_aruhn_chronicles.esp": {
+   "do": "order",
+   "plugin": "Tel_Aruhn_Chronicles.ESP",
+   "pair": [
+    "Tel_Aruhn_Chronicles.ESP",
+    "sm_tel_robe.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "sotha sil expanded.esp|st_alchemy_replacer_1.3.esp": {
+   "do": "order",
+   "plugin": "Sotha Sil Expanded.ESP",
+   "pair": [
+    "Sotha Sil Expanded.ESP",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "sotha sil expanded.esp|tribunal main quest reforged - sse.esp": {
+   "do": "order",
+   "plugin": "Sotha Sil Expanded.ESP",
+   "pair": [
+    "Sotha Sil Expanded.ESP",
+    "Tribunal Main Quest Reforged - SSE.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "st_alchemy_replacer_1.3.esp|strider burial.esp": {
+   "do": "order",
+   "plugin": "Strider Burial.esp",
+   "pair": [
+    "Strider Burial.esp",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "st_alchemy_replacer_1.3.esp|the mountain of fear.esp": {
+   "do": "order",
+   "plugin": "The Mountain of Fear.ESP",
+   "pair": [
+    "The Mountain of Fear.ESP",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "st_alchemy_replacer_1.3.esp|the northern strongholds.esp": {
+   "do": "order",
+   "plugin": "The Northern Strongholds.esp",
+   "pair": [
+    "The Northern Strongholds.esp",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "st_alchemy_replacer_1.3.esp|the sable dragon 1.6 mmc.esp": {
+   "do": "order",
+   "plugin": "The Sable Dragon 1.6 mmc.esp",
+   "pair": [
+    "The Sable Dragon 1.6 mmc.esp",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "st_alchemy_replacer_1.3.esp|the wanderers stash.esp": {
+   "do": "order",
+   "plugin": "The Wanderers Stash.esp",
+   "pair": [
+    "The Wanderers Stash.esp",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "st_alchemy_replacer_1.3.esp|urh_ald_velothi.esp": {
+   "do": "order",
+   "plugin": "URH_Ald_Velothi.esp",
+   "pair": [
+    "URH_Ald_Velothi.esp",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "st_alchemy_replacer_1.3.esp|uvirith's legacy_3.53.esp": {
+   "do": "order",
+   "plugin": "Uvirith's Legacy_3.53.esp",
+   "pair": [
+    "Uvirith's Legacy_3.53.esp",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "st_alchemy_replacer_1.3.esp|wom 4.0v compatibility for tr version 24.12.esp": {
+   "do": "order",
+   "plugin": "WoM 4.0v Compatibility for TR Version 24.12.ESP",
+   "pair": [
+    "WoM 4.0v Compatibility for TR Version 24.12.ESP",
+    "ST_Alchemy_Replacer_1.3.esp"
+   ],
+   "when": "2026-11-10 03:35"
+  },
+  "suran fix.esp|suran temple door fix.esp": {
+   "do": "order",
+   "plugin": "Suran Fix.ESP",
+   "pair": [
+    "Suran Fix.ESP",
+    "Suran Temple Door Fix.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "suran fix.esp|suran_underworld_v3.esp": {
+   "do": "order",
+   "plugin": "Suran Fix.ESP",
+   "pair": [
+    "Suran Fix.ESP",
+    "Suran_Underworld_v3.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "suran fix.esp|temple master.esp": {
+   "do": "order",
+   "plugin": "Suran Fix.ESP",
+   "pair": [
+    "Suran Fix.ESP",
+    "Temple Master.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "suran fix.esp|windows glow.esp": {
+   "do": "order",
+   "plugin": "Suran Fix.ESP",
+   "pair": [
+    "Suran Fix.ESP",
+    "Windows Glow.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "suran temple door fix.esp|temple master.esp": {
+   "do": "order",
+   "plugin": "Temple Master.ESP",
+   "pair": [
+    "Temple Master.ESP",
+    "Suran Temple Door Fix.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "suran temple door fix.esp|windows glow.esp": {
+   "do": "order",
+   "plugin": "Suran Temple Door Fix.esp",
+   "pair": [
+    "Suran Temple Door Fix.esp",
+    "Windows Glow.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "tasg.esp|tel_aruhn_chronicles.esp": {
+   "do": "order",
+   "plugin": "TASG.ESP",
+   "pair": [
+    "TASG.ESP",
+    "Tel_Aruhn_Chronicles.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "temple master.esp|windows glow.esp": {
+   "do": "order",
+   "plugin": "Temple Master.ESP",
+   "pair": [
+    "Temple Master.ESP",
+    "Windows Glow.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "temple throat singers.esp|the_magic_rock_of_maar_gan.esp": {
+   "do": "order",
+   "plugin": "Temple Throat Singers.esp",
+   "pair": [
+    "Temple Throat Singers.esp",
+    "The_magic_rock_of_Maar_Gan.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "tr_museumofartifacts.esp|unique uniques.esp": {
+   "do": "order",
+   "plugin": "Unique Uniques.ESP",
+   "pair": [
+    "Unique Uniques.ESP",
+    "TR_MuseumofArtifacts.esp"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "vampire clan services.esp|vampire clans - clutter monkey overhaul.esp": {
+   "do": "order",
+   "plugin": "Vampire Clans - Clutter Monkey Overhaul.ESP",
+   "pair": [
+    "Vampire Clans - Clutter Monkey Overhaul.ESP",
+    "Vampire Clan Services.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "vvardenfell distribution - seyda neen coast guard.esp|yet another guard diversity - regular.esp": {
+   "do": "order",
+   "plugin": "Vvardenfell Distribution - Seyda Neen Coast Guard.ESP",
+   "pair": [
+    "Vvardenfell Distribution - Seyda Neen Coast Guard.ESP",
+    "Yet Another Guard Diversity - Regular.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "vy_under_skar.esp|yet another guard diversity - regular.esp": {
+   "do": "order",
+   "plugin": "VY_Under_Skar.esp",
+   "pair": [
+    "VY_Under_Skar.esp",
+    "Yet Another Guard Diversity - Regular.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  },
+  "yet another guard diversity - regular.esp|yul marshee and the visage of mzund.esp": {
+   "do": "order",
+   "plugin": "Yul Marshee and the Visage of Mzund.ESP",
+   "pair": [
+    "Yul Marshee and the Visage of Mzund.ESP",
+    "Yet Another Guard Diversity - Regular.ESP"
+   ],
+   "when": "2026-11-11 17:07"
+  }
+ }
+}

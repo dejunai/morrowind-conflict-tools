@@ -1,0 +1,271 @@
+; Textures mwdialog_check.py --fix reduced to 2048. One per line: path under Data Files,
+; 'link' (the original is the Vortex staging file named) or 'backup' (moved there).
+; --restore-textures puts the originals back.
+textures\tx_a_dwemer_head.dds	link	G:\Vortex Mods\morrowind\Dwemer's vestiges - HD and Normal Maps textures for OpenMW-51813-1-0-1662908874\textures\tx_a_dwemer_head.dds
+textures\tx_a_dwemer_head_n.dds	link	G:\Vortex Mods\morrowind\Dwemer's vestiges - HD and Normal Maps textures for OpenMW-51813-1-0-1662908874\textures\tx_a_dwemer_head_n.dds
+textures\war_sload2_body.dds	link	G:\Vortex Mods\morrowind\Tel Aruhn Chronichles - HD and Normal Maps textures for OpenMW-51813-1-0-1662909050\Textures\war_sload2_body.dds
+textures\war_sload2_body_n.dds	link	G:\Vortex Mods\morrowind\Tel Aruhn Chronichles - HD and Normal Maps textures for OpenMW-51813-1-0-1662909050\Textures\war_sload2_body_n.dds
+textures\war_sload2_head4.dds	link	G:\Vortex Mods\morrowind\Tel Aruhn Chronichles - HD and Normal Maps textures for OpenMW-51813-1-0-1662909050\Textures\war_sload2_head4.dds
+textures\war_sload2_head4_n.dds	link	G:\Vortex Mods\morrowind\Tel Aruhn Chronichles - HD and Normal Maps textures for OpenMW-51813-1-0-1662909050\Textures\war_sload2_head4_n.dds
+textures\war_sload2_head5.dds	link	G:\Vortex Mods\morrowind\Tel Aruhn Chronichles - HD and Normal Maps textures for OpenMW-51813-1-0-1662909050\Textures\war_sload2_head5.dds
+textures\war_sload2_head5b.dds	link	G:\Vortex Mods\morrowind\Tel Aruhn Chronichles - HD and Normal Maps textures for OpenMW-51813-1-0-1662909050\Textures\war_sload2_head5b.dds
+textures\war_sload2_head5b_n.dds	link	G:\Vortex Mods\morrowind\Tel Aruhn Chronichles - HD and Normal Maps textures for OpenMW-51813-1-0-1662909050\Textures\war_sload2_head5b_n.dds
+textures\war_sload2_head5_n.dds	link	G:\Vortex Mods\morrowind\Tel Aruhn Chronichles - HD and Normal Maps textures for OpenMW-51813-1-0-1662909050\Textures\war_sload2_head5_n.dds
+textures\WereWolf_blk.dds	link	G:\Vortex Mods\morrowind\Creatures and critters fixes-53570-2-0-1775583594\textures\WereWolf_blk.dds
+textures\WereWolf_blk_gloss.dds	link	G:\Vortex Mods\morrowind\Creatures and critters fixes-53570-2-0-1775583594\textures\WereWolf_blk_gloss.dds
+textures\WereWolf_blk_n.dds	link	G:\Vortex Mods\morrowind\Creatures and critters fixes-53570-2-0-1775583594\textures\WereWolf_blk_n.dds
+textures\WereWolf_blk_spec.dds	link	G:\Vortex Mods\morrowind\Creatures and critters fixes-53570-2-0-1775583594\textures\WereWolf_blk_spec.dds
+textures\ATL\atlad_6th.dds	link	G:\Vortex Mods\morrowind\Morrowind Styled Atlases-52172-1-0-0-1695773047\textures\ATL\atlad_6th.dds
+textures\ATL\atlad_6th01.dds	link	G:\Vortex Mods\morrowind\Morrowind Styled Atlases-52172-1-0-0-1695773047\textures\ATL\atlad_6th01.dds
+textures\ATL\atlad_colony_rock.dds	link	G:\Vortex Mods\morrowind\Morrowind Styled Atlases-52172-1-0-0-1695773047\textures\ATL\atlad_colony_rock.dds
+textures\ATL\atlad_colony_roof.dds	link	G:\Vortex Mods\morrowind\Morrowind Styled Atlases-52172-1-0-0-1695773047\textures\ATL\atlad_colony_roof.dds
+textures\ATL\atlad_colony_wood.dds	link	G:\Vortex Mods\morrowind\Morrowind Styled Atlases-52172-1-0-0-1695773047\textures\ATL\atlad_colony_wood.dds
+textures\ATL\atlad_shack.dds	link	G:\Vortex Mods\morrowind\Morrowind Styled Atlases-52172-1-0-0-1695773047\textures\ATL\atlad_shack.dds
+textures\ATL\atlad_ship_hull.dds	link	G:\Vortex Mods\morrowind\Morrowind Styled Atlases-52172-1-0-0-1695773047\textures\ATL\atlad_ship_hull.dds
+textures\ATL\atlad_siltstrider.dds	link	G:\Vortex Mods\morrowind\Morrowind Styled Atlases-52172-1-0-0-1695773047\textures\ATL\atlad_siltstrider.dds
+textures\ATL\atlad_siltstrider_d.dds	link	G:\Vortex Mods\morrowind\Morrowind Styled Atlases-52172-1-0-0-1695773047\textures\ATL\atlad_siltstrider_d.dds
+textures\ATL\atlad_stat_saints.dds	link	G:\Vortex Mods\morrowind\Morrowind Styled Atlases-52172-1-0-0-1695773047\textures\ATL\atlad_stat_saints.dds
+textures\ATL\atlas_de_furniture.dds	link	G:\Vortex Mods\morrowind\Morrowind Styled Atlases-52172-1-0-0-1695773047\textures\ATL\atlas_de_furniture.dds
+textures\ATL\atlas_doors_01.dds	link	G:\Vortex Mods\morrowind\Morrowind Styled Atlases-52172-1-0-0-1695773047\textures\ATL\atlas_doors_01.dds
+textures\ATL\atlas_velothi_01.dds	link	G:\Vortex Mods\morrowind\Morrowind Styled Atlases-52172-1-0-0-1695773047\textures\ATL\atlas_velothi_01.dds
+textures\ATL\atlas_velothi_02.dds	link	G:\Vortex Mods\morrowind\Morrowind Styled Atlases-52172-1-0-0-1695773047\textures\ATL\atlas_velothi_02.dds
+textures\ATL\tx_bc_mushroom_atlas.dds	link	G:\Vortex Mods\morrowind\Morrowind Styled Atlases-52172-1-0-0-1695773047\textures\ATL\tx_bc_mushroom_atlas.dds
+textures\ATL\tx_drag_stat_atlas.dds	link	G:\Vortex Mods\morrowind\Morrowind Styled Atlases-52172-1-0-0-1695773047\textures\ATL\tx_drag_stat_atlas.dds
+textures\ATL\tx_hlaalu_atlas.dds	link	G:\Vortex Mods\morrowind\Morrowind Styled Atlases-52172-1-0-0-1695773047\textures\ATL\tx_hlaalu_atlas.dds
+textures\ATL\tx_imperial_atlas1.dds	link	G:\Vortex Mods\morrowind\Morrowind Styled Atlases-52172-1-0-0-1695773047\textures\ATL\tx_imperial_atlas1.dds
+textures\ATL\tx_imperial_atlas2.dds	link	G:\Vortex Mods\morrowind\Morrowind Styled Atlases-52172-1-0-0-1695773047\textures\ATL\tx_imperial_atlas2.dds
+textures\ATL\tx_nordcommon_atlas.dds	link	G:\Vortex Mods\morrowind\Morrowind Styled Atlases-52172-1-0-0-1695773047\textures\ATL\tx_nordcommon_atlas.dds
+textures\ATL\tx_nord_atlas.dds	link	G:\Vortex Mods\morrowind\Morrowind Styled Atlases-52172-1-0-0-1695773047\textures\ATL\tx_nord_atlas.dds
+textures\ATL\tx_redoran_atlas.dds	link	G:\Vortex Mods\morrowind\Morrowind Styled Atlases-52172-1-0-0-1695773047\textures\ATL\tx_redoran_atlas.dds
+textures\ATL\tx_redwall_atlas.dds	link	G:\Vortex Mods\morrowind\Morrowind Styled Atlases-52172-1-0-0-1695773047\textures\ATL\tx_redwall_atlas.dds
+textures\fireclan\Clannfear.dds	link	G:\Vortex Mods\morrowind\Creatures and critters fixes-53570-2-0-1775583594\textures\fireclan\Clannfear.dds
+textures\fireclan\Clannfear_n.dds	link	G:\Vortex Mods\morrowind\Creatures and critters fixes-53570-2-0-1775583594\textures\fireclan\Clannfear_n.dds
+textures\fireclan\Clannfear_spec.dds	link	G:\Vortex Mods\morrowind\Creatures and critters fixes-53570-2-0-1775583594\textures\fireclan\Clannfear_spec.dds
+textures\nb\NB_rock_n.dds	link	G:\Vortex Mods\morrowind\Tel Magic Rock of Maar Gan - HD and Normal Maps textures for OpenMW-51813-1-0-1662909113\textures\nb\NB_rock_n.dds
+textures\other_2\btl\bottles_tavern_basecolor1.dds	link	G:\Vortex Mods\morrowind\Sload and Slavers GigaTextures-52848-1-0-1683629285\Textures\other_2\btl\bottles_tavern_basecolor1.dds
+textures\other_2\crl\crystallow_coral02.dds	link	G:\Vortex Mods\morrowind\Sload and Slavers GigaTextures-52848-1-0-1683629285\Textures\other_2\crl\crystallow_coral02.dds
+textures\plx_crt\bloodwing.dds	link	G:\Vortex Mods\morrowind\Creatures and critters fixes-53570-2-0-1775583594\textures\plx_crt\bloodwing.dds
+textures\plx_crt\bloodwing_nm.dds	link	G:\Vortex Mods\morrowind\Creatures and critters fixes-53570-2-0-1775583594\textures\plx_crt\bloodwing_nm.dds
+textures\rr\_hol\tx_hol_door_met_00.dds	link	G:\Vortex Mods\morrowind\RR Holamayan-43524-1-4-1-1700726472\textures\rr\_hol\tx_hol_door_met_00.dds
+textures\rr\_hol\marble\azuramarble.dds	link	G:\Vortex Mods\morrowind\RR Holamayan-43524-1-4-1-1700726472\textures\rr\_hol\marble\azuramarble.dds
+textures\rr_atl\In_Ar_Bttm_Atl.dds	link	G:\Vortex Mods\morrowind\Skarface - HD and Normal Maps textures for OpenMW-51813-1-1-1706312656\textures\rr_atl\In_Ar_Bttm_Atl.dds
+textures\rr_atl\In_Ar_Bttm_Atl_n.dds	link	G:\Vortex Mods\morrowind\Skarface - HD and Normal Maps textures for OpenMW-51813-1-1-1706312656\textures\rr_atl\In_Ar_Bttm_Atl_n.dds
+textures\rr_atl\In_Ar_Top_Atl.dds	link	G:\Vortex Mods\morrowind\Skarface - HD and Normal Maps textures for OpenMW-51813-1-1-1706312656\textures\rr_atl\In_Ar_Top_Atl.dds
+textures\rr_atl\In_Ar_Top_Atl_n.dds	link	G:\Vortex Mods\morrowind\Skarface - HD and Normal Maps textures for OpenMW-51813-1-1-1706312656\textures\rr_atl\In_Ar_Top_Atl_n.dds
+textures\rr_atl\Tx_Scar_atl.dds	link	G:\Vortex Mods\morrowind\Skarface - HD and Normal Maps textures for OpenMW-51813-1-1-1706312656\textures\rr_atl\Tx_Scar_atl.dds
+textures\rr_atl\Tx_Scar_atl_n.dds	link	G:\Vortex Mods\morrowind\Skarface - HD and Normal Maps textures for OpenMW-51813-1-1-1706312656\textures\rr_atl\Tx_Scar_atl_n.dds
+textures\rr_atl\Tx_Scar_clamps.dds	link	G:\Vortex Mods\morrowind\Skarface - HD and Normal Maps textures for OpenMW-51813-1-1-1706312656\textures\rr_atl\Tx_Scar_clamps.dds
+textures\rr_atl\Tx_Scar_clamps_n.dds	link	G:\Vortex Mods\morrowind\Skarface - HD and Normal Maps textures for OpenMW-51813-1-1-1706312656\textures\rr_atl\Tx_Scar_clamps_n.dds
+textures\vd\NixHoundblight.dds	link	G:\Vortex Mods\morrowind\Creatures and critters fixes-53570-2-0-1775583594\textures\vd\NixHoundblight.dds
+textures\vd\NixHoundblight_n.dds	link	G:\Vortex Mods\morrowind\Creatures and critters fixes-53570-2-0-1775583594\textures\vd\NixHoundblight_n.dds
+textures\vd\NixHoundblight_spec.dds	link	G:\Vortex Mods\morrowind\Creatures and critters fixes-53570-2-0-1775583594\textures\vd\NixHoundblight_spec.dds
+textures\vd\NixHoundinfect.dds	link	G:\Vortex Mods\morrowind\Creatures and critters fixes-53570-2-0-1775583594\textures\vd\NixHoundinfect.dds
+textures\vd\NixHoundinfect_n.dds	link	G:\Vortex Mods\morrowind\Creatures and critters fixes-53570-2-0-1775583594\textures\vd\NixHoundinfect_n.dds
+textures\vd\NixHoundinfect_spec.dds	link	G:\Vortex Mods\morrowind\Creatures and critters fixes-53570-2-0-1775583594\textures\vd\NixHoundinfect_spec.dds
+textures\vd\tx_CliffracerCorprus.dds	link	G:\Vortex Mods\morrowind\Creatures and critters fixes-53570-2-0-1775583594\textures\vd\tx_CliffracerCorprus.dds
+textures\vd\tx_CliffracerCorprus_n.dds	link	G:\Vortex Mods\morrowind\Creatures and critters fixes-53570-2-0-1775583594\textures\vd\tx_CliffracerCorprus_n.dds
+textures\vd\tx_CliffracerInfected.dds	link	G:\Vortex Mods\morrowind\Creatures and critters fixes-53570-2-0-1775583594\textures\vd\tx_CliffracerInfected.dds
+textures\vd\tx_CliffracerInfected_n.dds	link	G:\Vortex Mods\morrowind\Creatures and critters fixes-53570-2-0-1775583594\textures\vd\tx_CliffracerInfected_n.dds
+textures\_dan\tx_Cliffracer.dds	link	G:\Vortex Mods\morrowind\Creatures and critters fixes-53570-2-0-1775583594\textures\_dan\tx_Cliffracer.dds
+textures\_dan\tx_Cliffracer_nm.dds	link	G:\Vortex Mods\morrowind\Creatures and critters fixes-53570-2-0-1775583594\textures\_dan\tx_Cliffracer_nm.dds
+textures\Trox\21_-_default_basecolor.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\21_-_default_basecolor.dds
+textures\Trox\22_-_default_basecolor.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\22_-_default_basecolor.dds
+textures\Trox\alien_plant_001.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\alien_plant_001.dds
+textures\Trox\alien_plant_002.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\alien_plant_002.dds
+textures\Trox\alien_plant_003.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\alien_plant_003.dds
+textures\Trox\alien_plant_004.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\alien_plant_004.dds
+textures\Trox\alien_plant_005.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\alien_plant_005.dds
+textures\Trox\alien_plant_006.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\alien_plant_006.dds
+textures\Trox\alien_plant_007.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\alien_plant_007.dds
+textures\Trox\alien_plant_008.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\alien_plant_008.dds
+textures\Trox\astrdstshn1.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\astrdstshn1.dds
+textures\Trox\astrdstshn2.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\astrdstshn2.dds
+textures\Trox\atlad_shack.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\atlad_shack.dds
+textures\Trox\aurora1.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\aurora1.dds
+textures\Trox\bar_front_baked.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\bar_front_baked.dds
+textures\Trox\beachgrass.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\beachgrass.dds
+textures\Trox\bh_body.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\bh_body.dds
+textures\Trox\blackstone!.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\blackstone!.dds
+textures\Trox\blackstone!g.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\blackstone!g.dds
+textures\Trox\blackstone.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\blackstone.dds
+textures\Trox\blackstone8k.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\blackstone8k.dds
+textures\Trox\blackstonemrd.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\blackstonemrd.dds
+textures\Trox\cait_whale1.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\cait_whale1.dds
+textures\Trox\centertech.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\centertech.dds
+textures\Trox\ceres.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\ceres.dds
+textures\Trox\ceresxl.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\ceresxl.dds
+textures\Trox\ceresxlg.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\ceresxlg.dds
+textures\Trox\ceres_g.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\ceres_g.dds
+textures\Trox\citadel_basecolor.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\citadel_basecolor.dds
+textures\Trox\citadel_basecolorg.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\citadel_basecolorg.dds
+textures\Trox\clayearth.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\clayearth.dds
+textures\Trox\clayearthg.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\clayearthg.dds
+textures\Trox\clayhut.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\clayhut.dds
+textures\Trox\concrete_tiles_basecolor.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\concrete_tiles_basecolor.dds
+textures\Trox\concrete_tiles_g.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\concrete_tiles_g.dds
+textures\Trox\coral2.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\coral2.dds
+textures\Trox\crystalcave.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\crystalcave.dds
+textures\Trox\crystalcaveg.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\crystalcaveg.dds
+textures\Trox\crystals_albedo.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\crystals_albedo.dds
+textures\Trox\cube.001_baked.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\cube.001_baked.dds
+textures\Trox\cube.003_baked.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\cube.003_baked.dds
+textures\Trox\cubetech.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\cubetech.dds
+textures\Trox\cube_baked.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\cube_baked.dds
+textures\Trox\deep_space2.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\deep_space2.dds
+textures\Trox\deep_space2g.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\deep_space2g.dds
+textures\Trox\distributionboard_basecolor.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\distributionboard_basecolor.dds
+textures\Trox\domecityfloor!.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\domecityfloor!.dds
+textures\Trox\domecityfloor.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\domecityfloor.dds
+textures\Trox\domecityfloor2.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\domecityfloor2.dds
+textures\Trox\floor_basecolor.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\floor_basecolor.dds
+textures\Trox\gsmaterial_1_basecolor.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\gsmaterial_1_basecolor.dds
+textures\Trox\gsmaterial_1_basecolorg.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\gsmaterial_1_basecolorg.dds
+textures\Trox\gsmaterial_basecolor.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\gsmaterial_basecolor.dds
+textures\Trox\gsshup_basecolor.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\gsshup_basecolor.dds
+textures\Trox\gsshup_basecolorg.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\gsshup_basecolorg.dds
+textures\Trox\histmazeend.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\histmazeend.dds
+textures\Trox\histmazeendg.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\histmazeendg.dds
+textures\Trox\icefloor.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\icefloor.dds
+textures\Trox\icewall1.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\icewall1.dds
+textures\Trox\icewallclear.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\icewallclear.dds
+textures\Trox\jungle2.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\jungle2.dds
+textures\Trox\kelp2.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\kelp2.dds
+textures\Trox\kelp2g.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\kelp2g.dds
+textures\Trox\kelp3.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\kelp3.dds
+textures\Trox\kelp3g.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\kelp3g.dds
+textures\Trox\lambert10.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\lambert10.dds
+textures\Trox\lambert10g.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\lambert10g.dds
+textures\Trox\lambert2.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\lambert2.dds
+textures\Trox\lambert2g.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\lambert2g.dds
+textures\Trox\lambert4.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\lambert4.dds
+textures\Trox\lambert4g.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\lambert4g.dds
+textures\Trox\lambert5.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\lambert5.dds
+textures\Trox\lambert5g.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\lambert5g.dds
+textures\Trox\lambert6.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\lambert6.dds
+textures\Trox\lambert6g.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\lambert6g.dds
+textures\Trox\lambert7.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\lambert7.dds
+textures\Trox\lambert7g.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\lambert7g.dds
+textures\Trox\lambert8.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\lambert8.dds
+textures\Trox\lambert8g.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\lambert8g.dds
+textures\Trox\masser.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\masser.dds
+textures\Trox\masserg.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\masserg.dds
+textures\Trox\material_0_basecolor.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\material_0_basecolor.dds
+textures\Trox\metal01_basecolor.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\metal01_basecolor.dds
+textures\Trox\metal02_basecolor.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\metal02_basecolor.dds
+textures\Trox\metal03_basecolor.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\metal03_basecolor.dds
+textures\Trox\metal04_basecolor.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\metal04_basecolor.dds
+textures\Trox\mrd3.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\mrd3.dds
+textures\Trox\mrd3g.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\mrd3g.dds
+textures\Trox\mushroom_tree.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\mushroom_tree.dds
+textures\Trox\mushroom_treeg.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\mushroom_treeg.dds
+textures\Trox\newserpentbody.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\newserpentbody.dds
+textures\Trox\nexusglobe.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\nexusglobe.dds
+textures\Trox\nirn.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\nirn.dds
+textures\Trox\nirng.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\nirng.dds
+textures\Trox\oldcitycoralwall2.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\oldcitycoralwall2.dds
+textures\Trox\oldcitycoralwall2g.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\oldcitycoralwall2g.dds
+textures\Trox\old_city_cave.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\old_city_cave.dds
+textures\Trox\old_city_caveg.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\old_city_caveg.dds
+textures\Trox\rain_window.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\rain_window.dds
+textures\Trox\reactorcore_basecolor.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\reactorcore_basecolor.dds
+textures\Trox\reactorparts_basecolor2.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\reactorparts_basecolor2.dds
+textures\Trox\red-sandstone.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\red-sandstone.dds
+textures\Trox\red-stone.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\red-stone.dds
+textures\Trox\red-stone2.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\red-stone2.dds
+textures\Trox\rock1rock.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\rock1rock.dds
+textures\Trox\rock1rocklight.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\rock1rocklight.dds
+textures\Trox\scales.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\scales.dds
+textures\Trox\scene_-_root_basecolor.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\scene_-_root_basecolor.dds
+textures\Trox\shattered-colorful-glass.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\shattered-colorful-glass.dds
+textures\Trox\shattered-colorful-glassg.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\shattered-colorful-glassg.dds
+textures\Trox\shroms.001.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\shroms.001.dds
+textures\Trox\shroms_2.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\shroms_2.dds
+textures\Trox\shroms_2g.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\shroms_2g.dds
+textures\Trox\shroomtreefossil.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\shroomtreefossil.dds
+textures\Trox\sky_black.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\sky_black.dds
+textures\Trox\stingraypbs1_basecolor.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\stingraypbs1_basecolor.dds
+textures\Trox\stingraypbs1_emissive.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\stingraypbs1_emissive.dds
+textures\Trox\stingraypbs2_basecolor.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\stingraypbs2_basecolor.dds
+textures\Trox\stingraypbs2_emissive.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\stingraypbs2_emissive.dds
+textures\Trox\tarnak2.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\tarnak2.dds
+textures\Trox\transparent.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\transparent.dds
+textures\Trox\troxsewer.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\troxsewer.dds
+textures\Trox\trox_build_metal.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\trox_build_metal.dds
+textures\Trox\trox_canopy1.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\trox_canopy1.dds
+textures\Trox\trox_forrest_in_pink.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\trox_forrest_in_pink.dds
+textures\Trox\trox_panel.1!.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\trox_panel.1!.dds
+textures\Trox\trox_panel.1.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\trox_panel.1.dds
+textures\Trox\trox_panel.1g.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\trox_panel.1g.dds
+textures\Trox\trox_panel.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\trox_panel.dds
+textures\Trox\trox_panel2(red).dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\trox_panel2(red).dds
+textures\Trox\trox_panel2.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\trox_panel2.dds
+textures\Trox\trox_panel3.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\trox_panel3.dds
+textures\Trox\trox_panel3g.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\trox_panel3g.dds
+textures\Trox\trox_panel4(red).dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\trox_panel4(red).dds
+textures\Trox\trox_panel4.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\trox_panel4.dds
+textures\Trox\trox_panel5.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\trox_panel5.dds
+textures\Trox\trox_panel6.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\trox_panel6.dds
+textures\Trox\trox_panel6g.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\trox_panel6g.dds
+textures\Trox\trox_panel7!.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\trox_panel7!.dds
+textures\Trox\trox_panel7(red).dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\trox_panel7(red).dds
+textures\Trox\trox_panel7.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\trox_panel7.dds
+textures\Trox\trox_panel7g.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\trox_panel7g.dds
+textures\Trox\trox_panelg.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\trox_panelg.dds
+textures\Trox\trox_stone.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\trox_stone.dds
+textures\Trox\trox_stone2.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\trox_stone2.dds
+textures\Trox\trox_stone3.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\trox_stone3.dds
+textures\Trox\trox_stone_mossy.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\trox_stone_mossy.dds
+textures\Trox\trox_stone_mossy2.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\trox_stone_mossy2.dds
+textures\Trox\trx_blue.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\trx_blue.dds
+textures\Trox\tr_vo_crab_face.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\tr_vo_crab_face.dds
+textures\Trox\tr_vo_crab_shell_2.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\tr_vo_crab_shell_2.dds
+textures\Trox\tuurok.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\tuurok.dds
+textures\Trox\tx_bark_01!.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\tx_bark_01!.dds
+textures\Trox\tx_bark_01_grey.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\tx_bark_01_grey.dds
+textures\Trox\tx_cr_wt.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\tx_cr_wt.dds
+textures\Trox\tx_stars.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\tx_stars.dds
+textures\Trox\tx_stars3.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\tx_stars3.dds
+textures\Trox\tx_stars3g.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\tx_stars3g.dds
+textures\Trox\tx_stars4.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\tx_stars4.dds
+textures\Trox\tx_stars4g.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\tx_stars4g.dds
+textures\Trox\tx_starsg.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\tx_starsg.dds
+textures\Trox\tx_stars_aurora2.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\tx_stars_aurora2.dds
+textures\Trox\tx_trox_33hdalpha.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\tx_trox_33hdalpha.dds
+textures\Trox\tx_trox_33hdalphag.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\tx_trox_33hdalphag.dds
+textures\Trox\tx_trox_metal2.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\tx_trox_metal2.dds
+textures\Trox\tx_trox_metal2g.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\tx_trox_metal2g.dds
+textures\Trox\underoceanic.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\underoceanic.dds
+textures\Trox\_rock1rock2.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\_rock1rock2.dds
+textures\Trox\_rock1rock2g.dds	link	G:\Vortex Mods\morrowind\TroxAssets2.6 59786 2.6 2026-10-31T20-18Z 2G6yGb02\Textures\Trox\_rock1rock2g.dds
+textures\dr\dr_gs_dome_molagmar.dds	link	G:\Vortex Mods\morrowind\Mages Guild Overhaul Guild Hall Visuals Main File-53354-1-0-1691586313\textures\dr\dr_gs_dome_molagmar.dds
+textures\dr\dr_seal_base_crescent.dds	link	G:\Vortex Mods\morrowind\Mages Guild Overhaul Guild Hall Visuals Main File-53354-1-0-1691586313\textures\dr\dr_seal_base_crescent.dds
+textures\dr\dr_seal_crescent_01.dds	link	G:\Vortex Mods\morrowind\Mages Guild Overhaul Guild Hall Visuals Main File-53354-1-0-1691586313\textures\dr\dr_seal_crescent_01.dds
+textures\Tx_vine_01.dds	link	G:\Vortex Mods\morrowind\All-in-one-46180-16-03-26-1773677704\Textures\Tx_vine_01.dds
+textures\4thunknown_kwamaworker.dds	link	G:\Vortex Mods\morrowind\Kwama Worker Remastered-57238-1-0-1-1754304858\textures\4thunknown_kwamaworker.dds
+textures\4thunknown_kwamaworker_n.dds	link	G:\Vortex Mods\morrowind\Kwama Worker Remastered-57238-1-0-1-1754304858\textures\4thunknown_kwamaworker_n.dds
+textures\AlitAtlas.dds	link	G:\Vortex Mods\morrowind\Alit Remastered-57215-1-2-1758169247\textures\AlitAtlas.dds
+textures\AlitAtlas_n.dds	link	G:\Vortex Mods\morrowind\Alit Remastered-57215-1-2-1758169247\textures\AlitAtlas_n.dds
+textures\Goblin_Base_BaseColor.dds	link	G:\Vortex Mods\morrowind\Goblins Remastered-57300-1-1-1755375309\textures\Goblin_Base_BaseColor.dds
+textures\Goblin_Base_BaseColor_n.dds	link	G:\Vortex Mods\morrowind\Goblins Remastered-57300-1-1-1755375309\textures\Goblin_Base_BaseColor_n.dds
+textures\Goblin_ShamanBase_Base_Color.dds	link	G:\Vortex Mods\morrowind\Goblins Remastered-57300-1-1-1755375309\textures\Goblin_ShamanBase_Base_Color.dds
+textures\Goblin_ShamanBase_Base_Color_n.dds	link	G:\Vortex Mods\morrowind\Goblins Remastered-57300-1-1-1755375309\textures\Goblin_ShamanBase_Base_Color_n.dds
+textures\Tx_RM_rock_01b0.dds	link	G:\Vortex Mods\morrowind\Devilish Rocky West Gash-53420-2-5-1-1773348919\Textures\Tx_RM_rock_01b0.dds
+textures\Tx_rock_RM_01bM2.dds	link	G:\Vortex Mods\morrowind\Devilish Rocky West Gash-53420-2-5-1-1773348919\Textures\Tx_rock_RM_01bM2.dds
+textures\Tx_rock_WG_01b0.dds	link	G:\Vortex Mods\morrowind\Devilish Rocky West Gash-53420-2-5-1-1773348919\Textures\Tx_rock_WG_01b0.dds
+textures\Tx_rock_WG_01bM2.dds	link	G:\Vortex Mods\morrowind\Devilish Rocky West Gash-53420-2-5-1-1773348919\Textures\Tx_rock_WG_01bM2.dds
+textures\mbg\Sh\SheoWhiteCliff00.dds	link	G:\Vortex Mods\morrowind\Devilish Spines of Madness 53423 1.4 2026-11-08T14-16Z 3aD5aupo\Textures\mbg\Sh\SheoWhiteCliff00.dds
+textures\mbg\Sh\SheoWhiteCliff01.dds	link	G:\Vortex Mods\morrowind\Devilish Spines of Madness 53423 1.4 2026-11-08T14-16Z 3aD5aupo\Textures\mbg\Sh\SheoWhiteCliff01.dds
+textures\mbg\Sh\SheoWhiteCliff02.dds	link	G:\Vortex Mods\morrowind\Devilish Spines of Madness 53423 1.4 2026-11-08T14-16Z 3aD5aupo\Textures\mbg\Sh\SheoWhiteCliff02.dds
+textures\mbg\Sh\SheoWhiteCliff02b.dds	link	G:\Vortex Mods\morrowind\Devilish Spines of Madness 53423 1.4 2026-11-08T14-16Z 3aD5aupo\Textures\mbg\Sh\SheoWhiteCliff02b.dds
+textures\mbg\Sh\SheoWhiteCliff02k2.dds	link	G:\Vortex Mods\morrowind\Devilish Spines of Madness 53423 1.4 2026-11-08T14-16Z 3aD5aupo\Textures\mbg\Sh\SheoWhiteCliff02k2.dds
+textures\mbg\Sh\SheoWhiteCliff02k4.dds	link	G:\Vortex Mods\morrowind\Devilish Spines of Madness 53423 1.4 2026-11-08T14-16Z 3aD5aupo\Textures\mbg\Sh\SheoWhiteCliff02k4.dds
+textures\mbg\Sh\SheoWhiteCliff03.dds	link	G:\Vortex Mods\morrowind\Devilish Spines of Madness 53423 1.4 2026-11-08T14-16Z 3aD5aupo\Textures\mbg\Sh\SheoWhiteCliff03.dds
+textures\mbg\Sh\SheoWhiteCliff03p.dds	link	G:\Vortex Mods\morrowind\Devilish Spines of Madness 53423 1.4 2026-11-08T14-16Z 3aD5aupo\Textures\mbg\Sh\SheoWhiteCliff03p.dds
+textures\mbg\Sh\SheoWhiteCliff03u.dds	link	G:\Vortex Mods\morrowind\Devilish Spines of Madness 53423 1.4 2026-11-08T14-16Z 3aD5aupo\Textures\mbg\Sh\SheoWhiteCliff03u.dds
+textures\mbg\Sh\SheoWhiteCliff04.dds	link	G:\Vortex Mods\morrowind\Devilish Spines of Madness 53423 1.4 2026-11-08T14-16Z 3aD5aupo\Textures\mbg\Sh\SheoWhiteCliff04.dds
+textures\mbg\Sh\SheoWhitePlat01.dds	link	G:\Vortex Mods\morrowind\Devilish Spines of Madness 53423 1.4 2026-11-08T14-16Z 3aD5aupo\Textures\mbg\Sh\SheoWhitePlat01.dds
+textures\x32\i\x32_i_skybox_stars1.dds	link	G:\Vortex Mods\morrowind\The Garden of Dreams-57831-1-4-2-1778293643\Textures\x32\i\x32_i_skybox_stars1.dds
+textures\x32\i\x32_i_skybox_stars2.dds	link	G:\Vortex Mods\morrowind\The Garden of Dreams-57831-1-4-2-1778293643\Textures\x32\i\x32_i_skybox_stars2.dds
+textures\x32\i\x32_i_skybox_stars3.dds	link	G:\Vortex Mods\morrowind\The Garden of Dreams-57831-1-4-2-1778293643\Textures\x32\i\x32_i_skybox_stars3.dds
+textures\x32\i\x32_i_skybox_stars4.dds	link	G:\Vortex Mods\morrowind\The Garden of Dreams-57831-1-4-2-1778293643\Textures\x32\i\x32_i_skybox_stars4.dds
+textures\x32\i\x32_i_skybox_stars5.dds	link	G:\Vortex Mods\morrowind\The Garden of Dreams-57831-1-4-2-1778293643\Textures\x32\i\x32_i_skybox_stars5.dds

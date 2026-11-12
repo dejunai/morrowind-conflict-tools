@@ -1,0 +1,158 @@
+{
+ "friends & frens - base.esm": {
+  "masters": {
+   "oaab_data.esm": {
+    "installed": 1733474,
+    "master": "OAAB_Data.esm",
+    "original": 1733277,
+    "seen": "2026-11-11 12:15:27"
+   }
+  },
+  "plugin": "Friends & Frens - base.esm"
+ },
+ "nod - core.esm": {
+  "masters": {
+   "oaab_data.esm": {
+    "installed": 1733474,
+    "master": "OAAB_Data.esm",
+    "original": 1384891,
+    "seen": "2026-11-11 12:15:27"
+   },
+   "tamriel_data.esm": {
+    "installed": 17198854,
+    "master": "Tamriel_Data.esm",
+    "original": 10684550,
+    "seen": "2026-11-11 12:15:27"
+   }
+  },
+  "plugin": "NOD - Core.esm"
+ },
+ "oaab - shipwrecks.esm": {
+  "masters": {
+   "oaab_data.esm": {
+    "installed": 1733474,
+    "master": "OAAB_Data.esm",
+    "original": 1733277,
+    "seen": "2026-11-11 12:15:27"
+   }
+  },
+  "plugin": "OAAB - Shipwrecks.esm"
+ },
+ "oaab - tombs and towers - diverse blood patch.esp": {
+  "masters": {
+   "bob's diverse blood.esp": {
+    "installed": 145611,
+    "master": "Bob's Diverse Blood.ESP",
+    "original": 145987,
+    "seen": "2026-11-11 17:15:18"
+   }
+  },
+  "plugin": "OAAB - Tombs and Towers - Diverse Blood Patch.esp"
+ },
+ "oaab - tombs and towers.esm": {
+  "masters": {
+   "oaab_data.esm": {
+    "installed": 1733474,
+    "master": "OAAB_Data.esm",
+    "original": 1733277,
+    "seen": "2026-11-11 12:15:27"
+   }
+  },
+  "plugin": "OAAB - Tombs and Towers.esm"
+ },
+ "oaab dwemer pavements.esm": {
+  "masters": {
+   "oaab_data.esm": {
+    "installed": 1733474,
+    "master": "OAAB_Data.esm",
+    "original": 1733277,
+    "seen": "2026-11-11 12:15:27"
+   }
+  },
+  "plugin": "OAAB Dwemer Pavements.esm"
+ },
+ "oaab_saplings.esm": {
+  "masters": {
+   "oaab_data.esm": {
+    "installed": 1733474,
+    "master": "OAAB_Data.esm",
+    "original": 1733277,
+    "seen": "2026-11-11 12:15:27"
+   }
+  },
+  "plugin": "OAAB_Saplings.esm"
+ },
+ "oaab_tel mora.esm": {
+  "masters": {
+   "oaab_data.esm": {
+    "installed": 1733474,
+    "master": "OAAB_Data.esm",
+    "original": 1733277,
+    "seen": "2026-11-11 12:15:27"
+   }
+  },
+  "plugin": "OAAB_Tel Mora.esm"
+ },
+ "repopulatedmorrowind.esm": {
+  "masters": {
+   "tamriel_data.esm": {
+    "installed": 17198854,
+    "master": "Tamriel_Data.esm",
+    "original": 11522094,
+    "seen": "2026-11-11 12:15:27"
+   }
+  },
+  "plugin": "RepopulatedMorrowind.ESM"
+ },
+ "sound_data.esm": {
+  "masters": {
+   "oaab_data.esm": {
+    "installed": 1733474,
+    "master": "OAAB_Data.esm",
+    "original": 1713532,
+    "seen": "2026-11-11 12:15:27"
+   },
+   "tamriel_data.esm": {
+    "installed": 17198854,
+    "master": "Tamriel_Data.esm",
+    "original": 16419014,
+    "seen": "2026-11-11 12:15:27"
+   }
+  },
+  "plugin": "Sound_Data.esm"
+ },
+ "tr_mainland.esm": {
+  "masters": {
+   "tamriel_data.esm": {
+    "installed": 17198854,
+    "master": "Tamriel_Data.esm",
+    "original": 17199325,
+    "seen": "2026-11-11 12:15:27"
+   }
+  },
+  "plugin": "TR_Mainland.esm"
+ },
+ "va_imperialbank.esm": {
+  "masters": {
+   "oaab_data.esm": {
+    "installed": 1733474,
+    "master": "OAAB_Data.esm",
+    "original": 1713532,
+    "seen": "2026-11-11 12:15:27"
+   },
+   "tamriel_data.esm": {
+    "installed": 17198854,
+    "master": "Tamriel_Data.esm",
+    "original": 17199325,
+    "seen": "2026-11-11 12:15:27"
+   },
+   "tr_mainland.esm": {
+    "installed": 244642958,
+    "master": "TR_Mainland.esm",
+    "original": 241093900,
+    "seen": "2026-11-11 12:15:27"
+   }
+  },
+  "plugin": "va_imperialbank.esm"
+ }
+}

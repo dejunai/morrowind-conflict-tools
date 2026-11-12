@@ -1,0 +1,867 @@
+; mwdialog_load_order.txt: the active plugins, in load order (mwdialog_check.py keeps this list;
+; Morrowind.ini's [Game Files] is written from it when a run that changed it ends, and by --play).
+; Last changed 2026-11-11 17:32 by --multipatch. One plugin per line.
+
+Morrowind.esm
+Tribunal.esm
+Bloodmoon.esm
+AFFresh.esm
+AATL_Data.esm
+Better Heads.esm
+Patch for Purists.esm
+Better Heads Tribunal addon.esm
+Better Heads Bloodmoon addon.esm
+GDR_MasterFile.esm
+AnthologySolstheimPatched.esm
+DN_Dwemer_Tileset.esm
+Tamriel_Data.esm
+Wares-base.esm
+Exterior Creature Locations Fix.esm
+Dr_Data.esm
+Cyr_Main.ESM
+Rise of House Telvanni.esm
+MRM-Non Pointy.esm
+Wyrmhaven.esm
+MWSE Lanterns.esm
+MCA.esm
+Sky_Main.ESM
+TR_Mainland.esm
+abotWaterLife.esm
+RepopulatedMorrowind.ESM
+OAAB_Data.esm
+OAAB_Saplings.esm
+OAAB - Tombs and Towers.esm
+OAAB - Shipwrecks.esm
+OAAB Dwemer Pavements.esm
+OAAB_Tel Mora.esm
+Friends & Frens - base.esm
+va_imperialbank.esm
+NOD - Core.esm
+Westly Prim & Proper Core.esm
+Sound_Data.esm
+mwdialog_check - ESM fixes.esp
+Vibrant Ivy.ESP
+Trellis addon.ESP
+RockyAzurasCoast.ESP
+Spines of Madness 1.13.esp
+DN-GDR BTB MRM-Non Pointy.esp
+Rocky_WG_Base_1.1.esp
+WoM 4.0v Compatibility for TR Version 24.12.ESP
+Ports Of Vvardenfell V1.6 - Aggressively Compatible.esp
+Walkers of Morrowind.esp
+Better Clothes Definitive Edition.ESP
+Better Clothes Definitive Edition - Shorter Imperial Skirt.ESP
+Dallara Fort Frostmoth.esp
+va_imperialbank_shotn.ESP
+va_imperialbank_pc.ESP
+Kalamestari_weapons_merged.ESP
+RR_Holamayan_Eng.ESP
+KHP-GuildOfVampireHunters-TheWearyVampire-Patch.esp
+Silt_strider_placement.ESP
+Utseeva's_DagonFel_MagesGuild.ESP
+Clean_Dagon Fel - Mages Adventures.ESP
+NOD - Cinia Urtius Addon.ESP
+Blight Storms Restored.ESP
+Dwemer's_Vestiges.ESP
+Telvanni Teleport Network.ESP
+Telvanni Teleport Network_TR.ESP
+Ebony Shortsword Returns.ESP
+FMI_Athyn_And_Shardie.ESP
+nibs_wshield_qcvl_patch.ESP
+Nice Telvanni Council House.ESP
+NOD - OAAB Hood-n-Hat AR Value Patch.ESP
+The Imperial Indoril.esp
+Early Transport to Mournhold.esp
+muckgoldfix.esp
+FMI - Alice's Package.ESP
+Ald'Ruhn Outskirts - Ancestral Refuge.ESP
+Ashlander Travel.ESP
+Thelas' Pillows Quest Fix.ESP
+Briricca Vault.esp
+PB_AStrangePlant.esp
+Bob's Diverse Blood.ESP
+No More Generic Egg Miners.ESP
+ResetActors on Travel v1.1.ESP
+Bow to the Daedra.ESP
+EKM Traveling Trader.ESP
+The Doors - Caldera 1.31.esp
+Dungeon Expansion Pack.ESP
+Seyda Neen - Damp Little Squat - unshabby.ESP
+TASG.ESP
+Properly clothed NPCs.ESP
+Destroyed Fort.esp
+Vvardenfell Dwellings - Ald-ruhn House.ESP
+OldMournholdOverhaul.ESP
+Abaesen-Pulu_exp EN.ESP
+Imperial Legion Expansion.esp
+The Last of the Redas Family - Kill her for the Quest.ESP
+Desele's Debt Money Tweaked 500.ESP
+OikImmCalderaGuild.ESP
+Andrayes Ancestral Tomb.ESP
+NPC Overhaul - Bloodmoon.ESP
+Cutting Room Floor - Containers.esp
+Unique and balanced easter eggs.ESP
+t_lostheir.esp
+Bodily Injuries.ESP
+Clean Temple Service Refusal.ESP
+Clean_PalansourRefit.esp
+Shulki Ashunbabi Restoration.ESP
+MaiqMainland.esp
+Cutting Room Floor - Voice Lines.esp
+Molag Mar Outskirts - Bonesaint Guardians.ESP
+Shrine of Boethiah Expanded.ESP
+Vivec_Foreign_Quarter_Bridge_1.0 .esp
+BTBGI Races and Birthsigns.esp
+RPNR_Skywind_Style_Arena.esp
+Ahead of the Classes.ESP
+CAP_Illuminated Staircase.ESP
+Justice4Khartag.esp
+Barristers Guild OE Questline.esp
+Supply Chests.ESP
+CAP_Flame.esp
+Bm leveled enemies balance.ESP
+LuceEdit - Ships of the Imperial Navy.esp
+Vvardenfell Departures - Sason (Kidnapped by Cultists).ESP
+less-awful-boots.ESP
+CAP_Rotating_Planets.ESP
+Cutting Room Floor - Extra Additions.esp
+Gnisis Expanded Remaster.esp
+Catch a Spy Double Agent Edition.ESP
+Velothi's Veloth's Velothian be Blessed.ESP
+Alfiq Integration.ESP
+NoAlarmNoShouting.ESP
+CAP_Bridge.ESP
+Services Restored.ESP
+Tel_Aruhn_Chronicles.ESP
+Urshilaku Spiritual.ESP
+FreeTheSlaves!.esp
+Balmora Redecorated.ESP
+Concept Art Hlaalu Balconies - Balmora.esp
+OAAB_-_Winged_Twilight_Companion_Ari-Ari.esp
+AndromedasFastTravel_RealSignPosts.esp
+Better Robes.ESP
+Better Robes TR.esp
+Lucid Disturbing Dreams.ESP
+Shrine_to_Stop_the_Moon_Replacer.ESP
+Camonna Tong Boat Service.ESP
+Anthology Solstheim Spire.ESP
+Baar Dau.ESP
+Free Argonians are not servile.ESP
+Skyrim_T_Fix.ESP
+Ashlander Silt Skiff.ESP
+Anvil Rickshaw Travel.ESP
+BardicInspiration.esp
+Blight Is Coming.ESP
+Cutting Room Floor - Tarvyn's Guar.esp
+Cutting Room Floor - Shrine Blessings.esp
+companionLeveler.ESP
+Adamantium Armor Naturalized.esp
+Dubdilla Location Fix.ESP
+RPNR_Shrine_Of_Azura.ESP
+EasyConsoleCommands.ESP
+RR_Danke's_Cephalopod_Armor_Eng.esp
+FMI_#NotAllDunmer.ESP
+Shrines - Restore Health and Cancel Options.esp
+Unique_CaveRats.ESP
+MabrDist.esp
+Sadrith Mora_Lighthouse.ESP
+MudcrabsHaveShells.esp
+Open Helmets.ESP
+SuranRedoranSkriak1.ESP
+Stav_OAAB_Battlemage.ESP
+Tales of Tel Branora.esp
+The Dark Brotherhood Attacks.esp
+Dwemer Legacy Reforged - Bthungthumz and Druscashti.esp
+Suran sewers.ESP
+RPNR_Decorated_Cantons.ESP
+Foreign Quarter Market Square.esp
+DRPV1.9.ESP
+Vvardenfell Distribution - Leveled Lists and Creatures.ESP
+Of Musk and Mer A Sadrith Mora Tale.esp
+Vvardenfell Distribution - Andrano Ancestral Tomb.ESP
+Vvardenfell Distribution - Andrethi Ancestral Tomb.ESP
+Smoking Yurts.ESP
+mistify.ESP
+Kogoruhn - Extinct City of Ash and Sulfur.esp
+Restocking Alchemy Essentials.ESP
+No Beds for the Diseased.ESP
+GITD_Telvanni_Dormers.ESP
+Dallara Bal Isra.ESP
+Vivec Striderport.ESP
+TelvanniMagisterRobesTR.ESP
+Weapons Expansion Morrowind.esp
+Forgotten Ways.ESP
+Soulful Dwemer Animunculi v1.1.ESP
+The cool Khuul Lighthouse.ESP
+FromWindIntoStone.ESP
+Guarded Dungeon Entrances.esp
+Dramatic Vivec - Temple only.ESP
+URH_Khuul.esp
+BTBGI Creature Buffs MDMD - Creatures Patch.esp
+LB_EbonheartArgonianMission.ESP
+Dissident_Ordinators.ESP
+Guarded_Dungeon_Entrances_for_Project_Cyrodiil.esp
+Vivec_Lighthouse.ESP
+More Redguard Crypts.ESP
+Guarded_Dungeon_Entrances_for_Skyrim_Home_Of_The_Nords.esp
+Past Life Regressions.ESP
+URH_Ald_Velothi.esp
+The Vestiges of Tukushapal.ESP
+Guarded_Dungeon_Entrances_for_Tamriel_Rebuilt.esp
+Marandus Stronghold Bridge 1.0.6.esp
+DM_DuniraiTown.ESP
+OAAB Ebonheart Six Fishes.ESP
+Trerayna's Camp.ESP
+Shabby Gnaar Mok.ESP
+Trerayna's Robe.ESP
+Odai River Upper Overhaul.esp
+Snug Suran - Oran Manor Upgrade.ESP
+Vvardenfell Distribution - Addamasartus.ESP
+Vvardenfell Distribution - Aharunartus.ESP
+ForestMaarGan.ESP
+Vvardenfell Distribution - House Redoran Misc Foes.ESP
+Light a Candle - Project Cyrodiil.ESP
+Store Entrance Chimes - TR Mainland.ESP
+Vvardenfell Distribution - Venim Manor.ESP
+Finished Morrowind - BASE PATCH - Part 1.esp
+RPNR_Almalexia_Chamber.ESP
+Store Entrance Chimes - Cyrodiil.ESP
+Skar_face.ESP
+Vvardenfell Distribution - Odai Plateau.ESP
+Diseases Restored.ESP
+Tel Morgana.esp
+DA_Sobitur_Facility_Clean.ESP
+DA_Sobitur_Quest_Part_1 Clean.esp
+DA_Sobitur_Quest_Part_2 Clean.esp
+S.W.I.T.ESP
+S.E.R.A.esp
+The Scent of Suspicion.esp
+DM_StonewoodLanterns.ESP
+Pilgrims in Peril.esp
+Gyldenhul Barrow Overhaul.ESP
+Clean_TureynulalRedone.esp
+Seran Ancestral Tomb Overhaul.ESP
+Telvayn Ancestral Tomb Overhaul.ESP
+Yul Marshee and the Visage of Mzund.ESP
+Tamrielic Integrations - Merged.ESP
+Balmora, The Weary Guar.ESP
+MinorTukushapalRefit.esp
+Companions of Morrowind.ESP
+Companions of Morrowind M&C.ESP
+Clean DR115_TheDropoff_HlaOadDocks.ESP
+CAP_Cluttered Staircase.ESP
+TelAhini.ESP
+Magical Lights.ESP
+Balmora Outskirts - Stoneflower trading post.esp
+Better Morrowind Armor.esp
+Complete Armor Joints.esp
+Yakin Overhaul.ESP
+OAAB - Hawia_Egg_Mine.ESP
+ROHT_2_0_8.ESP
+The Dream is the Door.ESP
+Enchanting_Realism_eng_all.esp
+LeFemm Armor Fix.ESP
+WWGTMA.ESP
+OutlanderVoiceFix.ESP
+Dwemer Legacy Reforged - Arkngthunch-Sturdumz.esp
+TIDR - Red Lights MW.ESP
+Library_AM_addon.ESP
+NoMoreStageDiving_TalkativeGirls.ESP
+Into the Abyss.esp
+Vvardenfell Distribution - Bal Isra.ESP
+OAAB - Shipwrecks - TR Patch.ESP
+Royal_Barenziah.ESP
+seamus_BrotherhoodOfSethiete.ESP
+INTA_Cryodiil Travel.ESP
+Missing Dialoge Additions.ESP
+Better Bodies.esp
+BetterTRBodies.ESP
+Morrowind Bodies Reimagined.esp
+Botanical Haven - Suran Apothecary Redux.esp
+Better Robes TR_Patch.esp
+Animated Soulgems.esp
+GoldbrandReforged.ESP
+Better Skulls.ESP
+DaedricBeacons.ESP
+Vvardenfell Distribution - Shishi.ESP
+DwemerTall.ESP
+Suda_OBRmovement.esp
+Fields of Humility.ESP
+Vvardenfell Distribution - Ashalmawia.ESP
+Dubdilla Remade.ESP
+Kumarahaz Bandit Lair.ESP
+RPNR_alma_chamber_water_fix.ESP
+A Merchant's Whim.ESP
+Koal Cave Overhaul.ESP
+himmelryn.ESP
+DM_SuranRoof.ESP
+Outfit_greetings_tweaked.ESP
+Urshilaku Outskirts - Glass and Shalk.ESP
+VA_ShalkArmor.ESP
+Old_dwemer_books_Better_typography.esp
+COI.ESP
+seamus_Ozymandias.ESP
+OAAB - Tel Raloran - Immersive Tables.ESP
+Greetings for No Lore.esp
+seamus_RealHasphatAntabolis.ESP
+if_redoran_lighthouse.ESP
+Samarys - The Sunken Tomb.esp
+Omaren and Anudnabia Overhaul.ESP
+WaitingDoors.esp
+Nasty Camonna Tong.esp
+New Argonian Bodies - Mature.esp
+New Khajiit Bodies - Mature.esp
+Face of the Hortator.esp
+OAAB - Tombs Extended.ESP
+Magic Diversity 1.0.ESP
+abotRainSplash.esp
+Interiors_of_Solstheim_V2.1.esp
+Molag Mar X.esp
+abotWhereAreAllBirdsGoing.esp
+Daedric Repolish.esp
+HoraceHoratiosTemple.ESP
+Cutting Room Floor - Spells.esp
+Cutting Room Floor - Sounds.esp
+factorestateimprovedv1.ESP
+Cutting Room Floor - Tamrielic Lore.esp
+the-needle.esp
+Mudcrab Island TLAD.esp
+Diverse Blood - Tamriel Data.ESP
+Outdoor Banners With Sound.ESP
+OAAB Scrolls.ESP
+A Lovers Quarrel.esp
+Manor Banners.ESP
+Livelier Lucky Lockup.ESP
+Know Thy Ancestors.ESP
+Gnisis Docks v1.0.esp
+Idle Talk.ESP
+Great Service.ESP
+wandering_umbra.ESP
+Mage Robes.ESP
+Ruines'n'relics.esp
+Great Seawall of Vivec.ESP
+Talos Cult Conspiracy.esp
+OAAB Market.ESP
+Red Wisdom.esp
+DM_TelvRRtoOAAB.ESP
+RepopulatedCreatures_DialogueEdits.ESP
+OAAB_Saplings BrotherJunipersTwinLamps patch.esp
+OAAB_Saplings Concept Arts plantations patch.esp
+Almalexia_Placeholder.ESP
+The Key Mod.esp
+Logs on Fire Skyrim.esp
+Silt Strider Animation Restored.ESP
+SadrithMoraMarketshroom.ESP
+Dual Faction Membership for NPCs.ESP
+Mountains_of_Mournhold_V4.0.esp
+Tealpanda's Alchemy Essentials.esp
+Interiors_of_Mournhold_V2.3.esp
+BitterAndBlightedRemastered.ESP
+NPC Faction Affiliation Corrector (Maximalistic).ESP
+_The_Cheese_Smugglers_of_Vos_Part_1_ENG.ESP
+Realistic_Repair_Add-on.ESP
+Hortator.ESP
+RR_Telvanni_Lighthouse_Tel Vos_Eng.ESP
+Redoran Freeloaders.esp
+TelFyrShroom.ESP
+Clear Your Name.esp
+Cutting Room Floor - Animations.esp
+Cutting Room Floor - Extra Orders.esp
+AnSol - Tamriel Rebuilt Patch.esp
+Cutting Room Floor - Conjuration.esp
+Saprius' Disguised.esp
+Cutting Room Floor - Kill Neloth.esp
+Wanted Posters.ESP
+Under Construction.esp
+Cutting Room Floor - Herders.esp
+Cutting Room Floor - Blightstorm.esp
+Cantons_on_the_Global_Map_v1.1.esp
+Cutting Room Floor - Bal Ur Ordinators.esp
+Consequences for Looting the Andrano Tomb.ESP
+Valley of the Wind Atmospheric Enhancements.ESP
+PortTelvannisRedux.ESP
+RR_Telvanni_Lighthouse_Tel Branora_Eng.ESP
+Yet Another Better Sounds Patch.esp
+Camonna Tong Chitin Armor.ESP
+Cutting Room Floor - Characters.esp
+Cutting Room Floor - Extra Jobs.esp
+Cutting Room Floor - Dialogue.esp
+OAAB_Shipwrecks_JFK_patch.esp
+Uncharted Artifacts.esp
+KF's Misc Fixes.ESP
+Cutting Room Floor - Dead Heroes.esp
+Cutting Room Floor - Ald-ruhn Underground.esp
+DirtyMurielsExpansion.esp
+TelvanniSeaBeacons.ESP
+Ebony Reforge.esp
+Floating Rock and Andus Plant Fix.esp
+Tribunal - Rare Durzogs In Vvardenfell Caves.esp
+GITD_WL_RR_Interiors.esp
+Original Faces 1.4.esp
+sb_smith.ESP
+Vvardenfell Distribution - Seyda Neen Coast Guard.ESP
+Llervu Ancestral Tomb Expanded.ESP
+Vivec_Mages_Guild_Expanded.ESP
+Cutting Room Floor - Stronghold Homes.esp
+imperialcultexpansionv1.esp
+Unique Banners and Signs.esp
+Unique Gothren's Cephalopod Helm.ESP
+Unique Banners and Signs Rat in the Pot.esp
+MCA_voiceovers.ESP
+Unique_Tavern_Signs_for_Tamriel_Rebuilt_v2.ESP
+Suran Fix.ESP
+Concept Art Hlaalu Balconies - Suran.ESP
+Hanging Gardens of Suran.esp
+Westly Prim & Proper Replacer.esp
+NPC_Schedule(beta).esp
+Personal Effects_MWSE.ESP
+Store Entrance Chimes - Alt Ver.ESP
+Concept_Arts_plantations.esp
+dgrandom_girlsonly.esp
+Westly's Master Headpack X.esp
+New Arenthia 1.2.ESP
+RFD_Heartthrum.ESP
+GAMA.esp
+DN_Dwemer_Tileset_TR.esp
+Vvardenfell Distribution - Mila-Nipal Camp.ESP
+Continue Bal Molagmer After TG Questline.esp
+Local Lore - Silt Striders and Caravaners.ESP
+Vvardenfell Distribution - Uvirith's Grave.ESP
+TR_DarkDungeons.esp
+CompletePropylonNetworkForTR.ESP
+Animated_Morrowind - Danaes Edits - TR.esp
+Imperial Employment Office (MD edits).esp
+Soulless Summons.ESP
+Strider Burial.esp
+Legacy of the Blades.ESP
+sm_tel_robe.ESP
+Clean Tales of Seyda Neen.esp
+Service_Requirements.esp
+AshlanderArch.ESP
+jobashaBookShop.esp
+OAABandoned Shack Mad Hermit.ESP
+Liar yes Idiot no.ESP
+WealthWithinMeasure_TR_v1.25.esp
+Epilogue - Sail to Akavir.ESP
+The Wanderers Stash.esp
+OAAB Huleen's Hut Overhaul.ESP
+The_Stolen_Sweetrolls.esp
+Eclipse of the Crescent Blade.ESP
+sell_skooma_v1.0.ESP
+Dim Vertical Shipwreck.ESP
+AFFargoth.ESP
+WanderingIdiot.esp
+Of_Murk_and_Mussels.esp
+DM_CrownOfUrshilaku.ESP
+Shroomdoliers and a Fishroomman.ESP
+OAAB - Astral Pocket.ESP
+Mudcrab Imports.esp
+Bal'laku - The Lonely Towers.esp
+The Wizard's Affair.esp
+Baan_Binif.ESP
+The Scholar of Dagon Fel.ESP
+SigilStones.esp
+Caldera Priory.ESP
+OAAB Pomegranates.ESP
+LB_RatPot.ESP
+Curio Manor - OAAB and Hlaaluified.ESP
+Lost Relics of the Tribunal Temple - TT Redux.esp
+Temple Master.ESP
+Suran Temple Door Fix.esp
+riders.ESP
+Melodies and Moonlight.esp
+From the Hand of God.ESP
+Aurane Frernis Apothecary.ESP
+LB_TempleBalmora.ESP
+Vanilla_TR_OAAB_Armors_Rebalance.ESP
+AFFiliates_MG.esp
+HelnimREDUXskriak.ESP
+FirewatchSkriak.ESP
+BalFoyenCosmeticSkriak.ESP
+RanyonRuhnSKRIAK.ESP
+HlerynhulSKRIAK.ESP
+GahSadrithSKRIAK.ESP
+nibs_wanderingshield.ESP
+SadasPlantationSKRIAK.ESP
+OmaynisSkriak.ESP
+nibs_wshield_DRPV_patch.ESP
+NivalisSKRIAK.ESP
+TelGilanSKRIAK.ESP
+MaarBaniSKRIAK.ESP
+NarsisSKRIAK.ESP
+BahrammuSKRIAK.esp
+The undergod cult v1.1.esp
+Keg Drip.ESP
+TelDrevisSkriak.esp
+Pergamaea_Overhaul.ESP
+Pergamaea_Overhaul_ROHT_2_0_8-patch.ESP
+Dras the Dunmer Legionnaire.esp
+Iceholme Retreat_No Solstheim Edits.ESP
+Robe'n'Hood.ESP
+BB2_Peasant_Gowns.esp
+GovernerMansionReplacer.esp
+Westly_Presents_FCOT.esp
+Ships of the Imperial Navy (TR addon).esp
+Hidden Sea Loot.ESP
+The_Old_Lie.esp
+Ranked Dremora.esp
+Cave Drips.ESP
+BulwarkAmulet.ESP
+Ashes_and_Ice.ESP
+seamus_AdmiralRolston.ESP
+abotWaterLifeTRaddon.esp
+The Vampire Hunter's Legacy 1.3.esp
+VampiricBloodlineVisages.ESP
+Ashes and Gold.ESP
+VampiricArtifacts.ESP
+Mournhold Courtiers.esp
+VampirePlayerHitSounds.ESP
+AshesOfSKill.ESP
+Thrall No More.ESP
+AwakenedAsh-AshVampireCombatEnhancer!.esp
+Vampire Masquerade - A Detailed Overhaul PTR.ESP
+Sabrina.esp
+Djangos Dialogue.ESP
+What Thieves Guild TR.ESP
+Djangos Dialogue - Patch for Purists.esp
+What Thieves Guild.ESP
+Quest Voice Greetings.ESP
+Sky_Main_greeting.esp
+Hla Odai.esp
+PR Perfect Scum.esp
+Uvirith's Legacy_3.53.esp
+Holy Art.ESP
+Improved Inns Expanded - TR Addon.esp
+Improved Inns Expanded - PC Addon.esp
+Improved Inns Expanded - SHotN Addon.esp
+UL_3.5_TR_26.08_Add-on.esp
+Ashlander Dombrists.ESP
+Magicka Expanded.ESP
+Corprusarium - Sorrow Heart of Tel Fyr.ESP
+OAAB - Foyada Mamaea.ESP
+Articus Solstheim Clothes.ESP
+Clean Twilots Tel Mora Manor.esp
+MWSE Belts.ESP
+Particle Arrow Replacer.esp
+BlightedAnimalsRetextured.esp
+OAAB Leveled Creatures.ESP
+New Khajiit Diversity(BEAST).esp
+MCA - Khajiit Diversity Revamped Addon.esp
+Cutting Room Floor - Anthology Solstheim.esp
+Cutting Room Floor - Missing Persons TR.esp
+Cutting Room Floor - Creatures & Diseases TR.esp
+Superb Shulk Eggmine.ESP
+Clean_Mines and Caverns.esp
+Join All Vampire Clans.esp
+Camonna Tong.esp
+CT-TR Patch.esp
+Clean_Ashirbadon.esp
+Clean_KuniraiRefit2.esp
+Clean_Sinsibadon.esp
+Clean_Zenarbael Overhaul.esp
+Clean_Piran.esp
+Guild of Vampire Hunters.ESP
+Putting Power in Willpower - Absorbonach.esp
+ABCmod.esp
+BalmoraDocks.ESP
+Temple Throat Singers.esp
+Diverse Khajiit.ESP
+DM_PilgrimageOfIncenseBTR.ESP
+Caldera Fighters Guild.ESP
+Tamrielic Treasures_Caldera Shop.ESP
+Entertainers Expanded.esp
+HSN - Lighthouse Only.esp
+Shabby Seyda Neen.ESP
+Shipyards of Vvardenfell.esp
+Shabby Interiors.ESP
+MWSE Lanterns - Merged.esp
+NPC_Schedule(beta) - Patch.esp
+BugMuskPerfume.esp
+RepopulatedMorrowind_CRF_AldRedaynia.ESP
+Westly_Presents_Unique_Corprus_Stalkers.esp
+RepopulatedMorrowind_AnimatedMorrowind.ESP
+RepopulatedMainland.ESP
+RepopulatedMorrowind_RP_CalderaMineExpanded.ESP
+RepopulatedStirk.ESP
+RepopulatedMorrowind_OAAB_Data.ESP
+Trainer Log.esp
+RepopulatedMorrowind.ESP
+Well Diversified - Anthology Solstheim.esp
+RepopulatedSkyrim.ESP
+Area Effect Projectiles Integrated (PAR Edit).esp
+Unique Uniques.ESP
+TR_MuseumofArtifacts.esp
+Pilgrimage of Storm and War.esp
+Price Balance - Merged.esp
+ALBlindingSpeed.ESP
+Hospitality_Papers_Expanded_v2.7.esp
+AATL Saturan Depths.ESP
+AATL Mini Mods - Family Ties.ESP
+Lustrous Pearls.ESP
+LeFemmArmor.esp
+Gares Last Gasp.ESP
+Something's Not Right - AS.ESP
+RepopulatedVassirDidanatMine.ESP
+The Mountain of Fear.ESP
+Iron and Steel.esp
+Imperial Armor Replacer.esp
+The_Traveling_Thieves.esp
+Better Bounties.esp
+The Sable Dragon 1.6 mmc.esp
+Trainer Log - AEA.esp
+mwse_PoisonCrafting.esp
+Healing.esp
+Ahnassi.esp
+Suran Ferry.esp
+Umbra, Blademaster.ESP
+Riekling Knock Off.esp
+Blackthorn Barrow (Anthology Patch).ESP
+Antares little mods.ESP
+Racer Dust Arms and Armor.ESP
+Remiros' Uniques.ESP
+abotGuars.esp
+Imperial Knights Faction.ESP
+FortGhostmoth.ESP
+Dallara Fort Buckmoth.esp
+Dallara Pelagiad PFP.esp
+Cait's Critters Unleashed 2.0.esp
+KS_Julan_Ashlander Companion_3.0_beta.esp
+Dallara Fort Darius.esp
+OAAB - There Can Be Only One Patch.ESP
+Uvirith's Legacy 3.53 Sorrow heart of tel fyr patch.ESP
+Sloads of the Mainland - TR addon.esp
+The Sanguine Rose.ESP
+Shipyards of Vvardenfell_greeting.esp
+TD&OAAB Leveled Creatures.esp
+Addon - Umbra Blademaster - Non-Umbra Weapons are Ebony.ESP
+Better Morrowind Armor - TD.esp
+Sheogorad - Groves of the North.esp
+OAAB_Grazelands.ESP
+Landscape Waterfalls MW (OTR).ESP
+The Northern Strongholds.esp
+Cutting Room Floor - Quests.esp
+Trackless Grazeland.ESP
+Trackless Grazeland OAAB Dwemer Pavements Patch.ESP
+Clean_EndusalRedone.esp
+Hall of the Last Ember_Sorkvild the Raven.ESP
+Cutting Room Floor - Keys.esp
+Cutting Room Floor - Free Slaves.esp
+GreymarchDawn.esp
+Unlock All Slaves.esp
+OAAB_Grazelands_Mines_and_Caverns_patch.esp
+Odirniran Fix-V1.esp
+ruinsoffalensarano.ESP
+Vurt's Grazelands Unique Trees.ESP
+Portal to Catalepsy.ESP
+Clan Aundae Vampire Dungeons.ESP
+Quests for Clans and Vampire Legends.ESP
+Vampire Clans - Clutter Monkey Overhaul.ESP
+DN-Lighted_Dwemer_Towers.ESP
+Vampire Clan Services.ESP
+Improved Inns Expanded.esp
+Cutting Room Floor - Taverns.esp
+LDM - Context Matters 1.7.ESP
+Raym's Vampire Rumors.esp
+Finished Morrowind - INCONSISTENCIES - Part 1.ESP
+Fighters Guild Improved.esp
+EbonheartEastEmpireCo.esp
+Molten Glass.ESP
+LB_ImpBusiness_DRP.ESP
+Suran_Underworld_v3.ESP
+RR_Gnisis_Arch_Eng.ESP
+SU3fixes.ESP
+DLR_DRP_Compatibility_Patch.esp
+FMI_Legion_Dialogue.ESP
+LDM - Vampire Talk.ESP
+Privileges&Services 1.1.esp
+FGI_QuestVoiceGreetings_Patch.esp
+Mushroom Crabs.esp
+Of Gems and Geodes.ESP
+Creatures Restored.esp
+New Windhelm - city of kings.ESP
+Privileges&Services - Improvement Patch.esp
+Privileges&Services - Bugs Patch only.esp
+Atmospheric Lights.esp
+Imperial Chainmail Armor.esp
+Morag Tong Polished.esp
+Stav_WebofMephala.ESP
+Religions Elaborated.esp
+RepopulatedMorrowind_MoragTongPolished.ESP
+Dallara Wolverine Hall.esp
+Graffiti of Morrowind.ESP
+InconsistenciesFixedOAAB.esp
+ItemInconsistenciesFixed.esp
+Diverse Corprus Stalkers.esp
+Cassius Verro.esp
+Creatures Restored - TD Addon.esp
+Herders.esp
+blessings.esp
+InconsistenciesFixedTD.esp
+CC6 Patch - Gares Last Gasp.ESP
+Skeletons.esp
+Skeletons - TD Patch.esp
+Diverse Draugrs.esp
+Diverse Draugrs - Skeletal Draugrs.esp
+Diverse Draugrs - Dragon Priests.esp
+Diverse Draugrs - Draugr Scourges.esp
+VSD - Pabanat.esp
+Blighted Durzogs.esp
+VSD - Odibi.esp
+DM_BalmoraMoragTong.ESP
+RM_MoragTongGuildHall.esp
+Mills of Morrowind.esp
+Fungal Grotto.esp
+Fungal Grotto II.esp
+The Flooded Grotto.ESP
+Dwemer Airship.ESP
+Dwemer Airship_Exterior.ESP
+The Doors of Oblivion 1.4.esp
+Ebonheart_Underworks.esp
+Ebonheart_Underworks_greetings.esp
+Memento Mori Buried.ESP
+The_magic_rock_of_Maar_Gan.ESP
+AATL Doors of Oblivion Interop.ESP
+Clean_Mines & Caverns_Solstheim.esp
+VSD - Supulimassu.esp
+Troxulgia.esp
+Sorrow Heart of Tel Fyr Doors of Oblivion 1.4 patch.ESP
+Sload and Slavers.ESP
+New Ilunibi.ESP
+Expansions Integrated - Fewer BM Creatures.esp
+MDMD - More Deadly Morrowind Denizens.ESP
+Expansions Integrated MDMD Patch.ESP
+mdmd - uvirith legacy cooperation.ESP
+MDMD - Creatures Add-On.ESP
+There Can Be Only One (Alt Fyr).esp
+BTB's Game Improvements (Necro Edit).esp
+Bloodmoon Rebalance.ESP
+Tribunal Rebalance.ESP
+avp BTBGI-NE - Beware the Sixth House.esp
+avp BTBGI-NE - Tribunal Rebalance.esp
+avp BTBGI-NE - Better Robes.esp
+BTBGI MDMD - Creatures Patch.ESP
+BTBGI PFP Patch.esp
+OAAB Creature Loot.ESP
+OAAB Leveled Lists.ESP
+avp BTBGI-NE - Creature Buffs - abotWaterLife.esp
+Cutting Room Floor - Items TR.esp
+BTBGI Creature Buffs.esp
+Beware the Sixth House.ESP
+avp BTBGI-NE - Creature Buffs - Beware the Sixth House.esp
+avp BTBGI-NE - Creature Buffs - BlightedAnimalsRetextured.esp
+Creatures and Critters.ESP
+DreamersExpansion.ESP
+Antares' Undead Redux.esp
+Expansions Integrated Fewer Fewer BM Creatures.esp
+Daedric Shrine Overhaul FULL.esp
+Daedric Ruin Expansion - Ramimilk - No Chrysamere.ESP
+Helm of Tohan Naturalized.esp
+Daedric Shrine Overhaul - Fropa's Fixes.ESP
+Slof's Better Beasts a.esp
+Slof's BB neck fix.esp
+ShadeofTheRevenant.ESP
+TelRivusSKRIAK.ESP
+Logs on Fire Tamriel Rebuilt.esp
+Logs on Fire Cyrodiil.esp
+Ineone the Buoyant Armiger.ESP
+Note to Hrisskar.esp
+Bloated Morrowind Magnified Mines & Caverns compatible.esp
+Dagoth Ur Voice Addon.esp
+Tamriel Rebuilt - Yet Another Border Fix.esp
+TelBranoraTether.ESP
+MGO Guild Halls Vanilla.esp
+Thieves Guild Quest Revisions.esp
+BLLDV_ALL.esp
+VY_Under_Skar.esp
+abotRedoranCouncilEntrancePlanters.esp
+JASPR-Mainland-Sign-Posts - Merged.esp
+RV Start Health Fix.ESP
+ST_Alchemy_Base_1.5.esp
+RestoreMagickaFlora.ESP
+Luce's FCOT-OAAB NPC Distribution.ESP
+Complete Armor Joints - TD.esp
+Bards of Bardenfell.esp
+There Can Be Only One (Alt Fyr) MDMD Patch.esp
+Djangos Dialogue - Tamriel Rebuilt.esp
+Hostages.ESP
+Imperial studded leather cuirass.esp
+Imperial Newscale cuirass Replacer.esp
+AliceL93 Vanilla Quest Tweaks - TR_Factions Compatibility Patch.esp
+Intervention Improved - Ghostgate - MG.ESP
+Of Eggs and Dwarves.ESP
+OldVosTradepost.ESP
+Glowbugs Red and Violet.ESP
+OldEbonheartSkriak.ESP
+OAAB Better Caldera Interiors.ESP
+MasterIndexRedux.esp
+Morrowind Quests Redux All-In-One.esp
+Windows Glow.esp
+Concept art palace.ESP
+CAP_Interior_Cluttering.ESP
+CAP_Door.ESP
+RR_Ghost_Gate_Fortress_Eng.ESP
+RepopulatedCreatures.ESP
+Friends & Frens - Vvardenfell.ESP
+Casimir's Legacy.esp
+Friends & Frens - TR.ESP
+Windows Glow - Tribunal Eng.esp
+abotWindowsGlowTR1912.esp
+abotWindowsGlow.esp
+The_Stolen_Sweetrolls - Seyda Neen Patch.esp
+Clean_Waterfowl_Of_Morrowind_Expanded.esp
+Dallara Ebonheart.esp
+Imperial Stables.esp
+Dallara Fort Moonmoth.esp
+Ebonheart Lighthouse.ESP
+seamus_TraitorKings.ESP
+logs on Fire.esp
+OAAB Odai Plateau.esp
+Illy's Oh my Goddess.ESP
+The_Vanilla_Quest_Tweaks_RP_Choices_Consequences_Super_Mega_Package_-_Ultimate_Edition.ESP
+Libertarian Magical Services.ESP
+RR_Better_Ships_n_Boats_Eng.esp
+MAH.ESP
+Better Landscapes Stonewood Pass (RP Edit).esp
+LuceEdit - BCOM - MoonlightOnTheOdaiRiver.esp
+seamus_GentleHand_StonewoodPass.ESP
+OAAB Brother Junipers Twin Lamps.esp
+DD_Caldera_Expansion.esp
+SWP - Caldera Mine Patch.ESP
+SWP - Foyada Mamaea Overhaul Patch.ESP
+Animated_Morrowind - Danaes Edits - Vv.esp
+FMI_HulStop 1.6.ESP
+RevampedDarkBrotherhood.ESP
+Clean_Severa Magia Fix.ESP
+Imperial Factions.esp
+TR_Factions.esp
+South Wall_TG_Hideout.esp
+Sabrina_South_Wall_Patch.esp
+RPNR_Library.ESP
+Yet Another Guard Diversity - Regular.ESP
+Sotha Sil Expanded.ESP
+Tribunal Main Quest Reforged - SSE.esp
+TMQR_Patch.ESP
+OAAB Brother Junipers Twin Lamps - Camonna Tong Compatibility Patch.esp
+SecretsOfTheCrystalCity.esp
+Expanded Sounds.esp
+DM_MassamaDarkness.ESP
+Julan Companion - Merged.esp
+Sotha Sil Expanded - NPCs do not get disabled.ESP
+Sotha Sil Expanded - Reduced Light Brightness.ESP
+ST_Alchemy_Replacer_1.3.esp
+OAAB_Tel Mora_Female Guards.ESP
+TheGardenOfDreams.esp
+avp BTBGI-NE - Uvirith's Legacy.esp
+FM - Unique Items v1.0 - PfP.ESP
+Finished Morrowind - GRAPHICS AND SOUND.ESP
+TLAD LogFl Necro Colors - Merged Patches.esp
+mwse_Containers.esp
+Uvirith's Legacy_3.53 - Script Fix.esp
+DA_Sobitur_Facility_Clean - Script Fix.esp
+DRPV1.9 - Script Fix.esp
+MoonlightOnTheOdaiRiver - Script Fix.esp
+XE Sky Variations.esp
+mwdialog_check AutoMerge.esp
+mwdialog_check Cell Fixes.esp
+mwdialog_check PlaceholderCell ESP Patch.esp
+mwdialog_check Multipatch.esp

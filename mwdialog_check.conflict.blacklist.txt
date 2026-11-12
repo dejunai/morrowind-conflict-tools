@@ -1,0 +1,15 @@
+; mwdialog_check.conflict.blacklist.txt - plugins that never take part in cell conflicts and
+; always lose: they are left out of --cell-conflicts (no report, no question), and --sort loads each one
+; as early as its masters allow (.esm among the masters, .esp right after the .esm files), so every
+; other mod's version wins, and mwcollide hides its object where two sit on top of each other.
+; One plugin per line (wildcards * ? allowed). Don't list a compatibility patch: it must load after the
+; mods it patches.
+OAAB_Saplings.esm
+Ports Of Vvardenfell V1.6 - Aggressively Compatible.esp
+WoM 4.0v Compatibility for TR Version 24.12.ESP
+Rocky_WG_Base_1.1.esp
+DN-GDR BTB MRM-Non Pointy.esp
+spines of madness 1.13.esp
+RockyAzurasCoast.ESP
+Vibrant Ivy.ESP
+Trellis addon.ESP

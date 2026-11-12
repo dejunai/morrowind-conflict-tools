@@ -1,1 +1,52 @@
+# Python
 __pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Plans written by vortex_tidy / mwdialog_luafix (enacted plans are blanked;
+# a leftover plan should not be committed or re-applied by accident)
+vortex_tidy_plan.txt
+mwdialog_luafix_plan.txt
+*.prev.txt
+*_plan.prev.txt
+*plan_reviewed.txt
+*plan_enacted.txt
+
+# Logs, reports, journals, caches, backups
+*.log
+fixes.archive.txt
+mwdialog_fixes.log
+mwdialog_report.txt
+mwdialog_unused_assets.txt
+mwdialog_new_conflicts.txt
+mwdialog.conflicts.txt
+mwdialog_mastercheck_cache.json
+mwdialog_asset_cache.json
+mwdialog_asset_cache.sqlite
+mwdialog_asset_cache.json.migrated
+mwdialog_backup/
+mwdialog_loadorder_undo.txt
+mwdialog_longpaths.json
+mwdialog_luafix.json
+vortex_tidy_journal.jsonl
+mwdialog_luafix_journal.jsonl
+.mwdialog*.tmp
+.*.tmp
+
+# Game / install leftovers that must not be published
+*.esp
+*.esm
+*.omwaddon
+*.bsa
+*.nif
+*.kf
+*.dds
+*.bik
+Morrowind.ini
+mgeXE.toml
+csse.toml
+vortex.deployment.dinput.json
