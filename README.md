@@ -72,7 +72,7 @@ These live next to the scripts in the game folder, except as noted.
 **Rules and lists you edit:**
 
 - `mwdialog_check.rules.txt` — mlox-style load-order rules for `--sort` (these win over mlox's own files)
-- `mlox/mlox_user.txt` — your mlox user rules (`mlox_base.txt` is not included; use the copy from your mlox install)
+- mlox rules are not included; the tool reads `mlox\mlox_user.txt` and `mlox_base.txt` from your own mlox install if they exist, and `mwdialog_check.rules.txt` is the place for your own rules
 - `mwdialog_check.conflict.blacklist.txt` — plugins left out of `--cell-conflicts` and loaded early so others win
 - `vortex_tidy_blacklist.txt` — Vortex staging folders tidy should never touch
 - `Data Files/MWSE/config/mwguard.json` — thresholds shared with `mwdialog_luafix.py` (copy this to `Data Files\MWSE\config\` in the game folder)
