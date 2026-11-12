@@ -6,7 +6,7 @@ import os
 import struct
 import sys
 
-from conftest import ah, m, vt
+from conftest import ah, fold, m, vt
 
 
 def _mod(tmp_path, files):
@@ -92,7 +92,7 @@ def test_I7_orphan_in_a_normal_maps_pack_still_moves_and_the_pack_is_flagged(tmp
     moved = [os.path.basename(s) for s, d, _w in moves if d and "normal maps" in d.lower()]
     assert moved == ["tx_rock_n.dds"]
     assert vt.NO_DIFFUSE_WARNING in next(w for s, _d, w in moves if s.endswith("tx_rock_n.dds"))
-    assert "Better Rocks-77-1-0: a normal-map add-on pack" in out and "not applicable to classic Morrowind" in out
+    assert "Better Rocks-77-1-0: a normal-map add-on pack" in fold(out) and "not applicable to classic Morrowind" in fold(out)
     assert "left in place (no diffuse texture anywhere)" in open(tmp_path / "plan.txt").read()
     assert vt.ORPHAN_NORMALS == [("Better Rocks-77-1-0", os.path.join("Textures", "tx_lone_n.dds"))]
 

@@ -1,3 +1,11 @@
+# Human-readable output wrapping (2026-11-11)
+
+- Console output, report text, dated `mwdialog_fixes.log` lines, and `argparse --help` wrap at 115 characters (`mwdialog_text.py`).
+- Continuation lines indent two spaces beyond the source line's leading indent, or align under a `- ` bullet or under the message after a log timestamp. A single overlong token (a long path) is not split.
+- Clear lists (left-alone notes, missing masters, plugins taken out of the load order, patch load-order hints, and similar) are printed as bulleted `- ` items.
+- Plan files are still written unwrapped: `--apply` compares action lines (including patch hashes) exactly. The on-screen plan preview is wrapped. Rules, records, JSON, CSV/TSV, and Lua patches are unchanged.
+- The fix-log parser rejoins wrapped continuation lines so existing and newly wrapped logs both work.
+
 # Relative paths, Vortex settings, and bundled LuaJIT (2026-11-11)
 
 - No hardcoded absolute paths in the tools. The game root is the folder the scripts live in.

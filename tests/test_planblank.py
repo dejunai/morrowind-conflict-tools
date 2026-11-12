@@ -6,7 +6,7 @@ import sys
 
 import pytest
 
-from conftest import _load, vt
+from conftest import _load, fold, vt
 
 lf = _load("mwdialog_luafix")
 PF = _load("mwdialog_planfile")
@@ -104,6 +104,7 @@ def test_tidy_second_apply_is_a_no_op(tidy, capsys):
     capsys.readouterr()
     assert tidy("--apply", "--yes") == 2
     out = capsys.readouterr().out
+    out = fold(out)
     assert "REFUSED" in out and "plan is empty / already applied" in out and "plan mode first" in out
     assert (tidy.mod / "late.txt").exists() and len(_runs(vt.JOURNAL)) == 1
     tidy()                                                                    # plan mode regenerates it
@@ -277,6 +278,7 @@ def test_planfile_compare_ignores_headers_comments_and_order():
 def test_tidy_missing_plan_refuses(tidy, capsys):
     assert tidy("--apply", "--yes") == 2
     out = capsys.readouterr().out
+    out = fold(out)
     assert "there is no plan file" in out and "plan mode first" in out
     assert (tidy.mod / "readme.txt").exists() and not _runs(vt.JOURNAL)
 
@@ -294,10 +296,11 @@ def test_tidy_mismatch_refuses_changes_nothing_and_rewrites_the_plan_with_prev(t
     capsys.readouterr()
     assert tidy("--apply", "--yes") == 2
     out = capsys.readouterr().out
-    assert "REFUSED" in out and "1 action(s) added, 1 removed" in out
-    assert "changelog.txt" in out and "notes.txt" in out
+    flat = fold(out)
+    assert "REFUSED" in flat and "1 action(s) added, 1 removed" in flat
+    assert "changelog.txt" in flat and "notes.txt" in flat
     prev = os.path.splitext(vt.PLAN)[0] + ".prev.txt"
-    assert f"saved as {prev}" in out
+    assert f"saved as {prev}" in flat
     assert open(prev).read() == reviewed                                     # the reviewed one, kept
     assert "changelog.txt  ->" in open(vt.PLAN).read()                       # the new one, to review
     assert (tidy.mod / "readme.txt").exists() and (tidy.mod / "changelog.txt").exists() and not _runs(vt.JOURNAL)

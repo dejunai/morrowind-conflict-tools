@@ -8,7 +8,12 @@ goes to the run's backup folder for auditing. --undo never reads the plan file (
 """
 import os
 import shutil
+import sys
 import time
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import mwdialog_text as MT                                  # noqa: E402
+print = MT.printer()                                        # noqa: A001
 
 APPLIED_TAG = "nothing pending"
 

@@ -7,7 +7,7 @@ import sys
 
 import pytest
 
-from conftest import m, misc
+from conftest import fold, m, misc
 from test_redundant import game, order, run, write, BASE, MW
 from test_full_redundant import full_args, steps, SPEC, staged  # noqa: F401  (fixture)
 
@@ -53,7 +53,7 @@ def test_nobody_to_ask_says_why_and_what_it_did(staged, tmp_path, capsys):
     m.run_full(full_args(tmp_path))                             # the fixture's stdin is not a console
     out = capsys.readouterr().out
     assert "Not asking: the output isn't on screen" in out or "Not asking: the input isn't a console" in out
-    assert "Turning off the 1 high-confidence duplicate(s)" in out
+    assert "Turning off the 1 high-confidence duplicate(s)" in fold(out)
     assert "Small.esp" not in order(tmp_path)
 
 
@@ -82,7 +82,7 @@ def test_answered_pairs_are_skipped_with_a_note(tmp_path, monkeypatch, capsys):
     asked = console(monkeypatch, [])
     run(tmp_path, "--redundant")
     out = capsys.readouterr().out
-    assert asked == [] and "Already answered, not asked again (keep both" in out and "Big.esp + Small.esp" in out
+    assert asked == [] and "Already answered, not asked again (keep both" in fold(out) and "Big.esp + Small.esp" in fold(out)
 
 
 def test_q_stops_asking(tmp_path, monkeypatch):

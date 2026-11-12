@@ -163,3 +163,19 @@ def test_assess_scores():
         == "other version"
     # ids defined by some other loaded plugin are not counted against the master
     assert mc.assess(facts(["zz_x"]), prof, {"zz_x"})[2]["total"] == 0
+
+
+def test_wrapped_fix_log_lines_are_rejoined(tmp_path):
+    """Human fix-log lines may wrap at 115 chars; parse_log must rejoin continuations."""
+    import mwdialog_text as MT
+    log = tmp_path / "mwdialog_fixes.log"
+    msg = ("Fooland Patch.esp: master 'Fooland.esp' has changed size since this plugin was saved; "
+           "the game warns at startup -> synced the size recorded for 'Fooland.esp' (111 -> 222); "
+           "its references all line up")
+    with MT.open_log(log, "w") as f:
+        f.write("==== 2026-11-01 10:00:00 ====\n")
+        f.write("2026-11-01 10:00:00  " + msg + "\n")
+    text = log.read_text(encoding="utf-8")
+    assert "\n" in text.rstrip() and "synced the size" in text
+    facts = mc.parse_log(str(log))["facts"]
+    assert facts["syncs"]["fooland patch.esp"]["fooland.esp"] == [111, 222]

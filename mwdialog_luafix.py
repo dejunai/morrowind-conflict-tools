@@ -72,6 +72,8 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mwdialog_lua as L                                   # noqa: E402
 import mwdialog_planfile as PF                             # noqa: E402
+import mwdialog_text as MT                                 # noqa: E402
+print = MT.printer()                                       # noqa: A001
 
 sys.setrecursionlimit(max(sys.getrecursionlimit(), 20000))
 
@@ -2253,7 +2255,8 @@ def summary_lines(counts, indent="  "):
 
 # ---------------------------------------------------------------------------------------------- CLI
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="Check MWSE Lua mods for bad habits and patch the safe ones.")
+    MT.install()
+    ap = MT.parser(description="Check MWSE Lua mods for bad habits and patch the safe ones.")
     ap.add_argument("paths", nargs="*", help="folders or files (default: Data Files\\MWSE\\mods next to this script)")
     ap.add_argument("--apply", action="store_true", help="patch (without it, only the plan is shown)")
     ap.add_argument("--yes", action="store_true", help="with --apply: don't ask first")

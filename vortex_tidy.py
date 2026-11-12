@@ -75,6 +75,8 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mwdialog_planfile as PF                   # noqa: E402
 import mwdialog_paths as MP                      # noqa: E402
+import mwdialog_text as MT                       # noqa: E402
+print = MT.printer()                             # noqa: A001
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 JOURNAL = os.path.join(HERE, "vortex_tidy_journal.jsonl")
@@ -455,8 +457,10 @@ def review(staging, moves, assume_keep=False):
         name = os.path.basename(mod_dir)
         print("\n" + "!" * 70)
         print(f"OpenMW-only mod: {name}")
-        print(f"  OpenMW plugin(s): {', '.join(addons)}; no .esp or .esm")
-        print(f"  OpenMW scripts: {', '.join(scripts)}")
+        print("  OpenMW plugin(s); no .esp or .esm:")
+        print(MT.bullets(addons, indent="  "))
+        print("  OpenMW scripts:")
+        print(MT.bullets(scripts, indent="  "))
         print("  It needs OpenMW's Lua scripting, so in Morrowind it would do little or nothing (or break).")
         if assume_keep or not sys.stdin.isatty():
             print("  Kept (not asked: --yes). Remove it in Vortex if you don't want it.")
@@ -551,7 +555,7 @@ def run_plan(args):
     head = [f"vortex_tidy plan, {time.strftime('%Y-%m-%d %H:%M')}: {len(mods)} mod(s), {touched} to change, "
             f"{sum(1 for m in all_moves if m[1])} move(s); {len(skipped)} left alone"]
     for d, why in skipped:
-        head.append(f"  left alone: {d} ({why})")
+        head.append(f"  - left alone: {d} ({why})")
     for d, n in sorted(NORMAL_PACKS.items()):
         NOTES.append(f"{d}: a normal-map add-on pack ({n} normal map(s) under a 'normal maps' path) - not "
                      f"applicable to classic Morrowind (only OpenMW uses normal maps); consider removing it in Vortex")
@@ -559,11 +563,11 @@ def run_plan(args):
         NOTES.append(f"{len(ORPHAN_NORMALS)} normal map(s) with no diffuse texture anywhere left in place (no "
                      f"stand-in); mwdialog_check --full's unused-asset purge removes the unused ones")
     for note in NOTES:
-        head.append(f"  NOTE: {note}")
+        head.append(f"  - NOTE: {note}")
     for d, rel in ORPHAN_NORMALS[:50]:
-        lines.append(f"  left in place (no diffuse texture anywhere): {d}\\{rel}")
+        lines.append(f"  - left in place (no diffuse texture anywhere): {d}\\{rel}")
     for mod_dir, (addons, scripts) in sorted(REVIEW.items()):
-        head.append(f"  NEEDS A LOOK (OpenMW-only: {', '.join(addons)}, no .esp, scripts {', '.join(scripts)}): "
+        head.append(f"  - NEEDS A LOOK (OpenMW-only: {', '.join(addons)}, no .esp, scripts {', '.join(scripts)}): "
                     f"{os.path.basename(mod_dir)} - --apply stops at it and offers to delete it")
     args._moves_text = "\n".join(head + lines) + "\n"
     if getattr(args, "_write_plan", True):
@@ -1004,7 +1008,8 @@ def assets_apply(args, ares, moved_mods=()):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Tidy the mods in Vortex's Morrowind staging folder.")
+    MT.install()
+    ap = MT.parser(description="Tidy the mods in Vortex's Morrowind staging folder.")
     ap.add_argument("--staging", default=None, metavar="DIR",
                     help="Vortex Morrowind staging folder (default: Vortex's own setting)")
     ap.add_argument("--only", nargs="+", metavar="PATTERN", help="only these mod folders (wildcards allowed)")

@@ -2,12 +2,19 @@
 MW_SRC=/workspace/uploads/morrowind runs the same tests against the originals."""
 import importlib.util
 import os
+import re
 import struct
 import sys
 
 import pytest
 
 SRC = os.environ.get("MW_SRC", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def fold(text):
+    """Collapse wrap() newlines and hanging indent so a phrase can be looked for in output."""
+    return re.sub(r"\s+", " ", text or "")
+
 if SRC not in sys.path:
     sys.path.insert(0, SRC)
 

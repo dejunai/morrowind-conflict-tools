@@ -30,6 +30,7 @@ import zipfile
 from collections import Counter
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mwdialog_paths as MP  # noqa: E402
+import mwdialog_text as MT  # noqa: E402
 
 DIFFERENT_AT = 0.75                      # confidence at or above which a master is called a different mod
 SIZES_RECORD = "mwdialog_master_sizes.json"
@@ -307,13 +308,27 @@ def parse_log(path, cached=None):
                 return dict(cached, head=head, headlen=len(first))
         f.seek(start)
         offset = start
+        pending = None                          # a dated line plus any wrap() continuation lines
+        def _flush(blob):
+            if any(k in blob for k in KEYWORDS):
+                _merge_line(facts, blob.decode("utf-8", "replace"))
         for raw in f:
-            offset += len(raw)
             if not raw.endswith(b"\n"):          # a line still being written: next time
-                offset -= len(raw)
+                if pending is not None:
+                    _flush(pending)
+                    pending = None
                 break
-            if any(k in raw for k in KEYWORDS):
-                _merge_line(facts, raw.decode("utf-8", "replace"))
+            offset += len(raw)
+            if pending is not None and raw[:1] in (b" ", b"\t"):
+                piece = raw.lstrip().rstrip(b"\r\n")
+                nl = b"\r\n" if pending.endswith(b"\r\n") else b"\n"
+                pending = pending.rstrip(b"\r\n") + b" " + piece + nl
+                continue
+            if pending is not None:
+                _flush(pending)
+            pending = raw
+        if pending is not None:
+            _flush(pending)
     return {"head": head, "headlen": len(first), "offset": offset, "size": st.st_size, "facts": facts}
 
 

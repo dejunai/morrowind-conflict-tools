@@ -33,7 +33,11 @@ import os
 import re
 import shutil
 import struct
+import sys
 import time
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import mwdialog_text as MT  # noqa: E402
+print = MT.printer()  # noqa: A001
 
 MAX_PATH_CHARS = 259                 # longest full path a non-long-path-aware Windows program can open
 NEAR_CHARS = 240                     # reported as "close to the limit"

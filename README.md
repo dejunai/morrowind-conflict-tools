@@ -26,6 +26,7 @@ On Windows you can also use the included `mwdialog_check.bat` and `vortex_tidy.b
 | `mwdialog_luafix.py` | Static checker and in-place patcher for MWSE Lua (parser-based, not regex). Nil guards, absurd event priorities, log-spam shim, one-shot handlers, and related rules. Plan first, then `--apply`. |
 | `mwdialog_lua.py` | Pure-Python Lua 5.1 / LuaJIT tokenizer and parser, used by `mwdialog_luafix.py`. |
 | `mwdialog_planfile.py` | Shared plan-file helpers: atomic writes, blanking after a successful `--apply`, audit copies, strict comparison of the reviewed plan. |
+| `mwdialog_text.py` | Shared helper that wraps human-readable console, report, `--help`, and fix-log text at 115 characters, with a hanging indent and bullets for lists. |
 | `chargen_ship_patch.py` | Builds `Chargen Ship - Original Model.esp` so the chargen ship keeps the original hull shape when a ship replacer is installed. |
 | `stranded_doors_patch.py` | Builds `Stranded Doors - DRPV Patch.esp` to put two load doors left in the void back into Dwemer Ruins Plus. |
 
@@ -97,6 +98,12 @@ Staging and download folders are read from Vortex's own settings (`%APPDATA%\Vor
 If Vortex's data cannot be read and no override is given, the tool exits with a message that names every folder it tried and the flag to pass. There is no hardcoded fallback path. `--no-vortex` skips the staging folder; `--no-archive-lookup` (or `--no-master-guard`) skips the download folder.
 
 The "deleted by vortex_tidy" folder is derived from the resolved staging folder (`<staging name> - deleted by vortex_tidy`, beside it).
+
+## Output wrapping
+
+Human-readable feedback (console, `mwdialog_report.txt` when stdout is redirected, dated lines in `mwdialog_fixes.log`, and `argparse --help`) is wrapped at 115 characters. A continuation line is indented two spaces beyond the line's own indent, or aligns under a `- ` bullet or under the message after a log timestamp. A path or other single token longer than 115 characters is left on its own line.
+
+Plan files (`vortex_tidy_plan.txt`, `mwdialog_luafix_plan.txt`) are written unwrapped: `--apply` compares action lines (moves, patch hashes, repairs) exactly, so those must stay one line. The console preview of a plan is wrapped. Rules, records, JSON, CSV/TSV, and Lua patch content are also left as-is.
 
 ## Usage notes
 

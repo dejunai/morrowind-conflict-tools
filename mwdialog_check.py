@@ -61,6 +61,8 @@ import time
 from collections import Counter, OrderedDict, defaultdict
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mwdialog_paths as MP  # noqa: E402
+import mwdialog_text as MT  # noqa: E402
+print = MT.printer()  # noqa: A001
 
 # One module, whatever name it runs under: mwdialog_assets.py and vortex_tidy.py import it as
 # "mwdialog_check" and must see this run's settings (--encoding...), not a second fresh copy.
@@ -3212,7 +3214,7 @@ def run_repair_sounds(args):
         fixed.append((rel, prob, backup))
         print(f"  repaired {rel}: it {prob}\n      original kept as {backup}")
     if fixed and not args.dry_run:
-        with open(os.path.join(game_dir, args.fix_log), "a", encoding="utf-8") as lf:
+        with MT.open_log(os.path.join(game_dir, args.fix_log), "a", encoding="utf-8") as lf:
             for rel, prob, backup in fixed:
                 lf.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {rel}: it {prob} -> re-saved under the same name; "
                          f"original kept as {backup}\n")
@@ -4845,7 +4847,7 @@ def run_clean_up(args):
             lines.append(f"deleted backup {os.path.basename(p)}")
         except OSError as e:
             print(f"  {os.path.basename(p)}: NOT deleted ({e})")
-    with open(args.fix_log, "a", encoding="utf-8") as f:
+    with MT.open_log(args.fix_log, "a", encoding="utf-8") as f:
         import datetime
         f.write(f"\n==== {datetime.datetime.now():%Y-%m-%d %H:%M:%S} clean-up ====\n")
         f.write("".join(l + "\n" for l in lines))
@@ -4896,7 +4898,7 @@ def restore_all(data_dir, assume_yes, fix_log):
             lines.append(f"{os.path.basename(path)}: restored from {os.path.basename(oldest)}, {len(baks)} backup(s) removed")
         except OSError as e:
             print(f"  {os.path.basename(path)}: NOT restored ({e})")
-    with open(fix_log, "a", encoding="utf-8") as f:
+    with MT.open_log(fix_log, "a", encoding="utf-8") as f:
         import datetime
         f.write(f"\n==== {datetime.datetime.now():%Y-%m-%d %H:%M:%S} restore-all ====\n")
         f.write("".join(l + "\n" for l in lines))
@@ -4948,8 +4950,8 @@ def scan(args, plugins, bsas, data_dirs, report):
             gone = mastercheck_module().disable(os.path.dirname(os.path.abspath(args.data_dir)), order, bad,
                                                 sys.modules[__name__], getattr(args, "fix_log", None))
             if gone:
-                print(f"Taken out of the load order (made for a different master): {', '.join(gone)} "
-                      f"(put back by adding them to {LOAD_ORDER_FILE})", file=sys.stderr)
+                print("Taken out of the load order (made for a different master) (put back by adding them to " + LOAD_ORDER_FILE + "):", file=sys.stderr)
+                print(MT.bullets(gone, indent="  "), file=sys.stderr)
         except (OSError, UnicodeError) as e:
             print(f"(could not take mismatched plugins out of the load order: {e})", file=sys.stderr)
     return world
@@ -5669,7 +5671,7 @@ def run_fix(args, plugins, bsas, data_dirs, report, world, only, hidden=frozense
     log.extend(place_log)
     patch_path = patch_path if patch_built[0] else None
 
-    with open(args.fix_log, "a", encoding="utf-8") as f:
+    with MT.open_log(args.fix_log, "a", encoding="utf-8") as f:
         import datetime
         f.write(f"\n==== {datetime.datetime.now():%Y-%m-%d %H:%M:%S} ====\n")
         for plugin, msg, desc in log:
@@ -5706,9 +5708,9 @@ def run_fix(args, plugins, bsas, data_dirs, report, world, only, hidden=frozense
     if patch_path or place_built[0]:
         print("\nLoad order for the patches (activate them in the Morrowind Launcher or your mod manager):")
         if patch_path:
-            print(f"  {PATCH_NAME}: right after the masters (.esm), where it is now")
+            print(f"  - {PATCH_NAME}: right after the masters (.esm), where it is now")
         if place_built[0]:
-            print(f"  {PLACE_PATCH_NAME}: LAST, after every other plugin")
+            print(f"  - {PLACE_PATCH_NAME}: LAST, after every other plugin")
 
 
 # --------------------------------------------------------------------------
@@ -6389,7 +6391,7 @@ def run_merge(args, plugins, bsas, data_dirs):
         if when:
             os.utime(out_path, (when, when))
         print(f"\n  Wrote {out_path}" + (" (dated after the newest plugin, so it loads last)" if when else ""))
-    with open(args.fix_log, "a", encoding="utf-8") as f:
+    with MT.open_log(args.fix_log, "a", encoding="utf-8") as f:
         import datetime
         f.write(f"\n==== {datetime.datetime.now():%Y-%m-%d %H:%M:%S} merge ====\n")
         f.write(f"{os.path.basename(out_path)}: merged {', '.join(n for n, _d in chosen)}\n")
@@ -6905,7 +6907,7 @@ def run_auto_merge(args, plugins, bsas, data_dirs):
     bak = set_game_files(ini, ini_order, "auto-merge")
     rec[out_name] = list(cands)
     write_merge_record(game_dir, rec)
-    with open(args.fix_log, "a", encoding="utf-8") as f:
+    with MT.open_log(args.fix_log, "a", encoding="utf-8") as f:
         import datetime
         f.write(f"\n==== {datetime.datetime.now():%Y-%m-%d %H:%M:%S} auto-merge ====\n")
         f.write(f"{out_name}: merged and deactivated {', '.join(cands)}\n")
@@ -7081,7 +7083,7 @@ def run_clean(args, plugins, only):
             print("Nothing cleaned.")
             return {}
     import datetime
-    with open(args.fix_log, "a", encoding="utf-8") as f:
+    with MT.open_log(args.fix_log, "a", encoding="utf-8") as f:
         f.write(f"\n==== {datetime.datetime.now():%Y-%m-%d %H:%M:%S} clean ====\n")
         for name, (path, out, stats, details) in results.items():
             try:
@@ -7623,7 +7625,7 @@ def run_multipatch(args, plugins, world):
         if when:
             os.utime(path, (when, when))
     import datetime
-    with open(args.fix_log, "a", encoding="utf-8") as f:
+    with MT.open_log(args.fix_log, "a", encoding="utf-8") as f:
         f.write(f"\n==== {datetime.datetime.now():%Y-%m-%d %H:%M:%S} multipatch ====\n")
         f.write("".join(f"{MULTI_PATCH_NAME}: {n}\n" for n in notes))
     print(f"  {MULTI_PATCH_NAME}: written with {len(recs)} record(s)" + (" (new: load it LAST)" if is_new else ""))
@@ -9064,7 +9066,7 @@ def fix_performers(args, plugins):
         at = next((i for i, n in enumerate(cur) if n.lower() in tail), len(cur))
         set_game_files(args.ini or os.path.join(game_dir, "Morrowind.ini"), cur[:at] + [PERFORMER_PATCH] + cur[at:],
                        "--fix (performers)")
-    with open(os.path.join(game_dir, args.fix_log), "a", encoding="utf-8") as lf:
+    with MT.open_log(os.path.join(game_dir, args.fix_log), "a", encoding="utf-8") as lf:
         lf.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {PERFORMER_PATCH}: removed {n_drop} doubled performer(s): "
                  + "; ".join(f"{label}: " + ", ".join(x['oid'] for x in d) for label, _k, _h, d in drops) + "\n")
     print(f"  Wrote {PERFORMER_PATCH}: {n_drop} performer(s) removed in {len(drops)} interior(s); it is in the load "
@@ -9537,7 +9539,7 @@ def fix_cell_winners(args, plugins):
         print(f"  Moved pieces: {sum(followed.values())} object(s) put back with the piece they were placed by, "
               f"which another mod moved:")
         for (who, mover, c), n in sorted(followed.items(), key=lambda kv: -kv[1])[:15]:
-            print(f"      {n:4} of {who}'s in '{c}' (moved by {mover})")
+            print(f"      - {n} of {who}'s in '{c}' (moved by {mover})")
         if len(followed) > 15:
             print(f"      ... and {len(followed) - 15} more (all listed in mwdialog_cell_fixes.txt)")
         try:
@@ -9782,7 +9784,7 @@ def fix_cell_winners(args, plugins):
         at = next((i for i, n in enumerate(cur) if n.lower() in tail), len(cur))
         set_game_files(args.ini or os.path.join(game_dir, "Morrowind.ini"), cur[:at] + [CELL_WINNER_PATCH] + cur[at:],
                        "--fix (cell winners)")
-    with open(os.path.join(game_dir, args.fix_log), "a", encoding="utf-8") as lf:
+    with MT.open_log(os.path.join(game_dir, args.fix_log), "a", encoding="utf-8") as lf:
         lf.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {CELL_WINNER_PATCH}: "
                  + "; ".join(f"{c}: {name_of[w]} over {name_of[l]}" for c, w, l in cells.values()) + "\n")
     print(f"  Wrote {CELL_WINNER_PATCH} ({count} record(s)); it loads near the end, before the Multipatch.")
@@ -9857,7 +9859,7 @@ def fix_omwaddon_masters(args):
         bak = write_inplace(path, recs)
         fixed += 1
         print(f"  {name}: {what} (backup {os.path.basename(bak)})")
-        with open(os.path.join(game_dir, args.fix_log), "a", encoding="utf-8") as lf:
+        with MT.open_log(os.path.join(game_dir, args.fix_log), "a", encoding="utf-8") as lf:
             lf.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {name}: master renamed {what}\n")
     if fixed:
         print(f"  {fixed} plugin header(s) fixed.")
@@ -10070,7 +10072,7 @@ def fix_long_names(args, plugins, bsas):
             bak = write_inplace(path, out)
             fixed += 1
             print(f"  {name}: {changed} record(s) changed (backup {os.path.basename(bak)})")
-            with open(os.path.join(game_dir, args.fix_log), "a", encoding="utf-8") as lf:
+            with MT.open_log(os.path.join(game_dir, args.fix_log), "a", encoding="utf-8") as lf:
                 lf.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {name}: {changed} record(s): names cut to "
                          f"31 characters (short meshes in {SHORT_MESH_RECORD})\n")
     if made:
@@ -10214,7 +10216,7 @@ def fix_ref_groups(args, plugins):
         changed += 1
         bak = write_inplace(path, out)
         print(f"    moved to the master's group (backup {os.path.basename(bak)})")
-        with open(os.path.join(game_dir, args.fix_log), "a", encoding="utf-8") as lf:
+        with MT.open_log(os.path.join(game_dir, args.fix_log), "a", encoding="utf-8") as lf:
             lf.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {name}: {len(moved)} master reference(s) moved to "
                      f"the master's group: " + "; ".join(f"{o} in {c}" for c, o, g in moved) + "\n")
     return changed
@@ -10955,7 +10957,7 @@ MERGE_REBUILD_RECORD = "mwdialog_merge_rebuild.txt"
 def fix_log_line(args, game_dir, text):
     """One dated line in the fix log (mwdialog_fixes.log next to the game, unless --fix-log says otherwise)."""
     try:
-        with open(os.path.join(game_dir, getattr(args, "fix_log", "") or "mwdialog_fixes.log"), "a",
+        with MT.open_log(os.path.join(game_dir, getattr(args, "fix_log", "") or "mwdialog_fixes.log"), "a",
                   encoding="utf-8") as lf:
             lf.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {text}\n")
     except OSError:
@@ -11590,7 +11592,7 @@ def drop_vanished_added_masters(args):
                 print(f"  {patch}: master {mod} (added by a sort from a content rule) taken out again: {mod} {why}"
                       + (f" (backup {os.path.basename(bak)})" if bak else ""))
                 try:
-                    with open(os.path.join(game_dir, getattr(args, "fix_log", "") or "mwdialog_fixes.log"), "a",
+                    with MT.open_log(os.path.join(game_dir, getattr(args, "fix_log", "") or "mwdialog_fixes.log"), "a",
                               encoding="utf-8") as lf:
                         lf.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {patch}: added master {mod} removed ({why})\n")
                 except OSError:
@@ -12121,7 +12123,7 @@ def run_sort(args, plugins):
                 print(f"    ... and {len(added) - 15} more")
             if not args.dry_run:
                 write_added_masters(os.path.dirname(os.path.abspath(args.data_dir)), added_rec)
-                with open(args.fix_log, "a", encoding="utf-8") as lf:
+                with MT.open_log(args.fix_log, "a", encoding="utf-8") as lf:
                     for patch, mod, bak, why in added:
                         lf.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {patch}: added master {mod} ({why}); "
                                  f"backup {os.path.basename(bak)}\n")
@@ -12376,9 +12378,8 @@ def run_full(args):
         set_title("mwdialog_check --full - stopped: missing masters")
         print("\n--full: ERROR - plugins whose masters aren't in Data Files. Install the masters, or take these "
               "plugins out of the load order, then run --full again:\n")
-        width = max(len(n) for n, _m in missing)
         for n, mname in missing:
-            print(f"  {n:{width}}  needs  {mname}")
+            print(f"  - {n}  needs  {mname}")
         return 2
     # your remembered --cell-conflicts answers are replayed by default (the rebuilt-interior winners and the
     # [Order] rules come back before --fix builds the Cell Fixes patch); --fresh-answers starts clean
@@ -12546,7 +12547,7 @@ def _ensure_vortex_paths(args):
 
 def _main(argv=None):
     global ENC
-    ap = argparse.ArgumentParser(description="Scan a Morrowind Data Files folder for dialogue errors.")
+    ap = MT.parser(description="Scan a Morrowind Data Files folder for dialogue errors.")
     ap.add_argument("data_dir", help='path to the "Data Files" folder')
     ap.add_argument("--plugins", nargs="+", metavar="FILE", help="explicit load order (file names in Data Files)")
     ap.add_argument("--ini", help=f"Morrowind.ini (its [Archives]; the plugin list is {LOAD_ORDER_FILE}, made from "
@@ -13151,6 +13152,7 @@ def apply_load_order_to_ini(args):
 
 
 def main(argv=None):
+    MT.install()
     global MAIN_DEPTH
     MAIN_DEPTH += 1
     finished = False

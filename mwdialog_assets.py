@@ -22,6 +22,9 @@ Originals of changed files go to <mod>\\Off\\<plugin>\\<path> (backup_asset_orig
 Not checked: mesh vertex counts (the 4.0.0.2 format can't exceed 65535) and folder-name case duplicates
 (the same folder on Windows)."""
 import os, re, struct, shutil, subprocess, sys, time
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import mwdialog_text as MT  # noqa: E402
+print = MT.printer()  # noqa: A001
 
 TEX_DIRS = ("textures", "icons", "bookart", "splash")
 SOUND_DIRS = ("sound", "music")
@@ -863,11 +866,13 @@ def check(world, m):
     import builtins, time as _time
     _t0 = _time.time()
 
+    _out = MT.printer(builtins.print)
+
     def print(*a, **k):                            # every status line says how long the check has run
         if k.get("file") is sys.stderr and a:
             a = (f"[{int(_time.time() - _t0)}s] {a[0]}",) + a[1:]
             k["flush"] = True
-        builtins.print(*a, **k)
+        _out(*a, **k)
     A = world.assets
     data_dir = os.path.abspath(world.args_data_dir)
     r = world.r
