@@ -85,3 +85,12 @@ def _fresh_caches():
     if hasattr(ah, "close_caches"):
         ah.close_caches()              # each test's asset cache is written and closed with it
     getattr(m, "_BSA_MEMO", {}).clear()
+
+
+@pytest.fixture(autouse=True)
+def _plan_audit_in_tmp(tmp_path, monkeypatch):
+    """Plan-file audit copies of --apply runs never land in the source tree."""
+    monkeypatch.setattr(vt, "AUDIT_ROOT", str(tmp_path / "audit"))
+    lfm = sys.modules.get("mwdialog_luafix")
+    if lfm is not None:
+        monkeypatch.setattr(lfm, "PLAN_FILE", str(tmp_path / "luafix_plan.txt"))

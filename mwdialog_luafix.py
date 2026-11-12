@@ -50,6 +50,8 @@ only written when LuaJIT (or luac) compiles the patched text; if the original do
     python mwdialog_luafix.py "G:\\Vortex Mods\\morrowind\\Some Mod"   (one folder)
     python mwdialog_luafix.py --apply                (patch the high-confidence findings)
     python mwdialog_luafix.py --undo                 (put back the files of the last --apply)
+After --apply, mwdialog_luafix_plan.txt is blanked (a second --apply does nothing until plan mode runs again) or
+cut down to the patches not written; a copy of it is kept in that run's mwdialog_backup\\luafix\\<run>\\.
 vortex_tidy.py runs the same check on every staging mod (its plan shows it, --apply patches, --undo reverts;
 --no-lua skips it, --lua-only does nothing else).
 """
@@ -67,6 +69,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mwdialog_lua as L                                   # noqa: E402
+import mwdialog_planfile as PF                             # noqa: E402
 
 sys.setrecursionlimit(max(sys.getrecursionlimit(), 20000))
 
@@ -2088,15 +2091,20 @@ def _require_cycles(rep, files):
 
 
 # ---------------------------------------------------------------------------------------------- apply / undo
-def apply_report(rep, journal=JOURNAL, backup_root=BACKUP_ROOT, head_extra=None, log=print):
-    """Write every verified patch in place, after copying the file to backup_root\\<run>\\. Every write is
-    journaled first. Returns (written, refused [(path, why)])."""
+def run_backup_dir(backup_root=BACKUP_ROOT):
+    return os.path.join(backup_root, time.strftime("%Y%m%d-%H%M%S"))
+
+
+def apply_report(rep, journal=JOURNAL, backup_root=BACKUP_ROOT, head_extra=None, log=print, bdir=None, done=None):
+    """Write every verified patch in place, after copying the file to backup_root\\<run>\\ (or bdir). Every write
+    is journaled first; done (a list) gets each path as it is written, so an interrupted run knows what is left.
+    Returns (written, refused [(path, why)])."""
     todo = [(p, e) for p, e in sorted(rep.files.items()) if e.get("patch")]
     refused = [(p, e["patch"]["why"]) for p, e in todo if not e["patch"]["ok"]]
     todo = [(p, e) for p, e in todo if e["patch"]["ok"]]
     if not todo:
         return 0, refused
-    bdir = os.path.join(backup_root, time.strftime("%Y%m%d-%H%M%S"))
+    bdir = bdir or run_backup_dir(backup_root)
     written = 0
     os.makedirs(os.path.dirname(os.path.abspath(journal)), exist_ok=True)
     with open(journal, "a", encoding="utf-8") as j:
@@ -2121,6 +2129,8 @@ def apply_report(rep, journal=JOURNAL, backup_root=BACKUP_ROOT, head_extra=None,
                 j.flush()
                 write_in_place(p, new)
                 written += 1
+                if done is not None:
+                    done.append(p)
                 log(f"    patched {e['mod']}: {e['rel']} ({', '.join(e['patch']['rules'])})")
             except OSError as ex:
                 refused.append((p, str(ex)))
@@ -2224,6 +2234,17 @@ def format_report(rep, show_info=False, indent="  "):
     return lines, counts
 
 
+def pending_lines(rep, done=(), indent="  "):
+    """The plan lines of the patches not written yet (verified ones only: a refused patch is not an action)."""
+    done = set(done)
+    left = Report()
+    for p, e in rep.files.items():
+        if e.get("patch") and e["patch"]["ok"] and p not in done:
+            left.files[p] = e
+    lines, _c = format_report(left, False, indent)
+    return lines
+
+
 def summary_lines(counts, indent="  "):
     by_rule = {}
     for (r, c), n in counts.items():
@@ -2256,7 +2277,11 @@ def main(argv=None):
     ap.add_argument("--diff", action="store_true", help="show each patch as a diff")
     args = ap.parse_args(argv)
     if args.undo:
-        return undo(force=args.force)
+        return undo(force=args.force)             # works from the journal; the plan file plays no part
+    if args.apply and PF.state(PLAN_FILE) == "applied":
+        print(PF.refuse_message(PLAN_FILE, "mwdialog_luafix.py"))
+        return 0
+    reviewed = PF.read(PLAN_FILE) if args.apply else None
     data_dir = os.path.join(HERE, "Data Files")
     paths = args.paths or [os.path.join(data_dir, "MWSE", "mods")]
     cfg = load_config(HERE, data_dir)
@@ -2275,8 +2300,7 @@ def main(argv=None):
     n_ok = sum(1 for e in rep.files.values() if e.get("patch") and e["patch"]["ok"])
     head = [f"mwdialog_luafix plan, {time.strftime('%Y-%m-%d %H:%M')}: {len(rep.files)} Lua file(s) checked, "
             f"{n_ok} to patch, {len(rep.skipped)} left alone (MWSE's own code / your mods)"] + summary_lines(counts)
-    with open(PLAN_FILE, "w", encoding="utf-8") as f:
-        f.write("\n".join(head + lines) + "\n")
+    PF.write_atomic(PLAN_FILE, "\n".join(head + lines) + "\n")
     print("\n".join(head))
     print("\n".join(lines[:300]))
     if len(lines) > 300:
@@ -2290,17 +2314,31 @@ def main(argv=None):
     if not args.apply:
         print(f"\n{n_ok} file(s) would be patched. Nothing changed (--apply patches them).")
         return 0
+    if reviewed is not None and not PF.same_actions(reviewed, PF.read(PLAN_FILE)):
+        print("NOTE: --apply recomputed the plan and it differs from the plan file you last reviewed (both are "
+              "kept in the run's backup folder).")
+    bdir = run_backup_dir(BACKUP_ROOT)
     if not n_ok:
         print("Nothing to patch.")
+        PF.finish(PLAN_FILE, "mwdialog_luafix.py", [], bdir, reviewed, note="there was nothing to patch")
         return 0
     if not args.yes and input(f"\nPatch {n_ok} file(s)? [y/N] ").strip().lower() not in ("y", "yes"):
         print("Nothing changed.")
         return 0
-    w, refused = apply_report(rep)
+    done, refused, finished = [], [], False
+    enacted = PF.read(PLAN_FILE)
+    try:
+        w, refused = apply_report(rep, journal=JOURNAL, backup_root=BACKUP_ROOT, bdir=bdir, done=done,
+                                  head_extra={"plan_copy": os.path.join(bdir, "plan_enacted.txt")})
+        finished = True
+    finally:                                      # also on Ctrl+C: what was written leaves the plan
+        left = pending_lines(rep, done)
+        PF.finish(PLAN_FILE, "mwdialog_luafix.py", left, bdir, reviewed, enacted,
+                  note="" if finished else "the run was interrupted")
     for p, why in refused:
         print(f"  not patched: {p}: {why}")
     print(f"Patched {w} file(s). Journal: {JOURNAL} (--undo puts them back).")
-    return 0
+    return 0 if not left else 1
 
 
 def diff_lines(rep):

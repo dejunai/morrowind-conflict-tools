@@ -517,7 +517,7 @@ def test_tidy_plan_lists_lua_and_apply_undo_round_trip(tmp_path, monkeypatch, ca
     monkeypatch.setattr(vt, "__file__", str(tmp_path / "vortex_tidy.py"))
     monkeypatch.setattr(lf, "find_checker", lambda *a, **k: OkChecker())
     monkeypatch.setattr(lf, "BACKUP_ROOT", str(tmp_path / "bk"))
-    monkeypatch.setattr(lf.apply_report, "__defaults__", (lf.JOURNAL, str(tmp_path / "bk"), None, print))
+    monkeypatch.setattr(lf.apply_report, "__defaults__", (lf.JOURNAL, str(tmp_path / "bk"), None, print, None, None))
     monkeypatch.setattr(sys, "argv", ["vortex_tidy.py", "--staging", str(staging), "--lua-only"])
     assert vt.main() == 0
     out = capsys.readouterr().out
