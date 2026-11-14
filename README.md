@@ -74,7 +74,7 @@ These live next to the scripts in the game folder, except as noted.
 
 **Rules and lists you edit:**
 
-- `mwdialog_check.rules.txt` — mlox-style load-order rules for `--sort` (these win over mlox's own files)
+- `mwdialog_check.rules.txt` — mlox-style load-order rules for `--sort` (these win over mlox's own files); a `[NearStart]` / `[NearEnd]` block there also orders its own plugins (`[NearEnd]`: first listed loads last), so they need no extra `[Order]` entry
 - mlox rules are not included; the tool reads `mlox\mlox_user.txt` and `mlox_base.txt` from your own mlox install if they exist, and `mwdialog_check.rules.txt` is the place for your own rules
 - `mwdialog_check.conflict.blacklist.txt` — plugins left out of `--cell-conflicts` and loaded early so others win
 - `vortex_tidy_blacklist.txt` — Vortex staging folders tidy should never touch

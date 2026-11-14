@@ -1,3 +1,18 @@
+# [NearStart] / [NearEnd] are [Order] rules too (2026-11-14)
+
+- In your rules file (`mwdialog_check.rules.txt`), a `[NearStart]` or `[NearEnd]` block now also orders its own
+  plugins, the way it places them: `[NearStart]` as listed, `[NearEnd]` reversed (its first plugin loads last,
+  mlox's convention). A plugin listed there needs no second `[Order]` entry. A block of one plugin orders
+  nothing. Wildcards expand as in `[Order]`.
+- A step that contradicts a master, an `[Exact]` group or an earlier rule is skipped and reported like any
+  `[Order]` step (the plugin still goes to the start / end); an .esm still loads before every .esp. The same
+  pair in an `[Order]` block adds nothing (no duplicate). `--update-rules` lists such steps but never cuts a
+  `[Near*]` block.
+- mlox's own files (`mlox_user.txt`, `mlox_base.txt`) keep mlox's meaning: their `[Near*]` lists are priorities,
+  not an order (read as an order they would move `mwse_Containers.esp` after `XE Sky Variations.esp`).
+- The [Order]-rule checks of `--cell-conflicts` and `--sort`'s added masters read `[Near*]` blocks the same way.
+- New `tests/test_near_order.py`.
+
 # Master check cache: tagged relative paths (2026-11-14)
 
 - `mwdialog_mastercheck_cache.json` stores the fix logs and download archives it names (its `logs` and

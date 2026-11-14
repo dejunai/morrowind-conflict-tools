@@ -36,20 +36,11 @@ Patch for Purists.esm
 
 [NearEnd]
 XE Sky Variations.esp
-
-[NearEnd]
-Rational Names Merged.esp
-
-[NearEnd]
 *Script Fix.esp
+Rational Names Merged.esp
 
 [NearEnd]
 Tamriel Rebuilt - Alternate Start.esp
-
-[Order]
-Rational Names Merged.esp
-*Script Fix.esp
-XE Sky Variations.esp
 
 [Exact]
 Utseeva's_DagonFel_MagesGuild.ESP
