@@ -3853,10 +3853,6 @@ def run_merge(args, plugins, bsas, data_dirs):
 AUTO_MERGE_NAME = "mwdialog_check AutoMerge.esp"
 
 
-NAME_SUBS_REF = {"NPCO", "ENAM", "SCRI", "INAM", "CNAM", "ONAM", "ANAM", "RNAM", "FNAM", "NAME", "PNAM",
-                 "NNAM", "SNAM", "BNAM", "XSCL"}
-
-
 def run_auto_merge(args, plugins, bsas, data_dirs):
     data_dir = os.path.abspath(args.data_dir)
     game_dir = os.path.dirname(data_dir)
@@ -7217,14 +7213,12 @@ DEFAULT_RULES = f"""; {RULES_FILE}: load order rules for mwdialog_check.py --sor
 ; One plugin per line; ";" starts a comment. Names are not case-sensitive and may use
 ; the wildcards * and ? and mlox's <VER> (a version number). A plugin always loads after its
 ; masters, and every .esm before every .esp, whatever the rules say.
+; The sorter pins the auto-merge, the performers patch, the placeholder patch and the
+; Multipatch at the very end, in that order. Leave them out of this file: a [NearEnd]
+; block here would also order them, the other way around.
 
 [NearStart]
 {PATCH_NAME}
-
-[NearEnd]
-{PERFORMER_PATCH}
-{PLACE_PATCH_NAME}
-{MULTI_PATCH_NAME}
 """
 
 
@@ -7771,7 +7765,7 @@ def run_update_rules(args):
     rule_sets, files = sort_rule_sources(args, plugins)
     _order, notes = compute_order(plugins, rule_sets, [n for n, _p in plugins])
     cuts = defaultdict(lambda: defaultdict(list))        # file -> tag line -> [(entry index, reasons)]
-    by_hand, partial, near_kept = [], [], []
+    by_hand, partial = [], []
     for (src, eb), st in notes["steps"].items():
         if not st["skipped"]:
             continue
@@ -7790,14 +7784,12 @@ def run_update_rules(args):
                              f"({why[0][0]} > ... > {why[-1][1]}), from {', '.join(srcs)}")
                 reasons.append(f"{a} before {b}: contradicts {chain}")
         if fname.lower() == RULES_FILE.lower():
-            by_hand.append((src, reasons))
-        elif st.get("kind", "order") != "order":
-            near_kept.append((src, st["entries"][eb], reasons))   # never cut: the block also sets start/end
+            by_hand.append((src, reasons))              # your file, including its [NearStart]/[NearEnd]
         elif st["applied"]:
             partial.append((src, st["entries"][eb], reasons))
         elif fname in files and line.isdigit():
             cuts[fname][int(line)].append((eb, st["entries"], reasons))
-    if not cuts and not by_hand and not partial and not near_kept:
+    if not cuts and not by_hand and not partial:
         print("  No rule is contradicted: nothing to remove.")
         return 0
     for fname in sorted(cuts):
@@ -7813,11 +7805,6 @@ def run_update_rules(args):
     if partial:
         print(f"\n  Left alone ({len(partial)}): wildcard steps that partly apply; removing them would change the order")
         for src, entry, reasons in partial[:10]:
-            print(f"    {src} at '{entry}': {reasons[0]}")
-    if near_kept:
-        print(f"\n  Left alone ({len(near_kept)}): [NearStart]/[NearEnd] steps whose order is contradicted (the "
-              f"plugins still go to the start / end; only that step's order is skipped)")
-        for src, entry, reasons in near_kept[:10]:
             print(f"    {src} at '{entry}': {reasons[0]}")
     if by_hand:
         print(f"\n  Your own {RULES_FILE} contradicts itself or a master ({len(by_hand)}); not edited, fix by hand:")

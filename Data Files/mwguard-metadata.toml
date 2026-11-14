@@ -1,0 +1,9 @@
+# Data Files\mwguard-metadata.toml (put this file in Data Files, next to the .esp/.esm files)
+# Makes MWSE load mwguard before other Lua mods, so it sees their event registrations.
+[package]
+name = "mwguard"
+description = "Finds Lua mods with bad habits: extreme priorities, costly per-frame handlers, MWSE.log spam"
+
+[tools.mwse]
+lua-mod = "mwguard"
+load-priority = 1000000

@@ -209,10 +209,6 @@ def format_log(message, stamp=None, width=WIDTH):
     return wrap(body, width=width, prefix=prefix)
 
 
-def write_log(fh, message, stamp=None, width=WIDTH):
-    fh.write(format_log(message, stamp=stamp, width=width) + "\n")
-
-
 def rejoin_wrapped(text):
     """Rebuild logical lines from wrap() output (for parsers that read one fact per line).
 
@@ -236,34 +232,6 @@ def rejoin_wrapped(text):
     if trailing_nl:
         result += "\n"
     return result
-
-
-def rejoin_wrapped_bytes_lines(lines):
-    """The same join, over an iterable of bytes lines (complete, including newline).
-
-    Yields joined logical lines as bytes, each ending with b'\\n' when the last
-    piece did. A final incomplete line is yielded as-is (caller decides).
-    """
-    pending = None
-    for raw in lines:
-        if not raw:
-            continue
-        is_cont = raw[:1] in (b" ", b"\t")
-        if pending is not None and is_cont:
-            piece = raw.lstrip().rstrip(b"\r\n")
-            # pending still has its original ending until we append
-            if pending.endswith(b"\r\n"):
-                pending = pending[:-2] + b" " + piece + b"\r\n"
-            elif pending.endswith(b"\n"):
-                pending = pending[:-1] + b" " + piece + b"\n"
-            else:
-                pending = pending + b" " + piece
-            continue
-        if pending is not None:
-            yield pending
-        pending = raw
-    if pending is not None:
-        yield pending
 
 
 def printer(builtin_print=None):

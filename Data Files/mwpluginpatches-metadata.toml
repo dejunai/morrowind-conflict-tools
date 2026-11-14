@@ -1,0 +1,9 @@
+[package]
+name = "mwpluginpatches"
+description = "Unified targeted patches for specific plugins (MCA auto-config, Ebonheart Underworks auto-config, Privileges & Services guard call fix, and YARR Ysmir combat shield fix). Automatically defaults to enabled only if target plugin is active."
+category = "Bug Fixes"
+author = "Antigravity"
+
+[tools.mwse]
+lua-mod = "mwpluginpatches"
+load-priority = 4500

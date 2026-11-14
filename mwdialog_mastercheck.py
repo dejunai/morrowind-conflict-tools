@@ -115,6 +115,11 @@ def script_ids(text):
     return {i for i in ids if i not in NOT_IDS and not re.fullmatch(r"[\d.\-]+", i)}
 
 
+# record types that define no id and name nothing plugin_facts collects
+_NO_FACTS = frozenset(("TES3", "CELL", "LAND", "PGRD", "GMST", "SKIL", "MGEF"))
+assert not _NO_FACTS & (set(REF_SUBS) | {"DIAL", "INFO", "SCPT", "NPC_", "CREA", "CONT"})
+
+
 def plugin_facts(data):
     """What a plugin defines and what it names: {"defs": set, "refs": set, "dials": set,
     "links": [(topic, info id)], "info_topic": {info id: topic}}; ids lowercase."""
@@ -123,7 +128,7 @@ def plugin_facts(data):
 
     def one(tag, body):
         nonlocal topic, refs
-        if tag == "TES3":
+        if tag in _NO_FACTS:              # nothing below reads these; cells and land are most of the subrecords
             return
         subs = _subs(body)
         if tag == "DIAL":
@@ -145,7 +150,7 @@ def plugin_facts(data):
                     defs.add(T.cstr(v[:32]).lower())
                 elif n == "SCTX":
                     refs |= script_ids(T.cstr(v))
-        elif tag not in ("CELL", "LAND", "PGRD", "GMST", "SKIL", "MGEF", "TES3"):
+        else:
             nm = next((T.cstr(v).lower() for n, v in subs if n == "NAME"), None)
             if nm:
                 defs.add(nm)
@@ -422,14 +427,6 @@ def log_facts(game_dir, cache, extra_logs=()):
 
 
 # ---------------------------------------------------------------------------------------- download archives
-
-def vortex_settings_downloads():
-    """Vortex's download folder from its settings, or None. Kept as a thin wrapper around mwdialog_paths."""
-    try:
-        return MP.resolve_downloads(required=False)
-    except MP.VortexPathError:
-        return None
-
 
 def downloads_dir(args=None, required=False):
     """The Morrowind Vortex download folder. CLI --vortex-downloads / --downloads wins; otherwise

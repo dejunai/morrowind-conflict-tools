@@ -1,0 +1,7 @@
+package = "mwespreplacements"
+version = "1.0.0"
+description = "Pure MWSE Lua replacements for legacy ESP script bugs, equipment balance, and lighting visuals."
+authors = ["MWSE Team"]
+
+[package.metadata]
+package-load-priority = 4600

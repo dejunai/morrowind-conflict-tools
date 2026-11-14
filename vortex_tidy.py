@@ -515,19 +515,6 @@ def moves_as_lines(moves, staging):
     return out
 
 
-def split_plan(text):
-    """(the moves part, the Lua part) of a plan file's text."""
-    t = text or ""
-    i = t.find("\n" + LUA_HEAD + "\n")
-    return (t, "") if i < 0 else (t[:i], t[i + 1:])
-
-
-def has_actions(part):
-    """Does a plan part list anything to do (indented action lines, not comments or notes)?"""
-    return any(ln.startswith("    ") and ln.strip() and not ln.lstrip().startswith("#")
-               for ln in (part or "").splitlines())
-
-
 def run_plan(args):
     mods = sorted(d for d in os.listdir(args.staging) if os.path.isdir(os.path.join(args.staging, d))
                   and d.lower() != "off")                       # your own Off folder is never touched

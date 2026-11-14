@@ -67,11 +67,6 @@ MIGRATED_SUFFIX = ".migrated"
 TIDY_KEY = "tidy3:"
 KNOWN_PREFIXES = {"clean2", "seen2", "clean", "seen", "texh", "tex2", "nif", "bsa", "bsa2", "snd", "refs", "names",
                   "fixed", "tidy3"}
-# tidy's "found clean" entries carry the version of the checks: raise it when a check is added or made
-# stricter, and every file is looked at again once
-# the old cache's tidy entries (per path, not per mod): dropped when it is converted
-CLEAN_KEY = "clean2:"
-SEEN_KEY = "seen2:"
 EXT_RE = re.compile(rb"\.(dds|tga|bmp|wav|mp3)(?![A-Za-z0-9_])", re.I)
 NAME_CHARS = set(range(0x21, 0x7f)) | {0x20}
 
@@ -995,13 +990,6 @@ def check(world, m):
             fixes.append(("tex", full, rel, job))
     # --- models: version, absolute texture paths; and texture names they use (for "unused")
     used = set()
-    tex_name = re.compile(rb"([\x21-\x7e][\x20-\x7e]{0,250}?)\.(?:dds|tga|bmp)", re.I)
-
-    def note_refs(b):
-        for mm in tex_name.finditer(b):
-            stem = mm.group(1).replace(b"/", b"\\").rsplit(b"\\", 1)[-1].lower()
-            used.add(stem.decode("latin1"))
-
     cache = shared_cache(os.path.dirname(data_dir))
     world.text_key_fixes = []
     allm = nif_files + kf_files

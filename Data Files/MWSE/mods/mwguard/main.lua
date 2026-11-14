@@ -31,7 +31,9 @@ local defaults = {
     logNoticeToMWSE = true,      -- output summary notices of costly handlers to MWSE.log
     exemptMods = {
         "mwguard", "mwhangwatch", "mwfloatfix", "mwstranded", "mwcollide",
-        "mwperformers", "mwinfoloop", "mwsoundguard"
+        "mwperformers", "mwinfoloop", "mwsoundguard", "mwsaveguard", "mwwarnsuppression",
+        "mwcompanionsneak", "mwpluginpatches", "mweffectinspector", "mwmouseguard", "mwespreplacements",
+        "mwteleportguard"
     },
     perFrameHints = {
         "e%.delta", "camera", "velocity", "orientation", "position%s*=", "rotation", "animat",
@@ -50,12 +52,12 @@ local interop = include("mwguard.interop") or {
 }
 
 -- logging ----------------------------------------------------------------------------------------
+local LOG_DIR = "Data Files\\MWSE\\logs"
 local function origLog(fmt, ...)
     local ok, s = pcall(string.format, fmt, ...)
     print(ok and s or tostring(fmt))
 end
 
-local LOG_DIR = "Data Files\\MWSE\\logs"
 local logFile
 local function flog(fmt, ...)
     if not logFile then
@@ -69,6 +71,7 @@ local function flog(fmt, ...)
     logFile:flush()
 end
 flog("mwguard started in passive profiling mode (MWSE build %s)", tostring(mwse.buildNumber or "?"))
+mwse.log("[mwguard] Initialized first (load priority 1000000): passive profiler and event monitor active.")
 
 -- microsecond clock ------------------------------------------------------------------------------
 local now = os.clock

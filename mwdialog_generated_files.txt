@@ -264,6 +264,7 @@
 [Troxulgia.esp]
   Music\trox\silent.mp3	3336
   Sound\trox\funk finesse-premiumbeat.w	8864
+  Textures\crystals_albedo_shine.dds	192
 [Wyrmhaven.esm]
   Textures\bamboo_02.dds	192
   Textures\iron_strap_tx_metal_strip_01.dds	192

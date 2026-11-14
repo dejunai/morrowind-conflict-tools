@@ -1,6 +1,6 @@
 ; mwdialog_load_order.txt: the active plugins, in load order (mwdialog_check.py keeps this list;
 ; Morrowind.ini's [Game Files] is written from it when a run that changed it ends, and by --play).
-; Last changed 2026-11-11 17:32 by --multipatch. One plugin per line.
+; Last changed 2026-11-14 08:09 by --multipatch. One plugin per line.
 
 Morrowind.esm
 Tribunal.esm
@@ -51,6 +51,7 @@ Ports Of Vvardenfell V1.6 - Aggressively Compatible.esp
 Walkers of Morrowind.esp
 Better Clothes Definitive Edition.ESP
 Better Clothes Definitive Edition - Shorter Imperial Skirt.ESP
+ingredient harvest drop sfx.ESP
 Dallara Fort Frostmoth.esp
 va_imperialbank_shotn.ESP
 va_imperialbank_pc.ESP
@@ -801,9 +802,6 @@ CAP_Interior_Cluttering.ESP
 CAP_Door.ESP
 RR_Ghost_Gate_Fortress_Eng.ESP
 RepopulatedCreatures.ESP
-Friends & Frens - Vvardenfell.ESP
-Casimir's Legacy.esp
-Friends & Frens - TR.ESP
 Windows Glow - Tribunal Eng.esp
 abotWindowsGlowTR1912.esp
 abotWindowsGlow.esp
@@ -816,11 +814,14 @@ Ebonheart Lighthouse.ESP
 seamus_TraitorKings.ESP
 logs on Fire.esp
 OAAB Odai Plateau.esp
-Illy's Oh my Goddess.ESP
 The_Vanilla_Quest_Tweaks_RP_Choices_Consequences_Super_Mega_Package_-_Ultimate_Edition.ESP
 Libertarian Magical Services.ESP
 RR_Better_Ships_n_Boats_Eng.esp
 MAH.ESP
+Friends & Frens - Vvardenfell.ESP
+Casimir's Legacy.esp
+Friends & Frens - TR.ESP
+Illy's Oh my Goddess.ESP
 Better Landscapes Stonewood Pass (RP Edit).esp
 LuceEdit - BCOM - MoonlightOnTheOdaiRiver.esp
 seamus_GentleHand_StonewoodPass.ESP

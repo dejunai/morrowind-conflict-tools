@@ -576,12 +576,6 @@ def nil_findings(a, rule):
     return [f for f in a.findings if f["rule"] == rule]
 
 
-def run_lua(src, *args):
-    rt = _lj.LuaRuntime()
-    fn = rt.execute(src)
-    return rt, fn
-
-
 PEEK = ("local config = { peekEnabled = true }\nlocal peek = {}\n"
         "local function pressedKey(e)\n"
         "    if e.keyCode == config.peekLeftKey.keyCode then\n        peek.left = true\n"

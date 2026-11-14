@@ -18,10 +18,6 @@ def _mod(tmp_path, files):
     return mod
 
 
-def _moved(mod):
-    return sorted(os.path.basename(s) for s, d, _w in vt.plan_mod(str(mod)) if d and "normal maps" in d)
-
-
 # ---------------------------------------------------------------- I7: normal maps (all moved; warn without a diffuse)
 def _plan(mod):
     vt.NOTES.clear()

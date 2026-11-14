@@ -35,25 +35,6 @@ class ToolNotFoundError(Exception):
     """An optional external tool (7-Zip) was needed and was not found."""
 
 
-def script_dir(script_file=None):
-    """Folder of the calling tool (or of this module if script_file is omitted)."""
-    if script_file:
-        return os.path.dirname(os.path.abspath(script_file))
-    return os.path.dirname(os.path.abspath(__file__))
-
-
-def game_root(script_file=None, data_dir=None):
-    """The Morrowind install root: the parent of Data Files when data_dir is given, else the
-    folder the calling script lives in."""
-    if data_dir:
-        data_dir = os.path.abspath(data_dir)
-        base = os.path.basename(data_dir)
-        if base.lower() == "data files":
-            return os.path.dirname(data_dir)
-        return data_dir
-    return script_dir(script_file)
-
-
 def is_abs_path(path):
     """True for a POSIX/Windows absolute path, including a drive-letter path on a non-Windows host."""
     if not path:

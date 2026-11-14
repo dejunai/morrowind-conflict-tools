@@ -1,0 +1,10 @@
+[package]
+name = "mwwarnsuppression"
+description = "Suppresses benign engine warning spam (missing body part armor warnings and shutdown cache dumps) from MWSE.log and Warnings.txt."
+category = "Bug Fixes"
+author = "Antigravity"
+
+[tools.mwse]
+lua-mod = "mwwarnsuppression"
+load-priority = 5000
+

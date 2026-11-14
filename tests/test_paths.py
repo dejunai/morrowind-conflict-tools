@@ -17,7 +17,6 @@ import mwdialog_paths as P                       # noqa: E402
 # Production code and docs (not tests, not git, not tool binaries).
 SCAN_ROOT = Path(__file__).resolve().parents[1]
 SKIP_DIRS = {".git", "__pycache__", ".pytest_cache", ".ruff_cache", "tests", "tools"}
-SKIP_SUFFIXES = {".pyc", ".pyo", ".json", ".txt", ".jsonl", ".sqlite"}
 # Data records are linted separately after migration; code/docs must stay clean.
 CODE_SUFFIXES = {".py", ".bat", ".md", ".gitignore"}
 DRIVE_LIT = re.compile(r"(?<![A-Za-z0-9_])[A-Za-z]:\\(?![dDsSnNtTwWbBaAzZrfvxuk0-9])")

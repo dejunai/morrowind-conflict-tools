@@ -365,9 +365,6 @@ def test_real_mwse_logger_lines_redirected_with_correct_line_numbers():
     assert r.rt.eval("print == ORIG_PRINT")
 
 
-V1_SHIM = None
-
-
 def _v1_shim():
     """The version-1 shim exactly as the first release wrote it (from git), for the upgrade test."""
     import subprocess

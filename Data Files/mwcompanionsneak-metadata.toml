@@ -1,0 +1,9 @@
+[package]
+name = "mwcompanionsneak"
+description = "Eliminates companion stealth detection feedback and blacklists entities (with auto-blacklisted creatures) from spoiling player sneak."
+category = "Gameplay"
+author = "Antigravity"
+
+[tools.mwse]
+lua-mod = "mwcompanionsneak"
+load-priority = 4000

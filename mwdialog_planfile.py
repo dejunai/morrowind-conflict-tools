@@ -126,14 +126,6 @@ def finish(path, tool, remaining, audit_dir, reviewed=None, enacted=None, note="
     return copies
 
 
-def same_actions(a, b):
-    """Do two plan texts list the same actions (ignoring the dated first line and comments)?"""
-    def body(t):
-        ls = [ln.rstrip() for ln in (t or "").splitlines() if ln.strip() and not ln.lstrip().startswith("#")]
-        return ls[1:] if ls and ("plan" in ls[0].lower()) else ls
-    return body(a) == body(b)
-
-
 # ---------------------------------------------------------------------------------------------- strict --apply
 # --apply enacts a plan only when the plan it works out lists the same actions as the plan file on disk (the
 # one you reviewed). Actions are compared as a multiset of (context, action line): the mod / Lua file they

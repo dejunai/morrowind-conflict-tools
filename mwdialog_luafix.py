@@ -80,7 +80,6 @@ sys.setrecursionlimit(max(sys.getrecursionlimit(), 20000))
 HERE = os.path.dirname(os.path.abspath(__file__))
 JOURNAL = os.path.join(HERE, "mwdialog_luafix_journal.jsonl")
 BACKUP_ROOT = os.path.join(HERE, "mwdialog_backup", "luafix")
-CONFIG_FILE = os.path.join(HERE, "mwdialog_luafix.json")
 PLAN_FILE = os.path.join(HERE, "mwdialog_luafix_plan.txt")
 VERSION = 3
 MARK = "mwdialog_luafix"

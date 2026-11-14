@@ -1,0 +1,7 @@
+package = "mwmouseguard"
+version = "1.0.0"
+description = "Multi-monitor cursor containment preventing mouse drift and mousewheel scroll bleed to secondary screens."
+authors = ["MWSE Team"]
+
+[package.metadata]
+package-load-priority = 4300

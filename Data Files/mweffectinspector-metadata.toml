@@ -1,0 +1,7 @@
+package = "mweffectinspector"
+version = "1.0.0"
+description = "In-depth actor magic effect, ability, enchantment, and attached VFX node inspector with console commands, in-game hotkey, and dispel tools."
+authors = ["MWSE Team"]
+
+[package.metadata]
+package-load-priority = 4400

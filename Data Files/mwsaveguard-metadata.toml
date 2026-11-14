@@ -1,0 +1,8 @@
+[package]
+name = "mwsaveguard"
+description = "Guards against save corruption on load and prevents save crashes by enforcing a world settling delay."
+
+[tools.mwse]
+lua-mod = "mwsaveguard"
+load-priority = 9000
+

@@ -196,3 +196,36 @@ called `event.register` for those mods.
   `test_unversioned_archive_cache_is_dropped_and_rebuilt`, `test_archive_cache_round_trips_tagged_and_versioned`,
   `test_bad_record_does_not_hide_the_rest_of_the_plugin`, `test_staging_index_and_profiles_can_be_refreshed`,
   `tests/test_rules_pfp.py` (the rules file orders Patch for Purists).
+
+## 10. MWSE mod review fixes (2026-11-14)
+
+- **mwsaveguard: quarantine, never delete.** A save the validator rejects is moved to `saves\quarantine\` with a
+  rename (an earlier quarantined save of the same name is kept; the new one gets a date prefix). If the move
+  fails the file stays where it is. The load is still blocked and the main menu is restored. The message names
+  where the file went.
+- **mwsaveguard: the options menu stays shut while a save is waiting.** During the settling delay, opening the
+  Esc menu closes it again and shows a short notice, so the game can't be quit or another save loaded before
+  the deferred save is written. It never holds the menu for more than 30 seconds, and a pending save is
+  dropped when a game loads (MWSE cancels its timer then).
+- **mwteleportguard: no fade means one frame.** With the fade off the teleport waited on a timer of 0 seconds.
+  It now waits one frame (`timer.delayOneFrame`), the shortest wait there is.
+- **mwwarnsuppression: patch sites are found, not assumed.** `locate.lua` finds each block by the warning text
+  it prints (the executable refers to each text once), checks the instructions around that reference byte for
+  byte, and only then reports an address. A build where a block is missing, doubled or already changed is
+  left alone and logged. The jump patches are computed from the jump found (`jz rel32` becomes `jmp rel32 + 1`
+  and a no-op; `jz short` becomes `jmp short`). Each patch keeps the original bytes and can be put back from
+  the Mod Config menu.
+- **Settings that could not be saved.** mwteleportguard, mwmouseguard, mweffectinspector, mwespreplacements and
+  mwpluginpatches handed a config table that holds functions to `template:saveOnClose`. MWSE's JSON encoder
+  rejects functions, after the file has been opened for writing, so closing the menu left an empty config
+  file. Each `config.save()` now leaves the functions out and the menus call it.
+- **mwmouseguard: load error.** It registered `tes3.event.destroy`, which is not an MWSE event, so `main.lua`
+  stopped there and the Mod Config menu was never registered. The line is gone.
+- **mwguard: the VoV log redirect is removed.** `print` and `mwse.log` are no longer wrapped.
+- **Master check speed-up.** `plugin_facts` skips record types it collects nothing from (cells, land, path
+  grids, game settings, skills, magic effects) before reading their subrecords. Same result, less work.
+
+Checked: `python -m pytest tests -q` gives 358 passed, 21 skipped. `tests\test_warnlocate.py` runs the locator
+against `Morrowind.exe` outside the game: every site is found, at the addresses the old code hard-coded on the
+build they were taken from, and changed code is left alone. All mod files pass a LuaJIT syntax check. None of
+the Lua changes were run inside the game.
