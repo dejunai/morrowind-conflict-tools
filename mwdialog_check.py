@@ -7227,19 +7227,6 @@ DEFAULT_RULES = f"""; {RULES_FILE}: load order rules for mwdialog_check.py --sor
 """
 
 
-# Built-in rules, below your rules file (and the content rules) and above mlox's, so your file can override them.
-# Major masters with a documented place in the order: Patch for Purists (the unofficial patch; its masters are
-# the three Bethesda files) loads right after Bloodmoon.esm, before Tamriel_Data, OAAB_Data and other masters.
-BUILTIN_RULES_NAME = "mwdialog_check (built-in)"
-BUILTIN_RULES = """[NearStart]
-Patch for Purists.esm
-"""
-
-
-def builtin_rules():
-    return parse_rules(BUILTIN_RULES_NAME, BUILTIN_RULES)[0]
-
-
 def compute_order(plugins, rule_sets, current_order):
     """Stable topological sort. Returns (new order, notes)."""
     names = [n for n, _p in plugins]
@@ -7714,8 +7701,8 @@ def sync_ini_order(args, order):
 
 
 def sort_rule_sources(args, plugins, quiet=False):
-    """The rule sets --sort uses, highest priority first: your rules file, the content rules, the built-in
-    rules (BUILTIN_RULES), then mlox_user.txt and mlox_base.txt. Returns (rule_sets, {file basename: path})."""
+    """The rule sets --sort uses, highest priority first: your rules file, the content rules, then
+    mlox_user.txt and mlox_base.txt. Returns (rule_sets, {file basename: path})."""
     game_dir = os.path.dirname(os.path.abspath(args.data_dir))
     rules_path = os.path.join(game_dir, RULES_FILE)
     sources = [rules_path]
@@ -7730,7 +7717,6 @@ def sort_rule_sources(args, plugins, quiet=False):
             rule_sets.append(parse_rules(s, DEFAULT_RULES)[0])
         else:
             rule_sets.append([])
-    rule_sets.insert(1, builtin_rules())
     if not getattr(args, "no_content_order", False):
         if not quiet:
             print("  Reading plugins to find patches that must follow the mods they change...", file=sys.stderr)
@@ -7874,7 +7860,6 @@ def run_sort(args, plugins):
                   + (f", {sum(ign.values())} other rule(s) ignored" if ign else ""))
         rule_sets.append(rules)
         ignored += ign
-    rule_sets.insert(1, builtin_rules())         # after your rules file, before mlox's
     mine = [b for b in BAD_RULE_ENTRIES if os.path.normcase(b[0]) == os.path.normcase(rules_path)]
     for src, no, entry in BAD_RULE_ENTRIES:
         if (src, no, entry) not in mine:

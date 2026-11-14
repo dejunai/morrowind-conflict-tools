@@ -187,12 +187,12 @@ called `event.register` for those mods.
   handles each record on its own, so one unreadable record no longer hides the rest of the plugin.
 - **Minor.** Unused `import shutil` removed; the `merge_levlist` docstring rewrapped; mwguard's "active as
   passive profiler" line is written only when profiling is on (no other mwguard change).
-- **Patch for Purists as a major master.** `--sort` has built-in rules (`BUILTIN_RULES`, below your rules file
-  and the content rules, above mlox's): `[NearStart] Patch for Purists.esm`, so it loads right after
-  Bloodmoon.esm and before Tamriel_Data, OAAB_Data and the other masters (its own masters are the three
-  Bethesda files). An `[Order]` rule in `mwdialog_check.rules.txt` still wins.
+- **Patch for Purists sort rule.** A rule in the rules text, not in the code: `mwdialog_check.rules.txt` has
+  `[NearStart]` / `Patch for Purists.esm` near its top, so `--sort` loads it right after Bloodmoon.esm and before
+  Tamriel_Data, OAAB_Data and the other masters (its own masters are the three Bethesda files). The scripts
+  have no list of major masters.
 - Tests: `test_assess_scores` (same size: few misses -> other version; overwhelming -> different mod),
   `test_large_plugin_matches_its_downloaded_original` (12,000 and 100,000 IDs),
   `test_unversioned_archive_cache_is_dropped_and_rebuilt`, `test_archive_cache_round_trips_tagged_and_versioned`,
   `test_bad_record_does_not_hide_the_rest_of_the_plugin`, `test_staging_index_and_profiles_can_be_refreshed`,
-  `tests/test_major_masters.py`.
+  `tests/test_rules_pfp.py` (the rules file orders Patch for Purists).

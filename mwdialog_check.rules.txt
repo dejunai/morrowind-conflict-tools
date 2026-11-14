@@ -29,6 +29,11 @@
 ; the wildcards * and ? and mlox's <VER> (a version number). A plugin always loads after its
 ; masters, and every .esm before every .esp, whatever the rules say.
 
+; Patch for Purists (the unofficial patch) loads right after Bloodmoon.esm, before Tamriel_Data,
+; OAAB_Data and every other master.
+[NearStart]
+Patch for Purists.esm
+
 [NearEnd]
 XE Sky Variations.esp
 
