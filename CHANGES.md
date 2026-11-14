@@ -1,3 +1,14 @@
+# Master check cache: tagged relative paths (2026-11-14)
+
+- `mwdialog_mastercheck_cache.json` stores the fix logs and download archives it names (its `logs` and
+  `archives` keys, each copy's `archive`, a verdict's `from_archive`) as `game:` / `staging:` / `downloads:` plus
+  a path relative to that folder, like the other records.
+- Older absolute entries are still read, so nothing is parsed or unpacked again, and are stored tagged on the
+  next check. A path under none of those folders (a `--fix-log` elsewhere) is kept as it is and named once on
+  the console. A tag whose folder isn't known on a run (`--no-archive-lookup` without `--vortex-downloads`) is
+  left as it is.
+- New `tests/test_mastercheck_cache.py`.
+
 # Split of mwdialog_check.py, speed-ups and fixes (2026-11-13, 2026-11-14)
 
 - `mwdialog_check.py` keeps the run as a whole (the `World` scan, fixing, merging, sorting, `--full`, the command

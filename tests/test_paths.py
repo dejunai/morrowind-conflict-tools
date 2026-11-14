@@ -28,6 +28,9 @@ DRIVE_LIT = re.compile(r"(?<![A-Za-z0-9_])[A-Za-z]:\\(?![dDsSnNtTwWbBaAzZrfvxuk0
 SHIPPED = re.compile(r"(mwdialog_|vortex_tidy|chargen_ship_patch|stranded_doors_patch|readme\.md$|changes\.md$)", re.I)
 SHIPPED_DIRS = {"diag"}
 # Written by the tools on a real install and kept out of the repo by .gitignore (caches, reports, journals).
+# mwdialog_mastercheck_cache.json now stores tagged paths (tests/test_mastercheck_cache.py checks what it writes),
+# but an install's copy keeps its older absolute entries until the next check rewrites it, and a path under none
+# of the game/staging/download folders stays absolute by design, so it is not linted here.
 IGNORED_RECORDS = {
     "mwdialog_mastercheck_cache.json", "mwdialog_asset_cache.json", "mwdialog_report.txt",
     "mwdialog_unused_assets.txt", "mwdialog_new_conflicts.txt", "mwdialog.conflicts.txt",

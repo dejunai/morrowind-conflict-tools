@@ -31,6 +31,7 @@ from collections import Counter
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mwdialog_paths as MP  # noqa: E402
 import mwdialog_text as MT  # noqa: E402
+print = MT.printer()  # noqa: A001
 
 DIFFERENT_AT = 0.75                      # confidence at or above which a master is called a different mod
 SIZES_RECORD = "mwdialog_master_sizes.json"
@@ -203,6 +204,61 @@ def _save_json(path, obj):
         os.replace(tmp, path)
     except OSError:
         pass
+
+
+# The cache names files: the fix logs it parsed ("logs" keys), the download archives it read ("archives" keys,
+# "<path>|<size>|<mtime>|<plugin>", and each copy's "archive") and the archive a verdict came from
+# ("from_archive"). On disk they are stored like the other records: game:/staging:/downloads: plus a path relative
+# to that folder (mwdialog_paths.store_path). In memory they are absolute, as the code compares them. Older
+# absolute entries are read as they are and stored tagged on the next save; a path under none of the folders is
+# kept as it is (and named once); a tag whose folder isn't known this run is left as it is.
+
+def _cache_paths(cache, conv_key, conv_val):
+    """A copy of the cache with every path it holds passed through conv_key (dictionary keys) / conv_val."""
+    out = dict(cache)
+    if isinstance(cache.get("logs"), dict):
+        out["logs"] = {conv_key(k): v for k, v in cache["logs"].items()}
+    if isinstance(cache.get("archives"), dict):
+        arcs = {}
+        for k, copies in cache["archives"].items():
+            parts = k.rsplit("|", 3)                 # a Windows path can't hold "|"; nor can a plugin name
+            if len(parts) == 4:
+                k = "|".join([conv_key(parts[0])] + parts[1:])
+            if isinstance(copies, list):
+                copies = [dict(c, archive=conv_val(c["archive"])) if isinstance(c, dict) and c.get("archive")
+                          else c for c in copies]
+            arcs[k] = copies
+        out["archives"] = arcs
+    if isinstance(cache.get("verdicts"), dict):
+        out["verdicts"] = {k: (dict(v, from_archive=conv_val(v["from_archive"]))
+                               if isinstance(v, dict) and v.get("from_archive") else v)
+                           for k, v in cache["verdicts"].items()}
+    return out
+
+
+def load_cache(path, bases):
+    """mwdialog_mastercheck_cache.json with its paths absolute (tagged ones resolved against `bases`)."""
+    def val(p):
+        return MP.resolve_stored(p, bases, missing_ok=True)
+
+    def key(p):
+        r = val(p)
+        return os.path.normcase(r) if MP.is_abs_path(r) else r
+    cache = _load_json(path)
+    return _cache_paths(cache, key, val) if isinstance(cache, dict) else {}
+
+
+def save_cache(path, cache, bases):
+    """Write the cache with its paths tagged. Returns the paths under none of `bases` (kept as they are)."""
+    outside = []
+
+    def val(p):
+        s = MP.store_path(p, bases)
+        if MP.is_abs_path(s) and s not in outside:
+            outside.append(s)
+        return s
+    _save_json(path, _cache_paths(cache, val, val))
+    return outside
 
 
 def read_sizes_record(game_dir):
@@ -545,8 +601,11 @@ def check(world, mw, args=None):
         return {}
     game_dir = os.path.dirname(os.path.abspath(data_dir))
     note_original_sizes(game_dir, world.size_mismatch)
+    vortex_root = getattr(getattr(world, "vortex", None), "root", None) or getattr(args, "vortex_dir", None)
+    dl = None if getattr(args, "no_archive_lookup", False) else downloads_dir(args, required=False)
+    bases = MP.path_bases(game_dir, staging=vortex_root, downloads=dl or getattr(args, "vortex_downloads", None))
     cache_path = os.path.join(game_dir, CACHE_FILE)
-    cache = _load_json(cache_path)
+    cache = load_cache(cache_path, bases)
     fix_log = getattr(args, "fix_log", None)
     extra = [fix_log] if fix_log and os.path.isabs(fix_log) else ([os.path.join(game_dir, fix_log)]
                                                                      if fix_log else [])
@@ -554,8 +613,6 @@ def check(world, mw, args=None):
                                        or os.path.dirname(os.path.abspath(e)) != game_dir])
     sizes = read_sizes_record(game_dir)
     evidence = cache.setdefault("evidence", {})
-    vortex_root = getattr(getattr(world, "vortex", None), "root", None) or getattr(args, "vortex_dir", None)
-    dl = None if getattr(args, "no_archive_lookup", False) else downloads_dir(args, required=False)
     defined = set(world.all_ids) | set(world.topics) | set(world.info_home)
     names = {n: os.path.basename(world.paths[n]) if n in world.paths else n for n in world.loaded}
     loaded = [names[n] for n in world.loaded]
@@ -618,7 +675,10 @@ def check(world, mw, args=None):
                 evidence[f"{plugin_l}|{ml}"] = sorted(set(seen) | set(info["misses"]))[:500]
             _report(r, v)
     cache["verdicts"] = {f"{p}|{m}": v for (p, m), v in verdicts.items() if v["kind"] != "matches"}
-    _save_json(cache_path, cache)
+    outside = save_cache(cache_path, cache, bases)
+    if outside:
+        print(f"  {CACHE_FILE}: {len(outside)} path(s) under none of the game, staging and download folders, kept "
+              f"as they are, e.g. {outside[0]}", file=sys.stderr)
     return verdicts
 
 
