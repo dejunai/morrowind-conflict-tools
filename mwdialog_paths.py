@@ -226,7 +226,29 @@ def _scan_json_backup_dir(folder, game_id):
     return None, None
 
 
-def read_vortex_settings(game_id=GAME_ID):
+_SETTINGS_MEMO = {}
+
+
+def read_vortex_settings(game_id=GAME_ID, refresh=False):
+    """_read_vortex_settings, once per run and %APPDATA% (staging and downloads both ask). Only an answer that
+    names a folder is kept, so a later call tries again after a failure; refresh=True reads Vortex again."""
+    key = (game_id, os.environ.get("APPDATA"))
+    info = None if refresh else _SETTINGS_MEMO.get(key)
+    if info is None:
+        info = _read_vortex_settings(game_id)
+        if info.get("downloads_tmpl") or info.get("staging_tmpl"):
+            _SETTINGS_MEMO[key] = info
+        else:
+            _SETTINGS_MEMO.pop(key, None)
+    return {k: list(v) if isinstance(v, list) else v for k, v in info.items()}
+
+
+def clear_vortex_settings_cache():
+    """Forget what read_vortex_settings read (a long-running caller, after Vortex's settings changed)."""
+    _SETTINGS_MEMO.clear()
+
+
+def _read_vortex_settings(game_id=GAME_ID):
     """Read Vortex's download path and Morrowind install/staging path templates.
 
     Returns dict: downloads_tmpl, staging_tmpl, tried (folders looked at), reason (if nothing useful).

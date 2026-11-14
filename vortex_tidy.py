@@ -588,6 +588,7 @@ def apply(moves, staging, progress=None, head_extra=None):
     head.update(head_extra or {})
     with open(JOURNAL, "a", encoding="utf-8") as j:
         j.write(json.dumps(head) + "\n")
+        j.flush()
         for i, (src, dst, why) in enumerate(moves):
             try:
                 if dst is None:
@@ -595,6 +596,7 @@ def apply(moves, staging, progress=None, head_extra=None):
                         if not os.listdir(base):
                             os.rmdir(base)
                             j.write(json.dumps({"rmdir": base}) + "\n")
+                            j.flush()
                     if progress is not None:
                         progress.append(i)
                     continue
@@ -619,8 +621,16 @@ def undo():
         print("Nothing to undo (no journal).")
         return 1
     runs, cur = [], None
-    for line in open(JOURNAL, encoding="utf-8"):
-        rec = json.loads(line)
+    with open(JOURNAL, encoding="utf-8") as jf:
+        journal_lines = jf.read().splitlines()
+    for line in journal_lines:
+        if not line.strip():
+            continue
+        try:
+            rec = json.loads(line)
+        except ValueError:                            # a line cut short when an --apply was interrupted
+            print(f"  (skipped an unreadable journal line: {line[:80]!r})", file=sys.stderr)
+            continue
         if "run" in rec:
             cur = {"head": rec, "ops": []}
             runs.append(cur)

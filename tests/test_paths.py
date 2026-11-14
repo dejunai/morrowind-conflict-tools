@@ -23,13 +23,34 @@ CODE_SUFFIXES = {".py", ".bat", ".md", ".gitignore"}
 DRIVE_LIT = re.compile(r"(?<![A-Za-z0-9_])[A-Za-z]:\\(?![dDsSnNtTwWbBaAzZrfvxuk0-9])")
 
 
+# Installed in the game folder (no .git): only the files this repo ships are ours to lint; the folder also holds
+# the game, other mods' tools and backups.
+SHIPPED = re.compile(r"(mwdialog_|vortex_tidy|chargen_ship_patch|stranded_doors_patch|readme\.md$|changes\.md$)", re.I)
+SHIPPED_DIRS = {"diag"}
+# Written by the tools on a real install and kept out of the repo by .gitignore (caches, reports, journals).
+IGNORED_RECORDS = {
+    "mwdialog_mastercheck_cache.json", "mwdialog_asset_cache.json", "mwdialog_report.txt",
+    "mwdialog_unused_assets.txt", "mwdialog_new_conflicts.txt", "mwdialog.conflicts.txt",
+    "mwdialog_loadorder_undo.txt", "mwdialog_longpaths.json", "mwdialog_luafix.json", "mwdialog_luafix_plan.txt",
+    "mwdialog_fixes.log",
+}
+
+
+def _in_repo():
+    return (SCAN_ROOT / ".git").exists()
+
+
 def _iter_code_files():
+    repo = _in_repo()
     for p in SCAN_ROOT.rglob("*"):
         if not p.is_file():
             continue
-        if any(part in SKIP_DIRS for part in p.parts):
+        rel = p.relative_to(SCAN_ROOT).parts
+        if any(part in SKIP_DIRS for part in rel):
             continue
         if p.suffix.lower() not in CODE_SUFFIXES and p.name not in {".gitignore"}:
+            continue
+        if not repo and not ((len(rel) == 1 and SHIPPED.match(p.name)) or (len(rel) == 2 and rel[0] in SHIPPED_DIRS)):
             continue
         yield p
 
@@ -223,8 +244,9 @@ def test_find_7z_path_then_tools_no_program_files(tmp_path, monkeypatch):
     assert "tools" in msg
     assert "Program Files" not in msg
     assert "registry" not in msg.lower() or "No registry" in msg or "PATH" in msg
-    # the error must not recommend a drive-letter Program Files path
-    assert DRIVE_LIT.search(msg) is None
+    # the error must not recommend a drive-letter path (the folder it looked in is this test's temp folder,
+    # which on Windows has a drive letter of its own)
+    assert DRIVE_LIT.search(msg.replace(str(empty), "<game>")) is None
 
 
 def test_luajit_candidates_are_relative_to_game(tmp_path):
@@ -245,7 +267,7 @@ def test_no_absolute_paths_in_data_records():
     for p in list(SCAN_ROOT.glob("mwdialog_*.json")) + list(SCAN_ROOT.glob("mwdialog_*.txt")) + [
         SCAN_ROOT / "mwdialog_check.rules.txt"
     ]:
-        if not p.is_file():
+        if not p.is_file() or p.name.lower() in IGNORED_RECORDS:
             continue
         text = p.read_text(encoding="utf-8", errors="replace")
         for i, line in enumerate(text.splitlines(), 1):

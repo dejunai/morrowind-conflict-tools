@@ -11,7 +11,7 @@ import sys
 
 import pytest
 
-from conftest import SRC, ah, m, rec, sub, tes3, z
+from conftest import SRC, ah, m, patch_everywhere, rec, sub, tes3, z
 
 NIF = b"NetImmerse File Format, Version 4.0.0.2\n" + struct.pack("<I", 0x04000002)
 
@@ -125,7 +125,7 @@ def test_model_textures_come_from_the_cache_on_run_2(tmp_path, capsys, monkeypat
 
     def boom(_b):
         raise AssertionError("a model was read again")
-    monkeypatch.setattr(m, "nif_texture_refs", boom)
+    patch_everywhere(monkeypatch, "nif_texture_refs", boom)     # mwdialog_datatree reads models too
     second = run(df, capsys)
     assert "tx_missing" in second
     rows = db_rows(g)

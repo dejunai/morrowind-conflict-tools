@@ -399,4 +399,5 @@ def test_tidy_asset_repair_that_fails_stays_in_the_plan(tidy_assets, monkeypatch
     assert tidy_assets("--apply", "--yes") == 1
     plan = open(vt.PLAN).read()
     assert plan.startswith("# partially applied") and "ASSET CHECK" in plan
+    plan = plan.replace("\\", "/")                          # the plan names files the way this OS writes them
     assert "repair broken Meshes/empty.nif" in plan and "a.nif" not in plan and "readme.txt" not in plan

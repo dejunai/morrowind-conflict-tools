@@ -128,7 +128,8 @@ def test_windows_console_read_when_stdin_is_redirected(monkeypatch):
         opened.append(path)
         assert path == "CONIN$"
         return io.StringIO("b\n")
-    monkeypatch.setattr(m, "open", fake_open, raising=False)
+    # console_interactive and ask live in mwdialog_console: its open is the one they call
+    monkeypatch.setattr(sys.modules["mwdialog_console"], "open", fake_open, raising=False)
     assert m.console_interactive() == (True, "")
     assert m.ask("? ") == "b" and opened == ["CONIN$", "CONIN$"]
 

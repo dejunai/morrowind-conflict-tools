@@ -1,3 +1,17 @@
+# Split of mwdialog_check.py, speed-ups and fixes (2026-11-13, 2026-11-14)
+
+- `mwdialog_check.py` keeps the run as a whole (the `World` scan, fixing, merging, sorting, `--full`, the command
+  line). Code that stands on its own moved to 15 `mwdialog_*` modules; `mwdialog_check` imports every name back.
+  Command-line options, `--help`, plan files, records and JSON are unchanged. Details: `MWDIALOG_REFACTOR.md`.
+- Seven speed-ups with the same results (default check on 981 plugins: 98 s to 47 s). `mwstranded_data.json` is
+  now written with its cells sorted.
+- `--undo` (`vortex_tidy.py`, `mwdialog_luafix.py`) skips a journal line cut short by an interrupted `--apply`.
+- mwguard and mwsoundguard restart their report timers after a save loads; mwhangwatch finds MWSE's handler
+  tables through mwguard's wrapper.
+- Fixed after review: the asset check crashed on every model (wrong module handed to `mwdialog_assets`), and the
+  Vortex staging/downloads folders were lost from `record_bases`, so `--restore-textures` could not find
+  `staging:` originals. New `tests/test_split_modules.py`; the tests also run from the game folder.
+
 # Human-readable output wrapping (2026-11-11)
 
 - Console output, report text, dated `mwdialog_fixes.log` lines, and `argparse --help` wrap at 115 characters (`mwdialog_text.py`).

@@ -2164,7 +2164,11 @@ def _read_runs(journal):
         for line in f:
             if not line.strip():
                 continue
-            rec = json.loads(line)
+            try:
+                rec = json.loads(line)
+            except ValueError:                        # a line cut short when an --apply was interrupted
+                print(f"  (skipped an unreadable journal line: {line[:80]!r})", file=sys.stderr)
+                continue
             if "run" in rec:
                 cur = {"head": rec, "ops": []}
                 runs.append(cur)

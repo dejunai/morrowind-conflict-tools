@@ -452,6 +452,9 @@ def original_from_archive(plugin_name, installed_data, mod_folder, dl, cache, ga
 
 # ------------------------------------------------------------------------------------------------ verdicts
 
+_STEM_RE = {}
+
+
 def candidate_masters(plugin, declared, loaded, original_mod_guess=None):
     """{master name: why}: masters in the header, plus loaded plugins the file name says it patches
     ('X - Y Compatibility Patch.esp' -> X.esp and Y.esp)."""
@@ -464,7 +467,10 @@ def candidate_masters(plugin, declared, loaded, original_mod_guess=None):
         s = os.path.splitext(n)[0].lower()
         if n.lower() == plugin.lower() or n.lower() in BASE_GAME or len(s) < 5 or n in out:
             continue
-        if re.search(r"(?<![a-z0-9])" + re.escape(s) + r"(?![a-z0-9])", stem):
+        pat = _STEM_RE.get(s)                     # one compiled pattern per plugin name, not one per pair
+        if pat is None:
+            pat = _STEM_RE[s] = re.compile(r"(?<![a-z0-9])" + re.escape(s) + r"(?![a-z0-9])")
+        if pat.search(stem):
             out[n] = "named in the file name"
     return out
 

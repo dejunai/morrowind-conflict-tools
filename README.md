@@ -26,6 +26,7 @@ On Windows you can also use the included `mwdialog_check.bat` and `vortex_tidy.b
 | `mwdialog_luafix.py` | Static checker and in-place patcher for MWSE Lua (parser-based, not regex). Nil guards, absurd event priorities, log-spam shim, one-shot handlers, and related rules. Plan first, then `--apply`. |
 | `mwdialog_lua.py` | Pure-Python Lua 5.1 / LuaJIT tokenizer and parser, used by `mwdialog_luafix.py`. |
 | `mwdialog_planfile.py` | Shared plan-file helpers: atomic writes, blanking after a successful `--apply`, audit copies, strict comparison of the reviewed plan. |
+| `mwdialog_tes3.py`, `mwdialog_bsa.py`, `mwdialog_media.py`, `mwdialog_backup.py`, `mwdialog_loadorder.py`, `mwdialog_records.py`, `mwdialog_state.py`, `mwdialog_cellmods.py`, `mwdialog_datatree.py`, `mwdialog_console.py`, `mwdialog_masters.py`, `mwdialog_patchfile.py`, `mwdialog_redundant.py`, `mwdialog_generated.py`, `mwdialog_restore.py` | Parts of `mwdialog_check.py` split out into their own modules (plugin format, BSAs, asset formats, backups, load order, records, state files, what `--cell-conflicts` writes, the Data Files tree, console, masters, the fix patch, redundant plugins, generated files, restoring). `mwdialog_check.py` imports every name back. See `MWDIALOG_REFACTOR.md`. |
 | `mwdialog_text.py` | Shared helper that wraps human-readable console, report, `--help`, and fix-log text at 115 characters, with a hanging indent and bullets for lists. |
 | `chargen_ship_patch.py` | Builds `Chargen Ship - Original Model.esp` so the chargen ship keeps the original hull shape when a ship replacer is installed. |
 | `stranded_doors_patch.py` | Builds `Stranded Doors - DRPV Patch.esp` to put two load doors left in the void back into Dwemer Ruins Plus. |
@@ -99,6 +100,10 @@ If Vortex's data cannot be read and no override is given, the tool exits with a 
 
 The "deleted by vortex_tidy" folder is derived from the resolved staging folder (`<staging name> - deleted by vortex_tidy`, beside it).
 
+## MWSE mods
+
+`Data Files/MWSE/mods/` holds three of the MWSE Lua mods these tools work with: `mwguard` (a passive profiler: it times per-frame handlers and logs extreme priorities to `MWSE\logs\mwguard.log`, without throttling or changing other mods), `mwsoundguard` and `mwhangwatch`.
+
 ## Output wrapping
 
 Human-readable feedback (console, `mwdialog_report.txt` when stdout is redirected, dated lines in `mwdialog_fixes.log`, and `argparse --help`) is wrapped at 115 characters. A continuation line is indented two spaces beyond the line's own indent, or aligns under a `- ` bullet or under the message after a log timestamp. A path or other single token longer than 115 characters is left on its own line.
@@ -110,7 +115,7 @@ Plan files (`vortex_tidy_plan.txt`, `mwdialog_luafix_plan.txt`) are written unwr
 - Put the scripts in the Morrowind game folder, or pass paths (`--staging` for tidy, folder arguments for luafix).
 - For tidy, Purge in Vortex first, `--apply`, then Deploy.
 - Do not run `--full`, `--fix`, or `--apply` against live mods until you have reviewed the plan.
-- Tests live in `tests/`. From a clone: `pytest`.
+- Tests live in `tests/`. From a clone, or from the game folder with `tests\` copied beside the scripts: `pytest`. They only use temp folders.
 
 ## License
 

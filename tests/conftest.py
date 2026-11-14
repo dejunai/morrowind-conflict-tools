@@ -34,6 +34,21 @@ ah = _load("mwdialog_assets")
 vt = _load("vortex_tidy")
 
 
+def patch_everywhere(monkeypatch, name, value, raising=True):
+    """Replace `name` on mwdialog_check and on every mwdialog_* module that holds it. mwdialog_check
+    imports the moved names back, so patching it alone does not reach code that now lives in the smaller
+    modules (mwdialog_datatree, mwdialog_console...)."""
+    hit = False
+    for modname, mod in list(sys.modules.items()):
+        if mod is None or not (modname == "mwdialog_check" or modname.startswith("mwdialog_")):
+            continue
+        if name in vars(mod):
+            monkeypatch.setattr(mod, name, value)
+            hit = True
+    if not hit:
+        monkeypatch.setattr(m, name, value, raising=raising)
+
+
 def sub(n, d):
     return n.encode() + struct.pack("<I", len(d)) + d
 
