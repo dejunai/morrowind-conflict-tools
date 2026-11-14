@@ -14,14 +14,16 @@ without complaint; its edits just point at records that aren't there. The signal
      taken from the plugin as downloaded (Vortex download archive), when the header has been rewritten.
 
 Verdicts per (plugin, master): "matches", "other version" (most of it lines up; a few references the master no
-longer has) or "different mod" (confidence >= DIFFERENT_AT). For "different mod" mwdialog_check does not sync
-the header size or strip the dead references (it warns instead), and --disable-mismatched takes the plugin out
-of the load order. Log parses and archive reads are cached in mwdialog_mastercheck_cache.json."""
+longer has) or "different mod" (confidence >= DIFFERENT_AT). When the plugin was saved against a master of
+exactly the installed size, the verdict is at most "other version" unless the misses are overwhelming: at
+least SAME_SIZE_OVERWHELMING (90%) of the references into the master don't resolve, and at least
+SAME_SIZE_MIN_MISSES (8) of them (a cell-reference error counts as 3). For "different mod" mwdialog_check
+does not sync the header size or strip the dead references (it warns instead), and --disable-mismatched takes
+the plugin out of the load order. Log parses and archive reads are cached in mwdialog_mastercheck_cache.json."""
 import hashlib
 import json
 import os
 import re
-import shutil
 import struct
 import subprocess
 import sys
@@ -30,10 +32,14 @@ import zipfile
 from collections import Counter
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mwdialog_paths as MP  # noqa: E402
+import mwdialog_tes3 as T  # noqa: E402
 import mwdialog_text as MT  # noqa: E402
 print = MT.printer()  # noqa: A001
 
 DIFFERENT_AT = 0.75                      # confidence at or above which a master is called a different mod
+SAME_SIZE_OVERWHELMING = 0.9             # same-size master: "different mod" only when at least this share of the
+SAME_SIZE_MIN_MISSES = 8                 # references into it, and at least this many, don't resolve
+ARCHIVE_CACHE_VERSION = 2                # "archives" entries: all IDs kept, key uses st_mtime_ns
 SIZES_RECORD = "mwdialog_master_sizes.json"
 CACHE_FILE = "mwdialog_mastercheck_cache.json"
 FIX_LOGS = ("mwdialog_fixes.log", os.path.join("mwdialog_backup", "fixes.archive.txt"))
@@ -68,41 +74,31 @@ ADDED_RE = re.compile(r"added master (?P<m>.+?\.(?:esp|esm))(?: removed)? \(", r
 
 # ---------------------------------------------------------------------------------------------- plugin facts
 
-def _cstr(b):
-    return bytes(b).split(b"\0", 1)[0].decode("cp1252", "replace").strip()
-
-
-def _records(data):
-    pos, n = 0, len(data)
-    while pos + 16 <= n:
-        tag = data[pos:pos + 4].decode("ascii", "replace")
-        size = struct.unpack_from("<I", data, pos + 4)[0]
-        flags = struct.unpack_from("<I", data, pos + 12)[0]
-        yield tag, flags, data[pos + 16:pos + 16 + size]
-        pos += 16 + size
-
-
 def _subs(body):
-    pos, n = 0, len(body)
-    while pos + 8 <= n:
-        name = body[pos:pos + 4].decode("ascii", "replace")
-        size = struct.unpack_from("<I", body, pos + 4)[0]
-        yield name, body[pos + 8:pos + 8 + size]
-        pos += 8 + size
+    """Subrecords of one record; after a bad subrecord size, the ones read before it."""
+    out = []
+    try:
+        for x in T.iter_subs(body):
+            out.append(x)
+    except T.FormatError:
+        pass
+    return out
 
 
 def header_masters(data):
     """[(master name, size the plugin was saved against or None)] from the TES3 header."""
     out = []
-    for tag, _f, body in _records(data):
-        if tag != "TES3":
-            break
-        for n, v in _subs(body):
-            if n == "MAST":
-                out.append([_cstr(v), None])
-            elif n == "DATA" and out and out[-1][1] is None and len(v) >= 8:
-                out[-1][1] = struct.unpack_from("<Q", v)[0]
-        break
+    try:
+        _off, tag, _flags, body = next(T.iter_records(data))
+    except (StopIteration, T.FormatError):
+        return []
+    if tag != "TES3":
+        return []
+    for n, v in _subs(body):
+        if n == "MAST":
+            out.append([T.cstr(v), None])
+        elif n == "DATA" and out and out[-1][1] is None and len(v) >= 8:
+            out[-1][1] = struct.unpack_from("<Q", v)[0]
     return [tuple(x) for x in out]
 
 
@@ -124,54 +120,74 @@ def plugin_facts(data):
     "links": [(topic, info id)], "info_topic": {info id: topic}}; ids lowercase."""
     defs, refs, dials, links = set(), set(), set(), []
     topic = None
-    for tag, flags, body in _records(data):
+
+    def one(tag, body):
+        nonlocal topic, refs
         if tag == "TES3":
-            continue
-        subs = list(_subs(body))
+            return
+        subs = _subs(body)
         if tag == "DIAL":
-            topic = next((_cstr(v).lower() for n, v in subs if n == "NAME"), None)
+            topic = next((T.cstr(v).lower() for n, v in subs if n == "NAME"), None)
             if topic:
                 dials.add(topic)
-            continue
+            return
         if tag == "INFO":
             for n, v in subs:
                 if n == "INAM":
-                    defs.add(_cstr(v).lower())
-                elif n in ("PNAM", "NNAM") and _cstr(v):
-                    links.append((topic, _cstr(v).lower()))
+                    defs.add(T.cstr(v).lower())
+                elif n in ("PNAM", "NNAM") and T.cstr(v):
+                    links.append((topic, T.cstr(v).lower()))
                 elif n == "BNAM":
-                    refs |= script_ids(_cstr(v))
+                    refs |= script_ids(T.cstr(v))
         elif tag == "SCPT":
             for n, v in subs:
                 if n == "SCHD":
-                    defs.add(_cstr(v[:32]).lower())
+                    defs.add(T.cstr(v[:32]).lower())
                 elif n == "SCTX":
-                    refs |= script_ids(_cstr(v))
+                    refs |= script_ids(T.cstr(v))
         elif tag not in ("CELL", "LAND", "PGRD", "GMST", "SKIL", "MGEF", "TES3"):
-            nm = next((_cstr(v).lower() for n, v in subs if n == "NAME"), None)
+            nm = next((T.cstr(v).lower() for n, v in subs if n == "NAME"), None)
             if nm:
                 defs.add(nm)
         for n, v in subs:
             if n in REF_SUBS.get(tag, ()):
-                refs.add(_cstr(v).lower())
+                refs.add(T.cstr(v).lower())
             elif n in ("NPCO", "CNTO") and tag in ("NPC_", "CREA", "CONT") and len(v) >= 5:
-                refs.add(_cstr(v[4:]).lower())
+                refs.add(T.cstr(v[4:]).lower())
+
+    records = T.iter_records(data)
+    while True:                       # a bad record size ends the walk: nothing after it can be found
+        try:
+            _off, tag, _flags, body = next(records)
+        except (StopIteration, T.FormatError):
+            break
+        try:
+            one(tag, body)
+        except (T.FormatError, struct.error, ValueError, IndexError):
+            continue                  # one unreadable record doesn't hide the rest of the plugin
     refs = {r for r in refs if r and r not in NOT_IDS}
     return {"defs": defs, "refs": refs, "dials": dials, "links": links}
 
 
-def master_profile(path, memo={}):
+_PROFILE_MEMO = {}
+
+
+def master_profile(path, memo=None, refresh=False):
     """IDs a master defines (objects, scripts, topics, response ids) and its main ID prefixes. Memoised by
-    path, size and date."""
+    path, size and mtime_ns; refresh=True reads the file again."""
+    if memo is None:
+        memo = _PROFILE_MEMO
     try:
         st = os.stat(path)
     except OSError:
         return None
-    key = (os.path.abspath(path), st.st_size, int(st.st_mtime))
-    if key in memo:
+    key = (os.path.normcase(os.path.abspath(path)), st.st_size, st.st_mtime_ns)
+    if key in memo and not refresh:
         return memo[key]
-    with open(path, "rb") as f:
-        data = f.read()
+    try:
+        data = T.read_plugin_bytes(path)
+    except OSError:
+        return None
     facts = plugin_facts(data)
     ids = facts["defs"] | facts["dials"]
     pref = Counter(mo.group(1) for i in ids for mo in [PREFIX_RE.match(i)] if mo)
@@ -207,7 +223,7 @@ def _save_json(path, obj):
 
 
 # The cache names files: the fix logs it parsed ("logs" keys), the download archives it read ("archives" keys,
-# "<path>|<size>|<mtime>|<plugin>", and each copy's "archive") and the archive a verdict came from
+# "<path>|<size>|<mtime_ns>|<plugin>", and each copy's "archive") and the archive a verdict came from
 # ("from_archive"). On disk they are stored like the other records: game:/staging:/downloads: plus a path relative
 # to that folder (mwdialog_paths.store_path). In memory they are absolute, as the code compares them. Older
 # absolute entries are read as they are and stored tagged on the next save; a path under none of the folders is
@@ -480,7 +496,12 @@ def plugins_in_archive(archive, plugin_name, game_dir=None):
 
 def original_from_archive(plugin_name, installed_data, mod_folder, dl, cache, game_dir=None):
     """The plugin as downloaded: {"archive", "entry", "masters": [(name, size)], "refs": [...], "defs": [...]}
-    or None. The copy whose records best match the installed file wins. Cached by archive size and date."""
+    or None. The copy whose records best match the installed file wins (a copy sharing fewer IDs with it than it
+    differs by is not used). Cached by archive size and mtime_ns, every ID kept; entries from an older cache
+    layout (cache["archives_version"] other than ARCHIVE_CACHE_VERSION) are dropped and read again."""
+    if cache.get("archives_version") != ARCHIVE_CACHE_VERSION:
+        cache["archives"] = {}
+        cache["archives_version"] = ARCHIVE_CACHE_VERSION
     arcs = cache.setdefault("archives", {})
     inst = plugin_facts(installed_data)
     best = None
@@ -489,18 +510,21 @@ def original_from_archive(plugin_name, installed_data, mod_folder, dl, cache, ga
             st = os.stat(arc)
         except OSError:
             continue
-        key = f"{os.path.normcase(arc)}|{st.st_size}|{int(st.st_mtime)}|{plugin_name.lower()}"
+        key = f"{os.path.normcase(arc)}|{st.st_size}|{st.st_mtime_ns}|{plugin_name.lower()}"
         copies = arcs.get(key)
         if copies is None:
             copies = []
             for entry, data in plugins_in_archive(arc, plugin_name, game_dir=game_dir):
                 f = plugin_facts(data)
                 copies.append({"archive": arc, "entry": entry, "masters": header_masters(data),
-                               "refs": sorted(f["refs"])[:5000], "defs": sorted(f["defs"])[:5000],
-                               "links": [list(x) for x in f["links"]][:5000]})
+                               "refs": sorted(f["refs"]), "defs": sorted(f["defs"]),
+                               "links": [list(x) for x in f["links"]]})
             arcs[key] = copies
         for c in copies:
-            score = len(set(c["defs"]) & inst["defs"]) - len(set(c["defs"]) ^ inst["defs"])
+            defs = set(c["defs"])
+            score = len(defs & inst["defs"]) - len(defs ^ inst["defs"])
+            if score < 0:
+                continue
             if best is None or score > best[0]:
                 best = (score, c)
     return best[1] if best else None
@@ -562,12 +586,46 @@ def assess(facts, profile, defined_anywhere, removed=(), refgone=0, cell_ref_err
         conf = ratio * min(1.0, total / 4)            # little evidence: less sure either way
         if size_note == "other size" and ratio > 0:
             conf = min(0.97, conf + 0.1)
+        if size_note == "same size" and not (ratio >= SAME_SIZE_OVERWHELMING and n_miss >= SAME_SIZE_MIN_MISSES):
+            conf = min(conf, round(DIFFERENT_AT - 0.01, 2))   # saved against this very file: a few misses are bugs
         kind = "different mod" if conf >= DIFFERENT_AT else ("other version" if n_miss else "matches")
-    if size_note == "same size":
-        conf, kind = min(conf, 0.05), ("other version" if n_miss else "matches")
     return round(conf, 2), kind, {"hits": len(hits), "misses": sorted(misses)[:20], "refgone": refgone,
                                   "cell_ref_errors": bool(cell_ref_errors), "size": size_note,
                                   "total": total}
+
+
+_STAGING_INDEX = {}
+
+
+def _staging_index(vortex_root, refresh=False):
+    """filename lower -> first mod folder that has that file at its top level. Built once per root;
+    refresh=True lists the staging folder again."""
+    root = os.path.normcase(os.path.abspath(vortex_root))
+    idx = None if refresh else _STAGING_INDEX.get(root)
+    if idx is not None:
+        return idx
+    idx = {}
+    try:
+        for d in os.scandir(vortex_root):
+            if not d.is_dir():
+                continue
+            try:
+                for x in os.scandir(d.path):
+                    if x.is_file():
+                        idx.setdefault(x.name.lower(), d.name)
+            except OSError:
+                continue
+    except OSError:
+        idx = {}
+    _STAGING_INDEX[root] = idx
+    return idx
+
+
+def clear_caches():
+    """Forget the staging index and the master profiles read this run (a long-running caller, after mods or
+    the staging folder changed). The on-disk mwdialog_mastercheck_cache.json is not touched."""
+    _STAGING_INDEX.clear()
+    _PROFILE_MEMO.clear()
 
 
 def staging_folder_of(path, vortex_root, mw):
@@ -581,14 +639,7 @@ def staging_folder_of(path, vortex_root, mw):
     except Exception:
         pass
     if vortex_root and os.path.isdir(vortex_root):
-        fn = os.path.basename(path).lower()
-        for d in os.listdir(vortex_root):
-            full = os.path.join(vortex_root, d)
-            try:
-                if os.path.isdir(full) and any(x.lower() == fn for x in os.listdir(full)):
-                    return d
-            except OSError:
-                continue
+        return _staging_index(vortex_root).get(os.path.basename(path).lower())
     return None
 
 
@@ -627,8 +678,7 @@ def check(world, mw, args=None):
         if not cands:
             continue
         try:
-            with open(path, "rb") as f:
-                data = f.read()
+            data = T.read_plugin_bytes(path)
         except OSError:
             continue
         facts = plugin_facts(data)

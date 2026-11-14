@@ -12,7 +12,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mwdialog_text as MT  # noqa: E402
 from mwdialog_tes3 import (  # noqa: E402
-    FormatError, ITEM_TAGS, cstr, first_sub, iter_records)
+    FormatError, ITEM_TAGS, cstr, first_sub, iter_records, read_plugin_bytes)
 print = MT.printer()  # noqa: A001
 
 COLLIDE_DATA = "mwcollide_data.json"           # Data Files\MWSE\config\, read by the mwcollide MWSE mod
@@ -130,15 +130,21 @@ _OBJECT_INFO = {}
 
 def object_info(order):
     """(tag_of, model_of, scripted) for every object id the plugins define (the last definition wins)."""
-    key = tuple(n.lower() for n, _p in order)
+    parts = []
+    for n, p in order:
+        try:
+            st = os.stat(p)
+            parts.append((n.lower(), st.st_size, st.st_mtime_ns))
+        except OSError:
+            parts.append((n.lower(), None, None))
+    key = tuple(parts)
     if key in _OBJECT_INFO:
         return _OBJECT_INFO[key]
     model_of, tag_of, scripted = {}, {}, set()
-    for n, p in order:
+    for _n, p in order:
         try:
-            with open(p, "rb") as f:
-                data = f.read()
-            for off, tag, flags, body in iter_records(data):
+            data = read_plugin_bytes(p)
+            for _off, tag, _flags, body in iter_records(data):
                 if tag in ("CELL", "DIAL", "INFO", "LAND", "PGRD", "TES3", "SCPT", "GMST"):
                     continue
                 nm = first_sub(body, b"NAME")

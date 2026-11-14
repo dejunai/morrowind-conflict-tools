@@ -28,8 +28,8 @@ On Windows you can also use the included `mwdialog_check.bat` and `vortex_tidy.b
 | `mwdialog_planfile.py` | Shared plan-file helpers: atomic writes, blanking after a successful `--apply`, audit copies, strict comparison of the reviewed plan. |
 | `mwdialog_tes3.py`, `mwdialog_bsa.py`, `mwdialog_media.py`, `mwdialog_backup.py`, `mwdialog_loadorder.py`, `mwdialog_records.py`, `mwdialog_state.py`, `mwdialog_cellmods.py`, `mwdialog_datatree.py`, `mwdialog_console.py`, `mwdialog_masters.py`, `mwdialog_patchfile.py`, `mwdialog_redundant.py`, `mwdialog_generated.py`, `mwdialog_restore.py` | Parts of `mwdialog_check.py` split out into their own modules (plugin format, BSAs, asset formats, backups, load order, records, state files, what `--cell-conflicts` writes, the Data Files tree, console, masters, the fix patch, redundant plugins, generated files, restoring). `mwdialog_check.py` imports every name back. See `MWDIALOG_REFACTOR.md`. |
 | `mwdialog_text.py` | Shared helper that wraps human-readable console, report, `--help`, and fix-log text at 115 characters, with a hanging indent and bullets for lists. |
-| `chargen_ship_patch.py` | Builds `Chargen Ship - Original Model.esp` so the chargen ship keeps the original hull shape when a ship replacer is installed. |
-| `stranded_doors_patch.py` | Builds `Stranded Doors - DRPV Patch.esp` to put two load doors left in the void back into Dwemer Ruins Plus. |
+| `_backup\retired-one-off-20261114\chargen_ship_patch.py` | Retired. Built `Chargen Ship - Original Model.esp`. Not part of the checker. |
+| `_backup\retired-one-off-20261114\stranded_doors_patch.py` | Retired. Built `Stranded Doors - DRPV Patch.esp`. Not part of the checker. |
 
 `diag/` holds small diagnostic scripts used while developing the tools. They hard-code a local game path.
 

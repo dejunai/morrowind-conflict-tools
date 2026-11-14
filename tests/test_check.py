@@ -146,6 +146,21 @@ def test_I3_independent_additions_both_kept():
     assert sorted(e for e, _l in m.parse_levlist("LEVI", out[16:])[2]) == ["a", "c", "d"]
 
 
+def test_I3_dropping_one_level_keeps_another_mods_other_level():
+    def levels(entries):
+        body = (sub("NAME", b"l_list\0") + sub("DATA", struct.pack("<I", 1)) + sub("NNAM", bytes([0]))
+                + sub("INDX", struct.pack("<I", len(entries)))
+                + b"".join(sub("INAM", z(e)) + sub("INTV", struct.pack("<H", lvl)) for e, lvl in entries))
+        return body
+    defs = [("Morrowind.esm", levels([("sword", 1)]), False),
+            ("A.esp", levels([("sword", 1), ("sword", 10)]), False),
+            ("B.esp", levels([("axe", 1)]), False)]
+    mo = _masters_of({"a.esp": {"morrowind.esm"}, "b.esp": {"morrowind.esm"}})
+    out, _n = m.merge_levlist("LEVI", defs, None, mo)
+    got = m.parse_levlist("LEVI", out[16:])[2]
+    assert ("sword", 1) not in got and ("sword", 10) in got and ("axe", 1) in got
+
+
 def test_I3_flags_from_last_plugin_that_changed_them():
     defs = [("Morrowind.esm", lev(["a"], flags=1), False), ("A.esp", lev(["a", "c"], flags=3), False),
             ("B.esp", lev(["a", "d"], flags=1), False)]

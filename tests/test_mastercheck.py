@@ -150,6 +150,17 @@ def test_rewritten_header_original_from_the_download_archive(game, tmp_path):
     assert v is None
 
 
+def test_unrelated_archive_copy_is_not_used(game, tmp_path):
+    _g, df = game
+    installed = open(df / "Fooland.esp", "rb").read()
+    other = plugin(tmp_path / "other.esp", [], [misc("completely_different")])
+    dl = tmp_path / "dl"
+    dl.mkdir()
+    with zipfile.ZipFile(dl / "Fooland-999-1-0.zip", "w") as zf:
+        zf.writestr("Fooland.esp", other)
+    assert mc.original_from_archive("Fooland.esp", installed, "Fooland-999-1-0", str(dl), {}) is None
+
+
 def test_assess_scores():
     prof = {"ids": {"zz_a", "zz_b", "zz_c", "zz_d"}, "dials": set(), "prefixes": {"zz"}}
     facts = lambda refs: {"defs": set(), "refs": set(refs), "dials": set(), "links": []}
@@ -158,9 +169,20 @@ def test_assess_scores():
     assert k == "other version" and c == 0.25
     c, k, _ = mc.assess(facts(["zz_x", "zz_y", "zz_w", "zz_v"]), prof, set())
     assert k == "different mod" and c == 1.0
-    # same original size as the installed master: at most "other version"
-    assert mc.assess(facts(["zz_x", "zz_y", "zz_w", "zz_v"]), prof, set(), original_size=5, installed_size=5)[1] \
+    # saved against a master of exactly the installed size: a few misses make it "other version" at most
+    c, k, info = mc.assess(facts(["zz_x", "zz_y", "zz_w", "zz_v"]), prof, set(), original_size=5, installed_size=5)
+    assert k == "other version" and c < mc.DIFFERENT_AT and info["size"] == "same size"
+    many = [f"zz_m{i}" for i in range(9)] + ["zz_a", "zz_b", "zz_c"]          # 9 of 12 missing: 75%
+    assert mc.assess(facts(many), prof, set())[1] == "different mod"
+    assert mc.assess(facts(many), prof, set(), original_size=5, installed_size=5)[1] == "other version"
+    # ... unless the misses are overwhelming (>= 90% of them, at least 8)
+    c, k, _ = mc.assess(facts([f"zz_m{i}" for i in range(10)]), prof, set(), original_size=5, installed_size=5)
+    assert k == "different mod" and c == 1.0
+    assert mc.assess(facts([f"zz_m{i}" for i in range(7)]), prof, set(), original_size=5, installed_size=5)[1] \
         == "other version"
+    # a different size keeps the plain verdict
+    assert mc.assess(facts(["zz_x", "zz_y", "zz_w", "zz_v"]), prof, set(), original_size=5, installed_size=6)[1] \
+        == "different mod"
     # ids defined by some other loaded plugin are not counted against the master
     assert mc.assess(facts(["zz_x"]), prof, {"zz_x"})[2]["total"] == 0
 
@@ -179,3 +201,93 @@ def test_wrapped_fix_log_lines_are_rejoined(tmp_path):
     assert "\n" in text.rstrip() and "synced the size" in text
     facts = mc.parse_log(str(log))["facts"]
     assert facts["syncs"]["fooland patch.esp"]["fooland.esp"] == [111, 222]
+
+
+@pytest.mark.parametrize("n", [12000, 100000])
+def test_large_plugin_matches_its_downloaded_original(tmp_path, n):
+    """Every defined ID is kept for the archive copy, so a Tamriel Rebuilt-sized plugin finds its original."""
+    data = plugin(tmp_path / "Big.esp", [("Morrowind.esm", 1)], [misc(f"big_{i:06d}") for i in range(n)])
+    dl = tmp_path / "dl"
+    dl.mkdir()
+    with zipfile.ZipFile(dl / "Big-1-1-0.zip", "w") as zf:
+        zf.writestr("Big.esp", data)
+    cache = {}
+    got = mc.original_from_archive("Big.esp", data, "Big-1-1-0", str(dl), cache)
+    assert got is not None and len(got["defs"]) == n
+    assert cache["archives_version"] == mc.ARCHIVE_CACHE_VERSION
+    (key,) = cache["archives"]
+    assert key.split("|")[2] == str(os.stat(dl / "Big-1-1-0.zip").st_mtime_ns)          # nanosecond mtime
+    # the cached copy (read back, no archive access) gives the same answer
+    os.remove(dl / "Big-1-1-0.zip")
+    with zipfile.ZipFile(dl / "Big-1-1-0.zip", "w") as zf:
+        zf.writestr("Big.esp", data)
+    st = os.stat(dl / "Big-1-1-0.zip")
+    cache["archives"] = {f"{os.path.normcase(str(dl / 'Big-1-1-0.zip'))}|{st.st_size}|{st.st_mtime_ns}|big.esp":
+                         list(cache["archives"].values())[0]}
+    assert mc.original_from_archive("Big.esp", data, "Big-1-1-0", str(dl), cache) is not None
+
+
+def test_unversioned_archive_cache_is_dropped_and_rebuilt(tmp_path):
+    data = plugin(tmp_path / "Fooland.esp", [("Morrowind.esm", 1)], [misc("zz_a"), misc("zz_b")])
+    dl = tmp_path / "dl"
+    dl.mkdir()
+    arc = dl / "Fooland-1-1-0.zip"
+    with zipfile.ZipFile(arc, "w") as zf:
+        zf.writestr("Fooland.esp", data)
+    st = os.stat(arc)
+    stale = {"archive": str(arc), "entry": "Fooland.esp", "masters": [["Other.esm", 5]],
+             "refs": [], "defs": ["zz_a", "zz_b"], "links": []}
+    old_key = f"{os.path.normcase(str(arc))}|{st.st_size}|{int(st.st_mtime)}|fooland.esp"
+    cache = {"archives": {old_key: [stale]}}                       # written by a build without archives_version
+    got = mc.original_from_archive("Fooland.esp", data, "Fooland-1-1-0", str(dl), cache)
+    assert got["masters"] == [("Morrowind.esm", 1)]                # read from the archive, not the stale entry
+    assert old_key not in cache["archives"] and cache["archives_version"] == mc.ARCHIVE_CACHE_VERSION
+
+
+def test_archive_cache_round_trips_tagged_and_versioned(tmp_path):
+    g = tmp_path / "Morrowind"
+    dl = tmp_path / "dl"
+    (g / "Data Files").mkdir(parents=True)
+    dl.mkdir()
+    bases = mc.MP.path_bases(str(g), downloads=str(dl))
+    arc = os.path.join(str(dl), "Fooland-1-1-0.zip")
+    cache = {"archives_version": mc.ARCHIVE_CACHE_VERSION,
+             "archives": {f"{os.path.normcase(arc)}|10|1700000000123456789|fooland.esp":
+                          [{"archive": arc, "entry": "Fooland.esp", "masters": [], "refs": [], "defs": [],
+                            "links": []}]}}
+    path = str(g / mc.CACHE_FILE)
+    assert mc.save_cache(path, cache, bases) == []
+    raw = open(path, encoding="utf-8").read()
+    assert str(dl) not in raw and "downloads:" in raw and '"archives_version": 2' in raw
+    back = mc.load_cache(path, bases)
+    assert back["archives_version"] == mc.ARCHIVE_CACHE_VERSION
+    (k,) = back["archives"]
+    assert k == f"{os.path.normcase(arc)}|10|1700000000123456789|fooland.esp"
+
+
+def test_bad_record_does_not_hide_the_rest_of_the_plugin():
+    good = misc("zz_after")
+    broken_sub = rec("MISC", sub("NAME", z("zz_broken")) + b"MODL" + struct.pack("<I", 999) + b"x")
+    from conftest import tes3
+    data = tes3([], 3) + misc("zz_before") + broken_sub + good
+    f = mc.plugin_facts(data)
+    assert {"zz_before", "zz_broken", "zz_after"} <= f["defs"]      # subrecords before the bad size still count
+    assert mc._subs(sub("NAME", z("a")) + b"XXXX" + struct.pack("<I", 50)) == [("NAME", b"a\0")]
+
+
+def test_staging_index_and_profiles_can_be_refreshed(tmp_path):
+    st = tmp_path / "staging"
+    (st / "ModA").mkdir(parents=True)
+    (st / "ModA" / "A.esp").write_bytes(b"x")
+    assert mc._staging_index(str(st)).get("a.esp") == "ModA"
+    (st / "ModB").mkdir()
+    (st / "ModB" / "B.esp").write_bytes(b"x")
+    assert mc._staging_index(str(st)).get("b.esp") is None                   # built once per root
+    assert mc._staging_index(str(st), refresh=True).get("b.esp") == "ModB"
+    p = tmp_path / "M.esm"
+    plugin(p, [], [misc("zz_one")])
+    assert "zz_one" in mc.master_profile(str(p))["ids"]
+    (st / "ModC").mkdir()
+    (st / "ModC" / "C.esp").write_bytes(b"x")
+    mc.clear_caches()
+    assert not mc._PROFILE_MEMO and mc._staging_index(str(st)).get("c.esp") == "ModC"

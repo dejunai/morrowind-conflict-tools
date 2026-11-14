@@ -343,9 +343,9 @@ def merge_levlist(tag, defs, known=None, masters_of=None):
     first; each later definition's changes are measured against the version it was made from - the latest
     earlier definition by one of its masters (masters_of(plugin) -> lowercase names of all its masters,
     masters' masters included), else the first - and applied: (id, level) entries it adds or whose count it
-    changes, and entries it removed (so a patch can take out what its mod added). Flags and chance-none come
-    from the last definition that changed them. Without masters_of every definition is measured against the
-    first (tes3cmd's merge)."""
+    changes, and (id, level) entries it removed. Another mod's copy of the same item at a different level
+    stays. Flags and chance-none come from the last definition that changed them. Without masters_of every
+    definition is measured against the first (tes3cmd's merge)."""
     levlist, casing = {}, {}
     parsed = []
     for plugin, body, _deleted in defs:
@@ -367,13 +367,8 @@ def merge_levlist(tag, defs, known=None, masters_of=None):
         for key, n in cur.items():                   # additions and changes
             if par.get(key) != n:
                 levlist[key] = n
-        par_ids = {e for e, _l in par}
-        cur_ids = {e for e, _l in cur}
-        for key in par:                              # removals from the version it was made from
+        for key in par:                              # this (id, level) only; other levels of the id stay
             if key not in cur:
-                levlist.pop(key, None)
-        for e in par_ids - cur_ids:
-            for key in [key for key in levlist if key[0] == e]:
                 levlist.pop(key, None)
         if f != pf:
             flags = f
@@ -449,8 +444,9 @@ def merge_object(tag, versions, parent_of, known, defined=None, file_ok=None):
     """versions: [(plugin index, body)] in load order. parent_of(k) -> the version index plugin k's changes
     are measured against (its masters' latest, else the first). Returns the merged body, or None if the
     last version already has every change."""
-    fields = [dict((f, v) for f, v in merge_fields(tag, b)) for _i, b in versions]
-    orders = [[f for f, _v in merge_fields(tag, b)] for _i, b in versions]
+    parsed = [merge_fields(tag, b) for _i, b in versions]
+    fields = [dict(p) for p in parsed]
+    orders = [[f for f, _v in p] for p in parsed]
     merged = {f: (dict(v) if isinstance(v, dict) else v) for f, v in fields[0].items()}
     for k in range(1, len(versions)):
         cur, par = fields[k], fields[parent_of(k)]

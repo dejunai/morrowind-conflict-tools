@@ -42,8 +42,7 @@ local defaults = {
 
 local config = mwse.loadConfig(CONFIG_NAME, defaults)
 if not config.enabled then
-    mwse.log("[mwguard] disabled in MWSE\\config\\mwguard.json")
-    return
+    mwse.log("[mwguard] profiling is off (MWSE\\config\\mwguard.json). The Mod Config menu can turn it on.")
 end
 
 local interop = include("mwguard.interop") or {
@@ -171,6 +170,7 @@ end
 -- 1. extreme priorities observation --------------------------------------------------------------
 local extremes = {} -- "event|sign" -> { [mod] = priority }
 local function checkPriority(eventType, options, w)
+    if not config.enabled then return options end
     local p = options and options.priority
     if type(p) ~= "number" or math.abs(p) < (config.priorityLimit or 10000) then return options end
     local k = eventType .. (p > 0 and "|+" or "|-")
@@ -192,10 +192,14 @@ local function makeWrapper(eventType, callback, w)
         hint = perFrameHint(w)
     }
     stats[#stats + 1] = st
-    local every = config.sampleEvery or 8
 
     return function(e)
+        if not config.enabled then
+            return callback(e)
+        end
         st.calls = st.calls + 1
+        local every = config.sampleEvery or 8
+        if every < 1 then every = 1 end
         if st.calls % every ~= 0 then
             return callback(e)
         end
@@ -252,6 +256,7 @@ end
 
 -- 3. periodic performance reports ----------------------------------------------------------------
 local function report()
+    if not config.enabled then return end
     local list = {}
     for _, st in ipairs(stats) do
         if st.sampled > 0 then
@@ -312,7 +317,10 @@ origRegister(tes3.event.loaded, startReportTimer)
 origRegister(tes3.event.initialized, function()
     priorityReport()
     startReportTimer()
-    origLog("[mwguard] active as passive profiler (measuring %d handlers; details in MWSE\\logs\\mwguard.log)", #stats)
+    if config.enabled then
+        origLog("[mwguard] active as passive profiler (measuring %d handlers; details in MWSE\\logs\\mwguard.log)",
+            #stats)
+    end
 end, { priority = -100000 })
 
 -- Mod Config Menu --------------------------------------------------------------------------------

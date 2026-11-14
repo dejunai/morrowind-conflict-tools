@@ -25,7 +25,7 @@ DRIVE_LIT = re.compile(r"(?<![A-Za-z0-9_])[A-Za-z]:\\(?![dDsSnNtTwWbBaAzZrfvxuk0
 
 # Installed in the game folder (no .git): only the files this repo ships are ours to lint; the folder also holds
 # the game, other mods' tools and backups.
-SHIPPED = re.compile(r"(mwdialog_|vortex_tidy|chargen_ship_patch|stranded_doors_patch|readme\.md$|changes\.md$)", re.I)
+SHIPPED = re.compile(r"(mwdialog_|vortex_tidy|readme\.md$|changes\.md$)", re.I)
 SHIPPED_DIRS = {"diag"}
 # Written by the tools on a real install and kept out of the repo by .gitignore (caches, reports, journals).
 # mwdialog_mastercheck_cache.json now stores tagged paths (tests/test_mastercheck_cache.py checks what it writes),
