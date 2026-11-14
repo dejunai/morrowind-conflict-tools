@@ -54,3 +54,7 @@ mlox/
 
 # Local LuaJIT copy (place luajit.exe, lua51.dll, jit\ and COPYRIGHT here; see tools/README.md)
 tools/luajit/
+
+# personal load-order patches: not part of the published suite
+Data Files/MWSE/mods/mwespreplacements/
+Data Files/mwespreplacements-metadata.toml
