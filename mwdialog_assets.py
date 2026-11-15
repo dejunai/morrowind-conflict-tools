@@ -1542,17 +1542,23 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None, stats=None):
         p = _dfrel(rel)
         return p.startswith("textures\\") and not mip_exempt_texture(p, rules) \
             and os.path.splitext(p[9:])[0] in world_tex
-    own_text = b""
-    try:
-        for e in os.listdir(root):
-            if e.lower().endswith((".esp", ".esm")):
-                own_text += open(os.path.join(root, e), "rb").read().lower()
-        for dp, ds, fs in os.walk(os.path.join(root, "MWSE")) if os.path.isdir(os.path.join(root, "MWSE")) else ():
-            for fn in fs:
-                if fn.lower().endswith((".lua", ".json", ".toml")):
-                    own_text += open(os.path.join(dp, fn), "rb").read().lower()
-    except OSError:
-        pass
+    # read every text source once, then join: repeatedly extending one bytes object would copy
+    # everything already read on each file (quadratic on big mod folders)
+    parts = []
+    for e in os.listdir(root):
+        if e.lower().endswith((".esp", ".esm")):
+            try:
+                parts.append(open(os.path.join(root, e), "rb").read().lower())
+            except OSError:
+                pass
+    for dp, ds, fs in os.walk(os.path.join(root, "MWSE")) if os.path.isdir(os.path.join(root, "MWSE")) else ():
+        for fn in fs:
+            if fn.lower().endswith((".lua", ".json", ".toml")):
+                try:
+                    parts.append(open(os.path.join(dp, fn), "rb").read().lower())
+                except OSError:
+                    pass
+    own_text = b"".join(parts)
     tops = ASSET_DIRS
     # files already found clean (here or by an earlier tidy / check run) aren't read again: keyed by the
     # Data Files path + size + date, which a Vortex hard link shares with the deployed copy

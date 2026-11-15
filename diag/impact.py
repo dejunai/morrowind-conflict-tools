@@ -1,4 +1,4 @@
-import os, sys, importlib.util, struct, json
+import os, sys, importlib.util, struct
 from collections import Counter, defaultdict
 GAME = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(GAME, "Data Files")

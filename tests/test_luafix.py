@@ -12,6 +12,7 @@ lf = _load("mwdialog_luafix")
 
 try:
     from lupa import luajit21 as _lj
+    from lupa.luajit21 import LuaError
     HAVE_LUA = True
 except Exception:                                    # the execution tests need a real LuaJIT
     HAVE_LUA = False
@@ -258,7 +259,7 @@ def test_A1_patched_text_no_longer_crashes_where_the_naive_guard_does():
     rt = _lj.LuaRuntime()
     fn = rt.execute(new)
     assert fn(rt.eval("{ reference = {} }")) is None        # data nil: nil, not an error
-    with pytest.raises(Exception):
+    with pytest.raises(LuaError):                          # nil 'data': raised by the LuaJIT FFI, not a broad catch
         rt.execute(src)(rt.eval("{ reference = {} }"))
 
 
@@ -607,7 +608,7 @@ def test_A2_patched_peek_keys_behave_the_same_when_bound_and_do_not_crash_unboun
         e = rt.eval("{ keyCode = %d }" % kc)
         assert f_new(bound, e) == f_old(bound, e)
     unbound = rt.eval("{ peekRightKey = { keyCode = 18 } }")
-    with pytest.raises(Exception):
+    with pytest.raises(LuaError):                          # nil 'peekLeftKey': not a broad catch
         f_old(unbound, rt.eval("{ keyCode = 18 }"))
     assert f_new(unbound, rt.eval("{ keyCode = 18 }")) == (None, True)
     assert f_new(unbound, rt.eval("{ keyCode = 16 }")) == (None, None)
@@ -693,7 +694,7 @@ def test_A3_patched_lookup_runs_the_same_when_found_and_skips_when_not():
     t = rt.eval("{}")
     assert rt.execute(new)(t) == "done" and t["value"] == 5 and t["count"] == 3
     assert rt.execute(new)(None) == "done"
-    with pytest.raises(Exception):
+    with pytest.raises(LuaError):                          # nil 'getObject': not a broad catch
         rt.execute(src)(None)
 
 

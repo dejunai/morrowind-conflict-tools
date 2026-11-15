@@ -9,7 +9,6 @@ import json
 import os
 import re
 import shutil
-import sys
 
 GAME_ID = "morrowind"
 TAGS = ("staging", "downloads", "game")

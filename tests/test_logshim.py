@@ -373,7 +373,6 @@ def _v1_shim():
     if not src:
         pytest.skip("no git history here")
     ns = {}
-    start = src.index("def lua_str(")
     end = src.index("MARK_RE = re.compile")
     exec("import re\nMARK = 'mwdialog_luafix'\n" + src[src.index("def log_name("):end], ns)
     old_defaults = {"logBudgetInit": 40, "logBudget": 10, "logKeepPatterns": ["error", "warn"]}

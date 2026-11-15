@@ -14,7 +14,6 @@ from __future__ import annotations
 import argparse
 import builtins
 import io
-import os
 import re
 import sys
 import time

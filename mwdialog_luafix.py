@@ -57,7 +57,6 @@ cut down to the patches not written; a copy of it is kept in that run's mwdialog
 vortex_tidy.py runs the same check on every staging mod (its plan shows it, --apply patches, --undo reverts;
 --no-lua skips it, --lua-only does nothing else).
 """
-import argparse
 import hashlib
 import json
 import math

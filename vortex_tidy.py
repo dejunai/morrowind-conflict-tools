@@ -63,7 +63,6 @@ Copies of the plan as reviewed and as enacted go to mwdialog_backup\\tidy\\<run>
     python vortex_tidy.py --apply              (do it)
     python vortex_tidy.py --undo               (put back everything the last --apply moved)
 """
-import argparse
 import fnmatch
 import json
 import os
