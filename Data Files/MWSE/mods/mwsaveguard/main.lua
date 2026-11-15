@@ -256,26 +256,6 @@ local function onLoaded(e)
 end
 event.register("loaded", onLoaded)
 
--- Forward declaration
-local function sanitizeCellReferences()
-	local ok, activeCells = pcall(tes3.getActiveCells)
-	if not ok or not activeCells then return end
-
-	for _, cell in ipairs(activeCells) do
-		for ref in cell:iterateReferences() do
-			if ref and ref.attachments then
-				local hasScript = (ref.baseObject and ref.baseObject.script) or (ref.object and ref.object.script)
-				if not hasScript then
-					local pOk, vars = pcall(function() return ref.attachments.variables end)
-					if pOk and vars ~= nil then
-						pcall(function() ref.attachments.variables = nil end)
-					end
-				end
-			end
-		end
-	end
-end
-
 local executeDeferredSave
 
 executeDeferredSave = function()
@@ -314,9 +294,8 @@ executeDeferredSave = function()
 		return
 	end
 
-	-- Purge duplicate clones and sanitize cell references right before writing deferred save
+	-- Purge duplicate clones right before writing deferred save
 	purgePlayerClones()
-	sanitizeCellReferences()
 
 	local target = pendingSave
 	pendingSave = nil
@@ -346,9 +325,8 @@ local function onSave(e)
 		return
 	end
 
-	-- Always purge duplicate player clones and sanitize references before save proceeds or gets queued
+	-- Always purge duplicate player clones before save proceeds or gets queued
 	purgePlayerClones()
-	sanitizeCellReferences()
 
 	-- If our own deferred execution triggered this, allow it straight through
 	if isExecutingDeferredSave then
@@ -466,4 +444,21 @@ event.register(tes3.event.modConfigReady, function()
 	template:register()
 end)
 
-mwse.log("[mwsaveguard] Initialized successfully. Core save integrity and settling delay guard active.")
+----------------------------------------------------------------------------------------------------
+-- 4. ENGINE PATCH: Prevent Cell_static::saveReference crash on corrupt/negative script pointers
+----------------------------------------------------------------------------------------------------
+
+local function applySaveReferenceSCRIFix()
+	local addr = 0x004E19FD
+	local ok, b = pcall(mwse.memory.readBytes, { address = addr, length = 1 })
+	if ok and b and b[1] == 0x74 then
+		local wOk = pcall(mwse.memory.writeBytes, { address = addr, bytes = { 0x7E } })
+		if wOk then
+			mwse.log("[mwsaveguard] Applied saveReference SCRI pointer validation patch (0x74 -> 0x7E at 0x%08X).", addr)
+		end
+	end
+end
+
+applySaveReferenceSCRIFix()
+
+mwse.log("[mwsaveguard] Initialized successfully. Core save integrity, settling delay, and saveReference patch active.")

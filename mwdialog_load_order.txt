@@ -1,6 +1,6 @@
 ; mwdialog_load_order.txt: the active plugins, in load order (mwdialog_check.py keeps this list;
 ; Morrowind.ini's [Game Files] is written from it when a run that changed it ends, and by --play).
-; Last changed 2026-11-15 02:29 by auto-merge. One plugin per line.
+; Last changed 2026-11-15 02:33 by --multipatch. One plugin per line.
 
 Morrowind.esm
 Tribunal.esm
@@ -857,3 +857,4 @@ XE Sky Variations.esp
 mwdialog_check AutoMerge.esp
 mwdialog_check Cell Fixes.esp
 mwdialog_check PlaceholderCell ESP Patch.esp
+mwdialog_check Multipatch.esp

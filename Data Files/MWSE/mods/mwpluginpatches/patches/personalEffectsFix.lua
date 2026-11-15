@@ -52,18 +52,28 @@ local CLASS_NAME_TO_INDEX = {
 }
 
 local function restoreSellusFacing()
+    local pCell = tes3.player and tes3.player.cell
+    if not pCell or not pCell.id or not pCell.id:lower():find("census and excise") then
+        return
+    end
+
     local captain = tes3.getReference("chargen captain")
-    if captain and captain.cell and captain.cell.id:lower():find("census and excise") then
+    if captain and captain.cell == pCell and captain.sceneNode then
         local targetFacing = -math.pi / 2
         captain.facing = targetFacing
         captain.orientation = tes3vector3.new(0, 0, targetFacing)
-        captain:updateSceneGraph()
+        pcall(captain.updateSceneGraph, captain)
     end
 end
 
 local function restoreDoorGuardFacing()
+    local pCell = tes3.player and tes3.player.cell
+    if not pCell or not pCell.id or not pCell.id:lower():find("census and excise") then
+        return
+    end
+
     local guard = tes3.getReference("chargen door guard")
-    if guard and guard.cell and guard.cell.id:lower():find("census and excise") then
+    if guard and guard.cell == pCell and guard.sceneNode then
         -- Do not snap facing while actively in dialogue with the door guard
         local menuDialog = tes3ui.findMenu(tes3ui.registerID("MenuDialog"))
         if menuDialog then
@@ -77,7 +87,7 @@ local function restoreDoorGuardFacing()
         if math.abs(guard.facing - targetFacing) > 0.05 then
             guard.facing = targetFacing
             guard.orientation = tes3vector3.new(0, 0, targetFacing)
-            guard:updateSceneGraph()
+            pcall(guard.updateSceneGraph, guard)
         end
     end
 end
@@ -301,18 +311,28 @@ function personalEffectsFix.init()
     end
 
     local function schedulePurge()
+        local cell = tes3.player and tes3.player.cell
+        if not cell or not cell.id or not cell.id:lower():find("census and excise") then
+            return
+        end
         purgeStaleClones()
         restoreSellusFacing()
         restoreDoorGuardFacing()
         timer.frame.delayOneFrame(function()
-            purgeStaleClones()
-            restoreSellusFacing()
-            restoreDoorGuardFacing()
+            local currentCell = tes3.player and tes3.player.cell
+            if currentCell and currentCell.id and currentCell.id:lower():find("census and excise") then
+                purgeStaleClones()
+                restoreSellusFacing()
+                restoreDoorGuardFacing()
+            end
         end)
         timer.start({ duration = 0.5, type = timer.real, callback = function()
-            purgeStaleClones()
-            restoreSellusFacing()
-            restoreDoorGuardFacing()
+            local currentCell = tes3.player and tes3.player.cell
+            if currentCell and currentCell.id and currentCell.id:lower():find("census and excise") then
+                purgeStaleClones()
+                restoreSellusFacing()
+                restoreDoorGuardFacing()
+            end
         end })
     end
 

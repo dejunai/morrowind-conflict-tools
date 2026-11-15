@@ -15,6 +15,17 @@ local SPECIALIZATION_NAMES = {
     [tes3.specialization.stealth] = "Stealth",
 }
 
+local ATTRIBUTE_NAMES = {
+    [0] = "Strength",
+    [1] = "Intelligence",
+    [2] = "Willpower",
+    [3] = "Agility",
+    [4] = "Speed",
+    [5] = "Endurance",
+    [6] = "Personality",
+    [7] = "Luck",
+}
+
 local function reloadSavedClasses()
     savedClasses = mwse.loadConfig(CONFIG_FILE, {}) or {}
     return savedClasses
@@ -38,7 +49,11 @@ local function isBaseGameClass(name)
     if savedClasses[lower] then
         return false
     end
-    for class in tes3.iterate(tes3.dataHandler.nonDynamicData.classes) do
+    local dh = tes3.dataHandler
+    local ndd = dh and dh.nonDynamicData
+    if not ndd or not ndd.classes then return false end
+
+    for class in tes3.iterate(ndd.classes) do
         if class.name and class.name:lower():match("^%s*(.-)%s*$") == lower then
             if class.id:lower() ~= "newclassid_chargen" then
                 return true
@@ -53,6 +68,7 @@ local function applyCustomClassToPlayer(classData)
     if not classData or not tes3.player or not tes3.player.object then return end
     local pObj = tes3.player.object
     local pClass = pObj.class
+    if not pClass then return end
 
     pClass.name = classData.name
     pClass.description = classData.description or ""
@@ -94,6 +110,7 @@ local function applyCustomClassToPlayer(classData)
                 reference = tes3.player,
                 attribute = attrId,
                 base = baseVal,
+                current = baseVal,
             })
         end
 
@@ -126,23 +143,27 @@ local function applyCustomClassToPlayer(classData)
                 reference = tes3.player,
                 skill = skillId,
                 base = val,
+                current = val,
             })
         end
 
-        -- Recalculate health, magicka, fatigue
-        local str = tes3.getStatistic({ reference = tes3.player, attribute = tes3.attribute.strength }).base
-        local endur = tes3.getStatistic({ reference = tes3.player, attribute = tes3.attribute.endurance }).base
-        local intell = tes3.getStatistic({ reference = tes3.player, attribute = tes3.attribute.intelligence }).base
-        local will = tes3.getStatistic({ reference = tes3.player, attribute = tes3.attribute.willpower }).base
-        local agi = tes3.getStatistic({ reference = tes3.player, attribute = tes3.attribute.agility }).base
+        -- Recalculate health, magicka, fatigue using live mobile stats
+        local mob = tes3.mobilePlayer
+        if mob and mob.attributes then
+            local str = mob.attributes[tes3.attribute.strength + 1].base
+            local endur = mob.attributes[tes3.attribute.endurance + 1].base
+            local intell = mob.attributes[tes3.attribute.intelligence + 1].base
+            local will = mob.attributes[tes3.attribute.willpower + 1].base
+            local agi = mob.attributes[tes3.attribute.agility + 1].base
 
-        local health = math.floor((str + endur) / 2)
-        local magicka = math.floor(intell * (race.magickaMultiplier or 1.0))
-        local fatigue = math.floor(str + will + agi + endur)
+            local health = math.floor((str + endur) / 2)
+            local magicka = math.floor(intell * (race.magickaMultiplier or 1.0))
+            local fatigue = math.floor(str + will + agi + endur)
 
-        tes3.setStatistic({ reference = tes3.player, name = "health", base = health, current = health })
-        tes3.setStatistic({ reference = tes3.player, name = "magicka", base = magicka, current = magicka })
-        tes3.setStatistic({ reference = tes3.player, name = "fatigue", base = fatigue, current = fatigue })
+            tes3.setStatistic({ reference = tes3.player, name = "health", base = health, current = health })
+            tes3.setStatistic({ reference = tes3.player, name = "magicka", base = magicka, current = magicka })
+            tes3.setStatistic({ reference = tes3.player, name = "fatigue", base = fatigue, current = fatigue })
+        end
     end
 
     mwse.log("[mwcustomclasspersistence] Successfully applied custom class '%s' to player.", classData.name)
@@ -152,7 +173,8 @@ end
 local function formatSkillList(skillIds)
     local lines = {}
     for _, id in ipairs(skillIds or {}) do
-        local name = tes3.getSkillName(id)
+        local skillObj = tes3.getSkill(id)
+        local name = skillObj and skillObj.name
         if name then table.insert(lines, name) end
     end
     return table.concat(lines, "\n")
@@ -162,32 +184,32 @@ end
 local function displayCustomClassInChooseMenu(menu, classData)
     currentSelectedCustomClass = classData
 
-    local selText = menu:findChild("MenuChooseClass_SelectedText")
+    local selText = menu:findChild(tes3ui.registerID("MenuChooseClass_SelectedText"))
     if selText then selText.text = classData.name end
 
-    local specText = menu:findChild("MenuChooseClass_SpecialText")
+    local specText = menu:findChild(tes3ui.registerID("MenuChooseClass_SpecialText"))
     if specText then
         specText.text = SPECIALIZATION_NAMES[classData.specialization] or "Specialization"
     end
 
-    local favText = menu:findChild("MenuChooseClass_FavoriteText")
+    local favText = menu:findChild(tes3ui.registerID("MenuChooseClass_FavoriteText"))
     if favText and classData.attributes then
-        local a1 = tes3.getAttributeName(classData.attributes[1]) or ""
-        local a2 = tes3.getAttributeName(classData.attributes[2]) or ""
+        local a1 = ATTRIBUTE_NAMES[classData.attributes[1]] or "Strength"
+        local a2 = ATTRIBUTE_NAMES[classData.attributes[2]] or "Agility"
         favText.text = string.format("%s, %s", a1, a2)
     end
 
-    local majText = menu:findChild("MenuChooseClass_MajorText")
+    local majText = menu:findChild(tes3ui.registerID("MenuChooseClass_MajorText"))
     if majText then
         majText.text = formatSkillList(classData.majorSkills)
     end
 
-    local minText = menu:findChild("MenuChooseClass_MinorText")
+    local minText = menu:findChild(tes3ui.registerID("MenuChooseClass_MinorText"))
     if minText then
         minText.text = formatSkillList(classData.minorSkills)
     end
 
-    local descText = menu:findChild("MenuChooseClass_DescriptionText")
+    local descText = menu:findChild(tes3ui.registerID("MenuChooseClass_DescriptionText"))
     if descText then
         descText.text = classData.description or ""
     end
@@ -198,7 +220,7 @@ end
 --- Handles MenuChooseClass ("Pick from a list")
 local function onMenuChooseClass(e)
     local menu = e.element
-    local scroll = menu:findChild("MenuChooseClass_ClassScroll")
+    local scroll = menu:findChild(tes3ui.registerID("MenuChooseClass_ClassScroll"))
     if not scroll then return end
 
     local content = scroll:getContentElement()
@@ -239,7 +261,7 @@ local function onMenuChooseClass(e)
     end
 
     -- Hook OK button: if a custom class is selected, apply it to player after native selection closes
-    local okBtn = menu:findChild("MenuChooseClass_Okbutton")
+    local okBtn = menu:findChild(tes3ui.registerID("MenuChooseClass_Okbutton"))
     if okBtn then
         okBtn:registerBefore("mouseClick", function()
             local selected = currentSelectedCustomClass
@@ -256,7 +278,7 @@ end
 local function onMenuStatReview(e)
     local menu = e.element
     if currentSelectedCustomClass then
-        local classLabel = menu:findChild("MenuStatReview_class")
+        local classLabel = menu:findChild(tes3ui.registerID("MenuStatReview_class"))
         if classLabel then
             classLabel.text = currentSelectedCustomClass.name
         end
@@ -265,7 +287,7 @@ local function onMenuStatReview(e)
     end
 
     -- When OK is clicked in StatReview, capture and auto-save the player's finalized custom class
-    local okBtn = menu:findChild("MenuStatReview_Okbutton")
+    local okBtn = menu:findChild(tes3ui.registerID("MenuStatReview_Okbutton"))
     if okBtn then
         okBtn:registerBefore("mouseClick", function()
             timer.frame.delayOneFrame(function()
@@ -294,11 +316,11 @@ end
 --- Handles MenuCreateClass (Saving newly created custom classes)
 local function onMenuCreateClass(e)
     local menu = e.element
-    local okBtn = menu:findChild("MenuCreateClass_Okbutton")
+    local okBtn = menu:findChild(tes3ui.registerID("MenuCreateClass_Okbutton"))
     if not okBtn then return end
 
     okBtn:registerBefore("mouseClick", function()
-        local nameElem = menu:findChild("MenuCreateClass_Classname")
+        local nameElem = menu:findChild(tes3ui.registerID("MenuCreateClass_Classname"))
         local rawName = nameElem and (nameElem.text or ""):match("^%s*(.-)%s*$")
         if not rawName or rawName == "" then return end
 
@@ -360,8 +382,9 @@ local function onInitialized()
     event.register("uiActivated", onMenuCreateClass, { filter = "MenuCreateClass" })
     event.register("loaded", onLoaded)
     reloadSavedClasses()
-    mwse.log("[mwcustomclasspersistence] Initialized successfully. Custom class persistence active with %d saved class(es).",
-        table.size and table.size(savedClasses) or 0)
+    local count = 0
+    for _ in pairs(savedClasses) do count = count + 1 end
+    mwse.log("[mwcustomclasspersistence] Initialized successfully. Custom class persistence active with %d saved class(es).", count)
 end
 
 event.register("initialized", onInitialized)

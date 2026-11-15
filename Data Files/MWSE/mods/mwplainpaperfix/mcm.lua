@@ -7,7 +7,9 @@ local function hasReadableText(book)
 end
 
 function this.scanAndClassify(config, force)
-    if not tes3.dataHandler or not tes3.dataHandler.nonDynamicData then return 0, 0 end
+    local dh = tes3.dataHandler
+    local ndd = dh and dh.nonDynamicData
+    if not ndd or not ndd.books then return 0, 0 end
 
     config.whitelist = config.whitelist or {}
     config.blacklist = config.blacklist or {}
@@ -97,43 +99,6 @@ Use the "Paper & Scroll Filter" page to interactively move items between the Whi
         label = "Enable mod",
         description = "Toggle Plain Paper Fix on or off.",
         configKey = "enabled",
-    })
-
-    settingsPage:createYesNoButton({
-        label = "Tweak plain paper stats",
-        description = "If enabled, modifies vanilla plain paper stats (value, weight, enchant capacity) to make it lightweight and enchantable.",
-        configKey = "tweakPaperStats",
-    })
-
-    settingsPage:createSlider({
-        label = "Plain paper weight",
-        description = "Weight for vanilla plain paper (default: 0.05).",
-        configKey = "paperWeight",
-        min = 0.01,
-        max = 1.0,
-        step = 0.01,
-        jump = 0.05,
-        decimalPlaces = 2,
-    })
-
-    settingsPage:createSlider({
-        label = "Plain paper value",
-        description = "Gold value for vanilla plain paper (default: 3).",
-        configKey = "paperValue",
-        min = 1,
-        max = 50,
-        step = 1,
-        jump = 5,
-    })
-
-    settingsPage:createSlider({
-        label = "Plain paper enchant capacity",
-        description = "Enchantment capacity for vanilla plain paper (default: 100).",
-        configKey = "paperEnchantCapacity",
-        min = 0,
-        max = 500,
-        step = 10,
-        jump = 50,
     })
 
     settingsPage:createButton({

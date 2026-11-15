@@ -9,10 +9,6 @@ local mcm = require("mwplainpaperfix.mcm")
 
 local defaultConfig = {
     enabled = true,
-    tweakPaperStats = true,
-    paperWeight = 0.05,
-    paperValue = 3,
-    paperEnchantCapacity = 100,
     whitelist = {},
     blacklist = {},
 }
@@ -60,11 +56,24 @@ local function onActivate(e)
         return -- Item is blacklisted or contains text; read normally
     end
 
+    -- Ownership & Sneak check: require sneak to take owned blank documents
+    local isOwned = not tes3.hasOwnershipAccess({ target = ref })
+    local isSneaking = (tes3.player.mobile and tes3.player.mobile.isSneaking)
+        or (tes3.mobilePlayer and tes3.mobilePlayer.isSneaking)
+
+    if isOwned and not isSneaking then
+       -- tes3.messageBox({
+       --     message = "You must sneak to take owned documents.",
+       --     buttons = { "OK" }
+       -- })
+        return false -- Consume activation to prevent un-sneaked theft
+    end
+
     -- Pick up directly into inventory
     local count = ref.stackSize or 1
 
     -- Crime check
-    if not tes3.hasOwnershipAccess({ target = ref }) then
+    if isOwned then
         local owner = tes3.getOwner(ref)
         local totalValue = (obj.value or 1) * count
         timer.frame.delayOneFrame(function()
@@ -93,25 +102,10 @@ local function onActivate(e)
         })
     end
 
-    -- Safely disable and move out of bounds (NEVER use setDelete or ref:delete())
+    -- Safely disable the picked-up reference
     ref:disable()
-    ref.modified = true
-    pcall(function()
-        ref.position = tes3vector3.new(ref.position.x, ref.position.y, ref.position.z - 10000)
-    end)
 
     return false -- Consume activation event to prevent reading window from opening
-end
-
-local function onLoaded()
-    if config.tweakPaperStats then
-        local obj = tes3.getObject("sc_paper plain")
-        if obj then
-            obj.value = config.paperValue or 3
-            obj.weight = config.paperWeight or 0.05
-            obj.enchantCapacity = config.paperEnchantCapacity or 100
-        end
-    end
 end
 
 local function onModConfigReady()
@@ -119,8 +113,7 @@ local function onModConfigReady()
 end
 
 local function onInitialized()
-    event.register("activate", onActivate)
-    event.register("loaded", onLoaded)
+    event.register("activate", onActivate, { priority = 10 })
     event.register("modConfigReady", onModConfigReady)
 
     -- First run scan if whitelist is empty
