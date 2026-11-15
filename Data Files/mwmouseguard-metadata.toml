@@ -1,7 +1,9 @@
-package = "mwmouseguard"
+[package]
+name = "mwmouseguard"
 version = "1.0.0"
 description = "Multi-monitor cursor containment preventing mouse drift and mousewheel scroll bleed to secondary screens."
 authors = ["MWSE Team"]
 
-[package.metadata]
-package-load-priority = 4300
+[tools.mwse]
+lua-mod = "mwmouseguard"
+load-priority = 4300

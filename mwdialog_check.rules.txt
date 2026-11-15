@@ -39,9 +39,6 @@ XE Sky Variations.esp
 *Script Fix.esp
 Rational Names Merged.esp
 
-[NearEnd]
-Tamriel Rebuilt - Alternate Start.esp
-
 [Exact]
 Utseeva's_DagonFel_MagesGuild.ESP
 Clean_Dagon Fel - Mages Adventures.ESP
@@ -165,7 +162,7 @@ avp BTBGI-NE - Factions - TR_Factions.esp
 avp BTBGI-NE - Uvirith's Legacy.esp
 FM - Unique Items v1.0 - PfP.ESP
 
-; ---- added by --cell-conflicts 2026-11-14 07:53 ----
+; ---- added by --cell-conflicts 2026-11-15 02:20 ----
 
 [Order]
 Sheogorad - Groves of the North.esp
@@ -288,11 +285,6 @@ Creatures and Critters.ESP
 ; keep Creatures and Critters.ESP winning where they conflict
 
 [Order]
-Rise of House Telvanni.esm
-RepopulatedMorrowind.ESM
-; keep RepopulatedMorrowind.ESM winning where they conflict
-
-[Order]
 HelnimREDUXskriak.ESP
 abotWindowsGlowTR1912.esp
 ; keep abotWindowsGlowTR1912.esp winning where they conflict
@@ -300,7 +292,7 @@ abotWindowsGlowTR1912.esp
 [Order]
 Sotha Sil Expanded.ESP
 ST_Alchemy_Replacer_1.3.esp
-; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+; make ST_Alchemy_Replacer_1.3.esp win where they conflict
 
 [Order]
 BB2_Peasant_Gowns.esp
@@ -328,11 +320,6 @@ Clean_Waterfowl_Of_Morrowind_Expanded.esp
 ; keep Clean_Waterfowl_Of_Morrowind_Expanded.esp winning where they conflict
 
 [Order]
-Dallara Fort Frostmoth.esp
-Mudcrab Island TLAD.esp
-; keep Mudcrab Island TLAD.esp winning where they conflict
-
-[Order]
 DM_SuranRoof.ESP
 Hanging Gardens of Suran.esp
 ; keep Hanging Gardens of Suran.esp winning where they conflict
@@ -341,11 +328,6 @@ Hanging Gardens of Suran.esp
 Dallara Ebonheart.esp
 The_Vanilla_Quest_Tweaks_RP_Choices_Consequences_Super_Mega_Package_-_Ultimate_Edition.ESP
 ; keep The_Vanilla_Quest_Tweaks_RP_Choices_Consequences_Super_Mega_Package_-_Ultimate_Edition.ESP winning where they conflict
-
-[Order]
-Better Bounties.esp
-Windows Glow - Tribunal Eng.esp
-; keep Windows Glow - Tribunal Eng.esp winning where they conflict
 
 [Order]
 Tel_Aruhn_Chronicles.ESP
@@ -533,9 +515,9 @@ RR_Better_Ships_n_Boats_Eng.esp
 ; keep RR_Better_Ships_n_Boats_Eng.esp winning where they conflict
 
 [Order]
-Dallara Ebonheart.esp
 Illy's Oh my Goddess.ESP
-; keep Illy's Oh my Goddess.ESP winning where they conflict
+Dallara Ebonheart.esp
+; make Dallara Ebonheart.esp win where they conflict
 
 [Order]
 Better Landscapes Stonewood Pass (RP Edit).esp
@@ -578,11 +560,6 @@ GITD_WL_RR_Interiors.esp
 ; keep GITD_WL_RR_Interiors.esp winning where they conflict
 
 [Order]
-Dallara Fort Frostmoth.esp
-RR_Better_Ships_n_Boats_Eng.esp
-; keep RR_Better_Ships_n_Boats_Eng.esp winning where they conflict
-
-[Order]
 URH_Ald_Velothi.esp
 Animated_Morrowind - Danaes Edits - Vv.esp
 ; keep Animated_Morrowind - Danaes Edits - Vv.esp winning where they conflict
@@ -596,6 +573,11 @@ Clean_Waterfowl_Of_Morrowind_Expanded.esp
 OAAB - Tel Raloran - Immersive Tables.ESP
 TheGardenOfDreams.esp
 ; keep TheGardenOfDreams.esp winning where they conflict
+
+[Order]
+Dallara Fort Frostmoth.esp
+RR_Better_Ships_n_Boats_Eng.esp
+; keep RR_Better_Ships_n_Boats_Eng.esp winning where they conflict
 
 [Order]
 Suran_Underworld_v3.ESP
@@ -623,19 +605,19 @@ OAAB_Shipwrecks_JFK_patch.esp
 ; keep OAAB_Shipwrecks_JFK_patch.esp winning where they conflict
 
 [Order]
-Interiors_of_Mournhold_V2.3.esp
-TR_MuseumofArtifacts.esp
-; keep TR_MuseumofArtifacts.esp winning where they conflict
-
-[Order]
 The Northern Strongholds.esp
 DreamersExpansion.ESP
 ; keep DreamersExpansion.ESP winning where they conflict
 
 [Order]
-Creatures and Critters.ESP
+Interiors_of_Mournhold_V2.3.esp
+TR_MuseumofArtifacts.esp
+; keep TR_MuseumofArtifacts.esp winning where they conflict
+
+[Order]
 Daedric Shrine Overhaul FULL.esp
-; keep Daedric Shrine Overhaul FULL.esp winning where they conflict
+Creatures and Critters.ESP
+; keep Creatures and Critters.ESP winning where they conflict
 
 [Order]
 TR_DarkDungeons.esp
@@ -693,6 +675,11 @@ Quests for Clans and Vampire Legends.ESP
 ; keep Quests for Clans and Vampire Legends.ESP winning where they conflict
 
 [Order]
+Mudcrab Island TLAD.esp
+Dallara Fort Frostmoth.esp
+; keep Dallara Fort Frostmoth.esp winning where they conflict
+
+[Order]
 Tel Morgana.esp
 DA_Sobitur_Facility_Clean.ESP
 ; keep DA_Sobitur_Facility_Clean.ESP winning where they conflict
@@ -728,14 +715,14 @@ logs on Fire.esp
 ; keep logs on Fire.esp winning where they conflict
 
 [Order]
-BLLDV_ALL.esp
-VY_Under_Skar.esp
-; keep VY_Under_Skar.esp winning where they conflict
-
-[Order]
 RR_Ghost_Gate_Fortress_Eng.ESP
 logs on Fire.esp
 ; keep logs on Fire.esp winning where they conflict
+
+[Order]
+BLLDV_ALL.esp
+VY_Under_Skar.esp
+; keep VY_Under_Skar.esp winning where they conflict
 
 [Order]
 Justice4Khartag.esp
@@ -808,9 +795,9 @@ Expansions Integrated - Fewer BM Creatures.esp
 ; keep Expansions Integrated - Fewer BM Creatures.esp winning where they conflict
 
 [Order]
-VY_Under_Skar.esp
-Yet Another Guard Diversity - Regular.ESP
-; keep Yet Another Guard Diversity - Regular.ESP winning where they conflict
+Sotha Sil Expanded.ESP
+Tribunal Main Quest Reforged - SSE.esp
+; make Tribunal Main Quest Reforged - SSE.esp win where they conflict
 
 [Order]
 Dallara Ebonheart.esp
@@ -823,9 +810,9 @@ Yet Another Guard Diversity - Regular.ESP
 ; keep Yet Another Guard Diversity - Regular.ESP winning where they conflict
 
 [Order]
-Sotha Sil Expanded.ESP
-Tribunal Main Quest Reforged - SSE.esp
-; keep Tribunal Main Quest Reforged - SSE.esp winning where they conflict
+VY_Under_Skar.esp
+Yet Another Guard Diversity - Regular.ESP
+; keep Yet Another Guard Diversity - Regular.ESP winning where they conflict
 
 [Order]
 RepopulatedMainland.ESP
@@ -908,11 +895,6 @@ MAH.ESP
 ; keep MAH.ESP winning where they conflict
 
 [Order]
-OAAB_Grazelands.ESP
-MAH.ESP
-; keep MAH.ESP winning where they conflict
-
-[Order]
 Clean_EndusalRedone.esp
 DN-Lighted_Dwemer_Towers.ESP
 ; keep DN-Lighted_Dwemer_Towers.ESP winning where they conflict
@@ -921,6 +903,11 @@ DN-Lighted_Dwemer_Towers.ESP
 Cutting Room Floor - Free Slaves.esp
 Unlock All Slaves.esp
 ; keep Unlock All Slaves.esp winning where they conflict
+
+[Order]
+OAAB_Grazelands.ESP
+MAH.ESP
+; keep MAH.ESP winning where they conflict
 
 [Order]
 GreymarchDawn.esp
@@ -968,16 +955,6 @@ ST_Alchemy_Replacer_1.3.esp
 ; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
 
 [Order]
-Interiors_of_Mournhold_V2.3.esp
-BTB's Game Improvements (Necro Edit).esp
-; keep BTB's Game Improvements (Necro Edit).esp winning where they conflict
-
-[Order]
-BTB's Game Improvements (Necro Edit).esp
-Cutting Room Floor - Items TR.esp
-; keep Cutting Room Floor - Items TR.esp winning where they conflict
-
-[Order]
 Suran Fix.ESP
 Concept_Arts_plantations.esp
 ; keep Concept_Arts_plantations.esp winning where they conflict
@@ -1008,9 +985,14 @@ Expanded Sounds.esp
 ; keep Expanded Sounds.esp winning where they conflict
 
 [Order]
-RepopulatedMorrowind.ESP
-MGO Guild Halls Vanilla.esp
-; keep MGO Guild Halls Vanilla.esp winning where they conflict
+Cutting Room Floor - Items TR.esp
+BTB's Game Improvements (Necro Edit).esp
+; keep BTB's Game Improvements (Necro Edit).esp winning where they conflict
+
+[Order]
+Interiors_of_Mournhold_V2.3.esp
+BTB's Game Improvements (Necro Edit).esp
+; keep BTB's Game Improvements (Necro Edit).esp winning where they conflict
 
 [Order]
 Daedric Shrine Overhaul FULL.esp
@@ -1028,11 +1010,6 @@ Windows Glow.esp
 ; keep Windows Glow.esp winning where they conflict
 
 [Order]
-Windows Glow.esp
-abotWindowsGlowTR1912.esp
-; keep abotWindowsGlowTR1912.esp winning where they conflict
-
-[Order]
 RR_Ghost_Gate_Fortress_Eng.ESP
 ST_Alchemy_Replacer_1.3.esp
 ; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
@@ -1048,6 +1025,16 @@ Clean_Severa Magia Fix.ESP
 ; keep Clean_Severa Magia Fix.ESP winning where they conflict
 
 [Order]
+RepopulatedMorrowind.ESP
+MGO Guild Halls Vanilla.esp
+; keep MGO Guild Halls Vanilla.esp winning where they conflict
+
+[Order]
+Windows Glow.esp
+abotWindowsGlowTR1912.esp
+; keep abotWindowsGlowTR1912.esp winning where they conflict
+
+[Order]
 Ald'Ruhn Outskirts - Ancestral Refuge.ESP
 Ineone the Buoyant Armiger.ESP
 ; keep Ineone the Buoyant Armiger.ESP winning where they conflict
@@ -1060,17 +1047,7 @@ Ineone the Buoyant Armiger.ESP
 [Order]
 SecretsOfTheCrystalCity.esp
 DM_MassamaDarkness.ESP
-; keep DM_MassamaDarkness.ESP winning where they conflict
-
-[Order]
-Mudcrab Island TLAD.esp
-Suran_Underworld_v3.ESP
-; keep Suran_Underworld_v3.ESP winning where they conflict
-
-[Order]
-Dallara Fort Frostmoth.esp
-The Sable Dragon 1.6 mmc.esp
-; keep The Sable Dragon 1.6 mmc.esp winning where they conflict
+; make DM_MassamaDarkness.ESP win where they conflict
 
 [Order]
 Silt_strider_placement.ESP
@@ -1148,6 +1125,16 @@ ST_Alchemy_Replacer_1.3.esp
 ; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
 
 [Order]
+Mudcrab Island TLAD.esp
+Suran_Underworld_v3.ESP
+; keep Suran_Underworld_v3.ESP winning where they conflict
+
+[Order]
+Dallara Fort Frostmoth.esp
+The Sable Dragon 1.6 mmc.esp
+; keep The Sable Dragon 1.6 mmc.esp winning where they conflict
+
+[Order]
 Temple Master.ESP
 Suran Temple Door Fix.esp
 ; keep Suran Temple Door Fix.esp winning where they conflict
@@ -1198,11 +1185,6 @@ DreamersExpansion.ESP
 ; keep DreamersExpansion.ESP winning where they conflict
 
 [Order]
-RepopulatedMorrowind.ESP
-Dallara Ebonheart.esp
-; keep Dallara Ebonheart.esp winning where they conflict
-
-[Order]
 Unique Uniques.ESP
 TR_MuseumofArtifacts.esp
 ; keep TR_MuseumofArtifacts.esp winning where they conflict
@@ -1218,6 +1200,11 @@ Portal to Catalepsy.ESP
 ; keep Portal to Catalepsy.ESP winning where they conflict
 
 [Order]
+Cutting Room Floor - Free Slaves.esp
+OAAB_Grazelands.ESP
+; keep OAAB_Grazelands.ESP winning where they conflict
+
+[Order]
 OAAB_Grazelands.ESP
 RepopulatedCreatures.ESP
 ; keep RepopulatedCreatures.ESP winning where they conflict
@@ -1231,11 +1218,6 @@ Odirniran Fix-V1.esp
 OAAB_Grazelands.ESP
 Suran_Underworld_v3.ESP
 ; keep Suran_Underworld_v3.ESP winning where they conflict
-
-[Order]
-OAAB_Grazelands.ESP
-Cutting Room Floor - Free Slaves.esp
-; keep Cutting Room Floor - Free Slaves.esp winning where they conflict
 
 [Order]
 OAAB_Grazelands.ESP
@@ -1293,24 +1275,29 @@ Yet Another Guard Diversity - Regular.ESP
 ; keep Yet Another Guard Diversity - Regular.ESP winning where they conflict
 
 [Order]
-Windows Glow.esp
 Concept art palace.ESP
-; keep Concept art palace.ESP winning where they conflict
+Windows Glow.esp
+; keep Windows Glow.esp winning where they conflict
 
 [Order]
-Windows Glow.esp
 RR_Ghost_Gate_Fortress_Eng.ESP
-; keep RR_Ghost_Gate_Fortress_Eng.ESP winning where they conflict
+Windows Glow.esp
+; keep Windows Glow.esp winning where they conflict
 
 [Order]
-Windows Glow.esp
 Dallara Ebonheart.esp
-; keep Dallara Ebonheart.esp winning where they conflict
+Windows Glow.esp
+; keep Windows Glow.esp winning where they conflict
 
 [Order]
-Windows Glow.esp
+Dallara Ebonheart.esp
+RepopulatedMorrowind.ESP
+; keep RepopulatedMorrowind.ESP winning where they conflict
+
+[Order]
 OAAB Odai Plateau.esp
-; keep OAAB Odai Plateau.esp winning where they conflict
+Windows Glow.esp
+; keep Windows Glow.esp winning where they conflict
 
 [Order]
 Yet Another Guard Diversity - Regular.ESP
@@ -1348,14 +1335,14 @@ abotWindowsGlowTR1912.esp
 ; keep abotWindowsGlowTR1912.esp winning where they conflict
 
 [Order]
-Animated_Morrowind - Danaes Edits - Vv.esp
 Imperial Factions.esp
-; keep Imperial Factions.esp winning where they conflict
+Animated_Morrowind - Danaes Edits - Vv.esp
+; keep Animated_Morrowind - Danaes Edits - Vv.esp winning where they conflict
 
 [Order]
-Animated_Morrowind - Danaes Edits - Vv.esp
 South Wall_TG_Hideout.esp
-; keep South Wall_TG_Hideout.esp winning where they conflict
+Animated_Morrowind - Danaes Edits - Vv.esp
+; keep Animated_Morrowind - Danaes Edits - Vv.esp winning where they conflict
 
 [Order]
 TR_DarkDungeons.esp
@@ -1603,16 +1590,6 @@ Holy Art.ESP
 ; keep Holy Art.ESP winning where they conflict
 
 [Order]
-Livelier Lucky Lockup.ESP
-Improved Inns Expanded.esp
-; keep Improved Inns Expanded.esp winning where they conflict
-
-[Order]
-Cutting Room Floor - Items TR.esp
-Interiors_of_Mournhold_V2.3.esp
-; make Interiors_of_Mournhold_V2.3.esp win where they conflict
-
-[Order]
 Llervu Ancestral Tomb Expanded.ESP
 ST_Alchemy_Replacer_1.3.esp
 ; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
@@ -1729,11 +1706,6 @@ ST_Alchemy_Replacer_1.3.esp
 
 [Order]
 Clean_Mines and Caverns.esp
-Join All Vampire Clans.esp
-; keep Join All Vampire Clans.esp winning where they conflict
-
-[Order]
-Clean_Mines and Caverns.esp
 Sheogorad - Groves of the North.esp
 ; keep Sheogorad - Groves of the North.esp winning where they conflict
 
@@ -1745,7 +1717,7 @@ BLLDV_ALL.esp
 [Order]
 SecretsOfTheCrystalCity.esp
 Expanded Sounds.esp
-; keep Expanded Sounds.esp winning where they conflict
+; make Expanded Sounds.esp win where they conflict
 
 [Order]
 Clean_Mines and Caverns.esp
@@ -1773,11 +1745,6 @@ The_magic_rock_of_Maar_Gan.ESP
 ; keep The_magic_rock_of_Maar_Gan.ESP winning where they conflict
 
 [Order]
-RepopulatedMorrowind.ESP
-Animated_Morrowind - Danaes Edits - Vv.esp
-; keep Animated_Morrowind - Danaes Edits - Vv.esp winning where they conflict
-
-[Order]
 Unique Uniques.ESP
 BLLDV_ALL.esp
 ; keep BLLDV_ALL.esp winning where they conflict
@@ -1796,11 +1763,6 @@ GreymarchDawn.esp
 The Mountain of Fear.ESP
 ST_Alchemy_Replacer_1.3.esp
 ; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
-
-[Order]
-Better Bounties.esp
-abotWindowsGlow.esp
-; keep abotWindowsGlow.esp winning where they conflict
 
 [Order]
 The Sable Dragon 1.6 mmc.esp
@@ -1853,49 +1815,24 @@ Windows Glow.esp
 ; keep Windows Glow.esp winning where they conflict
 
 [Order]
-RepopulatedCreatures.ESP
-Clean_Waterfowl_Of_Morrowind_Expanded.esp
-; keep Clean_Waterfowl_Of_Morrowind_Expanded.esp winning where they conflict
-
-[Order]
-OAAB_Grazelands.ESP
-Hall of the Last Ember_Sorkvild the Raven.ESP
-; keep Hall of the Last Ember_Sorkvild the Raven.ESP winning where they conflict
-
-[Order]
-OAAB_Grazelands.ESP
-Cutting Room Floor - Quests.esp
-; keep Cutting Room Floor - Quests.esp winning where they conflict
-
-[Order]
-OAAB_Grazelands.ESP
-Cutting Room Floor - Keys.esp
-; keep Cutting Room Floor - Keys.esp winning where they conflict
-
-[Order]
-OAAB_Grazelands.ESP
-Improved Inns Expanded.esp
-; keep Improved Inns Expanded.esp winning where they conflict
-
-[Order]
-The Northern Strongholds.esp
-BLLDV_ALL.esp
-; keep BLLDV_ALL.esp winning where they conflict
-
-[Order]
 Cutting Room Floor - Quests.esp
 Clean_EndusalRedone.esp
 ; keep Clean_EndusalRedone.esp winning where they conflict
 
 [Order]
-Hall of the Last Ember_Sorkvild the Raven.ESP
-RPNR_Library.ESP
-; keep RPNR_Library.ESP winning where they conflict
+Cutting Room Floor - Quests.esp
+OAAB_Grazelands.ESP
+; keep OAAB_Grazelands.ESP winning where they conflict
 
 [Order]
 Cutting Room Floor - Keys.esp
 VY_Under_Skar.esp
 ; keep VY_Under_Skar.esp winning where they conflict
+
+[Order]
+Cutting Room Floor - Keys.esp
+OAAB_Grazelands.ESP
+; keep OAAB_Grazelands.ESP winning where they conflict
 
 [Order]
 Cutting Room Floor - Free Slaves.esp
@@ -1908,9 +1845,34 @@ GreymarchDawn.esp
 ; keep GreymarchDawn.esp winning where they conflict
 
 [Order]
-GreymarchDawn.esp
 Unlock All Slaves.esp
-; keep Unlock All Slaves.esp winning where they conflict
+GreymarchDawn.esp
+; keep GreymarchDawn.esp winning where they conflict
+
+[Order]
+RepopulatedCreatures.ESP
+Clean_Waterfowl_Of_Morrowind_Expanded.esp
+; keep Clean_Waterfowl_Of_Morrowind_Expanded.esp winning where they conflict
+
+[Order]
+OAAB_Grazelands.ESP
+Hall of the Last Ember_Sorkvild the Raven.ESP
+; keep Hall of the Last Ember_Sorkvild the Raven.ESP winning where they conflict
+
+[Order]
+OAAB_Grazelands.ESP
+Improved Inns Expanded.esp
+; keep Improved Inns Expanded.esp winning where they conflict
+
+[Order]
+The Northern Strongholds.esp
+BLLDV_ALL.esp
+; keep BLLDV_ALL.esp winning where they conflict
+
+[Order]
+Hall of the Last Ember_Sorkvild the Raven.ESP
+RPNR_Library.ESP
+; keep RPNR_Library.ESP winning where they conflict
 
 [Order]
 GreymarchDawn.esp
@@ -1926,6 +1888,11 @@ Vampire Clan Services.ESP
 Vampire Clans - Clutter Monkey Overhaul.ESP
 DN-Lighted_Dwemer_Towers.ESP
 ; keep DN-Lighted_Dwemer_Towers.ESP winning where they conflict
+
+[Order]
+Improved Inns Expanded.esp
+Livelier Lucky Lockup.ESP
+; keep Livelier Lucky Lockup.ESP winning where they conflict
 
 [Order]
 Cutting Room Floor - Taverns.esp
@@ -1963,6 +1930,11 @@ Creatures and Critters.ESP
 ; keep Creatures and Critters.ESP winning where they conflict
 
 [Order]
+Cutting Room Floor - Items TR.esp
+Interiors_of_Mournhold_V2.3.esp
+; keep Interiors_of_Mournhold_V2.3.esp winning where they conflict
+
+[Order]
 Daedric Shrine Overhaul FULL.esp
 Helm of Tohan Naturalized.esp
 ; keep Helm of Tohan Naturalized.esp winning where they conflict
@@ -1971,21 +1943,6 @@ Helm of Tohan Naturalized.esp
 TelRivusSKRIAK.ESP
 Logs on Fire Tamriel Rebuilt.esp
 ; keep Logs on Fire Tamriel Rebuilt.esp winning where they conflict
-
-[Order]
-MGO Guild Halls Vanilla.esp
-Thieves Guild Quest Revisions.esp
-; keep Thieves Guild Quest Revisions.esp winning where they conflict
-
-[Order]
-MGO Guild Halls Vanilla.esp
-BLLDV_ALL.esp
-; keep BLLDV_ALL.esp winning where they conflict
-
-[Order]
-MGO Guild Halls Vanilla.esp
-Windows Glow.esp
-; keep Windows Glow.esp winning where they conflict
 
 [Order]
 OldEbonheartSkriak.ESP
@@ -2003,11 +1960,6 @@ Morrowind Quests Redux All-In-One.esp
 ; keep Morrowind Quests Redux All-In-One.esp winning where they conflict
 
 [Order]
-Dallara Ebonheart.esp
-seamus_TraitorKings.ESP
-; keep seamus_TraitorKings.ESP winning where they conflict
-
-[Order]
 OAAB Brother Junipers Twin Lamps.esp
 DD_Caldera_Expansion.esp
 ; make DD_Caldera_Expansion.esp win where they conflict
@@ -2018,24 +1970,49 @@ Animated_Morrowind - Danaes Edits - Vv.esp
 ; keep Animated_Morrowind - Danaes Edits - Vv.esp winning where they conflict
 
 [Order]
-Animated_Morrowind - Danaes Edits - Vv.esp
-RPNR_Library.ESP
-; keep RPNR_Library.ESP winning where they conflict
-
-[Order]
 OAAB Brother Junipers Twin Lamps.esp
 RevampedDarkBrotherhood.ESP
 ; make RevampedDarkBrotherhood.ESP win where they conflict
 
 [Order]
+OAAB Brother Junipers Twin Lamps.esp
+ST_Alchemy_Replacer_1.3.esp
+; make ST_Alchemy_Replacer_1.3.esp win where they conflict
+
+[Order]
+Dallara Ebonheart.esp
+seamus_TraitorKings.ESP
+; keep seamus_TraitorKings.ESP winning where they conflict
+
+[Order]
+RepopulatedMorrowind.ESP
+Animated_Morrowind - Danaes Edits - Vv.esp
+; keep Animated_Morrowind - Danaes Edits - Vv.esp winning where they conflict
+
+[Order]
+MGO Guild Halls Vanilla.esp
+Thieves Guild Quest Revisions.esp
+; keep Thieves Guild Quest Revisions.esp winning where they conflict
+
+[Order]
+MGO Guild Halls Vanilla.esp
+BLLDV_ALL.esp
+; keep BLLDV_ALL.esp winning where they conflict
+
+[Order]
+MGO Guild Halls Vanilla.esp
+Windows Glow.esp
+; keep Windows Glow.esp winning where they conflict
+
+[Order]
+Animated_Morrowind - Danaes Edits - Vv.esp
+RPNR_Library.ESP
+; keep RPNR_Library.ESP winning where they conflict
+
+[Order]
 Yet Another Guard Diversity - Regular.ESP
 mwse_Containers.esp
 ; keep mwse_Containers.esp winning where they conflict
-
-[Order]
-OAAB Brother Junipers Twin Lamps.esp
-ST_Alchemy_Replacer_1.3.esp
-; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
 
 ;; ==== content rules promoted to masters (written by mwdialog_check --sort; don't edit) ====
 ;; Each was an [Order] rule found from what the patch changes; the patch now lists the mod as a

@@ -56,13 +56,22 @@ local function findSites()
     return sites
 end
 
+local function readOriginalBytes(address, length)
+    local bytes = {}
+    local ptr = ffi.cast("const uint8_t*", address)
+    for i = 0, length - 1 do
+        bytes[i + 1] = ptr[i]
+    end
+    return bytes
+end
+
 -- Writes (enable) or puts back (not enable) one located patch. Returns true when the code was changed.
 local function patch(name, enable)
     local site = findSites()[name]
     if not site then return false end
     if enable then
         if origBytes[name] then return false end          -- already applied
-        origBytes[name] = mwse.memory.readBytes({ address = site.address, length = site.length })
+        origBytes[name] = readOriginalBytes(site.address, site.length)
         if site.bytes then
             mwse.memory.writeBytes({ address = site.address, bytes = site.bytes })
         else

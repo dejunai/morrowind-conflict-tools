@@ -217,17 +217,6 @@
   Sound\cr\meridia\meridiasbeacon.wav	8864
 [Price Balance - Merged.esp]
   Textures\hr\ing_lich_dust.dds	192
-[Quest Voice Greetings.ESP]
-  Sound\vo\vdquest\raltmer.mp3	3336
-  Sound\vo\vdquest\rargonian.mp3	3336
-  Sound\vo\vdquest\rbosmer.mp3	3336
-  Sound\vo\vdquest\rbreton.mp3	3336
-  Sound\vo\vdquest\rdelf.mp3	3336
-  Sound\vo\vdquest\rimperial.mp3	3336
-  Sound\vo\vdquest\rkhajiit.mp3	3336
-  Sound\vo\vdquest\rnord.mp3	3336
-  Sound\vo\vdquest\rorc.mp3	3336
-  Sound\vo\vdquest\rredguard.mp3	3336
 [Sabrina.esp]
   Textures\rv\rv_redoexile plate.dds	192
 [Sheogorad - Groves of the North.esp]
@@ -264,7 +253,6 @@
 [Troxulgia.esp]
   Music\trox\silent.mp3	3336
   Sound\trox\funk finesse-premiumbeat.w	8864
-  Textures\crystals_albedo_shine.dds	192
 [Wyrmhaven.esm]
   Textures\bamboo_02.dds	192
   Textures\iron_strap_tx_metal_strip_01.dds	192

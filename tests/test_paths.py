@@ -16,7 +16,7 @@ import mwdialog_paths as P                       # noqa: E402
 
 # Production code and docs (not tests, not git, not tool binaries).
 SCAN_ROOT = Path(__file__).resolve().parents[1]
-SKIP_DIRS = {".git", "__pycache__", ".pytest_cache", ".ruff_cache", "tests", "tools"}
+SKIP_DIRS = {".git", "__pycache__", ".pytest_cache", ".ruff_cache", "tests", "tools", "Data Files"}
 # Data records are linted separately after migration; code/docs must stay clean.
 CODE_SUFFIXES = {".py", ".bat", ".md", ".gitignore"}
 DRIVE_LIT = re.compile(r"(?<![A-Za-z0-9_])[A-Za-z]:\\(?![dDsSnNtTwWbBaAzZrfvxuk0-9])")
@@ -44,17 +44,16 @@ def _in_repo():
 
 def _iter_code_files():
     repo = _in_repo()
-    for p in SCAN_ROOT.rglob("*"):
-        if not p.is_file():
-            continue
-        rel = p.relative_to(SCAN_ROOT).parts
-        if any(part in SKIP_DIRS for part in rel):
-            continue
-        if p.suffix.lower() not in CODE_SUFFIXES and p.name not in {".gitignore"}:
-            continue
-        if not repo and not ((len(rel) == 1 and SHIPPED.match(p.name)) or (len(rel) == 2 and rel[0] in SHIPPED_DIRS)):
-            continue
-        yield p
+    for root, dirs, files in os.walk(SCAN_ROOT):
+        dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
+        for fn in files:
+            p = Path(root) / fn
+            rel = p.relative_to(SCAN_ROOT).parts
+            if p.suffix.lower() not in CODE_SUFFIXES and p.name not in {".gitignore"}:
+                continue
+            if not repo and not ((len(rel) == 1 and SHIPPED.match(p.name)) or (len(rel) == 2 and rel[0] in SHIPPED_DIRS)):
+                continue
+            yield p
 
 
 def test_no_absolute_paths_in_repo_code():

@@ -1,0 +1,9 @@
+[package]
+name = "mwcustomclasspersistence"
+version = "1.0.0"
+description = "Saves custom player-created classes from character generation and makes them selectable in the Class Menu across playthroughs."
+authors = ["MWSE Team"]
+
+[tools.mwse]
+lua-mod = "mwcustomclasspersistence"
+load-priority = 4100

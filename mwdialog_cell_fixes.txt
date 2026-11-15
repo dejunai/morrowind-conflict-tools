@@ -31,8 +31,8 @@ balmora, tsiya's house	1 of Windows Glow.esp's	moved by Concept Art Hlaalu Balco
 berandas, keep, bottom level	1 of Something's Not Right - AS.ESP's	moved by The Sable Dragon 1.6 mmc.esp
 big head's shack	1 of Expanded Sounds.esp's	moved by Sheogorad - Groves of the North.esp
 caldera, falanaamo: clothier	1 of Store Entrance Chimes - Alt Ver.ESP's	moved by OAAB Better Caldera Interiors.ESP
-caldera, falanaamo: clothier	1 of Windows Glow.esp's	moved by OAAB Better Caldera Interiors.ESP
 caldera, falanaamo: clothier	1 of Friends & Frens - Vvardenfell.ESP's	moved by OAAB Better Caldera Interiors.ESP
+caldera, falanaamo: clothier	1 of Windows Glow.esp's	moved by OAAB Better Caldera Interiors.ESP
 caldera, falanaamo: clothier	1 of Expanded Sounds.esp's	moved by OAAB Better Caldera Interiors.ESP
 caldera, guild of mages	25 of OikImmCalderaGuild.ESP's	moved by MasterIndexRedux.esp
 caldera, guild of mages	4 of MasterIndexRedux.esp's	moved by OikImmCalderaGuild.ESP
@@ -62,10 +62,9 @@ dubdilla	1 of Something's Not Right - AS.ESP's	moved by Dubdilla Remade.ESP
 ebonheart, east empire company hall	1 of Adamantium Armor Naturalized.esp's	moved by EbonheartEastEmpireCo.esp
 ebonheart, grand council chambers	1 of Expanded Sounds.esp's	moved by Dallara Ebonheart.esp
 ebonheart, hawkmoth legion garrison	1 of Expanded Sounds.esp's	moved by Dallara Ebonheart.esp
-ebonheart, imperial chapels	6 of Illy's Oh my Goddess.ESP's	moved by Dallara Ebonheart.esp
-ebonheart, imperial chapels	2 of Dallara Ebonheart.esp's	moved by Illy's Oh my Goddess.ESP
+ebonheart, imperial chapels	12 of Illy's Oh my Goddess.ESP's	moved by Dallara Ebonheart.esp
 ebonheart, imperial chapels	1 of DA_Sobitur_Facility_Clean.ESP's	moved by Dallara Ebonheart.esp
-ebonheart, imperial chapels	1 of Camonna Tong.esp's	moved by Illy's Oh my Goddess.ESP
+ebonheart, imperial chapels	1 of Camonna Tong.esp's	moved by Dallara Ebonheart.esp
 elf-skerring, upper level	1 of Expanded Sounds.esp's	moved by RR_Better_Ships_n_Boats_Eng.esp
 eluba-addon egg mine	1 of Expanded Sounds.esp's	moved by Of Gems and Geodes.ESP
 endusal, kagrenac's study	1 of Mage Robes.ESP's	moved by Clean_EndusalRedone.esp

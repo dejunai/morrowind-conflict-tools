@@ -557,6 +557,7 @@ REF_NAME = re.compile(r"(?i)(ref|reference|target|actor|npc|creature|container|i
                       r"mobile)s?$")
 DEBUG_FLAG = re.compile(r"(?i)(debug|debugmode|debug_mode|verbose|logging|logdebug|log_debug|enablelogging|"
                         r"enabledebug|showdebug|debuglog|debugging)")
+KEY_BIND_RE = re.compile(r"(?i)config|cfg|setting|key|bind")
 
 
 class FileAnalysis:
@@ -1022,7 +1023,7 @@ class FileAnalysis:
             if n.kind != "Index" or n.field not in KEY_FIELDS:
                 continue
             bt = L.dotted(n.obj)
-            if not bt or not re.search(r"(?i)config|cfg|setting|key|bind", bt):
+            if not bt or not KEY_BIND_RE.search(bt):
                 continue
             if n.parent is not None and n.parent.kind == "Assign" and any(t is n for t in n.parent.targets):
                 continue
@@ -1207,8 +1208,8 @@ class FileAnalysis:
                 self.add("A3", c, what, f"held in a local and checked: do local {NIL_TMP} = {d}(...) if {NIL_TMP} "
                          f"then ... end end", "high", edits)
             else:
-                self.add("A3", c, what, f"keep the result in a local and check it - left as a report: the lookup "
-                         f"is indexed inside a bigger expression", "report")
+                self.add("A3", c, what, "keep the result in a local and check it - left as a report: the lookup "
+                         "is indexed inside a bigger expression", "report")
 
     def r_event_fields(self):
         for c, ev, fn, harg, opts in self.registrations:

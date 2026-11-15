@@ -7,12 +7,21 @@ Bow to the Daedra OAAB Add-on.ESP
 Bow to the Daedra MDMD Add-on.ESP
 KingsOathFix.ESP
 AF_Kishni_fix.ESP
+Better Bodies.esp
+Morrowind Bodies Reimagined.esp
+Better Robes TR_Patch.esp
 FMI_Current_Councilors.ESP
+RepopulatedCreatures_DialogueEdits.ESP
 Abundant Adamantium.ESP
+Cutting Room Floor - Dialogue.esp
 Fast Eddie fix.esp
+Vvardenfell Distribution - Mila-Nipal Camp.ESP
 Flora Glow.esp
 Vampire-tolerant Duke Vedam Dren.ESP
-Height & Weight.ESP
+Trainer Log - AEA.esp
+mdmd - uvirith legacy cooperation.ESP
+BTBGI PFP Patch.esp
+Slof's BB neck fix.esp
 Sorry We're Closed.ESP
 Wares-base - Adamantium Armor - Rare.esp
 avp BTBGI-NE - OAAB Tombs and Towers.esp
@@ -37,7 +46,6 @@ MW Containers Animated + LeFemmArmor.esp
 MW Containers Animated + Adamantium Armor.esp
 TR Guard fix.esp
 Hircine's Artifacts.ESP
-YARR - yet another race revamp v1.2.ESP
 Dwemer Double Doors.ESP
 immersivetravel.esp
 Diverse Blood - Project Cyrodiil.ESP

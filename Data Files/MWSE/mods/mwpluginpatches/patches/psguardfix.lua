@@ -164,6 +164,20 @@ local function check()
     end
 end
 
+local function onInfoFilter(e)
+    if e.dialogue and e.dialogue.id then
+        local id = e.dialogue.id:lower()
+        if id:find("%(target%)") then
+            local topicVal = tes3.getGlobal("ABM_Topic") or 0
+            local targetVal = tes3.getGlobal("ABM_TargetGlobal") or 0
+            if topicVal <= 0 and targetVal <= 0 then
+                e.passes = false
+                return false
+            end
+        end
+    end
+end
+
 function psguardfix.init()
     if not config.psGuardFixEnabled or not config.isPsGuardActive() then
         return
@@ -172,6 +186,8 @@ function psguardfix.init()
     event.register(tes3.event.loaded, function()
         wasRunning = {}
     end)
+
+    event.register(tes3.event.infoFilter, onInfoFilter)
 
     timer.start({
         type = timer.real,
@@ -183,7 +199,7 @@ function psguardfix.init()
         end
     })
 
-    mwse.log("[mwpluginpatches] Privileges & Services guard call and fade fix active.")
+    mwse.log("[mwpluginpatches] Privileges & Services guard call, fade, and target-topic filter active.")
 end
 
 return psguardfix

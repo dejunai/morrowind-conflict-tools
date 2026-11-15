@@ -569,7 +569,7 @@ end
 -- now playing: sounds already running (loops start when a cell loads, before the audio watch can see
 -- them). Checks every sound against the player and every object within NOW_RANGE, spread over frames.
 local NOW_RANGE, NOW_PER_FRAME = 4000, 12000
-local nowScan
+local nowScan, onNowScanFrame
 local function startNowPlaying(reason)
     if not tes3.player then return end
     local sounds = {}
@@ -587,6 +587,8 @@ local function startNowPlaying(reason)
     nowScan = { sounds = sounds, refs = refs, i = 1, found = 0, from = p:copy() }
     log("NOW PLAYING (%s): checking %d sounds on you and %d objects within %d units",
         reason, #sounds, #refs - 1, NOW_RANGE)
+    event.unregister(tes3.event.enterFrame, onNowScanFrame)
+    event.register(tes3.event.enterFrame, onNowScanFrame)
 end
 
 local function stepNowPlaying()
@@ -616,7 +618,15 @@ local function stepNowPlaying()
         nowScan = nil
     end
 end
-event.register(tes3.event.enterFrame, function() if nowScan then pcall(stepNowPlaying) end end)
+
+onNowScanFrame = function()
+    if nowScan then
+        pcall(stepNowPlaying)
+    end
+    if not nowScan then
+        event.unregister(tes3.event.enterFrame, onNowScanFrame)
+    end
+end
 
 local watchStarted, audioStarted = false, false
 
@@ -724,8 +734,13 @@ local function applySettings()
 end
 
 event.register(tes3.event.initialized, applySettings)
--- the memory check has its own frame hook, so it works with the rest of the watch turned off
-event.register(tes3.event.enterFrame, function() pcall(memCheck) end)
+-- the memory check has its own 1.0s timer, so it works with the rest of the watch turned off without per-frame overhead
+timer.start({
+    type = timer.real,
+    duration = 1.0,
+    iterations = -1,
+    callback = function() pcall(memCheck) end,
+})
 
 -- Mod Config menu ------------------------------------------------------------------
 local function registerModConfig()

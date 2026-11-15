@@ -81,19 +81,25 @@ local function flushLog()
     if logFile then pcall(logFile.flush, logFile) end
 end
 
+local function getObjId(o) return o.id end
+local function getObjSource(o) return o.sourceMod end
+
 -- id of an info: reads the plugin from disk (see header) - only for reported lines
 local function infoId(info)
-    local ok, id = pcall(function() return info.id end)
+    if not info then return "?" end
+    local ok, id = pcall(getObjId, info)
     return ok and id and tostring(id) or "?"
 end
 
 local function infoSource(info)
-    local ok, m = pcall(function() return info.sourceMod end)
+    if not info then return "?" end
+    local ok, m = pcall(getObjSource, info)
     return ok and m or "?"
 end
 
 local function dialId(dial)
-    local ok, id = pcall(function() return dial.id end)
+    if not dial then return "?" end
+    local ok, id = pcall(getObjId, dial)
     return ok and id and tostring(id) or "?"
 end
 

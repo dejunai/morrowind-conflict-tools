@@ -68,10 +68,19 @@ blCat:createKeyBinder({
 
 blCat:createButton({
     label = "Open Detection Inspector UI",
-    description = "Opens the in-game Detection Inspector to view nearby actors and manage blacklisted entities.",
+    description = "Opens the in-game Detection Inspector to view active detectors.",
     buttonText = "Open Inspector",
     callback = function()
         inspectorUI.open()
+    end,
+})
+
+blCat:createButton({
+    label = "Open Blacklist UI",
+    description = "Opens the separate Blacklist UI to view and manage all blacklisted entity IDs.",
+    buttonText = "Open Blacklist",
+    callback = function()
+        inspectorUI.openBlacklist()
     end,
 })
 

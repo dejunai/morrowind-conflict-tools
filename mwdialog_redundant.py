@@ -32,6 +32,7 @@ PERFORMER_PATCH = "mwdialog_check Performers Patch.esp"
 OUR_PATCHES = (PATCH_NAME, PLACE_PATCH_NAME, "mwdialog_check Multipatch.esp", CELL_WINNER_PATCH, PERFORMER_PATCH)
 
 AUTO_SKIP_TAGS = {"CELL", "LAND", "PGRD"}          # placing/moving objects, land, pathgrids: not merged
+SCRIPT_REF_RE = re.compile(r'"([^"\n]+)"|([A-Za-z_][\w\'\-]*)')
 
 
 def lua_named_plugins(data_dir):
@@ -71,7 +72,7 @@ def plugin_profile(path):
             prof["scripts"] = True
             tx = first_sub(body, b"SCTX")
             if tx:                                   # names a script uses (resolved when it loads)
-                for q, w in re.findall(r'"([^"\n]+)"|([A-Za-z_][\w\'\-]*)', tx.decode(_T.ENC, MW_ERRORS)):
+                for q, w in SCRIPT_REF_RE.findall(tx.decode(_T.ENC, MW_ERRORS)):
                     prof["refs"].add((q or w).lower())
         if tag in AUTO_SKIP_TAGS:
             prof["cells"] = True

@@ -24,13 +24,19 @@ Active Plugin Status:
   • Privileges & Services: %s
   • YARR (Yet Another Race Revamp): %s
   • Friends & Frens: %s
-  • The Lost Heir: %s]],
+  • The Lost Heir: %s
+  • Mabrigash Distribution: %s
+  • Personal Effects: %s
+  • No Accidental Theft: %s]],
     config.isMcaActive() and "Active" or "Not Active",
     config.isEbonheartUnderworksActive() and "Active" or "Not Active",
     config.isPsGuardActive() and "Active" or "Not Active",
     config.isYsmirActive() and "Active" or "Not Active",
     config.isFriendsAndFrensActive() and "Active" or "Not Active",
-    config.isLostHeirActive() and "Active" or "Not Active"),
+    config.isLostHeirActive() and "Active" or "Not Active",
+    config.isMabrDistActive() and "Active" or "Not Active",
+    config.isPersonalEffectsActive() and "Active" or "Not Active",
+    config.isNoAccidentalTheftActive() and "Active" or "Not Active"),
 })
 
 -- SECTION 1: FRIENDS & FRENS (JIUB COMPANION DELAY)
@@ -177,6 +183,43 @@ euCategory:createYesNoButton({
     label = "Thief Branch Content",
     description = "Enable the additional Thief questline content in the Underworks.",
     variable = mwse.mcm.createTableVariable({ id = "euThiefBranch", table = config }),
+})
+
+-- SECTION 7: MABRIGASH DISTRIBUTION
+local mabrCategory = page:createCategory(string.format("Mabrigash Distribution: Popup Suppression%s", getStatusText(config.isMabrDistActive())))
+
+mabrCategory:createYesNoButton({
+    label = "Suppress 'Distributing Mabrigash' Popup",
+    description = "Silently suppresses the background distribution notification box on game startup and cell load.",
+    variable = mwse.mcm.createTableVariable({ id = "mabrDistSuppressionEnabled", table = config }),
+})
+
+-- SECTION 8: PERSONAL EFFECTS
+local peCategory = page:createCategory(string.format("Personal Effects: Sellus Gravius Facing%s", getStatusText(config.isPersonalEffectsActive())))
+
+peCategory:createYesNoButton({
+    label = "Fix Sellus Gravius 180° Spin",
+    description = "Prevents Sellus Gravius from spinning 180° into the rear wall upon dialogue exit caused by Personal Effects' hardcoded 'Face 1605 -376' script command.",
+    variable = mwse.mcm.createTableVariable({ id = "personalEffectsFixEnabled", table = config }),
+})
+
+-- SECTION 9: NO ACCIDENTAL THEFT (BOOK READING FIX)
+local natCategory = page:createCategory(string.format("No Accidental Theft: Book Reading Fix%s", getStatusText(config.isNoAccidentalTheftActive())))
+
+natCategory:createYesNoButton({
+    label = "Enable Book Reading While Standing",
+    description = "Allows reading owned books and documents in the world without sneaking. When reading an owned book while standing, the Take button is disabled/greyed out to prevent accidental stealing.",
+    variable = mwse.mcm.createTableVariable({ id = "noAccidentalTheftBookFixEnabled", table = config }),
+})
+
+natCategory:createDropdown({
+    label = "Take Button Appearance for Owned Books",
+    description = "Choose how the Take button appears when reading an owned book while standing (not sneaking):\n• Disabled / Red Tint: Button is greyed out, red-tinted, unclickable, and shows an informational tooltip.\n• Hidden / Missing: Button is completely removed from the reading window.",
+    options = {
+        { label = "Disabled & Red Tint (with Tooltip)", value = "disabled" },
+        { label = "Hidden / Missing", value = "hidden" },
+    },
+    variable = mwse.mcm.createTableVariable({ id = "ownedBookTakeMode", table = config }),
 })
 
 mwse.mcm.register(template)

@@ -2,21 +2,17 @@ local config = require("mweffectinspector.config")
 local inspector = require("mweffectinspector.inspector")
 
 local INSPECT_COMMANDS = {
-    ["showeffects"] = true,
     ["inspecteffects"] = true,
+    ["showeffects"] = true,
+    ["effects"] = true,
+    ["magiceffects"] = true,
     ["/inspecteffects"] = true,
     ["/showeffects"] = true,
-    ["magiceffects"] = true,
-    ["/magiceffects"] = true,
-    ["effects"] = true,
-    ["/effects"] = true,
 }
 
 local CLEAR_COMMANDS = {
     ["cleareffects"] = true,
-    ["/cleareffects"] = true,
     ["purgeeffects"] = true,
-    ["/purgeeffects"] = true,
     ["dispel"] = true,
     ["/dispel"] = true,
     ["removeeffects"] = true,
@@ -26,11 +22,31 @@ local CLEAR_COMMANDS = {
 local function parseFirstWord(cmdStr)
     if not cmdStr then return nil end
     local clean = cmdStr:gsub("^%s*`*", ""):gsub("`*%s*$", "")
+    clean = clean:gsub("%(.*%)", "")
     local firstWord = clean:match("^(%S+)")
     return firstWord and firstWord:lower()
 end
 
--- 1. Integration with More Console Commands (complement when available)
+local function handleConsoleCommand(cmdStr)
+    local cmd = parseFirstWord(cmdStr)
+    if not cmd then return false end
+    if INSPECT_COMMANDS[cmd] then
+        inspector.inspectEffects()
+        return true
+    elseif CLEAR_COMMANDS[cmd] then
+        inspector.clearEffects()
+        return true
+    end
+    return false
+end
+
+-- Expose to global Lua environment for UI Expansion Lua console (e.g. inspecteffects or inspecteffects())
+_G.inspecteffects = function(ref) inspector.inspectEffects(ref) end
+_G.showeffects = function(ref) inspector.inspectEffects(ref) end
+_G.cleareffects = function(ref) inspector.clearEffects(ref) end
+_G.dispel = function(ref) inspector.clearEffects(ref) end
+
+-- 1. Integration with More Console Commands
 local function tryRegisterWithMCC()
     local interop = include("JosephMcKean.commands.interop")
     if interop and interop.registerCommands then
@@ -39,6 +55,7 @@ local function tryRegisterWithMCC()
                 name = "showeffects",
                 description = "Inspect active magic effects, abilities, enchantments, and attached VFX nodes on the target",
                 aliases = { "effects", "inspecteffects", "magiceffects", "/inspecteffects", "/showeffects" },
+                arguments = {},
                 callback = function(argv)
                     inspector.inspectEffects()
                 end,
@@ -47,6 +64,7 @@ local function tryRegisterWithMCC()
                 name = "cleareffects",
                 description = "Remove and purge all active magic effects from the targeted actor",
                 aliases = { "dispel", "purgeeffects", "removeeffects", "/cleareffects", "/dispel" },
+                arguments = {},
                 callback = function(argv)
                     inspector.clearEffects()
                 end,
@@ -58,24 +76,16 @@ local function tryRegisterWithMCC()
     return false
 end
 
--- 2. Independent Console Listener for UI Expansion
+-- 2. UI Expansion Console Listener (catches both Lua and MWScript contexts)
 local function onUIExpConsoleCommand(e)
     if not config.enabled then return end
     if not e.command then return end
-
-    local cmd = parseFirstWord(e.command)
-    if not cmd then return end
-
-    if INSPECT_COMMANDS[cmd] then
-        inspector.inspectEffects()
-        e.block = true
-    elseif CLEAR_COMMANDS[cmd] then
-        inspector.clearEffects()
+    if handleConsoleCommand(e.command) then
         e.block = true
     end
 end
 
--- 3. Independent Vanilla Console Listener (fallback if UI Expansion is absent)
+-- 3. Vanilla Console Listener (fallback if UI Expansion is absent)
 local function onMenuConsoleActivated(e)
     if not config.enabled then return end
     local menu = e.element
@@ -83,18 +93,9 @@ local function onMenuConsoleActivated(e)
     if not input then return end
 
     input:registerBefore("keyEnter", function()
-        local text = input.text
-        local cmd = parseFirstWord(text)
-        if cmd then
-            if INSPECT_COMMANDS[cmd] then
-                input.text = ""
-                inspector.inspectEffects()
-                return false
-            elseif CLEAR_COMMANDS[cmd] then
-                input.text = ""
-                inspector.clearEffects()
-                return false
-            end
+        if handleConsoleCommand(input.text) then
+            input.text = ""
+            return false
         end
     end)
 end
@@ -111,15 +112,13 @@ end
 
 -- Initialization
 local function onInitialized()
-    -- Attempt integration with More Console Commands
     tryRegisterWithMCC()
     event.register("command:register", tryRegisterWithMCC)
 
-    -- Register independent UI Expansion & Vanilla console listeners
+    -- Single unfiltered listener catches all UI Expansion console contexts (lua, mwscript, etc.)
     event.register("UIEXP:consoleCommand", onUIExpConsoleCommand)
-    event.register("uiActivated", onMenuConsoleActivated, { filter = "MenuConsole" })
 
-    -- In-game hotkey
+    event.register("uiActivated", onMenuConsoleActivated, { filter = "MenuConsole" })
     event.register("keyDown", onKeyDown)
 
     mwse.log("[mweffectinspector] Initialized. Available console commands: showeffects, inspecteffects, /inspecteffects, cleareffects, dispel.")
@@ -127,7 +126,6 @@ end
 
 event.register("initialized", onInitialized)
 
--- Mod Config Menu
 local function registerModConfig()
     require("mweffectinspector.mcm")
 end

@@ -25,18 +25,19 @@ def read_generated_record(rec_path):
     out, plugin = {}, ""
     if not os.path.exists(rec_path):
         return out
-    for line in open(rec_path, encoding="utf-8", errors="replace"):
-        line = line.rstrip("\r\n")
-        if not line.strip() or line.startswith(";"):
-            continue
-        if line.startswith("[") and line.endswith("]"):
-            plugin = line[1:-1]
-            if plugin.startswith("normal maps") or plugin.startswith("earlier runs"):
-                plugin = ""
-            continue
-        parts = line.split("\t")
-        rel = parts[0].strip()
-        out[rel.lower()] = (rel, parts[1].strip() if len(parts) > 1 else "", plugin)
+    with open(rec_path, encoding="utf-8", errors="replace") as stream:
+        for line in stream:
+            line = line.rstrip("\r\n")
+            if not line.strip() or line.startswith(";"):
+                continue
+            if line.startswith("[") and line.endswith("]"):
+                plugin = line[1:-1]
+                if plugin.startswith("normal maps") or plugin.startswith("earlier runs"):
+                    plugin = ""
+                continue
+            parts = line.split("\t")
+            rel = parts[0].strip()
+            out[rel.lower()] = (rel, parts[1].strip() if len(parts) > 1 else "", plugin)
     return out
 
 

@@ -112,9 +112,15 @@ local function checkCursorLock()
     end
 end
 
-event.register(tes3.event.enterFrame, function()
-    pcall(checkCursorLock)
-end)
+-- Check cursor containment every 0.35s rather than polling Win32 FFI every frame
+timer.start({
+    type = timer.real,
+    duration = 0.35,
+    iterations = -1,
+    callback = function()
+        pcall(checkCursorLock)
+    end,
+})
 
 event.register(tes3.event.menuEnter, function()
     if not config.lockInMenus then releaseCursor() end

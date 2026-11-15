@@ -5,6 +5,9 @@ local psguardfix = require("mwpluginpatches.patches.psguardfix")
 local ysmirShield = require("mwpluginpatches.patches.ysmirShield")
 local jiubDelay = require("mwpluginpatches.patches.jiubDelay")
 local lostHeirDelay = require("mwpluginpatches.patches.lostHeirDelay")
+local mabrDist = require("mwpluginpatches.patches.mabrDist")
+local personalEffectsFix = require("mwpluginpatches.patches.personalEffectsFix")
+local noAccidentalTheftBookFix = require("mwpluginpatches.patches.noAccidentalTheftBookFix")
 
 local function onInitialized()
     mwse.log("[mwpluginpatches] Initializing unified plugin compatibility patches...")
@@ -32,6 +35,21 @@ local function onInitialized()
     -- 5. The Lost Heir Delayer
     if config.lostHeirDelayEnabled and config.isLostHeirActive() then
         lostHeirDelay.init()
+    end
+
+    -- 6. Mabrigash Distribution Popup Suppression
+    if config.mabrDistSuppressionEnabled and config.isMabrDistActive() then
+        mabrDist.init()
+    end
+
+    -- 7. Personal Effects Sellus Gravius Facing Fix
+    if config.personalEffectsFixEnabled and config.isPersonalEffectsActive() then
+        personalEffectsFix.init()
+    end
+
+    -- 8. No Accidental Theft - Book Reading Fix
+    if config.noAccidentalTheftBookFixEnabled and config.isNoAccidentalTheftActive() then
+        noAccidentalTheftBookFix.init()
     end
 
     mwse.log("[mwpluginpatches] Unified plugin compatibility patches initialized.")

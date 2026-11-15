@@ -10,6 +10,7 @@ local defaults = {
 	settleWindow = 5.0,
 	validateOnLoad = true,
 	logToMWSE = true,
+	cleanClones = true,
 }
 local config = mwse.loadConfig(CONFIG_NAME, defaults)
 
@@ -118,7 +119,103 @@ event.register("load", onPreLoad, { priority = -9000 })
 
 
 ----------------------------------------------------------------------------------------------------
--- 2. SAVE STALLING / SETTLING WINDOW: Prevent save crashes during volatile world transitions
+-- 2. PLAYER CLONE PROTECTION: Detect and purge duplicate player actors to prevent save CTD
+----------------------------------------------------------------------------------------------------
+
+local function isPlayerClone(ref)
+	if not ref or not tes3.player or ref == tes3.player then
+		return false
+	end
+	if ref.objectType ~= tes3.objectType.npc then
+		return false
+	end
+
+	-- 0. Explicit match on PlayerSaveGame dynamic player duplicate
+	local refId = ref.id and ref.id:lower()
+	if refId and refId:find("playersavegame") then
+		return true
+	end
+
+	-- 1. Direct object / baseObject match: only the player character can have the 'player' base record
+	local baseId = ref.baseObject and ref.baseObject.id and ref.baseObject.id:lower()
+	if baseId == "player" then
+		return true
+	end
+	if tes3.player.object and (ref.object == tes3.player.object or ref.baseObject == tes3.player.baseObject) then
+		return true
+	end
+
+	-- 2. Exact identity clone: matching player name AND identical race/head/hair/class
+	local playerObj = tes3.player.object
+	local refObj = ref.object
+	if playerObj and refObj then
+		local pName = playerObj.name
+		local rName = refObj.name
+		if rName and (rName == "Player" or (pName and pName ~= "" and rName == pName)) then
+			if baseId and baseId:find("^player") then
+				return true
+			end
+			if refObj.race == playerObj.race and
+			   refObj.head == playerObj.head and
+			   refObj.hair == playerObj.hair and
+			   refObj.class == playerObj.class then
+				return true
+			end
+		end
+	end
+
+	return false
+end
+
+local function purgePlayerClones()
+	if not config.enabled or config.cleanClones == false then
+		return 0
+	end
+	if not tes3.player then
+		return 0
+	end
+
+	local ok, activeCells = pcall(tes3.getActiveCells)
+	if not ok or not activeCells then
+		return 0
+	end
+
+	local toPurge = {}
+	for _, cell in ipairs(activeCells) do
+		for ref in cell:iterateReferences(tes3.objectType.npc) do
+			if isPlayerClone(ref) then
+				table.insert(toPurge, {
+					ref = ref,
+					cellName = cell.editorName or cell.displayName or cell.id or "Unknown Cell",
+				})
+			end
+		end
+	end
+
+	for _, entry in ipairs(toPurge) do
+		local ref = entry.ref
+		local refName = (ref.object and ref.object.name) or "Player"
+		local refId = (ref.baseObject and ref.baseObject.id) or (ref.id or "unknown")
+		mwse.log("[mwsaveguard] Detected duplicate player clone '%s' [%s] in %s. Disabling reference.",
+			refName, refId, entry.cellName)
+
+		pcall(function()
+			ref.position = tes3vector3.new(ref.position.x, ref.position.y, ref.position.z - 10000)
+			ref:disable()
+			ref.modified = true
+		end)
+	end
+
+	if #toPurge > 0 then
+		logMsg("[mwsaveguard] Disabled %d duplicate player clone(s) across active cells to prevent save corruption.", #toPurge)
+	end
+
+	return #toPurge
+end
+
+
+----------------------------------------------------------------------------------------------------
+-- 3. SAVE STALLING / SETTLING WINDOW: Prevent save crashes during volatile world transitions
 ----------------------------------------------------------------------------------------------------
 
 local lastCellChangeTime = os.clock()
@@ -131,11 +228,16 @@ local PENDING_MAX = 30          -- s: a deferred save older than this no longer 
 
 local function onCellChanged(e)
 	lastCellChangeTime = os.clock()
+	purgePlayerClones()
+	timer.delayOneFrame(function()
+		purgePlayerClones()
+	end)
 end
 event.register("cellChanged", onCellChanged)
 
 local function onCharGenFinished(e)
 	lastCharGenFinishTime = os.clock()
+	purgePlayerClones()
 end
 event.register("charGenFinished", onCharGenFinished)
 
@@ -148,10 +250,32 @@ local function onLoaded(e)
 	else
 		lastCharGenFinishTime = os.clock()
 	end
+	timer.delayOneFrame(function()
+		purgePlayerClones()
+	end)
 end
 event.register("loaded", onLoaded)
 
 -- Forward declaration
+local function sanitizeCellReferences()
+	local ok, activeCells = pcall(tes3.getActiveCells)
+	if not ok or not activeCells then return end
+
+	for _, cell in ipairs(activeCells) do
+		for ref in cell:iterateReferences() do
+			if ref and ref.attachments then
+				local hasScript = (ref.baseObject and ref.baseObject.script) or (ref.object and ref.object.script)
+				if not hasScript then
+					local pOk, vars = pcall(function() return ref.attachments.variables end)
+					if pOk and vars ~= nil then
+						pcall(function() ref.attachments.variables = nil end)
+					end
+				end
+			end
+		end
+	end
+end
+
 local executeDeferredSave
 
 executeDeferredSave = function()
@@ -190,6 +314,10 @@ executeDeferredSave = function()
 		return
 	end
 
+	-- Purge duplicate clones and sanitize cell references right before writing deferred save
+	purgePlayerClones()
+	sanitizeCellReferences()
+
 	local target = pendingSave
 	pendingSave = nil
 
@@ -218,10 +346,18 @@ local function onSave(e)
 		return
 	end
 
+	-- Always purge duplicate player clones and sanitize references before save proceeds or gets queued
+	purgePlayerClones()
+	sanitizeCellReferences()
+
 	-- If our own deferred execution triggered this, allow it straight through
 	if isExecutingDeferredSave then
 		return
 	end
+
+	local dh = tes3.dataHandler
+	local ndd = dh and dh.nonDynamicData
+	local isVolatileTransition = ndd and ndd.isSavingOrLoading
 
 	local window = tonumber(config.settleWindow) or 5.0
 	local now = os.clock()
@@ -231,8 +367,8 @@ local function onSave(e)
 	-- Calculate the minimum elapsed time across all settling triggers
 	local minElapsed = math.min(cellElapsed, charGenElapsed)
 
-	if minElapsed < window then
-		-- Suppress immediate engine save
+	if minElapsed < window or isVolatileTransition then
+		-- Suppress immediate save during volatile transitions / load screens to prevent corruption/crash
 		e.block = true
 		e.claim = true
 
@@ -278,7 +414,7 @@ event.register("uiActivated", onOptionsMenu, { filter = "MenuOptions" })
 
 
 ----------------------------------------------------------------------------------------------------
--- 3. MOD CONFIG MENU
+-- 4. MOD CONFIG MENU
 ----------------------------------------------------------------------------------------------------
 
 event.register(tes3.event.modConfigReady, function()
@@ -290,7 +426,7 @@ event.register(tes3.event.modConfigReady, function()
 
 	local page = template:createSideBarPage({
 		label = "Settings",
-		description = "mwsaveguard is a core protection tool for Morrowind saves:\n\n1. Settling Window: Defers autosaves or quicksaves following cell transitions and chargen completion until actors, inventories, and custom Lua data stabilize, eliminating save-time freeze and crash bugs.\n\n2. Load Integrity: Pre-scans save files to intercept and quarantine truncated or corrupted files before the engine attempts to load them.",
+		description = "mwsaveguard is a core protection tool for Morrowind saves:\n\n1. Settling Window: Defers autosaves or quicksaves following cell transitions and chargen completion until actors, inventories, and custom Lua data stabilize, eliminating save-time freeze and crash bugs.\n\n2. Player Clone Purge: Detects and deletes duplicate player clone actors left in active cells from fresh starts or transitions, preventing the 50% save freeze and CTD.\n\n3. Load Integrity: Pre-scans save files to intercept and quarantine truncated or corrupted files before the engine attempts to load them.",
 	})
 
 	page:createOnOffButton({
@@ -307,6 +443,12 @@ event.register(tes3.event.modConfigReady, function()
 		step = 0.5,
 		decimalPlaces = 1,
 		variable = mwse.mcm.createTableVariable({ id = "settleWindow", table = config }),
+	})
+
+	page:createOnOffButton({
+		label = "Auto-Purge Duplicate Player Clones",
+		description = "Detects and purges duplicate player clone actors across active cells, preventing the 50% save freeze and crash bug.",
+		variable = mwse.mcm.createTableVariable({ id = "cleanClones", table = config }),
 	})
 
 	page:createOnOffButton({

@@ -107,7 +107,9 @@ local function onKeyDown(e)
         if bind.isAltDown and not e.isAltDown then return end
         if bind.isControlDown and not e.isControlDown then return end
 
-        if tes3ui.findMenu(tes3ui.registerID("mwcompanionsneak:DetectionInspector")) then
+        local idMenu = tes3ui.registerID("mwcompanionsneak:DetectionInspector")
+        local idBlMenu = tes3ui.registerID("mwcompanionsneak:BlacklistMenu")
+        if tes3ui.findMenu(idMenu) or tes3ui.findMenu(idBlMenu) then
             inspectorUI.close()
         elseif not tes3ui.menuMode() then
             inspectorUI.open()

@@ -1,5 +1,4 @@
 {
-  "perFrameHints":["e%.delta","camera","velocity","orientation","position%s*=","rotation","animat","drag","mouse","lerp","smooth","interpolat","fade","tes3ui","menu","controls","keybind","inputcontroller","positioncell"],
   "enabled":true,
   "priorityLimit":10000,
   "sampleEvery":8,
@@ -7,5 +6,6 @@
   "reportTop":10,
   "costMs":0.75,
   "logNoticeToMWSE":true,
-  "exemptMods":["mwguard","mwhangwatch","mwfloatfix","mwstranded","mwcollide","mwperformers","mwinfoloop","mwsoundguard","mwsaveguard","mwwarnsuppression","mwcompanionsneak","mwpluginpatches","mweffectinspector","mwmouseguard","mwespreplacements","mwteleportguard"]
+  "exemptMods":["mwguard","mwhangwatch","mwfloatfix","mwstranded","mwcollide","mwperformers","mwinfoloop","mwsoundguard","mwsaveguard","mwwarnsuppression","mwcompanionsneak","mwpluginpatches","mweffectinspector","mwmouseguard","mwespreplacements","mwteleportguard"],
+  "perFrameHints":["e%.delta","camera","velocity","orientation","position%s*=","rotation","animat","drag","mouse","lerp","smooth","interpolat","fade","tes3ui","menu","controls","keybind","inputcontroller","positioncell"]
 }

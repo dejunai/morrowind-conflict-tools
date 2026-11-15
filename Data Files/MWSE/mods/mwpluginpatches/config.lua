@@ -39,6 +39,25 @@ function config.isLostHeirActive()
         or tes3.isModActive("LostHeir.esp")
 end
 
+function config.isMabrDistActive()
+    return tes3.isModActive("MabrDist.esp")
+        or tes3.findGlobal("gv_mabrDist") ~= nil
+        or tes3.getScript("mabDist") ~= nil
+end
+
+function config.isPersonalEffectsActive()
+    return tes3.isModActive("Personal Effects_MWSE.ESP")
+        or tes3.isModActive("Personal Effects.ESP")
+        or tes3.getObject("R0_pe_basecont") ~= nil
+        or tes3.getScript("R0_pe_init_scr") ~= nil
+end
+
+function config.isNoAccidentalTheftActive()
+    return tes3.getFileExists("MWSE/mods/mer/accidentalTheftProtection/main.lua")
+        or tes3.getFileExists("Data Files/MWSE/mods/mer/accidentalTheftProtection/main.lua")
+        or tes3.isModActive("accidentalTheftProtection")
+end
+
 -- Resolve dynamic defaults based on whether target plugin is active in load order
 local function getDynamicDefaults()
     local mca = config.isMcaActive()
@@ -47,6 +66,9 @@ local function getDynamicDefaults()
     local ysmir = config.isYsmirActive()
     local fnf = config.isFriendsAndFrensActive()
     local lostHeir = config.isLostHeirActive()
+    local mabr = config.isMabrDistActive()
+    local pe = config.isPersonalEffectsActive()
+    local nat = config.isNoAccidentalTheftActive()
 
     return {
         -- AutoStartup: Morrowind Comes Alive
@@ -79,6 +101,16 @@ local function getDynamicDefaults()
 
         -- The Lost Heir Delayer
         lostHeirDelayEnabled = lostHeir,
+
+        -- Mabrigash Distribution Popup Suppression
+        mabrDistSuppressionEnabled = mabr,
+
+        -- Personal Effects Sellus Gravius Facing Fix
+        personalEffectsFixEnabled = pe,
+
+        -- No Accidental Theft: Allow Reading Owned Books while Standing
+        noAccidentalTheftBookFixEnabled = nat,
+        ownedBookTakeMode = "disabled", -- "disabled" (red/greyed out with tooltip) or "hidden"
     }
 end
 

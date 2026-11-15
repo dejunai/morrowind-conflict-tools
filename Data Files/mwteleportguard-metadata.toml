@@ -1,7 +1,9 @@
-package = "mwteleportguard"
+[package]
+name = "mwteleportguard"
 version = "1.0.0"
 description = "Mod-agnostic protection deferring scripted dialogue teleports until conversation closes, preventing freezes and companion abandonment."
 authors = ["MWSE Team"]
 
-[package.metadata]
-package-load-priority = 4200
+[tools.mwse]
+lua-mod = "mwteleportguard"
+load-priority = 4200

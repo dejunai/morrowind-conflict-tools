@@ -51,15 +51,18 @@ local checkedThisSession = setmetatable({}, { __mode = "k" })
 -- the item's own itemData: a mark there went into the save for every loose item ever loaded, and an item
 -- carrying data no longer stacks with its plain twins once picked up. An item that was lowered rests on
 -- the floor afterwards, so checking it again next session costs a few rays and changes nothing.
+local function readTemp(r, k) return r.tempData[k] end
+local function writeTemp(r, k, v) r.tempData[k] = v end
+
 local function getRefData(ref, key)
     if not ref or not ref.supportsLuaData then return nil end
-    local ok, val = pcall(function() return ref.tempData[key] end)
+    local ok, val = pcall(readTemp, ref, key)
     return ok and val or nil
 end
 
 local function setRefData(ref, key, val)
     if not ref or not ref.supportsLuaData then return false end
-    return (pcall(function() ref.tempData[key] = val end))
+    return (pcall(writeTemp, ref, key, val))
 end
 
 local queue, queued, qHead = {}, {}, 1    -- reviewed: a read index instead of table.remove(queue, 1)
@@ -84,18 +87,22 @@ local function log(fmt, ...)
     logFile:flush()
 end
 
+local function checkRefValid(r)
+    return not r.disabled and not r.deleted and r.sceneNode ~= nil and r.position ~= nil
+end
+
 local function isRefValid(ref)
     if not ref then return false end
-    local ok, valid = pcall(function()
-        return not ref.disabled and not ref.deleted and ref.sceneNode ~= nil and ref.position ~= nil
-    end)
+    local ok, valid = pcall(checkRefValid, ref)
     return ok and valid
 end
+
+local function getRefObject(r) return r.object end
 
 local function isCandidate(ref)
     if not isRefValid(ref) then return false end
     if checkedThisSession[ref] then return false end
-    local ok, obj = pcall(function() return ref.object end)
+    local ok, obj = pcall(getRefObject, ref)
     if not ok or not obj then return false end
 
     local id = obj.id:lower()
@@ -487,19 +494,19 @@ event.register(tes3.event.simulate, function()
         for i = qHead, #queue do
             local ref = queue[i]
             if isRefValid(ref) and isCandidate(ref) then
-                rest[#rest + 1] = ref
+                local p = ref.position
+                local z = (p and p.z) or 0
+                rest[#rest + 1] = { ref = ref, z = z }
             end
         end
-        local function getZ(ref)
-            local ok, z = pcall(function() return ref.position.z end)
-            return ok and z or 0
-        end
-        pcall(function()
-            table.sort(rest, function(a, b)
-                return getZ(a) < getZ(b)
-            end)
+        table.sort(rest, function(a, b)
+            return a.z < b.z
         end)
-        queue, qHead, sorted = rest, 1, true
+        local sortedRefs = {}
+        for i = 1, #rest do
+            sortedRefs[i] = rest[i].ref
+        end
+        queue, qHead, sorted = sortedRefs, 1, true
     end
     for _ = 1, config.perFrame do
         local ref = queue[qHead]
