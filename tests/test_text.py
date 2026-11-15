@@ -101,7 +101,6 @@ def test_no_mid_word_or_hyphen_break():
     prefix = "x " * 54  # 108
     text = prefix + token
     lines = _lines(T.wrap(text))
-    joined = "".join(ln.strip() for ln in lines)
     assert token in " ".join(ln.strip() for ln in lines)
     assert all(token in ln or token not in ln for ln in lines)
     # the hyphenated token is not split
@@ -222,7 +221,6 @@ def test_open_log_wraps_human_lines_not_tsv_or_header(tmp_path):
     text = p.read_text(encoding="utf-8")
     assert "==== 2026-11-11 20:07:00 clean ====" in text
     assert "cell\t3 of Who's\tmoved by other" in text
-    log_lines = [ln for ln in text.splitlines() if "synced the size" in ln or ln.startswith(" ")]
     assert any(ln.startswith("2026-11-11 20:07:00  ") for ln in text.splitlines())
     # the human line wrapped
     assert any(ln.startswith(" ") and "continuation" not in ln.lower() or ln.startswith(" ")

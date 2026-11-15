@@ -45,6 +45,7 @@ tool reproduces that for the ini and folder-scan modes.
 
 import argparse
 import bisect
+from contextlib import redirect_stderr
 import json
 import math
 import copy
@@ -2164,12 +2165,9 @@ def split_exact_groups(args):
     if not exact:
         return []
     quiet = Report()
-    old_err, sys.stderr = sys.stderr, open(os.devnull, "w")
-    try:
-        plugins = resolve(args, quiet)[0]
-    finally:
-        sys.stderr.close()
-        sys.stderr = old_err
+    with open(os.devnull, "w") as devnull:
+        with redirect_stderr(devnull):
+            plugins = resolve(args, quiet)[0]
     names = [n for n, _p in plugins]
     low = [n.lower() for n in names]
     paths = dict(plugins)
@@ -4335,7 +4333,7 @@ def run_clean(args, plugins, only):
 
 import mwdialog_multipatch as _MP
 from mwdialog_multipatch import (
-    MULTI_PATCH_NAME, BETHESDA_MASTERS, MERGE_TAGS,
+    MULTI_PATCH_NAME, MERGE_TAGS,
     multipatch_source, merge_file_check, merged_objects, expand_merged,
     object_merges, merged_inputs_of
 )
@@ -7723,8 +7721,10 @@ def full_reset(args, game_dir):
     text = open(rules_path, encoding="cp1252", errors="replace").read() if os.path.exists(rules_path) else ""
     own_text, earlier = split_conflict_rules(text)
     gen_path = os.path.join(game_dir, GENERATED_RECORD)
-    has_gen = os.path.exists(gen_path) and any(l.strip() and not l.startswith(";")
-                                                 for l in open(gen_path, encoding="utf-8", errors="replace"))
+    def has_gen_lines():
+        with open(gen_path, encoding="utf-8", errors="replace") as f:
+            return any(l.strip() and not l.startswith(";") for l in f)
+    has_gen = os.path.exists(gen_path) and has_gen_lines()
     print(f"  plugins turned off by earlier runs, back on: {', '.join(rec) or 'none'}")
     print(f"  [Order] rules from earlier --cell-conflicts runs removed: {len(earlier)}")
     print(f"  stand-in files from earlier asset checks removed: {'yes' if has_gen else 'none recorded'}")
