@@ -47,10 +47,12 @@ _G.cleareffects = function(ref) inspector.clearEffects(ref) end
 _G.dispel = function(ref) inspector.clearEffects(ref) end
 
 -- 1. Integration with More Console Commands
+local mccRegistered = false
 local function tryRegisterWithMCC()
+    if mccRegistered then return true end
     local interop = include("JosephMcKean.commands.interop")
     if interop and interop.registerCommands then
-        interop.registerCommands({
+        local commands = {
             {
                 name = "showeffects",
                 description = "Inspect active magic effects, abilities, enchantments, and attached VFX nodes on the target",
@@ -69,7 +71,20 @@ local function tryRegisterWithMCC()
                     inspector.clearEffects()
                 end,
             },
-        })
+        }
+
+        local toRegister = {}
+        for _, cmd in ipairs(commands) do
+            local name = cmd.name:lower()
+            if not (interop.data and interop.data.commands and interop.data.commands[name]) then
+                table.insert(toRegister, cmd)
+            end
+        end
+
+        if #toRegister > 0 then
+            interop.registerCommands(toRegister)
+        end
+        mccRegistered = true
         mwse.log("[mweffectinspector] Successfully integrated with More Console Commands.")
         return true
     end

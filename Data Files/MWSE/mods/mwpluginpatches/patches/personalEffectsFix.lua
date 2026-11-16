@@ -346,18 +346,23 @@ function personalEffectsFix.init()
     end, { filter = "MenuDialog" })
 
     -- Continuous background check while player is in Census & Excise
-    timer.start({
-        duration = 1.0,
-        type = timer.real,
-        iterations = -1,
-        callback = function()
-            local cell = tes3.player and tes3.player.cell
-            if cell and cell.id:lower():find("census and excise") then
-                purgeStaleClones()
-                restoreDoorGuardFacing()
+    -- MWSE cancels every timer just before `loaded`, so it is started again there
+    local function startBackgroundCheck()
+        timer.start({
+            duration = 1.0,
+            type = timer.real,
+            iterations = -1,
+            callback = function()
+                local cell = tes3.player and tes3.player.cell
+                if cell and cell.id:lower():find("census and excise") then
+                    purgeStaleClones()
+                    restoreDoorGuardFacing()
+                end
             end
-        end
-    })
+        })
+    end
+    startBackgroundCheck()
+    event.register(tes3.event.loaded, startBackgroundCheck)
 
     mwse.log("[mwpluginpatches] Personal Effects Sellus Gravius & Census Door Guard script overrides and facing fixes active.")
 end

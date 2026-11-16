@@ -172,3 +172,29 @@ def test_I7_normal_map_pack_named_by_the_mod_folder(tmp_path, monkeypatch):
     (mod / "Textures").mkdir(parents=True)
     (mod / "Textures" / "tx_rock_n.dds").write_bytes(b"DDS ")
     assert [n for n, _d, _w in _plan(mod)] == ["tx_rock_n.dds"]
+
+
+def test_repairs_found_after_the_moves_are_queued_and_made(tmp_path, monkeypatch):
+    root = tmp_path / "Foo"
+    root.mkdir()
+    reviewed = {"issues": [("WARN", "x", "y")], "lp_plan": [],
+                "fixes": [("abs", "f", "meshes/m.nif", None), ("tex", "f", "Data Files/textures/t.dds", None)]}
+    after = {"issues": [("WARN", "x", "y")], "lp_plan": [],
+             "fixes": [("abs", "f", "meshes/m.nif", None), ("tex", "f", "textures/t.dds", None),
+                       ("snd", "f", "Sound/a.wav", {"mp3": True})]}
+    calls = []
+
+    class Ah:
+        nexus_id = staticmethod(lambda r: None)
+        update_bug_report = staticmethod(lambda *a: None)
+
+        @staticmethod
+        def apply_folder(r, fixes, m, game_dir, plug):
+            calls.append([f[2] for f in fixes])
+            return len(fixes), []
+    monkeypatch.setattr(vt, "assets_check_mod", lambda *a: dict(after))
+    ares = {"m": None, "ah": Ah, "game_dir": "", "data_dir": "", "bsa": None, "done": set(),
+            "mods": {"Foo": dict(reviewed, root=str(root))}}
+    vt.assets_apply(None, ares, moved_mods={"Foo"})
+    assert calls == [["meshes/m.nif"], ["textures/t.dds", "Sound/a.wav"]]  # reviewed first, then only the queue
+    assert vt.assets_pending(ares) == []                                       # nothing left: the run exits 0

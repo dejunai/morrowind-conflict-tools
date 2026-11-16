@@ -125,3 +125,14 @@ def test_M13_dx10_alpha_detection():
     assert ah.dx10_has_alpha(dx10_head(98)) is True       # BC7
     assert ah.dx10_has_alpha(dx10_head(98, 3)) is False   # BC7, opaque
     assert ah.dx10_has_alpha(b"DDS ") is True             # unknown: keep alpha
+
+
+def test_check_folder_converts_every_wav_to_a_same_stem_mp3(tmp_path):
+    import struct
+    fmt = struct.pack("<HHIIHH", 1, 1, 44100, 88200, 2, 16)              # mono, 44.1 kHz, 16-bit PCM
+    wav = b"RIFF" + struct.pack("<I", 36) + b"WAVE" + b"fmt " + struct.pack("<I", 16) + fmt + b"data" + b"\0" * 4
+    (tmp_path / "Sound" / "fx").mkdir(parents=True)
+    (tmp_path / "Sound" / "fx" / "a.wav").write_bytes(wav)
+    issues, fixes = ah.check_folder(str(tmp_path), m)
+    assert [(k, r.replace("\\", "/"), j.get("mp3")) for k, _f, r, j in fixes if k == "snd"] == \
+        [("snd", "Sound/fx/a.wav", True)]

@@ -1,128 +1,66 @@
 --[[
     Plain Paper Fix (mwplainpaperfix)
-    The essential classic mod by its original creator, modernized for MWSE 2.1+.
-    Picks up plain paper, blank scrolls, and unwritten documents directly into inventory
-    without triggering the reading window popup, while preserving normal reading for written notes.
-]]--
 
-local mcm = require("mwplainpaperfix.mcm")
+    Activating a blank sheet (a scroll-type book with no text) puts it straight into the inventory instead of
+    opening the empty scroll window. Nothing is scanned in advance: a sheet is tested the first time it is
+    activated and, if blank, remembered. Sheets with writing or a picture, and all bound books, open as usual.
+    Taking an owned sheet is theft, as it is from the scroll window's Take button.
+]]
 
-local defaultConfig = {
-    enabled = true,
-    whitelist = {},
-    blacklist = {},
-}
+local NAME = "mwplainpaperfix"
+local saved = mwse.loadConfig(NAME, {}) or {}
+-- "blank", not the "whitelist" of earlier versions: those lists also hold maps and other picture-only scrolls
+local config = { enabled = saved.enabled ~= false, blank = saved.blank or {} }
+local function save() mwse.saveConfig(NAME, config) end
 
-local config = mwse.loadConfig("mwplainpaperfix", defaultConfig) or {}
--- Ensure sub-tables exist
-config.whitelist = config.whitelist or {}
-config.blacklist = config.blacklist or {}
+local written = {}      -- ids found to have text, this session
 
-local function hasReadableText(book)
-    if not book or not book.text then return false end
-    local clean = book.text:gsub("<[^>]*>", ""):gsub("%s+", "")
-    return #clean > 0
+local function isBlankSheet(book)
+    if book.type ~= tes3.bookType.scroll then return false end
+    local id = book.id:lower()
+    if config.blank[id] then return true end
+    if written[id] then return false end
+    local raw = book.text or ""
+    local text = raw:gsub("<[^>]*>", ""):gsub("%s+", "")
+    if #text > 0 or raw:lower():find("<img", 1, true) then
+        written[id] = true
+        return false
+    end
+    config.blank[id] = true
+    save()
+    return true
 end
 
 local function onActivate(e)
-    if not config.enabled then return end
-    if e.activator ~= tes3.player then return end
-
+    if not config.enabled or e.activator ~= tes3.player then return end
     local ref = e.target
-    if not ref or ref.disabled or ref.deleted then return end
+    local book = ref and ref.object
+    if not book or book.objectType ~= tes3.objectType.book then return end
+    if not isBlankSheet(book) then return end
+    local count = math.max(ref.stackSize or 1, 1)
+    local owner = not tes3.hasOwnershipAccess({ target = ref }) and tes3.getOwner({ reference = ref }) or nil
 
-    local obj = ref.object
-    if not obj or obj.objectType ~= tes3.objectType.book then return end
-
-    local id = obj.id:lower()
-
-    -- Check whitelist status
-    local isWhitelisted = config.whitelist and config.whitelist[id]
-    if isWhitelisted == nil then
-        -- Dynamic check for first-time encountered items
-        if not (config.blacklist and config.blacklist[id]) then
-            if not hasReadableText(obj) then
-                isWhitelisted = true
-                config.whitelist[id] = true
-            else
-                isWhitelisted = false
-                config.blacklist[id] = true
-            end
-            mwse.saveConfig("mwplainpaperfix", config)
-        end
+    -- the item data goes with the item, so it is unhooked from the world object before that is deleted; a world
+    -- object left holding item data the inventory also holds is written twice by a save, which can crash it
+    local itemData = ref.itemData
+    ref.itemData = nil
+    tes3.addItem({ reference = tes3.player, item = book, count = count, itemData = itemData })
+    ref:delete()
+    if owner then
+        tes3.setItemIsStolen({ item = book, from = owner, stolen = true })
+        tes3.triggerCrime({ type = tes3.crimeType.theft, victim = owner, value = book.value * count })
     end
-
-    if not isWhitelisted then
-        return -- Item is blacklisted or contains text; read normally
-    end
-
-    -- Ownership & Sneak check: require sneak to take owned blank documents
-    local isOwned = not tes3.hasOwnershipAccess({ target = ref })
-    local isSneaking = (tes3.player.mobile and tes3.player.mobile.isSneaking)
-        or (tes3.mobilePlayer and tes3.mobilePlayer.isSneaking)
-
-    if isOwned and not isSneaking then
-       -- tes3.messageBox({
-       --     message = "You must sneak to take owned documents.",
-       --     buttons = { "OK" }
-       -- })
-        return false -- Consume activation to prevent un-sneaked theft
-    end
-
-    -- Pick up directly into inventory
-    local count = ref.stackSize or 1
-
-    -- Crime check
-    if isOwned then
-        local owner = tes3.getOwner(ref)
-        local totalValue = (obj.value or 1) * count
-        timer.frame.delayOneFrame(function()
-            tes3.triggerCrime({ type = tes3.crimeType.theft, victim = owner, value = totalValue })
-        end)
-    end
-
-    -- Play pickup sound
-    tes3.playSound({ sound = "Item Book Up" })
-
-    -- Add to player inventory
-    if ref.itemData then
-        tes3.addItem({
-            reference = tes3.player,
-            item = obj,
-            count = count,
-            itemData = ref.itemData,
-            playSound = false,
-        })
-    else
-        tes3.addItem({
-            reference = tes3.player,
-            item = obj,
-            count = count,
-            playSound = false,
-        })
-    end
-
-    -- Safely disable the picked-up reference
-    ref:disable()
-
-    return false -- Consume activation event to prevent reading window from opening
+    return false
 end
 
-local function onModConfigReady()
-    mcm.register(config, defaultConfig)
-end
+event.register("activate", onActivate, { priority = 10 })
 
-local function onInitialized()
-    event.register("activate", onActivate, { priority = 10 })
-    event.register("modConfigReady", onModConfigReady)
-
-    -- First run scan if whitelist is empty
-    if not next(config.whitelist) then
-        mcm.scanAndClassify(config, false)
-    end
-
-    mwse.log("[mwplainpaperfix] Initialized successfully. Direct pickup active for %d whitelisted blank document(s).",
-        table.size and table.size(config.whitelist) or 0)
-end
-
-event.register("initialized", onInitialized)
+event.register("modConfigReady", function()
+    local template = mwse.mcm.createTemplate({ name = "Plain Paper Fix", onClose = save })
+    local page = template:createPage({ label = "Settings" })
+    page:createYesNoButton({
+        label = "Pick up blank sheets without opening them",
+        variable = mwse.mcm.createTableVariable({ id = "enabled", table = config }),
+    })
+    template:register()
+end)

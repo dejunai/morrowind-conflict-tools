@@ -1706,6 +1706,8 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None, stats=None):
                     info = _mp3_info(b, m.mp3_first_frame)
             else:
                 info = _wav_info(b)
+                job["mp3"] = True
+                why.append("WAV (converted to MP3; Morrowind uses the same-stem fallback)")
                 fmt_bits = None
                 p = b.find(b"fmt ")
                 if p != -1 and p + 24 <= len(b):
@@ -2098,6 +2100,14 @@ def nexus_id(folder):
     return None
 
 
+def package_bug_report_path(folder, plugin_name, report_kind=None):
+    """A consistently named package report, optionally qualified by checker."""
+    nid = nexus_id(folder)
+    base = os.path.splitext(plugin_name)[0] + (f" [Nexus {nid}]" if nid else "")
+    base += (f".{report_kind}" if report_kind else "") + ".bugreport.txt"
+    return os.path.join(folder, "bugreports", base)
+
+
 def bug_report_path(data_dir, game_dir, plugin_name, m):
     """<mod folder>\\bugreports\\<plugin name>.bugreport.txt (Vortex), else <game>\\bugreports\\."""
     mod = None
@@ -2105,6 +2115,4 @@ def bug_report_path(data_dir, game_dir, plugin_name, m):
         mod, _pl = m.asset_owner_folder(data_dir, plugin_name)
     except Exception:
         mod = None
-    nid = nexus_id(mod) if mod else None
-    base = os.path.splitext(plugin_name)[0] + (f" [Nexus {nid}]" if nid else "") + ".bugreport.txt"
-    return os.path.join(mod or game_dir, "bugreports", base)
+    return package_bug_report_path(mod or game_dir, plugin_name)

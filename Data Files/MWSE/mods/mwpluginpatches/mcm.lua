@@ -208,7 +208,7 @@ local natCategory = page:createCategory(string.format("No Accidental Theft: Book
 
 natCategory:createYesNoButton({
     label = "Enable Book Reading While Standing",
-    description = "Allows reading owned books and documents in the world without sneaking. When reading an owned book while standing, the Take button is disabled/greyed out to prevent accidental stealing.",
+    description = "Allows reading owned books and documents in the world without sneaking. When reading an owned book while standing, the Take button is hidden or tinted red.",
     variable = mwse.mcm.createTableVariable({ id = "noAccidentalTheftBookFixEnabled", table = config }),
 })
 
@@ -216,8 +216,8 @@ natCategory:createDropdown({
     label = "Take Button Appearance for Owned Books",
     description = "Choose how the Take button appears when reading an owned book while standing (not sneaking):\n• Disabled / Red Tint: Button is greyed out, red-tinted, unclickable, and shows an informational tooltip.\n• Hidden / Missing: Button is completely removed from the reading window.",
     options = {
-        { label = "Disabled & Red Tint (with Tooltip)", value = "disabled" },
-        { label = "Hidden / Missing", value = "hidden" },
+        { label = "Red tint", value = "disabled" },
+        { label = "Hidden", value = "hidden" },
     },
     variable = mwse.mcm.createTableVariable({ id = "ownedBookTakeMode", table = config }),
 })

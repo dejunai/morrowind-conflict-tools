@@ -503,37 +503,42 @@ local function memOffenders()
 end
 
 local function memWarning(mb, pct)
-    openLog()
-    local list, flist, cells, total, unknown = memOffenders()
-    log("MEMORY WARNING: %.0f%% used (%.0f of %d MB). A 32-bit Morrowind crashes when it runs out.",
-        pct, mb, ADDRESS_SPACE_MB)
-    log("  textures of everything in the loaded cells: %d, %.0f MB on disk (%d more are in BSAs, size unknown)",
-        #list, total / 1048576, unknown)
-    for i = 1, math.min(MEM_TOP, #list) do
-        local t = list[i]
-        if not t.size then break end
-        log("    %6.1f MB  x%-4d %s", t.size / 1048576, t.uses, t.name)
-    end
-    log("  by texture folder (usually a texture pack):")
-    for i = 1, math.min(8, #flist) do
-        log("    %6.0f MB  %s", flist[i].size / 1048576, flist[i].name)
-    end
-    log("  loaded cells by number of objects:")
-    for i = 1, math.min(6, #cells) do
-        log("    %6d  %s", cells[i].refs, cells[i].name)
-    end
-    log("  lua %.0f KB. The rest of the memory is the engine, MGE XE (distant land) and DXVK, which a mod "
-        .. "can't see into.", collectgarbage("count"))
-    local top = {}
-    for i = 1, math.min(3, #flist) do
-        top[#top + 1] = string.format("%s %.0f MB", flist[i].name, flist[i].size / 1048576)
-    end
-    local biggest = list[1] and list[1].size and string.format("\nBiggest texture: %s (%.0f MB)",
-        list[1].name, list[1].size / 1048576) or ""
-    pcall(tes3.messageBox, string.format(
-        "mwhangwatch: MEMORY %.0f%% USED (%.2f of %.2f GB)\nSave now: the game crashes when it runs out.\n"
-        .. "Largest texture folders loaded: %s%s\nDetails in mwhangwatch.log",
-        pct, mb / 1024, ADDRESS_SPACE_MB / 1024, (#top > 0) and table.concat(top, ", ") or "-", biggest))
+    -- 1. IMMEDIATELY show the modal pop-up with an OK button to pause the game and alert the player
+    pcall(tes3.playSound, { sound = "Health Damage" })
+    pcall(tes3.messageBox, {
+        message = string.format(
+            "CRITICAL MEMORY ALERT (mwhangwatch)\n\n"
+            .. "Memory usage is at %.0f%% (%.2f GB of %.2f GB address space).\n\n"
+            .. "Save your game NOW: a 32-bit Morrowind will crash when memory is exhausted!",
+            pct, mb / 1024, ADDRESS_SPACE_MB / 1024
+        ),
+        buttons = { "OK" }
+    })
+
+    -- 2. Safely log detailed diagnostics to mwhangwatch.log in protected call
+    pcall(function()
+        openLog()
+        local list, flist, cells, total, unknown = memOffenders()
+        log("MEMORY WARNING: %.0f%% used (%.0f of %d MB). A 32-bit Morrowind crashes when it runs out.",
+            pct, mb, ADDRESS_SPACE_MB)
+        log("  textures of everything in the loaded cells: %d, %.0f MB on disk (%d more are in BSAs, size unknown)",
+            #list, total / 1048576, unknown)
+        for i = 1, math.min(MEM_TOP, #list) do
+            local t = list[i]
+            if not t.size then break end
+            log("    %6.1f MB  x%-4d %s", t.size / 1048576, t.uses, t.name)
+        end
+        log("  by texture folder (usually a texture pack):")
+        for i = 1, math.min(8, #flist) do
+            log("    %6.0f MB  %s", flist[i].size / 1048576, flist[i].name)
+        end
+        log("  loaded cells by number of objects:")
+        for i = 1, math.min(6, #cells) do
+            log("    %6d  %s", cells[i].refs, cells[i].name)
+        end
+        log("  lua %.0f KB. The rest of the memory is the engine, MGE XE (distant land) and DXVK, which a mod "
+            .. "can't see into.", collectgarbage("count"))
+    end)
 end
 
 local function memCheck()
@@ -735,12 +740,22 @@ end
 
 event.register(tes3.event.initialized, applySettings)
 -- the memory check has its own 1.0s timer, so it works with the rest of the watch turned off without per-frame overhead
-timer.start({
-    type = timer.real,
-    duration = 1.0,
-    iterations = -1,
-    callback = function() pcall(memCheck) end,
-})
+-- MWSE cancels every timer just before `loaded`, so it is started again there
+local memTimer = nil
+local function startMemCheck()
+    if memTimer then
+        memTimer:cancel()
+        memTimer = nil
+    end
+    memTimer = timer.start({
+        type = timer.real,
+        duration = 1.0,
+        iterations = -1,
+        callback = function() pcall(memCheck) end,
+    })
+end
+startMemCheck()
+event.register(tes3.event.loaded, startMemCheck)
 
 -- Mod Config menu ------------------------------------------------------------------
 local function registerModConfig()

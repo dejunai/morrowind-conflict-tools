@@ -46,11 +46,13 @@ local function findSites()
         if image.text then sites = locate.find(image) end
     end)
     if not ok then mwse.log("[mwwarnsuppression] Could not read the executable's code: %s", tostring(err)) end
+    local LABEL = { bodyPart = "BodyPart" }        -- shown as the game spells it in the warning
     for _, name in ipairs({ "bodyPart", "texture", "nif", "kf" }) do
+        local label = LABEL[name] or name
         if sites[name] then
-            mwse.log("[mwwarnsuppression] %s: found at 0x%X.", name, sites[name].address)
+            mwse.log("[mwwarnsuppression] %s: found at 0x%X.", label, sites[name].address)
         else
-            mwse.log("[mwwarnsuppression] %s: not found in this Morrowind.exe (another build or already patched); left alone.", name)
+            mwse.log("[mwwarnsuppression] %s: not found in this Morrowind.exe (another build or already patched); left alone.", label)
         end
     end
     return sites

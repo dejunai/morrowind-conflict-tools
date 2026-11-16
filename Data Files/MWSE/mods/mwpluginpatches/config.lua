@@ -110,7 +110,7 @@ local function getDynamicDefaults()
 
         -- No Accidental Theft: Allow Reading Owned Books while Standing
         noAccidentalTheftBookFixEnabled = nat,
-        ownedBookTakeMode = "disabled", -- "disabled" (red/greyed out with tooltip) or "hidden"
+        ownedBookTakeMode = "hidden", -- "hidden" (no Take button) or "disabled" (Take button tinted red)
     }
 end
 

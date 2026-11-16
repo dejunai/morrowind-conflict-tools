@@ -302,34 +302,121 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 
 ---
 
-## 24. Save Hang / Crash at 50% on Reference SCRI Pointer Dereference (`Cell_static::saveReference+0x607`)
+## 25. MWSE Core MCM ExclusionsPage Destroyed Element Access (`toggleFiltered` & `resetToDefault`)
 
-* **Author**: `mwsaveguard` / `mwplainpaperfix` / Engine Bug
-* **Files**:
-  - [mwsaveguard/main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwsaveguard/main.lua)
-  - [mwplainpaperfix/main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwplainpaperfix/main.lua)
-  - [mwplainpaperfix/mcm.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwplainpaperfix/mcm.lua)
+* **Author**: `MWSE Core`
+* **File**: [exclusionspage.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/core/mcm/components/pages/exclusionspage.lua#L82-L91)
 * **Bug**:
-  1. In `mwplainpaperfix/main.lua`, `onLoaded()` modified base object stats for `sc_paper plain` (`value`, `weight`, `enchantCapacity = 100`). Modifying a base object record at runtime dirty-marked active cell references (including `sc_paper plain` FRMR 17099332 from Patch for Purists in the Census Office), forcing Morrowind to serialize them during cell saving. Furthermore, setting `enchantCapacity` on an unenchanted book record violates engine assumptions.
-  2. Inside Morrowind's native reference serialization routine `Cell_static::saveReference`:
-     ```x86asm
-     0x004E19F8: 8B 43 14        mov eax, [ebx + 0x14]  ; script pointer from ExtraScriptVariables
-     0x004E19FB: 85 C0           test eax, eax
-     0x004E19FD: 74 41           jz 0x004E1A40
-     0x004E19FF: 8B C8           mov ecx, eax
-     0x004E1A01: 8B 11           mov edx, [ecx]
-     0x004E1A07: FF 52 20        call [edx + 0x20]      ; CRASH / HANG AT 50%
-     ```
-     Vanilla code only checked `jz 0x004E1A40` (`eax == 0`). When a reference's ExtraData structure contained an invalid, negative, or flag value (e.g. `eax = 0x80000000`), the engine attempted to call `[edx + 0x20]`, resulting in a null/invalid pointer dereference (`EXCEPTION_ACCESS_VIOLATION`) that froze the game window at 50% save progress.
+  In `exclusionspage.lua`, both `resetToDefault()` (line 88) and `toggleFiltered()` (line 226) attempted to destroy and recreate the exclusions page layout with:
+  ```lua
+  self.elements.outerContainer.parent:destroyChildren()
+  self:create(self.elements.outerContainer.parent)
+  ```
+  `self.elements.outerContainer` is a child of `outerContainer.parent`. Calling `parent:destroyChildren()` immediately deletes `outerContainer`. The very next line then attempts to index `.parent` on the destroyed element (`self.elements.outerContainer.parent`), causing Sol to throw an unhandled Lua exception during the UI click/key event:
+  `sol: 'self' argument is lua_nil (bad '.' access?)`
 * **Fix**:
-  1. In `mwsaveguard/main.lua`, installed an in-memory binary patch at `0x004E19FD` replacing `0x74` (`JZ`) with `0x7E` (`JLE`). If `eax <= 0` (including `0x80000000`, `0xFFFFFFFF`, or null), the engine jumps safely to `0x004E1A40`, bypassing the invalid script name call and cleanly serializing the reference.
-  2. In `mwplainpaperfix/main.lua` and `mwplainpaperfix/mcm.lua`, removed all runtime base object mutations (`tweakPaperStats`, `paperWeight`, `paperValue`, `paperEnchantCapacity`) and removed forced `ref.modified = true` / position displacements, keeping the mod strictly focused on direct inventory pickup and sneak requirements.
+  1. Cached `local parent = self.elements.outerContainer.parent` before invoking `parent:destroyChildren()`, and passed `parent` directly into `self:create(parent)`.
+  2. In `toggle()` (line 135) and `updateSearch()` (line 157), guarded `self.elements.outerContainer:getTopLevelMenu():updateLayout()` with `local topMenu = self.elements.outerContainer and self.elements.outerContainer:getTopLevelMenu()` before calling `:updateLayout()` to prevent `sol: 'self' argument is lua_nil` crashes during search bar reset / filter switching when the top-level menu is not yet resolved.
 
+---
 
+## 26. More Console Commands (MCC) Duplicate Command Registration in `mweffectinspector`
 
+* **Author**: `mweffectinspector` / `JosephMcKean.commands`
+* **File**: [mweffectinspector/main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mweffectinspector/main.lua#L49-L78)
+* **Bug**:
+  `tryRegisterWithMCC()` was invoked both during `onInitialized` and registered as a listener on the `command:register` event. Because `mweffectinspector` initializes before MCC (priority 0 vs priority -999), the first call registered `showeffects` and `cleareffects`. When MCC subsequently initialized and triggered `command:register`, `tryRegisterWithMCC()` executed a second time, triggering MCC's error log in `data.lua`:
+  `[More Console Commands | data.lua:908 | ERROR] Attempt to create existing command ... Use modify() instead.`
+* **Fix**:
+  Added an idempotent guard (`local mccRegistered = false`) and an existence check against `interop.data.commands[cmd.name:lower()]` before registering commands, preventing duplicate registrations.
 
+---
 
+## 27. Unthrottled Per-Frame Achievement Evaluation in `sb_achievements`
 
+* **Author**: `SikSlick` / `sb_achievements`
+* **File**: [sb_achievements/main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/sb_achievements/main.lua#L35-L42)
+* **Bug**:
+  `enterFrameCallback` ran unthrottled on every single render frame (60–80x/sec). On every frame, it looped over all registered achievements and executed their Lua condition and progress functions, consuming ~1 ms/frame average CPU and producing micro-stutter spikes up to 50 ms.
+* **Fix**:
+  Throttled `enterFrameCallback` using `os.clock()` so achievement progress and unlock conditions are evaluated at most once every 2.0 seconds.
 
+---
 
+## 28. Unthrottled Per-Frame Flora Raycasting in `tew/AURA` (`florasounds.lua`)
+
+* **Author**: `tew` / `AURA`
+* **File**: [tew/aura/misc/florasounds.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/tew/aura/misc/florasounds.lua#L93-L115)
+* **Bug**:
+  `playFlora` ran on `simulate` (every frame), executing a downwards `tes3.rayTest` with `useModelCoordinates = true` even when the player was completely stationary or walking over non-vegetation surfaces. This raycast consumed ~1 ms of frame time (~1,250 ms CPU time per 30 seconds).
+* **Fix**:
+  1. Throttled the simulation check to at most once every 0.20 seconds (5 checks/sec, matching natural footstep cadence).
+  2. Added a stationary distance check (`playerPos:distance(lastCheckPos) < 25`) so raycasting is skipped completely when the player is not moving.
+  3. Eliminated redundant vector cloning allocations.
+
+---
+
+## 29. False-Positive Recovery Fade in `mwpluginpatches` (`psguardfix.lua`)
+
+* **Author**: `mwpluginpatches` / `Privileges & Services`
+* **File**: [mwpluginpatches/patches/psguardfix.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwpluginpatches/patches/psguardfix.lua#L119-L162)
+* **Bug**:
+  `psguardfix` monitored P&S scripts (`ABM_ll_DetectPCCrimeScript`, `ABM_PutItBackScript`) which are triggered by ambient NPC voice/trespass evaluations. When an evaluation passed with no crime detected, the script stopped naturally without ever invoking `FadeOut`. However, `psguardfix` assumed that *any* script termination with no guard present meant the screen was stuck black, erroneously triggering `fadeBackIn()` and logging misleading recovery messages.
+* **Fix**:
+  Updated `fadeBackIn()` to check `tes3.worldController.transitionFader.value > 0.05` before executing a fade or logging, ensuring recovery only runs when the screen was actually left faded to black.
+
+---
+
+## 30. Guards Treated as Companions During Sneaking in `companionLeveler`, `HUD Companion Health Bar`, `AttendMeMWSE`, and `mwcompanionsneak`
+
+* **Author**: `companionLeveler`, `Pirate`, `AttendMeMWSE`, `mwcompanionsneak`
+* **Files**:
+  - [companionLeveler/functions/common.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/companionLeveler/functions/common.lua#L522-L548)
+  - [Pirate/HUD Companion Health Bar/main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/Pirate/HUD%20Companion%20Health%20Bar/main.lua#L85-L108)
+  - [AttendMeMWSE/followers.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/AttendMeMWSE/followers.lua#L17-L38)
+  - [mwcompanionsneak/interop.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwcompanionsneak/interop.lua#L43-L53)
+* **Bug**:
+  When sneaking near a guard, `MoreAttentiveGuards` (`celediel/MoreAttentiveGuards/sneak.lua`) assigns the guard a temporary `tes3.aiPackage.follow` targeting the player while inspecting them. Because `companionLeveler`, `HUD Companion Health Bar`, and `AttendMeMWSE` only checked for a follow package targeting the player without verifying `obj.isGuard` or guard class/script:
+  1. `companionLeveler` added the guard to `npcTable()`, initialized blank companion mod data on the guard reference, and logged `Companion Mod Data not found, setting to base Mod Data values` / `NPC Mod Data not found, setting to base Mod Data values`.
+  2. `HUD Companion Health Bar` and `AttendMeMWSE` immediately instantiated health/magicka/fatigue UI elements for the guard, forcing the player to manually blacklist them.
+* **Fix**:
+  Added comprehensive guard exclusion (`obj.isGuard`, guard class name/id, and `MoreAttentiveGuards.interop.getGuardFollower()`) across `companionLeveler.validCompanionCheck`, `HUD Companion Health Bar.validCompanionCheck`, `AttendMeMWSE.isFollower` / `isActivelyFollowing`, and `mwcompanionsneak.isCompanion`.
+
+---
+
+## 31. Multi-Monitor Secondary Screen Scroll Bleed in `mwmouseguard` (`main.lua`)
+
+* **Author**: `mwmouseguard`
+* **File**: [mwmouseguard/main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwmouseguard/main.lua#L37-L145)
+* **Bug**:
+  `mwmouseguard` set the Win32 `ClipCursor` rectangle to `[0, 0, width, height]`. Because Win32 `ClipCursor` bounds are inclusive (`left <= x <= right`), the cursor was allowed to sit at `x = width`. In dual-monitor setups, `x = width` is the very first pixel column of the adjacent monitor, causing Windows 10/11 "Scroll inactive windows when hovering" to route `WM_MOUSEWHEEL` to the second screen. Furthermore, Windows automatically clears `ClipCursor` on window activation shifts, notifications, or modal dialogs; `mwmouseguard` used a one-shot latch (`if not isClipped or fg ~= cachedHwnd`) and never reclipped once Windows reset the clip.
+* **Fix**:
+  1. Inset the clipping rectangle by 2px on all edges (`left + 2, top + 2, right - 2, bottom - 2`), strictly confining the cursor inside Morrowind's monitor and preventing border drift.
+  2. Added Win32 `GetClipCursor` verification to continuously detect if Windows dropped the clip, immediately restoring it.
+  3. Added `tes3.event.mouseWheel` verification and reduced check interval to 0.15s with proper timer reference handling.
+
+---
+
+## 33. BSAPack Exclusion List, Unprocessable Asset Guard, & Progress Prompts
+
+* **Files**:
+  - [bsapack.cpp](file:///k:/Downloads/Browser/bsapack%20source/bsapack.cpp)
+  - [bsapack.h](file:///k:/Downloads/Browser/bsapack%20source/bsapack.h)
+  - [bsapack.dej.exe (build directory)](file:///k:/Downloads/Browser/bsapack%20source/bsapack.dej.exe)
+  - [bsapack.dej.exe (Morrowind root)](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/bsapack.dej.exe)
+* **Feature & Fix**:
+  1. **Exclusion List Support (`-exclude <file>`)**:
+     - Added `-exclude <file>` / `--exclude <file>` / `-exclude=<file>` flag (with `-except` maintained as an alias):
+       `bsapack pack <folder|archive> [split_size_mb] -exclude <exclusions.txt>`
+     - Reads one exclusion entry per line, supporting relative paths (`Textures\my_image.png`, `Data Files\Sound\foo.wav`), directory prefixes (`sound\`, `music\`), and extension patterns (`*.png`, `.png`).
+     - Normalizes paths (strips `data files\`, `.\`, quotes, trims whitespace, standardizes slashes to `\`, case-folds).
+     - Applied binary search `bsearch` on sorted exact keys for $O(\log N)$ performance over tens of thousands of files.
+  2. **Preserved Loose Files / Error Exemption**:
+     - Exclusion list filtering executes *before* Morrowind BSA asset type compatibility validation.
+     - Files matched by the exclusion list remain loose on disk and are completely exempt from unprocessable asset checks (e.g. `.png`, `.wav`), producing zero errors or false-positive aborts.
+  3. **Unprocessable Asset Guard**:
+     - Morrowind's native engine only resolves Meshes, Textures, Icons, BookArt, and Splash from BSA archives. Audio (`Sound`, `Music`), fonts (`Fonts`), video cutscenes (`Video`), scripts, and text files must remain loose.
+     - Any non-excluded unprocessable assets trigger an explicit error listing each offending file and reason, aborting the pack to avoid game corruptions.
+  4. **Status Prompts**:
+     - Configured `#define STATUS_INTERVAL 2000` so progress outputs claim how many files have been processed every 2,000 files and when segments change.
 

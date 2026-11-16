@@ -1,390 +1,270 @@
 --[[
     Custom Class Persistence (mwcustomclasspersistence)
-    Saves player-created classes from character generation and seamlessly
-    adds them to the "Pick from a list" menu in future playthroughs.
-]]--
+
+    A class made in the Create Class menu is saved to config\savedCustomClasses.json when the menu is accepted.
+    In later games the saved classes are listed at the bottom of the "pick from a list" menu. Choosing one
+    opens the game's own Create Class menu with its name, specialization, two attributes and ten skills already
+    selected; pressing OK there makes the class exactly as the game does for a hand-made one. This mod never
+    calculates or sets a stat itself and never edits a base-game class.
+
+    How the Create Class menu keeps its choices (read from Morrowind.exe; the same in every build, because these
+    are element names and record layout, not code addresses):
+      - the class being built is the menu's "MenuCreateClass_Class" property; picking something writes straight
+        into that record (specialization, attributes[1..2], skills[1..10] as minor1, major1, minor2, major2 ...)
+      - each button also carries its choice: "MenuCreateClass_skill" / "MenuCreateClass_attriubte" (the game's
+        own spelling) and shows the choice as its text
+      - the name is the text of "MenuCreateClass_NameSpace"
+]]
 
 local CONFIG_FILE = "savedCustomClasses"
-local savedClasses = mwse.loadConfig(CONFIG_FILE, {}) or {}
+local CHARGEN_ID = "newclassid_chargen"
+local SLOT = { "One", "Two", "Three", "Four", "Five" }
+local log = function(fmt, ...) mwse.log("[mwcustomclasspersistence] " .. fmt, ...) end
 
-local currentSelectedCustomClass = nil
+local function trim(s) return (s or ""):match("^%s*(.-)%s*$") end
+local function loadSaved() return mwse.loadConfig(CONFIG_FILE, {}) or {} end
 
-local SPECIALIZATION_NAMES = {
-    [tes3.specialization.combat] = "Combat",
-    [tes3.specialization.magic] = "Magic",
-    [tes3.specialization.stealth] = "Stealth",
-}
-
-local ATTRIBUTE_NAMES = {
-    [0] = "Strength",
-    [1] = "Intelligence",
-    [2] = "Willpower",
-    [3] = "Agility",
-    [4] = "Speed",
-    [5] = "Endurance",
-    [6] = "Personality",
-    [7] = "Luck",
-}
-
-local function reloadSavedClasses()
-    savedClasses = mwse.loadConfig(CONFIG_FILE, {}) or {}
-    return savedClasses
-end
-
-local function saveCustomClass(classData)
-    if not classData or not classData.name or classData.name == "" then return end
-    local lower = classData.name:lower():match("^%s*(.-)%s*$")
-    if not lower or lower == "" then return end
-
-    reloadSavedClasses()
-    savedClasses[lower] = classData
-    mwse.saveConfig(CONFIG_FILE, savedClasses)
-    mwse.log("[mwcustomclasspersistence] Saved custom class '%s' to %s.json", classData.name, CONFIG_FILE)
-end
-
-local function isBaseGameClass(name)
-    if not name or name == "" then return false end
-    local lower = name:lower():match("^%s*(.-)%s*$")
-    reloadSavedClasses()
-    if savedClasses[lower] then
-        return false
-    end
-    local dh = tes3.dataHandler
-    local ndd = dh and dh.nonDynamicData
-    if not ndd or not ndd.classes then return false end
-
-    for class in tes3.iterate(ndd.classes) do
-        if class.name and class.name:lower():match("^%s*(.-)%s*$") == lower then
-            if class.id:lower() ~= "newclassid_chargen" then
-                return true
-            end
-        end
+--- true when a class of the game or of a plugin already has this name (a saved custom class may be overwritten)
+local function isKnownClassName(name)
+    local lower = name:lower()
+    for class in tes3.iterate(tes3.dataHandler.nonDynamicData.classes) do
+        if class.id:lower() ~= CHARGEN_ID and trim(class.name):lower() == lower then return true end
     end
     return false
 end
 
---- Applies custom class data to the player character and recalculates stats
-local function applyCustomClassToPlayer(classData)
-    if not classData or not tes3.player or not tes3.player.object then return end
-    local pObj = tes3.player.object
-    local pClass = pObj.class
-    if not pClass then return end
+-- Create Class menu ---------------------------------------------------------------------------------
 
-    pClass.name = classData.name
-    pClass.description = classData.description or ""
-    pClass.specialization = classData.specialization or tes3.specialization.combat
+local pending   -- the saved class to put into the Create Class menu when it next opens
 
-    -- Set favorite attributes
-    if classData.attributes and #classData.attributes >= 2 then
-        pClass.attributes[1] = classData.attributes[1]
-        pClass.attributes[2] = classData.attributes[2]
-    end
-
-    -- Set major and minor skills
-    if classData.majorSkills then
-        for i = 1, 5 do
-            if classData.majorSkills[i] then
-                pClass.majorSkills[i] = classData.majorSkills[i]
-            end
-        end
-    end
-    if classData.minorSkills then
-        for i = 1, 5 do
-            if classData.minorSkills[i] then
-                pClass.minorSkills[i] = classData.minorSkills[i]
-            end
-        end
-    end
-
-    -- Recalculate player skill and attribute bases based on race, class, and specialization
-    local race = pObj.race
-    local isFemale = pObj.female
-    if race then
-        -- Set attributes: race base + 10 for favorite attributes
-        for attrId = 0, 7 do
-            local baseVal = race.baseAttributes[attrId + 1] and race.baseAttributes[attrId + 1][isFemale and 2 or 1] or 40
-            if attrId == classData.attributes[1] or attrId == classData.attributes[2] then
-                baseVal = baseVal + 10
-            end
-            tes3.setStatistic({
-                reference = tes3.player,
-                attribute = attrId,
-                base = baseVal,
-                current = baseVal,
-            })
-        end
-
-        local majorSet = {}
-        for _, id in ipairs(classData.majorSkills or {}) do majorSet[id] = true end
-        local minorSet = {}
-        for _, id in ipairs(classData.minorSkills or {}) do minorSet[id] = true end
-
-        for skillId = 0, 26 do
-            local val = 5
-            -- Check race bonus
-            for _, bonus in ipairs(race.skillBonuses or {}) do
-                if bonus.skill == skillId then
-                    val = val + (bonus.bonus or 0)
-                end
-            end
-            -- Specialization bonus
-            local skillObj = tes3.getSkill(skillId)
-            if skillObj and skillObj.specialization == classData.specialization then
-                val = val + 5
-            end
-            -- Major / Minor
-            if majorSet[skillId] then
-                val = val + 25
-            elseif minorSet[skillId] then
-                val = val + 10
-            end
-
-            tes3.setStatistic({
-                reference = tes3.player,
-                skill = skillId,
-                base = val,
-                current = val,
-            })
-        end
-
-        -- Recalculate health, magicka, fatigue using live mobile stats
-        local mob = tes3.mobilePlayer
-        if mob and mob.attributes then
-            local str = mob.attributes[tes3.attribute.strength + 1].base
-            local endur = mob.attributes[tes3.attribute.endurance + 1].base
-            local intell = mob.attributes[tes3.attribute.intelligence + 1].base
-            local will = mob.attributes[tes3.attribute.willpower + 1].base
-            local agi = mob.attributes[tes3.attribute.agility + 1].base
-
-            local health = math.floor((str + endur) / 2)
-            local magicka = math.floor(intell * (race.magickaMultiplier or 1.0))
-            local fatigue = math.floor(str + will + agi + endur)
-
-            tes3.setStatistic({ reference = tes3.player, name = "health", base = health, current = health })
-            tes3.setStatistic({ reference = tes3.player, name = "magicka", base = magicka, current = magicka })
-            tes3.setStatistic({ reference = tes3.player, name = "fatigue", base = fatigue, current = fatigue })
-        end
-    end
-
-    mwse.log("[mwcustomclasspersistence] Successfully applied custom class '%s' to player.", classData.name)
+local function chargenClass(menu)
+    local ok, class = pcall(menu.getPropertyObject, menu, "MenuCreateClass_Class")
+    return (ok and class) or tes3.findClass("NewClassID_CharGen")
 end
 
---- Formats skills list into text
-local function formatSkillList(skillIds)
-    local lines = {}
-    for _, id in ipairs(skillIds or {}) do
-        local skillObj = tes3.getSkill(id)
-        local name = skillObj and skillObj.name
-        if name then table.insert(lines, name) end
+--- the class as it stands in the Create Class menu
+local function capture(menu)
+    local class = chargenClass(menu)
+    local nameBox = menu:findChild("MenuCreateClass_NameSpace")
+    if not (class and nameBox) then return nil end
+    local data = {
+        name = trim(nameBox.text),
+        specialization = class.specialization,
+        attributes = { class.attributes[1], class.attributes[2] },
+        majorSkills = {},
+        minorSkills = {},
+    }
+    for i = 1, 5 do
+        data.minorSkills[i] = class.skills[2 * i - 1]
+        data.majorSkills[i] = class.skills[2 * i]
     end
-    return table.concat(lines, "\n")
+    return data
 end
 
---- Updates MenuChooseClass display when a custom class is selected
-local function displayCustomClassInChooseMenu(menu, classData)
-    currentSelectedCustomClass = classData
+--- puts a saved class into the Create Class menu; false (and nothing half-done that matters) when it cannot
+local function prefill(menu, data)
+    local class = chargenClass(menu)
+    if not class then return false, "the menu has no class record" end
 
-    local selText = menu:findChild(tes3ui.registerID("MenuChooseClass_SelectedText"))
-    if selText then selText.text = classData.name end
-
-    local specText = menu:findChild(tes3ui.registerID("MenuChooseClass_SpecialText"))
-    if specText then
-        specText.text = SPECIALIZATION_NAMES[classData.specialization] or "Specialization"
+    local function button(id, text, property, value)
+        local el = menu:findChild(id)
+        if not el then error("no " .. id) end
+        el.text = text
+        if property then el:setPropertyInt(property, value) end
     end
 
-    local favText = menu:findChild(tes3ui.registerID("MenuChooseClass_FavoriteText"))
-    if favText and classData.attributes then
-        local a1 = ATTRIBUTE_NAMES[classData.attributes[1]] or "Strength"
-        local a2 = ATTRIBUTE_NAMES[classData.attributes[2]] or "Agility"
-        favText.text = string.format("%s, %s", a1, a2)
-    end
+    local ok, err = pcall(function()
+        class.specialization = data.specialization
+        button("MenuCreateClass_Special", tes3.getSpecializationName(data.specialization))
+        for i = 1, 2 do
+            class.attributes[i] = data.attributes[i]
+            button("MenuCreateClass_Attribute" .. SLOT[i], tes3.getAttributeName(data.attributes[i]),
+                "MenuCreateClass_attriubte", data.attributes[i])
+        end
+        for i = 1, 5 do
+            class.skills[2 * i - 1] = data.minorSkills[i]
+            class.skills[2 * i] = data.majorSkills[i]
+            button("MenuCreateClass_MinorSkill" .. SLOT[i], tes3.getSkillName(data.minorSkills[i]),
+                "MenuCreateClass_skill", data.minorSkills[i])
+            button("MenuCreateClass_MajorSkill" .. SLOT[i], tes3.getSkillName(data.majorSkills[i]),
+                "MenuCreateClass_skill", data.majorSkills[i])
+        end
+        button("MenuCreateClass_NameSpace", data.name)
+    end)
+    if not ok then return false, tostring(err) end
 
-    local majText = menu:findChild(tes3ui.registerID("MenuChooseClass_MajorText"))
-    if majText then
-        majText.text = formatSkillList(classData.majorSkills)
+    -- the record must now read back as the saved class
+    local now = capture(menu)
+    for i = 1, 5 do
+        if now.majorSkills[i] ~= data.majorSkills[i] or now.minorSkills[i] ~= data.minorSkills[i] then
+            return false, "the class record did not take the skills"
+        end
     end
-
-    local minText = menu:findChild(tes3ui.registerID("MenuChooseClass_MinorText"))
-    if minText then
-        minText.text = formatSkillList(classData.minorSkills)
+    if now.attributes[1] ~= data.attributes[1] or now.attributes[2] ~= data.attributes[2] then
+        return false, "the class record did not take the attributes"
     end
-
-    local descText = menu:findChild(tes3ui.registerID("MenuChooseClass_DescriptionText"))
-    if descText then
-        descText.text = classData.description or ""
-    end
-
     menu:updateLayout()
+    return true
 end
 
---- Handles MenuChooseClass ("Pick from a list")
-local function onMenuChooseClass(e)
-    local menu = e.element
-    local scroll = menu:findChild(tes3ui.registerID("MenuChooseClass_ClassScroll"))
-    if not scroll then return end
-
-    local content = scroll:getContentElement()
-    if not content then return end
-
-    currentSelectedCustomClass = nil
-    reloadSavedClasses()
-
-    -- When any built-in class is clicked, clear currentSelectedCustomClass
-    for _, btn in ipairs(content.children) do
-        btn:registerBefore("mouseClick", function()
-            currentSelectedCustomClass = nil
-        end)
-    end
-
-    -- Inject saved custom classes into the scroll list
-    local sortedCustom = {}
-    for _, data in pairs(savedClasses) do
-        table.insert(sortedCustom, data)
-    end
-    table.sort(sortedCustom, function(a, b) return a.name:lower() < b.name:lower() end)
-
-    if #sortedCustom > 0 then
-        -- Add a divider label
-        local div = content:createLabel({ text = "--- Custom Classes ---" })
-        div.color = tes3ui.getPalette("header_color")
-        div.borderTop = 6
-        div.borderBottom = 4
-
-        for _, classData in ipairs(sortedCustom) do
-            local btn = content:createTextSelect({ text = classData.name .. " *" })
-            btn:register("mouseClick", function()
-                displayCustomClassInChooseMenu(menu, classData)
-            end)
-        end
-
-        scroll.widget:contentsChanged()
-    end
-
-    -- Hook OK button: if a custom class is selected, apply it to player after native selection closes
-    local okBtn = menu:findChild(tes3ui.registerID("MenuChooseClass_Okbutton"))
-    if okBtn then
-        okBtn:registerBefore("mouseClick", function()
-            local selected = currentSelectedCustomClass
-            if selected then
-                timer.frame.delayOneFrame(function()
-                    applyCustomClassToPlayer(selected)
-                end)
-            end
-        end)
-    end
-end
-
---- Handles MenuStatReview (Final Chargen Review)
-local function onMenuStatReview(e)
-    local menu = e.element
-    if currentSelectedCustomClass then
-        local classLabel = menu:findChild(tes3ui.registerID("MenuStatReview_class"))
-        if classLabel then
-            classLabel.text = currentSelectedCustomClass.name
-        end
-        applyCustomClassToPlayer(currentSelectedCustomClass)
-        menu:updateLayout()
-    end
-
-    -- When OK is clicked in StatReview, capture and auto-save the player's finalized custom class
-    local okBtn = menu:findChild(tes3ui.registerID("MenuStatReview_Okbutton"))
-    if okBtn then
-        okBtn:registerBefore("mouseClick", function()
-            timer.frame.delayOneFrame(function()
-                local pObj = tes3.player and tes3.player.object
-                local pClass = pObj and pObj.class
-                if pClass and pClass.name and not isBaseGameClass(pClass.name) then
-                    local data = {
-                        name = pClass.name,
-                        description = pClass.description or "",
-                        specialization = pClass.specialization or tes3.specialization.combat,
-                        attributes = { pClass.attributes[1], pClass.attributes[2] },
-                        majorSkills = {},
-                        minorSkills = {},
-                    }
-                    for i = 1, 5 do
-                        table.insert(data.majorSkills, pClass.majorSkills[i])
-                        table.insert(data.minorSkills, pClass.minorSkills[i])
-                    end
-                    saveCustomClass(data)
-                end
-            end)
-        end)
-    end
-end
-
---- Handles MenuCreateClass (Saving newly created custom classes)
 local function onMenuCreateClass(e)
     local menu = e.element
-    local okBtn = menu:findChild(tes3ui.registerID("MenuCreateClass_Okbutton"))
-    if not okBtn then return end
 
-    okBtn:registerBefore("mouseClick", function()
-        local nameElem = menu:findChild(tes3ui.registerID("MenuCreateClass_Classname"))
-        local rawName = nameElem and (nameElem.text or ""):match("^%s*(.-)%s*$")
-        if not rawName or rawName == "" then return end
+    if pending then
+        local data = pending
+        pending = nil
+        local ok, err = prefill(menu, data)
+        if ok then
+            log("'%s' loaded into the Create Class menu.", data.name)
+        else
+            log("Could not load '%s' into the Create Class menu: %s", data.name, err)
+            tes3.messageBox("The saved class '%s' could not be loaded. Check every choice before accepting.", data.name)
+        end
+    end
 
-        if isBaseGameClass(rawName) then
+    local okButton = menu:findChild("MenuCreateClass_Okbutton")
+    if not okButton then return end
+    okButton:registerBefore("mouseClick", function()
+        local data = capture(menu)
+        if not data or data.name == "" then return end      -- the game reports a missing name itself
+        if isKnownClassName(data.name) then
             tes3.messageBox({
-                message = string.format("Cannot overwrite existing base class '%s'. Please choose a different name.", rawName),
-                buttons = { "OK" }
+                message = string.format("'%s' is already the name of a class. Choose a different name.", data.name),
+                buttons = { tes3.findGMST(tes3.gmst.sOK).value },
             })
             return false
         end
-
-        timer.frame.delayOneFrame(function()
-            local pClass = tes3.player and tes3.player.object and tes3.player.object.class
-            if pClass and pClass.name and pClass.name:lower():match("^%s*(.-)%s*$") == rawName:lower() then
-                local data = {
-                    name = pClass.name,
-                    description = pClass.description or "",
-                    specialization = pClass.specialization or tes3.specialization.combat,
-                    attributes = { pClass.attributes[1], pClass.attributes[2] },
-                    majorSkills = {},
-                    minorSkills = {},
-                }
-                for i = 1, 5 do
-                    table.insert(data.majorSkills, pClass.majorSkills[i])
-                    table.insert(data.minorSkills, pClass.minorSkills[i])
-                end
-
-                saveCustomClass(data)
-                tes3.messageBox("Custom class '%s' saved to Class Menu for future playthroughs.", data.name)
-            end
-        end)
+        -- the game still checks the class (two different attributes, no skill twice); it is saved only if the
+        -- menu was accepted, which is when it is gone
+        timer.delayOneFrame(function()
+            if tes3ui.findMenu("MenuCreateClass") then return end
+            local saved = loadSaved()
+            saved[data.name:lower()] = data
+            mwse.saveConfig(CONFIG_FILE, saved)
+            log("Saved custom class '%s'.", data.name)
+        end, timer.real)
     end)
 end
 
---- Auto-captures custom classes from loaded save games
-local function onLoaded(e)
-    local pObj = tes3.player and tes3.player.object
-    local pClass = pObj and pObj.class
-    if pClass and pClass.name and not isBaseGameClass(pClass.name) then
-        local data = {
-            name = pClass.name,
-            description = pClass.description or "",
-            specialization = pClass.specialization or tes3.specialization.combat,
-            attributes = { pClass.attributes[1], pClass.attributes[2] },
-            majorSkills = {},
-            minorSkills = {},
-        }
-        for i = 1, 5 do
-            table.insert(data.majorSkills, pClass.majorSkills[i])
-            table.insert(data.minorSkills, pClass.minorSkills[i])
+-- Choose Class menu ---------------------------------------------------------------------------------
+
+--- sets the text of the menu's elements called `name`, in order (the game makes one label per attribute and skill)
+local function setTexts(menu, name, texts)
+    local id, n = tes3ui.registerID(name), 0
+    local function walk(el)
+        for _, child in ipairs(el.children) do
+            if child.id == id then
+                n = n + 1
+                if texts[n] then child.text = texts[n] end
+            end
+            walk(child)
         end
-        saveCustomClass(data)
     end
+    walk(menu)
 end
 
-local function onInitialized()
-    event.register("uiActivated", onMenuChooseClass, { filter = "MenuChooseClass" })
-    event.register("uiActivated", onMenuStatReview, { filter = "MenuStatReview" })
-    event.register("uiActivated", onMenuCreateClass, { filter = "MenuCreateClass" })
-    event.register("loaded", onLoaded)
-    reloadSavedClasses()
-    local count = 0
-    for _ in pairs(savedClasses) do count = count + 1 end
-    mwse.log("[mwcustomclasspersistence] Initialized successfully. Custom class persistence active with %d saved class(es).", count)
+--- the two favoured-attribute labels are found by what they show, an attribute's name: their element names differ
+local function setAttributeTexts(menu, texts)
+    local names, found = {}, {}
+    for _, id in pairs(tes3.attribute) do names[tes3.getAttributeName(id)] = true end
+    local function walk(el)
+        for _, child in ipairs(el.children) do
+            if names[child.text] then found[#found + 1] = child end
+            walk(child)
+        end
+    end
+    walk(menu)
+    if #found ~= 2 then
+        log("Choose Class menu: expected 2 attribute labels, found %d.", #found)
+        return
+    end
+    for i = 1, 2 do found[i].text = texts[i] end
 end
 
-event.register("initialized", onInitialized)
+local function showInChooseMenu(menu, data)
+    local major, minor = {}, {}
+    for i = 1, 5 do
+        major[i] = tes3.getSkillName(data.majorSkills[i])
+        minor[i] = tes3.getSkillName(data.minorSkills[i])
+    end
+    setTexts(menu, "MenuChooseClass_SpecialText", { tes3.getSpecializationName(data.specialization) })
+    setAttributeTexts(menu, { tes3.getAttributeName(data.attributes[1]), tes3.getAttributeName(data.attributes[2]) })
+    setTexts(menu, "MenuChooseClass_MajorText", major)
+    setTexts(menu, "MenuChooseClass_MinorText", minor)
+    setTexts(menu, "MenuChooseClass_DescriptionText",
+        { string.format("%s - your saved custom class. OK opens it in the Create Class menu.", data.name) })
+    menu:updateLayout()
+end
+
+local function validClass(data)
+    return type(data) == "table" and type(data.name) == "string" and tonumber(data.specialization)
+        and type(data.attributes) == "table" and #data.attributes == 2
+        and type(data.majorSkills) == "table" and #data.majorSkills == 5
+        and type(data.minorSkills) == "table" and #data.minorSkills == 5
+end
+
+local function onMenuChooseClass(e)
+    local menu = e.element
+    pending = nil
+    local scroll = menu:findChild("MenuChooseClass_ClassScroll")
+    local content = scroll and scroll:getContentElement()
+    if not content then return end
+
+    local list = {}
+    for _, data in pairs(loadSaved()) do
+        if validClass(data) then list[#list + 1] = data end
+    end
+    if #list == 0 then return end
+    table.sort(list, function(a, b) return a.name:lower() < b.name:lower() end)
+
+    local selected, buttons = nil, {}
+    local function mark()
+        for data, button in pairs(buttons) do
+            button.widget.state = (data == selected) and tes3.uiState.active or tes3.uiState.normal
+        end
+    end
+
+    for _, child in ipairs(content.children) do     -- picking one of the game's classes drops ours
+        child:registerBefore("mouseClick", function()
+            selected = nil
+            mark()
+        end)
+    end
+
+    local header = content:createLabel({ text = "Saved custom classes" })
+    header.color = tes3ui.getPalette("header_color")
+    header.borderTop = 6
+    for _, data in ipairs(list) do
+        local button = content:createTextSelect({ text = data.name })
+        buttons[data] = button
+        button:register("mouseClick", function()
+            selected = data
+            mark()
+            showInChooseMenu(menu, data)
+        end)
+    end
+    scroll.widget:contentsChanged()
+
+    local okButton = menu:findChild("MenuChooseClass_Okbutton")
+    local backButton = menu:findChild("MenuChooseClass_Backbutton")
+    if not (okButton and backButton) then return end
+    okButton:registerBefore("mouseClick", function()
+        if not selected then return end
+        -- back to the "how do you want to choose" menu, then into Create Class, where the class is filled in
+        pending = selected
+        backButton:triggerEvent("mouseClick")
+        timer.delayOneFrame(function()
+            local choice = tes3ui.findMenu("MenuClassChoice")
+            local create = choice and choice:findChild("MenuClassChoice_CreateClassbutton")
+            if create then
+                create:triggerEvent("mouseClick")
+            elseif pending then
+                tes3.messageBox("Choose to create a class: '%s' will be filled in for you.", pending.name)
+            end
+        end, timer.real)
+        return false
+    end)
+end
+
+event.register("uiActivated", onMenuChooseClass, { filter = "MenuChooseClass" })
+event.register("uiActivated", onMenuCreateClass, { filter = "MenuCreateClass" })

@@ -55,14 +55,19 @@ local function readTemp(r, k) return r.tempData[k] end
 local function writeTemp(r, k, v) r.tempData[k] = v end
 
 local function getRefData(ref, key)
-    if not ref or not ref.supportsLuaData then return nil end
-    local ok, val = pcall(readTemp, ref, key)
-    return ok and val or nil
+    if not ref then return nil end
+    local ok, t = pcall(readTemp, ref)
+    return (ok and t) and t[key] or nil
 end
 
 local function setRefData(ref, key, val)
-    if not ref or not ref.supportsLuaData then return false end
-    return (pcall(writeTemp, ref, key, val))
+    if not ref then return false end
+    local ok, t = pcall(readTemp, ref)
+    if ok and t then
+        t[key] = val
+        return true
+    end
+    return false
 end
 
 local queue, queued, qHead = {}, {}, 1    -- reviewed: a read index instead of table.remove(queue, 1)
@@ -355,9 +360,22 @@ end
 -- reviewed: where its plugin put it (startingPosition: unchanged by this mod lowering it, or by anything
 -- else moving it), so no saved "original z" is needed. Same key as before for anything not yet moved.
 local blackIds = {}                      -- object id -> true: most references are skipped without a key
+local function resolveBaseId(ref)
+    if not ref or not ref.object then return nil end
+    local id = ref.object.id:lower()
+    if tes3.player and tes3.player.data and tes3.player.data.leavethelightsoff then
+        local rev = tes3.player.data.leavethelightsoff.reverse
+        if rev and rev[id] then
+            return rev[id]:lower()
+        end
+    end
+    return id
+end
+
 local function refKey(ref)
     local p = ref.startingPosition or ref.position
-    return string.format("%s|%s|%d|%d|%d", cellKey(ref.cell), ref.object.id:lower(),
+    local baseId = resolveBaseId(ref) or ref.object.id:lower()
+    return string.format("%s|%s|%d|%d|%d", cellKey(ref.cell), baseId,
                          math.floor(p.x + 0.5), math.floor(p.y + 0.5), math.floor(p.z + 0.5))
 end
 local function rebuildKeys()
@@ -370,8 +388,10 @@ end
 rebuildKeys()
 
 local function applyBlacklist(ref)
-    if not ref or ref.disabled or not ref.object or not blackIds[ref.object.id:lower()]
-        or not blackKeys[refKey(ref)] then return false end
+    if not ref or ref.disabled or not ref.object then return false end
+    local baseId = resolveBaseId(ref) or ref.object.id:lower()
+    if not blackIds[baseId] and not blackIds[ref.object.id:lower()] then return false end
+    if not blackKeys[refKey(ref)] then return false end
     ref:disable()
     log("hid blacklisted %s in %s", ref.object.id, cellKey(ref.cell))
     return true
@@ -400,18 +420,20 @@ local function describe(ref)
 end
 
 local function addToBlacklist(ref)
+    local baseId = resolveBaseId(ref) or ref.object.id
     local key = refKey(ref)
     if blackKeys[key] then
         tes3.messageBox("%s is already on the blacklist.", describe(ref))
         return
     end
-    local srcMod = ref.sourceMod or (ref.object.sourceMod) or "?"
-    table.insert(blacklist.entries, { key = key, id = ref.object.id, cell = cellKey(ref.cell),
+    local srcObj = tes3.getObject(baseId) or ref.object
+    local srcMod = ref.sourceMod or (srcObj and srcObj.sourceMod) or "?"
+    table.insert(blacklist.entries, { key = key, id = baseId, cell = cellKey(ref.cell),
                                       mod = srcMod, added = os.date("%Y-%m-%d %H:%M") })
     mwse.saveConfig(BLACKLIST_NAME, blacklist)
     rebuildKeys()
     ref:disable()
-    log("blacklisted %s in %s (key %s, from %s)", ref.object.id, cellKey(ref.cell), key, srcMod)
+    log("blacklisted %s in %s (key %s, from %s)", baseId, cellKey(ref.cell), key, srcMod)
     tes3.messageBox("Hidden in every game from now on: %s", describe(ref))
 end
 

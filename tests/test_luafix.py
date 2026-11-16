@@ -750,3 +750,19 @@ def test_every_nil_guard_patch_compiles():
     for s in srcs:
         new = patch(s)
         assert new and ch.check(new)[0], new
+
+
+def test_applied_report_prefixes_every_finding_with_its_status():
+    rep = lf.Report()
+    find = lambda rule, conf, fix: {"rule": rule, "conf": conf, "line": 1, "what": rule + " wrong", "fix": fix}
+    patch = {"ok": True, "rules": ["A1"], "text": "x", "why": ""}
+    rep.files["a.lua"] = {"rel": "a.lua", "mod": "m", "error": None, "patch": patch,
+                          "findings": [find("A1", "high", "guard"), find("A2", "high", ""), find("L1", "report", "")]}
+    rep.files["b.lua"] = {"rel": "b.lua", "mod": "m", "error": None, "patch": dict(patch),
+                          "findings": [find("A1", "high", "guard")]}
+    lines, _c = lf.format_report(rep, done=["a.lua"], refused={"b.lua": "syntax check failed"})
+    text = "\n".join(lines)
+    assert "PATCHED: A1 line 1: A1 wrong  -> guard" in lines[1]
+    assert "UNCONFIGURED: A2 line 1: A2 wrong" in text and "REPORTED: L1 line 1: L1 wrong" in text
+    assert "=> PATCHED (A1)" in text
+    assert "NOT PATCHED: A1 line 1" in text and "=> NOT PATCHED: syntax check failed" in text

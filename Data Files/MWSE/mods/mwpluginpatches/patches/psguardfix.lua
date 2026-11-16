@@ -117,7 +117,12 @@ local function guardNearby()
 end
 
 local function fadeBackIn()
-    tes3.fadeIn({ fader = tes3.worldController.transitionFader, duration = 0.3 })
+    local f = tes3.worldController.transitionFader
+    if f and f.value and f.value > 0.05 then
+        tes3.fadeIn({ fader = f, duration = 0.3 })
+        return true
+    end
+    return false
 end
 
 local function check()
@@ -148,14 +153,13 @@ local function check()
                 end
             })
         elseif wasRunning[name] and not running then
-            -- script finished: a guard should be here and fading us back in
+            -- script finished: a guard should be here; if left faded out, recover
             timer.start({
                 type = timer.real,
                 duration = 1.0,
                 callback = function()
-                    if not guardNearby() then
+                    if not guardNearby() and fadeBackIn() then
                         mwse.log("[mwpluginpatches] %s ended with no guard; fading in", name)
-                        fadeBackIn()
                     end
                 end
             })
@@ -183,21 +187,26 @@ function psguardfix.init()
         return
     end
 
+    -- MWSE cancels every timer just before `loaded`, so it is started again there
+    local function startCheck()
+        timer.start({
+            type = timer.real,
+            duration = 0.35,
+            iterations = -1,
+            persist = false,
+            callback = function()
+                if tes3.player then check() end
+            end
+        })
+    end
+    startCheck()
+
     event.register(tes3.event.loaded, function()
         wasRunning = {}
+        startCheck()
     end)
 
     event.register(tes3.event.infoFilter, onInfoFilter)
-
-    timer.start({
-        type = timer.real,
-        duration = 0.35,
-        iterations = -1,
-        persist = false,
-        callback = function()
-            if tes3.player then check() end
-        end
-    })
 
     mwse.log("[mwpluginpatches] Privileges & Services guard call, fade, and target-topic filter active.")
 end

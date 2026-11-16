@@ -929,37 +929,44 @@ def assets_pending(ares):
     out = []
     for d, ent in ares["mods"].items():
         acts = [a for a in asset_action_lines(ent) if (d, a) not in ares["done"]]
+        acts += [a for qd, a in ares.get("queued", ()) if qd == d and (d, a) not in ares["done"]]
         if acts:
             out += [f"\n{d}"] + [f"    {a}" for a in acts]
     return out
 
 
+def _only(ent, lines):
+    """ent's fixes and long-path moves whose plan line is in lines."""
+    return ([f for f, a in zip(ent["fixes"], asset_action_lines(dict(ent, lp_plan=[]))) if a in lines],
+            [lp for lp, a in zip(ent["lp_plan"], asset_action_lines(dict(ent, fixes=[]))) if a in lines])
+
+
 def assets_apply(args, ares, moved_mods=()):
-    """Make the asset repairs assets_check() listed (the reviewed ones) - nothing else. A mod whose files the
-    moves of this run touched is checked again first, and only the reviewed repairs that still apply are
-    made; the rest stay in the plan. Originals go to <mod>\\Off\\<plugin>\\<path>."""
+    """Make the asset repairs assets_check() listed (the reviewed ones). A mod whose files the moves of this
+    run touched is checked again first: the reviewed repairs that still apply are made, reviewed lines the
+    moves made obsolete (old paths) are dropped, and repairs that only show up after the moves (new paths,
+    or files moved into a checked folder) are queued. When every mod is done, the queue - and only the
+    queue - is processed. Originals go to <mod>\\Off\\<plugin>\\<path>."""
     if not ares:
         return
     m, ah, game_dir = ares["m"], ares["ah"], ares["game_dir"]
+    queue = []
     for d, ent in ares["mods"].items():
         root = ent["root"]
         wanted = set(asset_action_lines(ent))
-        if d in moved_mods and wanted:
+        if d in moved_mods:
             try:
                 now = assets_check_mod(root, m, ah, ares["data_dir"], ares["bsa"], game_dir, {})
             except Exception as e:
                 print(f"  {d}: check failed ({e})")
                 continue
             new = set(asset_action_lines(now))
+            for a in wanted - new:                    # its file is no longer there: the moves settled it
+                ares["done"].add((d, a))
             if new - wanted:
-                print(f"  {d}: {len(new - wanted)} repair(s) appeared after the moves - not in the plan you "
-                      f"reviewed, so not made (rerun plan mode)")
-            now["fixes"] = [f for f, a in zip(now["fixes"], asset_action_lines(dict(now, lp_plan=[])))
-                            if a in wanted]
-            now["lp_plan"] = [lp for lp, a in zip(now["lp_plan"], asset_action_lines(dict(now, fixes=[])))
-                              if a in wanted]
-            now["root"] = root
-            work = now
+                queue.append((d, root, now, new - wanted))
+            fixes, lp_plan = _only(now, wanted)
+            work = dict(now, fixes=fixes, lp_plan=lp_plan)
         else:
             work = ent
         issues, fixes, lp_plan = work["issues"], work["fixes"], work["lp_plan"]
@@ -984,23 +991,38 @@ def assets_apply(args, ares, moved_mods=()):
         lines += ["", "(The mod's copy was repaired on this PC; originals kept in Off\\.)"]
         ah.update_bug_report(os.path.join(root, "bugreports", plug + (f" [Nexus {nid}]" if nid else "")
                                           + ".bugreport.txt"), "vortex_tidy (files)", head, lines)
-        if lp_plan:
-            lpm = m.longpaths_module()
-            n = lpm.apply_mod(root, lp_plan, m, game_dir, plug, log=print)
-            for lp, a in zip(lp_plan, asset_action_lines({"fixes": [], "lp_plan": lp_plan})):
-                if os.path.exists(os.path.join(root, lpm.fs(lp["short"]) if hasattr(lpm, "fs") else lp["short"])):
-                    ares["done"].add((d, a))
-            print(f"    -> {n} file(s) moved to a short path (listed in mwdialog_longpaths.json; "
-                  f"mwdialog_check --longpaths-undo puts them back)")
-            gone = {lp["orig"].lower() for lp in lp_plan} | {t[0].lower() for lp in lp_plan for t in lp["twins"]}
-            fixes = [f for f in fixes if f[2].replace("/", "\\").lower() not in gone]   # moved: next run
-        if fixes:
-            done, skipped = ah.apply_folder(root, fixes, m, game_dir, plug)
-            for f, a in zip(fixes, asset_action_lines({"fixes": fixes, "lp_plan": []})):
-                if not any(sk.startswith(f[2] + " (") for sk in skipped):
-                    ares["done"].add((d, a))
-            print(f"    -> {done} file(s) repaired (originals in Off\\{plug}\\)"
-                  + (f"; {len(skipped)} skipped, e.g. {skipped[0]}" if skipped else ""))
+        _repair(ares, d, root, fixes, lp_plan, plug)
+    if queue:
+        print(f"\nQueue: {sum(len(q[3]) for q in queue)} repair(s) found after the moves")
+    for d, root, now, lines in queue:
+        fixes, lp_plan = _only(now, lines)
+        plug_file = next((e for e in sorted(os.listdir(root))
+                          if os.path.splitext(e)[1].lower() in (".esp", ".esm")), None)
+        print(f"  {d}: {len(lines)} queued repair(s)")
+        _repair(ares, d, root, fixes, lp_plan, os.path.splitext(plug_file)[0] if plug_file else mod_name(d))
+        ares["queued"] = ares.get("queued", []) + [(d, a) for a in sorted(lines) if (d, a) not in ares["done"]]
+
+
+def _repair(ares, d, root, fixes, lp_plan, plug):
+    """Make one mod's repairs and mark each one that worked in ares["done"]."""
+    m, ah, game_dir = ares["m"], ares["ah"], ares["game_dir"]
+    if lp_plan:
+        lpm = m.longpaths_module()
+        n = lpm.apply_mod(root, lp_plan, m, game_dir, plug, log=print)
+        for lp, a in zip(lp_plan, asset_action_lines({"fixes": [], "lp_plan": lp_plan})):
+            if os.path.exists(os.path.join(root, lpm.fs(lp["short"]) if hasattr(lpm, "fs") else lp["short"])):
+                ares["done"].add((d, a))
+        print(f"    -> {n} file(s) moved to a short path (listed in mwdialog_longpaths.json; "
+              f"mwdialog_check --longpaths-undo puts them back)")
+        gone = {lp["orig"].lower() for lp in lp_plan} | {t[0].lower() for lp in lp_plan for t in lp["twins"]}
+        fixes = [f for f in fixes if f[2].replace("/", "\\").lower() not in gone]   # moved: next run
+    if fixes:
+        done, skipped = ah.apply_folder(root, fixes, m, game_dir, plug)
+        for f, a in zip(fixes, asset_action_lines({"fixes": fixes, "lp_plan": []})):
+            if not any(sk.startswith(f[2] + " (") for sk in skipped):
+                ares["done"].add((d, a))
+        print(f"    -> {done} file(s) repaired (originals in Off\\{plug}\\)"
+              + (f"; {len(skipped)} skipped, e.g. {skipped[0]}" if skipped else ""))
 
 
 def main():

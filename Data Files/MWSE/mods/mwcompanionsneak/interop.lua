@@ -45,6 +45,16 @@ function interop.isCompanion(mobile)
         return false
     end
 
+    -- Guards are never companions
+    local obj = ref.baseObject or ref.object
+    if obj then
+        if obj.isGuard then return false end
+        local class = obj.class
+        if class and (class.id:lower():find("guard") or (class.name and class.name:lower():find("guard"))) then
+            return false
+        end
+    end
+
     -- 1. Active AI Package check (follow or escort targeting player)
     local planner = mobile.aiPlanner
     if planner then

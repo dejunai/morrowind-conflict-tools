@@ -2092,9 +2092,11 @@ def run_backup_dir(backup_root=BACKUP_ROOT):
     return os.path.join(backup_root, time.strftime("%Y%m%d-%H%M%S"))
 
 
-def apply_report(rep, journal=JOURNAL, backup_root=BACKUP_ROOT, head_extra=None, log=print, bdir=None, done=None):
+def apply_report(rep, journal=JOURNAL, backup_root=BACKUP_ROOT, head_extra=None, log=print, bdir=None, done=None,
+                 *, backup_relative_to=None):
     """Write every verified patch in place, after copying the file to backup_root\\<run>\\ (or bdir). Every write
-    is journaled first; done (a list) gets each path as it is written, so an interrupted run knows what is left.
+    is journaled first; backup_relative_to keeps package-local backups free of host paths. done (a list) gets each
+    path as it is written, so an interrupted run knows what is left.
     Returns (written, refused [(path, why)])."""
     todo = [(p, e) for p, e in sorted(rep.files.items()) if e.get("patch")]
     refused = [(p, e["patch"]["why"]) for p, e in todo if not e["patch"]["ok"]]
@@ -2115,8 +2117,15 @@ def apply_report(rep, journal=JOURNAL, backup_root=BACKUP_ROOT, head_extra=None,
                 if e.get("sha") and sha(b) != e["sha"]:
                     refused.append((p, "changed since it was checked"))
                     continue
-                drive, tail = os.path.splitdrive(os.path.abspath(p))
-                bpath = os.path.join(bdir, drive.rstrip(":\\/") or "root", tail.lstrip("\\/"))
+                if backup_relative_to:
+                    relative = os.path.relpath(p, backup_relative_to)
+                    if relative == os.pardir or relative.startswith(os.pardir + os.sep):
+                        refused.append((p, f"outside backup-relative root {backup_relative_to}"))
+                        continue
+                    bpath = os.path.join(bdir, relative)
+                else:
+                    drive, tail = os.path.splitdrive(os.path.abspath(p))
+                    bpath = os.path.join(bdir, drive.rstrip(":\\/") or "root", tail.lstrip("\\/"))
                 os.makedirs(os.path.dirname(bpath), exist_ok=True)
                 with open(bpath, "wb") as f:
                     f.write(b)
@@ -2214,7 +2223,19 @@ def undo(journal=JOURNAL, force=False, log=print):
 CONF_ORDER = {"high": 0, "report-high": 1, "medium": 2, "report": 3, "trigger": 4, "covered": 5, "info": 6}
 
 
-def format_report(rep, show_info=False, indent="  "):
+def finding_status(f, pt, written):
+    """After --apply: PATCHED (fixed in the written file), NOT PATCHED (had a fix, the file was not written),
+    UNCONFIGURED (should be fixed, no fix exists for it), REPORTED (report only)."""
+    if f["fix"]:
+        return "PATCHED" if written and pt and pt["ok"] and f["rule"] in pt["rules"] else "NOT PATCHED"
+    return "UNCONFIGURED" if f["conf"] in ("high", "medium") else "REPORTED"
+
+
+def format_report(rep, show_info=False, indent="  ", done=None, refused=None):
+    """The report lines. With done (paths written by apply_report) each finding is prefixed with its status and
+    the file's last line says PATCHED or NOT PATCHED (refused: {path: why})."""
+    if done is not None:
+        return _format_applied(rep, show_info, indent, set(done), refused or {})
     lines, counts = [], {}
     for p, e in sorted(rep.files.items(), key=lambda x: (x[1]["mod"].lower(), x[1]["rel"].lower())):
         for f in e["findings"]:
@@ -2233,6 +2254,28 @@ def format_report(rep, show_info=False, indent="  "):
             lines.append(f"{indent}    => " + (f"patch ready ({', '.join(pt['rules'])}) "
                                                f"[{sha(pt['text'].encode('latin-1'))[:8]}]" if pt["ok"]
                                                else f"NOT patched: {pt['why']}"))
+    return lines, counts
+
+
+def _format_applied(rep, show_info, indent, done, refused):
+    lines, counts = [], {}
+    for p, e in sorted(rep.files.items(), key=lambda x: (x[1]["mod"].lower(), x[1]["rel"].lower())):
+        for f in e["findings"]:
+            counts[(f["rule"], f["conf"])] = counts.get((f["rule"], f["conf"]), 0) + 1
+        fs = [f for f in e["findings"] if show_info or f["conf"] not in ("info",)]
+        pt = e.get("patch")
+        if not fs and not e["error"] and not pt:
+            continue
+        lines.append(f"{indent}lua {e['rel']}")
+        if e["error"]:
+            lines.append(f"{indent}    ! {e['error']}")
+        for f in sorted(fs, key=lambda f: (CONF_ORDER.get(f["conf"], 9), f["line"])):
+            lines.append(f"{indent}    {finding_status(f, pt, p in done)}: {f['rule']} line {f['line']}: {f['what']}"
+                         + (f"  -> {f['fix']}" if f["fix"] else ""))
+        if pt:
+            why = refused.get(p) or (None if pt["ok"] else pt["why"]) or "not written"
+            lines.append(f"{indent}    => " + (f"PATCHED ({', '.join(pt['rules'])}) [{sha(pt['text'].encode('latin-1'))[:8]}]"
+                                               if p in done else f"NOT PATCHED: {why}"))
     return lines, counts
 
 
