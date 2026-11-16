@@ -136,3 +136,49 @@ def test_check_folder_converts_every_wav_to_a_same_stem_mp3(tmp_path):
     issues, fixes = ah.check_folder(str(tmp_path), m)
     assert [(k, r.replace("\\", "/"), j.get("mp3")) for k, _f, r, j in fixes if k == "snd"] == \
         [("snd", "Sound/fx/a.wav", True)]
+
+
+def test_a_large_splash_tga_gets_a_dds_without_mipmaps_and_stays(tmp_path, monkeypatch):
+    import struct
+    import subprocess
+    splash = tmp_path / "mod" / "Splash"
+    splash.mkdir(parents=True)
+    (splash / "big.tga").write_bytes(b"\0" * 12 + struct.pack("<HH", 2048, 1024) + b"\x20\0" + b"px")
+    (splash / "small.tga").write_bytes(b"\0" * 12 + struct.pack("<HH", 1024, 512) + b"\x20\0" + b"px")
+    issues, fixes = ah.check_folder(str(tmp_path / "mod"), m)
+    jobs = [(os.path.basename(f), j) for k, f, _r, j in fixes if k == "tex"]
+    assert jobs == [("big.tga", {"convert": ".dds", "nomips": True, "keep": True})]
+    (tmp_path / "texconv.exe").write_bytes(b"")
+    seen = []
+
+    def fake(cmd, **_kw):
+        seen.append(cmd)
+        out = cmd[cmd.index("-o") + 1]
+        open(os.path.join(out, "big.dds"), "wb").write(b"DDS converted")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+    monkeypatch.setattr(ah.subprocess, "run", fake)
+    done, skipped = ah.apply_folder(str(tmp_path / "mod"), fixes, m, str(tmp_path), "mod")
+    assert (done, skipped) == (1, [])
+    assert seen[0][seen[0].index("-m") + 1] == "1" and "BC3_UNORM" in seen[0]
+    assert (splash / "big.dds").read_bytes() == b"DDS converted" and (splash / "big.tga").exists()
+
+
+def test_apply_folder_turns_a_wav_into_a_same_stem_mp3_and_keeps_the_wav_in_off(tmp_path, monkeypatch):
+    import struct
+    import subprocess
+    fmt = struct.pack("<HHIIHH", 1, 1, 44100, 88200, 2, 16)
+    wav = b"RIFF" + struct.pack("<I", 36) + b"WAVE" + b"fmt " + struct.pack("<I", 16) + fmt + b"data" + b"\0" * 4
+    sound = tmp_path / "mod" / "Sound" / "fx"
+    sound.mkdir(parents=True)
+    (sound / "a.wav").write_bytes(wav)
+    _issues, fixes = ah.check_folder(str(tmp_path / "mod"), m)
+
+    def fake(cmd, **_kw):
+        open(cmd[-1], "wb").write(b"ID3mp3 audio")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+    monkeypatch.setattr(ah, "find_ffmpeg", lambda: "ffmpeg.exe")
+    monkeypatch.setattr(ah.subprocess, "run", fake)
+    done, skipped = ah.apply_folder(str(tmp_path / "mod"), fixes, m, str(tmp_path), "mod")
+    assert (done, skipped) == (1, [])
+    assert (sound / "a.mp3").read_bytes() == b"ID3mp3 audio" and not (sound / "a.wav").exists()
+    assert list((tmp_path / "mod" / "Off").rglob("a.wav"))                    # the original is kept

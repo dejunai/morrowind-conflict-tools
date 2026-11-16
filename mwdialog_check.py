@@ -4658,6 +4658,11 @@ def run_cell_conflicts(args, plugins, collect=False):
             write_collide_data(args, order, new_objs, labels, pos, name_of, deps, cells_of)
         except (OSError, ValueError) as e:
             print(f"  (could not write {COLLIDE_DATA}: {e})", file=sys.stderr)
+        try:                                       # MGE XE never sees those hides: keep them out of distant land
+            import mwdialog_mgeghosts
+            mwdialog_mgeghosts.write(os.path.dirname(os.path.abspath(args.data_dir)), args.data_dir, plugins)
+        except (OSError, ValueError, FormatError) as e:
+            print(f"  (could not write the distant land overrides: {e})", file=sys.stderr)
     doors_at, arrivals = defaultdict(list), defaultdict(list)
     for bk, (_pi, ckey, at, dest, to, dele) in door_final.items():
         if dele:
@@ -5357,6 +5362,8 @@ def fix_cell_winners(args, plugins):
     xver = defaultdict(list)                     # (interior, ref key) -> [(plugin, group, block)]
     xpgrd = defaultdict(list)                    # interior -> [(plugin, raw PGRD record)]
     door_hist = defaultdict(list)                # ref key -> [(plugin, group, block, cell key)] of doors into them
+    revive_hist = defaultdict(list)              # ref key -> [(plugin, group, deleted, NAME, cell key)] of
+                                                 # the changes later plugins make to another plugin's object
     for pi, (n, p) in enumerate(order):
         low = n.lower()
         try:
@@ -5420,6 +5427,9 @@ def fix_cell_winners(args, plugins):
                                     rz = struct.unpack_from("<f", dd, 20)[0] if len(dd) >= 24 else 0.0
                                     oid = next((cstr(d) for s_, d in blk if s_ == "NAME"), "").lower()
                                     iorig[(key[1], bk)] = (x, y, z, rz, oid)
+                        if bk[0] != low:
+                            revive_hist[bk].append((low, grp, any(s_ == "DELE" for s_, _d in blk),
+                                                    next((d for s_, d in blk if s_ == "NAME"), b"\0"), key))
                         if bk in door_hist or any(s_ == "DNAM" for s_, _d in blk):
                             door_hist[bk].append((low, grp, blk, key))
 
@@ -5890,6 +5900,30 @@ def fix_cell_winners(args, plugins):
         if moved:
             print(f"  '{cell}': {len(moved)} left in the void of the old layout, moved to the entrance: "
                   f"{', '.join(moved[:10])}{' ...' if len(moved) > 10 else ''}")
+
+    # an object one plugin deletes and a later plugin that isn't built on it changes again: the change brings
+    # it back (two copies of a replaced walkway, guards a mod took away). The deletion is kept. Chosen interiors
+    # are left to the cell winners above.
+    revived = []
+    for bk, hist in revive_hist.items():
+        last_del = max((i for i, h in enumerate(hist) if h[2]), default=None)
+        if last_del is None or hist[-1][2]:
+            continue
+        deleter = hist[last_del][0]
+        if any(knows(h[0], deleter) for h in hist[last_del + 1:]):
+            continue                                 # a later plugin knew about the deletion and undid it
+        reviver, grp, _dele, nm, key = hist[-1]
+        if (key[0] == "i" and key[1] in cells) or bk in out.get(key, {}):
+            continue
+        put(key, grp, bk, [["FRMR", b""], ["NAME", nm], ["DELE", struct.pack("<I", 0)]])
+        revived.append((cstr(nm), name_of.get(deleter, deleter), name_of.get(reviver, reviver)))
+    if revived:
+        print(f"  Objects deleted by one mod and brought back by a later mod that didn't know: {len(revived)} "
+              f"kept deleted")
+        for oid, deleter, reviver in revived[:20]:
+            print(f"    {oid}: deleted by {deleter}, brought back by {reviver}")
+        if len(revived) > 20:
+            print(f"    ... and {len(revived) - 20} more")
 
     if not any(out.values()) and not pgrds:
         print("  Nothing to change.")

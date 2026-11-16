@@ -28,6 +28,7 @@ print = MT.printer()  # noqa: A001
 
 TEX_DIRS = ("textures", "icons", "bookart", "splash")
 SOUND_DIRS = ("sound", "music")
+SPLASH_DDS_PIXELS = 1024 * 1024    # bigger splash TGAs get a DDS beside them (2048x1024 is 8 MB uncompressed)
 ASSET_DIRS = ("meshes",) + TEX_DIRS + SOUND_DIRS + ("video", "fonts")
 NIF_HEAD = b"NetImmerse File Format, Version 4.0.0.2"
 UNUSED_RECORD = "mwdialog_unused_assets.txt"
@@ -787,6 +788,15 @@ def _walk(data_dir, tops):
             for f in fs:
                 full = os.path.join(dp, f)
                 yield top, os.path.relpath(full, data_dir), full
+
+
+def _tga_pixels(path):
+    try:
+        with open(path, "rb") as f:
+            head = f.read(18)
+    except OSError:
+        return 0
+    return int.from_bytes(head[12:14], "little") * int.from_bytes(head[14:16], "little") if len(head) == 18 else 0
 
 
 def _wav_info(b):
@@ -1628,6 +1638,14 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None, stats=None):
             issues.append(("ERROR", rel, "empty file (0 bytes) -> kept in Off\\...\\broken\\, stand-in put there"))
             fixes.append(("broken", full, rel, "empty"))
             continue
+        if top == "splash" and low.endswith(".tga") and not os.path.exists(full[:-4] + ".dds") \
+                and _tga_pixels(full) > SPLASH_DDS_PIXELS:
+            # a big loading screen as TGA is held uncompressed; the engine loads a DDS of the same name instead.
+            # The TGA stays: the splash list may be read by name.
+            issues.append(("WARN", rel, "large splash screen as TGA -> a DDS beside it (compressed, no mipmaps); "
+                                        "the TGA stays"))
+            fixes.append(("tex", full, rel, {"convert": ".dds", "nomips": True, "keep": True}))
+            continue
         if top in TEX_DIRS and low.endswith(".dds"):
             msgs, job = _examine_dds(rel, full, size, m, want_mips, pending[5])
             if pending[5].get("m") and stats is not None:
@@ -1956,7 +1974,9 @@ def apply_folder(root, fixes, m, game_dir, plugin_name):
                         skipped.append(f"{rel} (texconv.exe not found)")
                         continue
                     os.makedirs(tmp, exist_ok=True)
-                    a = [texconv, "-nologo", "-y", "-dx9", "-o", tmp, "-m", "0"]
+                    a = [texconv, "-nologo", "-y", "-dx9", "-o", tmp, "-m", "1" if job.get("nomips") else "0"]
+                    if job.get("convert"):
+                        a += ["-ft", job["convert"][1:], "-f", "BC3_UNORM"]
                     if job.get("dxt"):
                         a += ["-f", "BC3_UNORM" if job.get("alpha", True) else "BC1_UNORM"]
                     w, h = job.get("size") or (None, None)
@@ -1969,7 +1989,8 @@ def apply_folder(root, fixes, m, game_dir, plugin_name):
                     if w:
                         a += ["-w", str(w), "-h", str(h)]
                     res = subprocess.run(a + [full], capture_output=True, text=True)
-                    out = os.path.join(tmp, os.path.basename(full))
+                    out = os.path.join(tmp, os.path.splitext(os.path.basename(full))[0] + job["convert"]
+                                       if job.get("convert") else os.path.basename(full))
                     if res.returncode or not os.path.exists(out):
                         skipped.append(f"{rel} (texconv: {(res.stdout + res.stderr).strip()[-100:]})")
                         continue
@@ -1983,7 +2004,7 @@ def apply_folder(root, fixes, m, game_dir, plugin_name):
                         skipped.append(f"{rel} (ffmpeg not found)")
                         continue
                     os.makedirs(tmp, exist_ok=True)
-                    out = os.path.join(tmp, "x" + os.path.splitext(full)[1].lower())
+                    out = os.path.join(tmp, "x" + (".mp3" if job.get("mp3") else os.path.splitext(full)[1].lower()))
                     a = [ff, "-y", "-v", "error", "-i", full]
                     if job.get("mono"):
                         a += ["-ac", "1"]
@@ -1998,6 +2019,20 @@ def apply_folder(root, fixes, m, game_dir, plugin_name):
                     new = open(out, "rb").read()
                     os.remove(out)
             if not new:
+                continue
+            if kind == "snd" and job.get("mp3"):         # Morrowind falls back from x.wav to x.mp3
+                mp3 = os.path.splitext(full)[0] + ".mp3"
+                if os.path.exists(mp3):
+                    skipped.append(f"{rel} (an MP3 of that name exists already)")
+                    continue
+                _backup_in_mod(root, orig_rel.get(full, rel), full, plugin_name, FEATURE_OF.get(kind, "converted"))
+                m.replace_asset_in_place(mp3, new)
+                os.remove(full)
+                done += 1
+                continue
+            if kind == "tex" and job.get("keep"):        # the original stays; only the DDS beside it is new
+                m.replace_asset_in_place(os.path.splitext(full)[0] + job["convert"], new)
+                done += 1
                 continue
             # only the original is kept: a backup that exists already (an earlier fix of this run, or a run
             # before) is never overwritten; a renamed file's original is kept under its original name
