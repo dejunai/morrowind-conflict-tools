@@ -1557,7 +1557,8 @@ SAVE_HELPER = ('local mwluafix_save do mwluafix_save = package.loaded["mwluafix_
                'package.loaded["mwluafix_savestate"] = mwluafix_save '
                'event.register("save", function() mwluafix_save.saving = true end, { priority = 9999 }) '
                'event.register("saved", function() mwluafix_save.saving = false end) '
-               'event.register("loaded", function() mwluafix_save.saving = false end) end end ')
+               'event.register("loaded", function() mwluafix_save.saving = false end) '
+               'event.register("menuExit", function() mwluafix_save.saving = false end) end end ')
 
 IMAGE_LIT_RE = re.compile(r'(["\'])([^"\'\r\n]{1,260}?)\.(tga|bmp)\1', re.I)
 

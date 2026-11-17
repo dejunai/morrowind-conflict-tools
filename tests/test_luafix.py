@@ -788,6 +788,7 @@ def test_a_ui_slideshow_timer_skips_while_saving_and_config_waits_for_the_save()
     new, applied = lf.build_patch(SAVE_SRC, a.findings, "x", lf.load_config())
     assert {"I2", "I3"} <= set(applied)
     assert "if mwluafix_save.saving then return end" in new and "mwluafix_savestate" in new
+    assert 'event.register("menuExit", function() mwluafix_save.saving = false end)' in new
     assert 'timer.delayOneFrame(function() mwse.saveConfig("x", config) end, timer.real)' in new
     b = lf.FileAnalysis(new, "x", "x/main.lua")                     # a second pass changes nothing more
     assert not [f for f in b.run() if f["rule"] in ("I2", "I3")]

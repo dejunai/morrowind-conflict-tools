@@ -127,15 +127,15 @@ def test_M13_dx10_alpha_detection():
     assert ah.dx10_has_alpha(b"DDS ") is True             # unknown: keep alpha
 
 
-def test_check_folder_converts_every_wav_to_a_same_stem_mp3(tmp_path):
+def test_check_folder_leaves_a_plain_wav_alone(tmp_path):
+    # the game does not fall back from a missing .wav to an .mp3: no conversion until plugins are repathed
     import struct
     fmt = struct.pack("<HHIIHH", 1, 1, 44100, 88200, 2, 16)              # mono, 44.1 kHz, 16-bit PCM
     wav = b"RIFF" + struct.pack("<I", 36) + b"WAVE" + b"fmt " + struct.pack("<I", 16) + fmt + b"data" + b"\0" * 4
     (tmp_path / "Sound" / "fx").mkdir(parents=True)
     (tmp_path / "Sound" / "fx" / "a.wav").write_bytes(wav)
     issues, fixes = ah.check_folder(str(tmp_path), m)
-    assert [(k, r.replace("\\", "/"), j.get("mp3")) for k, _f, r, j in fixes if k == "snd"] == \
-        [("snd", "Sound/fx/a.wav", True)]
+    assert [f for f in fixes if f[0] == "snd"] == []
 
 
 def test_a_large_splash_tga_gets_a_dds_without_mipmaps_and_stays(tmp_path, monkeypatch):
@@ -171,7 +171,7 @@ def test_apply_folder_turns_a_wav_into_a_same_stem_mp3_and_keeps_the_wav_in_off(
     sound = tmp_path / "mod" / "Sound" / "fx"
     sound.mkdir(parents=True)
     (sound / "a.wav").write_bytes(wav)
-    _issues, fixes = ah.check_folder(str(tmp_path / "mod"), m)
+    fixes = [("snd", str(sound / "a.wav"), "Sound\\fx\\a.wav", {"mp3": True})]
 
     def fake(cmd, **_kw):
         open(cmd[-1], "wb").write(b"ID3mp3 audio")

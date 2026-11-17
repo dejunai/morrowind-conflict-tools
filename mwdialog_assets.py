@@ -1735,8 +1735,6 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None, stats=None):
                     info = _mp3_info(b, m.mp3_first_frame)
             else:
                 info = _wav_info(b)
-                job["mp3"] = True
-                why.append("WAV (converted to MP3; Morrowind uses the same-stem fallback)")
                 fmt_bits = None
                 p = b.find(b"fmt ")
                 if p != -1 and p + 24 <= len(b):
