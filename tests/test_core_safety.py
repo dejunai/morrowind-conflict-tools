@@ -110,3 +110,25 @@ def test_malformed_conflict_answers_are_dropped_not_crashed_on(tmp_path):
     assert ST.read_conflict_answers(str(tmp_path)) == {"c.esp|d.esp": {"do": "skip"}}
     (tmp_path / ST.CONFLICT_ANSWERS_FILE).write_text(json.dumps({"answers": ["not", "a", "mapping"]}))
     assert ST.read_conflict_answers(str(tmp_path)) == {}
+
+
+def test_master_check_facts_are_kept_between_runs_and_dropped_when_a_plugin_changes(tmp_path, monkeypatch):
+    MC = _load("mwdialog_mastercheck")
+    plugin = tmp_path / "A.esp"
+    plugin.write_bytes(b"x")
+    real = {"defs": {"a"}, "refs": {"b"}, "dials": set(), "links": [("t", "1")]}
+    calls = []
+    monkeypatch.setattr(MC, "plugin_facts", lambda data: calls.append(data) or real)
+    MC._load_facts(str(tmp_path))
+    assert MC.cached_plugin_facts(str(plugin), b"x") == real
+    MC._save_facts(str(tmp_path))
+    MC._load_facts(str(tmp_path))
+    assert MC.cached_plugin_facts(str(plugin), b"x") == real and len(calls) == 1    # from the file, not parsed
+    MC._save_facts(str(tmp_path))
+    os.utime(plugin, ns=(1, 1))                                                   # the plugin changed
+    MC._load_facts(str(tmp_path))
+    MC.cached_plugin_facts(str(plugin), b"x")
+    MC._save_facts(str(tmp_path))
+    assert len(calls) == 2
+    saved = json.loads((tmp_path / MC.FACTS_FILE).read_text())
+    assert len(saved["facts"]) == 1                                               # the old entry is gone

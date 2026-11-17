@@ -25,6 +25,7 @@ mwdialog_unused_assets.txt
 mwdialog_new_conflicts.txt
 mwdialog.conflicts.txt
 mwdialog_mastercheck_cache.json
+mwdialog_mastercheck_facts.json
 mwdialog_asset_cache.json
 mwdialog_asset_cache.sqlite
 mwdialog_asset_cache.json.migrated

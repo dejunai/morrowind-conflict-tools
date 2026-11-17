@@ -227,7 +227,8 @@ def cstr(b):
     i = b.find(b"\0")
     if i >= 0:
         b = b[:i]
-    return b.decode(ENC, MW_ERRORS)
+    # nearly every ID is plain ASCII, which cp1252 decodes to the same text: skip the slower codec for it
+    return b.decode("ascii") if b.isascii() else b.decode(ENC, MW_ERRORS)
 
 
 def iter_records(data):

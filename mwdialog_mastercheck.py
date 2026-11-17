@@ -42,6 +42,8 @@ SAME_SIZE_MIN_MISSES = 8                 # references into it, and at least this
 ARCHIVE_CACHE_VERSION = 2                # "archives" entries: all IDs kept, key uses st_mtime_ns
 SIZES_RECORD = "mwdialog_master_sizes.json"
 CACHE_FILE = "mwdialog_mastercheck_cache.json"
+FACTS_FILE = "mwdialog_mastercheck_facts.json"    # parsed plugin facts and master profiles, by file stamp
+FACTS_VERSION = 1                       # raise when plugin_facts() or master_profile() change what they find
 FIX_LOGS = ("mwdialog_fixes.log", os.path.join("mwdialog_backup", "fixes.archive.txt"))
 BASE_GAME = {"morrowind.esm", "tribunal.esm", "bloodmoon.esm"}
 ARCHIVE_EXT = (".7z", ".zip", ".rar")
@@ -175,6 +177,67 @@ def plugin_facts(data):
 
 
 _PROFILE_MEMO = {}
+_FACTS = None                            # this run's {"facts": {}, "profiles": {}, "used": set()}, or None
+
+
+def _rel(path):
+    """A path in the facts file: relative to the game folder (no drive letters in data files) when inside it."""
+    path = os.path.normcase(os.path.abspath(path))
+    root = _FACTS.get("root") if _FACTS else None
+    if root:
+        rel = os.path.relpath(path, root)
+        if not rel.startswith(os.pardir) and not os.path.isabs(rel):
+            return rel
+    return path
+
+
+def _stamp(path):
+    st = os.stat(path)
+    return f"{_rel(path)}|{st.st_size}|{st.st_mtime_ns}"
+
+
+def _load_facts(game_dir):
+    global _FACTS
+    disk = _load_json(os.path.join(game_dir, FACTS_FILE)) or {}
+    ok = isinstance(disk, dict) and disk.get("version") == FACTS_VERSION
+    _FACTS = {"facts": disk.get("facts", {}) if ok else {}, "profiles": disk.get("profiles", {}) if ok else {},
+              "used": set(), "root": os.path.normcase(os.path.abspath(game_dir))}
+
+
+def _save_facts(game_dir):
+    """Keep only what this run used: a removed or changed plugin's entry goes."""
+    global _FACTS
+    if _FACTS is None:
+        return
+    keep = _FACTS["used"]
+    out = {"version": FACTS_VERSION,
+           "facts": {k: v for k, v in _FACTS["facts"].items() if k in keep},
+           "profiles": {k: v for k, v in _FACTS["profiles"].items() if k in keep}}
+    try:
+        with T.atomic_open(os.path.join(game_dir, FACTS_FILE), encoding="utf-8") as f:
+            json.dump(out, f, separators=(",", ":"))
+    except OSError as e:
+        print(f"  ({FACTS_FILE} not saved: {e})", file=sys.stderr)
+    _FACTS = None
+
+
+def cached_plugin_facts(path, data):
+    """plugin_facts(data) for the plugin at path, from the facts file when the plugin hasn't changed."""
+    if _FACTS is None:
+        return plugin_facts(data)
+    try:
+        key = _stamp(path)
+    except OSError:
+        return plugin_facts(data)
+    _FACTS["used"].add(key)
+    hit = _FACTS["facts"].get(key)
+    if hit is not None:
+        return {"defs": set(hit["defs"]), "refs": set(hit["refs"]), "dials": set(hit["dials"]),
+                "links": [tuple(x) for x in hit["links"]]}
+    facts = plugin_facts(data)
+    _FACTS["facts"][key] = {"defs": sorted(facts["defs"]), "refs": sorted(facts["refs"]),
+                            "dials": sorted(facts["dials"]), "links": [list(x) for x in facts["links"]]}
+    return facts
 
 
 def master_profile(path, memo=None, refresh=False):
@@ -189,6 +252,13 @@ def master_profile(path, memo=None, refresh=False):
     key = (os.path.normcase(os.path.abspath(path)), st.st_size, st.st_mtime_ns)
     if key in memo and not refresh:
         return memo[key]
+    stamp = f"{_rel(key[0])}|{key[1]}|{key[2]}"
+    if _FACTS is not None:
+        _FACTS["used"].add(stamp)
+        hit = None if refresh else _FACTS["profiles"].get(stamp)
+        if hit is not None:
+            memo[key] = {"ids": set(hit["ids"]), "dials": set(hit["dials"]), "prefixes": set(hit["prefixes"])}
+            return memo[key]
     try:
         data = T.read_plugin_bytes(path)
     except OSError:
@@ -199,6 +269,8 @@ def master_profile(path, memo=None, refresh=False):
     total = max(1, len(ids))
     top = {p for p, c in pref.items() if c >= 3 and c / total >= 0.05}
     memo[key] = {"ids": ids, "dials": facts["dials"], "prefixes": top}
+    if _FACTS is not None:
+        _FACTS["profiles"][stamp] = {"ids": sorted(ids), "dials": sorted(facts["dials"]), "prefixes": sorted(top)}
     return memo[key]
 
 
@@ -654,6 +726,7 @@ def check(world, mw, args=None):
     bases = MP.path_bases(game_dir, staging=vortex_root, downloads=dl or getattr(args, "vortex_downloads", None))
     cache_path = os.path.join(game_dir, CACHE_FILE)
     cache = load_cache(cache_path, bases)
+    _load_facts(game_dir)
     fix_log = getattr(args, "fix_log", None)
     extra = [fix_log] if fix_log and os.path.isabs(fix_log) else ([os.path.join(game_dir, fix_log)]
                                                                      if fix_log else [])
@@ -678,7 +751,7 @@ def check(world, mw, args=None):
             data = T.read_plugin_bytes(path)
         except OSError:
             continue
-        facts = plugin_facts(data)
+        facts = cached_plugin_facts(path, data)
         hdr = {n.lower(): s for n, s in header_masters(data)}
         removed = logs["missing"].get(plugin_l, [])
         rewritten = plugin_l in logs["syncs"] or plugin_l in logs["added"]
@@ -723,6 +796,7 @@ def check(world, mw, args=None):
             _report(r, v)
     cache["verdicts"] = {f"{p}|{m}": v for (p, m), v in verdicts.items() if v["kind"] != "matches"}
     outside = save_cache(cache_path, cache, bases)
+    _save_facts(game_dir)
     if outside:
         print(f"  {CACHE_FILE}: {len(outside)} path(s) under none of the game, staging and download folders, kept "
               f"as they are, e.g. {outside[0]}", file=sys.stderr)
