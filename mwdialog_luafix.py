@@ -35,6 +35,9 @@ Rules (thresholds come from MWSE\\config\\mwguard.json when it exists - the same
   H3 global variables a mod creates by accident (no local)                                            report
   H4 game data used at file load, before the initialized event                                        report
   H5 require cycles inside a mod                                                                      report
+  I1 a .tga/.bmp it names is gone and a real .dds of that name is there -> names the .dds          fix
+  I2 a repeating real-time timer that redraws UI keeps running through a save -> skips while saving fix
+  I3 a config written inside a save handler (during the save) -> written the frame after it        fix
   H6 tes3.messageBox inside a loop                                                                    report
 
 Never touched: MWSE's own code (only files under ...\\MWSE\\mods\\ are read; core, lib, config never), and
@@ -721,7 +724,7 @@ class FileAnalysis:
         for r in (self.r_priority, self.r_per_frame, self.r_timers, self.r_one_shot, self.r_data_guard,
                   self.r_keycode, self.r_lookups, self.r_event_fields, self.r_destroy, self.r_console, self.r_info_filter, self.r_reregister,
                   self.r_reload_timers, self.r_globals, self.r_toplevel, self.r_loops, self.r_logger_level,
-                  self.r_log_triggers, self.r_loggers):
+                  self.r_log_triggers, self.r_loggers, self.r_save_safe):
             r()
         return self.findings
 
@@ -828,6 +831,40 @@ class FileAnalysis:
                      "report-high" if io else "report")
         if logs:
             self.add("F1", fn, f"{ev} handler {name} logs every frame ({logs} call(s))", "log shim", "trigger")
+
+    def r_save_safe(self):
+        """I2: a repeating real-time timer whose callback redraws UI (updateLayout) keeps redrawing while the game
+        saves, which fights the save for the D3D device (a crash on a loading-screen autosave): it skips while a
+        save runs. I3: a config written inside a save handler is written the frame after the save."""
+        saves = set()
+        for c in self.calls:
+            if L.dotted(c.func) == "event.register" and len(c.args) >= 2 and event_name(c.args[0]) == "save":
+                fn = self.func_of(c.args[1])
+                if fn is not None:
+                    saves.add(id(fn))
+        for c in self.calls:
+            d = L.dotted(c.func)
+            if d == "timer.start" and c.args and c.args[0].kind == "Table":
+                tb = c.args[0]
+                ty, it = table_field(tb, "type"), num_value(table_field(tb, "iterations"))
+                fn = self.func_of(table_field(tb, "callback"))
+                if ty is None or L.dotted(ty) != "timer.real" or it != -1 or fn is None or not fn.body.stats:
+                    continue
+                if not any(n.kind == "Method" and n.name == "updateLayout" for g in self.closure(fn)
+                           for n in L.walk(g.body)):
+                    continue
+                if "mwluafix_save" in self.text(fn.body.stats[0]):
+                    continue
+                at = fn.body.stats[0].s
+                self.add("I2", c, "a repeating real-time timer redraws UI and keeps running through a save",
+                         "skips while a save is running", "high", [(at, at, "if mwluafix_save.saving then return end ")],
+                         {"savestate"})
+            elif d in ("mwse.saveConfig", "json.savefile"):
+                fn = L.enclosing_function(c)
+                if fn is not None and id(fn) in saves:
+                    self.add("I3", c, f"{d} inside a save handler: the config is written while the game saves",
+                             "written the frame after the save", "high",
+                             [(c.s, c.e, f"timer.delayOneFrame(function() {self.text(c)} end, timer.real)")])
 
     def r_timers(self):
         mi = self.cfg["minInterval"]
@@ -1515,6 +1552,47 @@ class FileAnalysis:
 
 
 # ---------------------------------------------------------------------------------------------- what we add
+SAVE_HELPER = ('local mwluafix_save do mwluafix_save = package.loaded["mwluafix_savestate"] '
+               'if type(mwluafix_save) ~= "table" then mwluafix_save = { saving = false } '
+               'package.loaded["mwluafix_savestate"] = mwluafix_save '
+               'event.register("save", function() mwluafix_save.saving = true end, { priority = 9999 }) '
+               'event.register("saved", function() mwluafix_save.saving = false end) '
+               'event.register("loaded", function() mwluafix_save.saving = false end) end end ')
+
+IMAGE_LIT_RE = re.compile(r'(["\'])([^"\'\r\n]{1,260}?)\.(tga|bmp)\1', re.I)
+
+
+def _is_dds(path):
+    try:
+        with open(path, "rb") as f:
+            return f.read(4) == b"DDS "
+    except OSError:
+        return False
+
+
+def image_findings(src, roots):
+    """I1: a string naming a .tga/.bmp that is in none of `roots` (Data Files, the mod's own package) while a
+    file of that name with a real DDS header is: Lua loads images by exact name, with no fallback to .dds."""
+    out = []
+    for mo in IMAGE_LIT_RE.finditer(src):
+        name = mo.group(2).replace("/", "\\").replace("\\\\", "\\")
+        if name.lower().startswith("data files\\"):
+            name = name[len("data files\\"):]
+        for root in roots:
+            hit = None
+            for base in (os.path.join(root, name), os.path.join(root, "textures", name)):
+                if not os.path.exists(f"{base}.{mo.group(3)}") and _is_dds(base + ".dds"):
+                    hit = base
+                    break
+            if hit:
+                out.append(Finding(rule="I1", line=src.count("\n", 0, mo.start()) + 1,
+                                   what=f"names '{mo.group(2)}.{mo.group(3)}', which is gone; a .dds of that name is there",
+                                   fix="names the .dds", conf="high", edits=[(mo.start(3), mo.end(3), "dds")],
+                                   needs=set()))
+                break
+    return out
+
+
 GATE_HELPER = ("local mwluafix_gate do local last, clock = {}, os.clock mwluafix_gate = function(k, s) "
                "local t = clock() local l = last[k] if l and t >= l and t - l < s then return true end "
                "last[k] = t return false end end ")
@@ -1807,6 +1885,8 @@ def build_patch(src, findings, mod_key, cfg, level="high", want_shim=False):
         head += log_shim(mod_key, cfg)
     if "gate" in needs and "mwluafix_gate = function" not in src:
         head += GATE_HELPER
+    if "savestate" in needs and "mwluafix_savestate" not in src:
+        head += SAVE_HELPER
     out = out[:ip] + head + out[m.end() if m else ip:]
     return out, sorted(set(rules))
 
@@ -1929,6 +2009,7 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
     fix_conf = ("high",) if level == "high" else ("high", "medium")
     for (mroot, key), files in sorted(by_mod.items()):
         analyses = {}
+        roots = [r for r in (data_dir, os.path.dirname(os.path.dirname(mroot)) if mroot else None) if r]
         for p, rel in files:
             ent = {"rel": rel, "mod": key, "findings": [], "error": None, "patch": None, "logs": 0, "requires": []}
             rep.files[p] = ent
@@ -2019,7 +2100,9 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
                     if f["rule"] == "F1":
                         f["conf"] = old.get((f["rule"], f["line"], f["what"]), f["conf"])
                 ent["findings"] = a.findings + [f for f in ent["findings"] if f["rule"] == "H5"]
-            new, rules = build_patch(a.src, a.findings, key, cfg, level, want_shim)
+            images = image_findings(a.src, roots)
+            ent["findings"] = [f for f in ent["findings"] if f["rule"] != "I1"] + images
+            new, rules = build_patch(a.src, a.findings + images, key, cfg, level, want_shim)
             if new is not None:
                 ent["patch"] = verify_patch(a.src, new, rules, checker, key, rel, cfg, level)
     return rep

@@ -766,3 +766,41 @@ def test_applied_report_prefixes_every_finding_with_its_status():
     assert "UNCONFIGURED: A2 line 1: A2 wrong" in text and "REPORTED: L1 line 1: L1 wrong" in text
     assert "=> PATCHED (A1)" in text
     assert "NOT PATCHED: A1 line 1" in text and "=> NOT PATCHED: syntax check failed" in text
+
+
+SAVE_SRC = """local config = {}
+event.register(tes3.event.save, function(e)
+    mwse.saveConfig("x", config)
+end)
+event.register(tes3.event.uiActivated, function(e)
+    local t = timer.start({ type = timer.real, duration = 10, iterations = -1, callback = function()
+        local m = tes3ui.findMenu("MenuLoading")
+        if m then m:updateLayout() end
+    end })
+end, { filter = "MenuLoading" })
+"""
+
+
+def test_a_ui_slideshow_timer_skips_while_saving_and_config_waits_for_the_save():
+    a = lf.FileAnalysis(SAVE_SRC, "x", "x/main.lua")
+    rules = sorted(f["rule"] for f in a.run() if f["rule"] in ("I2", "I3"))
+    assert rules == ["I2", "I3"]
+    new, applied = lf.build_patch(SAVE_SRC, a.findings, "x", lf.load_config())
+    assert {"I2", "I3"} <= set(applied)
+    assert "if mwluafix_save.saving then return end" in new and "mwluafix_savestate" in new
+    assert 'timer.delayOneFrame(function() mwse.saveConfig("x", config) end, timer.real)' in new
+    b = lf.FileAnalysis(new, "x", "x/main.lua")                     # a second pass changes nothing more
+    assert not [f for f in b.run() if f["rule"] in ("I2", "I3")]
+
+
+def test_a_tga_the_lua_names_is_pointed_at_a_real_dds(tmp_path):
+    (tmp_path / "Splash").mkdir()
+    (tmp_path / "Splash" / "a.dds").write_bytes(b"DDS " + b"\0" * 124)
+    (tmp_path / "Splash" / "b.dds").write_bytes(b"not a dds")             # no DDS header: left alone
+    (tmp_path / "Splash" / "c.tga").write_bytes(b"x")                     # the .tga is still there: left alone
+    (tmp_path / "Splash" / "c.dds").write_bytes(b"DDS " + b"\0" * 124)
+    src = r'local p = "Splash\\a.tga" local q = "Splash/b.tga" local r = "Splash\\c.tga"'   # Lua's escaped \
+    found = lf.image_findings(src, [str(tmp_path)])
+    assert [(f["rule"], f["what"].split("'")[1]) for f in found] == [("I1", r"Splash\\a.tga")]
+    s, e, txt = found[0]["edits"][0]
+    assert src[:s] + txt + src[e:] == r'local p = "Splash\\a.dds" local q = "Splash/b.tga" local r = "Splash\\c.tga"'
