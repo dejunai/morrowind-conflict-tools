@@ -319,3 +319,27 @@ def test_a_plugin_with_nothing_left_and_nothing_of_its_own_is_taken_out_on_every
     assert "none of its 2 references into 'Fooland.esp' exist any more" in out
     order = [s for s in (g / m.LOAD_ORDER_FILE).read_text().splitlines() if s and not s.startswith(";")]
     assert "Fooland Patch.esp" not in order and "Fooland.esp" in order
+
+
+def test_a_patch_whose_every_change_is_now_in_the_updated_master_is_taken_out(game, capsys):
+    g, df = game
+    mor = os.path.getsize(df / "Morrowind.esm")
+    plugin(df / "Fooland Patch.esp", [("Morrowind.esm", mor), ("Fooland.esp", 123456)], [misc("zz_a"), misc("zz_b")])
+    run(df, "--dry-run")
+    assert not (g / m.LOAD_ORDER_FILE).exists()
+    run(df)
+    out = " ".join(capsys.readouterr().out.split())
+    assert "obsolete: 'Fooland.esp' was updated, and all 2 change(s) it makes to 'Fooland.esp' are in the installed" in out
+    order = [s for s in (g / m.LOAD_ORDER_FILE).read_text().splitlines() if s and not s.startswith(";")]
+    assert "Fooland Patch.esp" not in order and "Fooland.esp" in order
+
+
+def test_a_patch_with_changes_of_its_own_stays_and_says_how_much_is_in_the_master(game, capsys):
+    g, df = game
+    mor = os.path.getsize(df / "Morrowind.esm")
+    plugin(df / "Fooland Patch.esp", [("Morrowind.esm", mor), ("Fooland.esp", 123456)],
+           [misc("zz_a"), misc("pt_own")])
+    run(df)
+    out = " ".join(capsys.readouterr().out.split())
+    assert "1 of the 1 change(s) it makes to 'Fooland.esp' are already in the updated 'Fooland.esp'" in out
+    assert "obsolete" not in out and not (g / m.LOAD_ORDER_FILE).exists()

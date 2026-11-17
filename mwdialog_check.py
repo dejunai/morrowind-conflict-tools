@@ -2971,7 +2971,7 @@ def scan(args, plugins, bsas, data_dirs, report):
         # every run: a plugin that uses nothing from a master any more and has nothing of its own
         # (--disable-mismatched: every plugin made for a different master)
         bad = {p for (p, _m), v in getattr(world, "master_verdicts", {}).items()
-               if p in bad and v.get("none_left") == 0}
+               if p in bad and (v.get("none_left") == 0 or v.get("obsolete"))}
     if bad and not getattr(args, "dry_run", False) and not getattr(args, "_mismatched_done", False):
         args._mismatched_done = True
         try:

@@ -177,6 +177,45 @@ def plugin_facts(data):
 
 
 _PROFILE_MEMO = {}
+_DIGEST_MEMO = {}                        # master path, size, mtime -> record_digests()
+
+
+def record_digests(data):
+    """{record key: content digest} for every record but cells, land and pathgrids (what a patch overrides):
+    objects by type and ID, dialogue by topic and response ID; the deleted flag counts."""
+    out, topic = {}, None
+    for _off, tag, flags, body in T.iter_records(data):
+        if tag == "DIAL":
+            topic = T.cstr(T.first_sub(body, b"NAME") or b"").lower()
+            key = ("DIAL", topic)
+        elif tag == "INFO":
+            key = ("INFO", topic, T.cstr(T.first_sub(body, b"INAM") or b"").lower())
+        else:
+            topic = None
+            if tag in ("TES3", "CELL", "LAND", "PGRD"):
+                continue
+            key = T.record_id(tag, body)
+            if key is None:
+                continue
+        out[key] = hashlib.md5(bytes([1 if flags & 0x20 else 0]) + body, usedforsecurity=False).digest()
+    return out
+
+
+def absorbed(data, master_path):
+    """(changes the patch makes to records of this master, how many of them the master now has as they are,
+    everything else it has: records not in the master, cells and land), or None if the master can't be read."""
+    try:
+        st = os.stat(master_path)
+        key = (os.path.normcase(os.path.abspath(master_path)), st.st_size, st.st_mtime_ns)
+        theirs = _DIGEST_MEMO.get(key)
+        if theirs is None:
+            theirs = _DIGEST_MEMO[key] = record_digests(T.read_plugin_bytes(master_path))
+        mine = record_digests(data)
+        cells = sum(1 for _o, tg, _f, _b in T.iter_records(data) if tg in ("CELL", "LAND"))
+    except (OSError, T.FormatError):
+        return None
+    over = [k for k in mine if k in theirs]
+    return len(over), sum(1 for k in over if mine[k] == theirs[k]), len(mine) - len(over) + cells
 _FACTS = None                            # this run's {"facts": {}, "profiles": {}, "used": set()}, or None
 
 
@@ -787,6 +826,15 @@ def check(world, mw, args=None):
             rm = list(rm) + [x for x in seen if x not in rm]
             conf, kind, info = assess(f2, prof, defined, rm, logs["refgone"].get(plugin_l, {}).get(ml, 0),
                                       (plugin_l, ml) in world.ref_error_masters, orig, inst_size)
+            saved_against = orig if orig is not None else hdr.get(ml)   # the header may be synced already
+            if saved_against is not None and inst_size is not None and saved_against != inst_size and mpath:
+                # the master was updated since the patch was made: is what it patches fixed in it already?
+                got = absorbed(data, mpath)
+                if got and got[0]:
+                    info["absorbed"] = got
+                    if got[1] == got[0] and not got[2]:     # every change is in the master, nothing else
+                        info["obsolete"] = True
+                        conf, kind = max(conf, DIFFERENT_AT), "different mod"
             counted = info["total"] - info["hits"] - (3 if info["cell_ref_errors"] else 0)
             if not info["hits"] and counted >= 2 and info["size"] != "same size":
                 # nothing it uses from this master is there any more: what else does it have of its own?
@@ -820,6 +868,16 @@ def _report(r, v):
         size = (f"; it was saved against a {v['original_size']}-byte '{m}' ({v['size_source']}), the installed one is "
                 f"{v['installed_size']} bytes")
     ex = ", ".join(v["misses"][:5])
+    if v.get("obsolete"):
+        n = v["absorbed"][0]
+        r.add("ERROR", p, "", "", f"obsolete: '{m}' was updated, and all {n} change(s) it makes to '{m}' are in the "
+                                  f"installed '{m}' as they are{size}; it has nothing else, so it is taken out of the "
+                                  f"load order (add it back to the load order to keep it)")
+        return
+    if v.get("absorbed") and v["absorbed"][1]:
+        n, same, _rest = v["absorbed"]
+        r.add("WARN", p, "", "", f"{same} of the {n} change(s) it makes to '{m}' are already in the updated '{m}'"
+                                 f" (check whether the patch is still needed)")
     if v.get("none_left") == 0:
         r.add("ERROR", p, "", "", f"none of its {v['total']} references into '{m}' exist any more"
                                   + (f" ({ex})" if ex else "") + size
