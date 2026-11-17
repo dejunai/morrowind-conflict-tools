@@ -221,9 +221,13 @@ def read_conflict_answers(game_dir):
     try:
         with open(os.path.join(game_dir, CONFLICT_ANSWERS_FILE), encoding="utf-8") as f:
             d = json.load(f)
-        return d.get("answers", {}) if isinstance(d, dict) else {}
     except (OSError, ValueError):
         return {}
+    answers = d.get("answers") if isinstance(d, dict) else None
+    if not isinstance(answers, dict):
+        return {}
+    # an entry edited by hand into something else is forgotten (asked again), never a crash in the report
+    return {k: v for k, v in answers.items() if isinstance(k, str) and isinstance(v, dict)}
 
 
 def write_conflict_answers(game_dir, answers):

@@ -94,6 +94,8 @@ def read_load_order(args):
     if not os.path.isfile(ini):
         return None
     names = ini_game_files(ini)
+    if getattr(args, "dry_run", False):              # a dry run changes nothing: Morrowind.ini's list, not saved
+        return names
     write_load_order(game_dir, names, "made from Morrowind.ini")
     print(f"Created {LOAD_ORDER_FILE} from Morrowind.ini's [Game Files] ({len(names)} plugins). From now on this "
           f"file is the load order; Morrowind.ini only gets it when --play starts the game.", file=sys.stderr)

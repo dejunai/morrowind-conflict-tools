@@ -92,3 +92,21 @@ def test_a_move_is_journaled_before_it_is_made_and_undo_copes_when_it_never_happ
     monkeypatch.undo()
     monkeypatch.setattr(vt, "JOURNAL", str(tmp_path / "journal.jsonl"))
     assert vt.undo() == 0 and src.read_text() == "r"
+
+
+def test_a_dry_run_reads_morrowind_ini_without_creating_the_load_order(tmp_path):
+    data = tmp_path / "Data Files"
+    data.mkdir()
+    (tmp_path / "Morrowind.ini").write_text("[Game Files]\nGameFile0=Morrowind.esm\n")
+    args = types.SimpleNamespace(data_dir=str(data), ini=None, dry_run=True)
+    assert LO.read_load_order(args) == ["Morrowind.esm"]
+    assert not (tmp_path / LO.LOAD_ORDER_FILE).exists()
+
+
+def test_malformed_conflict_answers_are_dropped_not_crashed_on(tmp_path):
+    ST = _load("mwdialog_state")
+    (tmp_path / ST.CONFLICT_ANSWERS_FILE).write_text(json.dumps(
+        {"answers": {"a.esp|b.esp": "oops", "c.esp|d.esp": {"do": "skip"}, "e.esp|f.esp": None}}))
+    assert ST.read_conflict_answers(str(tmp_path)) == {"c.esp|d.esp": {"do": "skip"}}
+    (tmp_path / ST.CONFLICT_ANSWERS_FILE).write_text(json.dumps({"answers": ["not", "a", "mapping"]}))
+    assert ST.read_conflict_answers(str(tmp_path)) == {}
