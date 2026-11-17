@@ -79,15 +79,33 @@ end
 -- into the save for every performer visited, including ones that are only logged.
 local sessionLogged = {}
 
-local function refKey(ref)
-    local p = ref.startingPosition or ref.position
+local function cellTag(ref)
     local cell = ref.cell
-    local where = "?"
-    if cell then
-        where = cell.isInterior and cell.id:lower() or string.format("#%d,%d", cell.gridX, cell.gridY)
-    end
-    return string.format("%s|%s|%d|%d|%d", where, ref.object.id:lower(),
+    if not cell then return "?" end
+    return cell.isInterior and cell.id:lower() or string.format("#%d,%d", cell.gridX, cell.gridY)
+end
+
+-- the key an older version saved: startingPosition is not valid for NPCs (MWSE docs), so it can't be relied on
+local function oldKey(ref)
+    local p = ref.startingPosition or ref.position
+    return string.format("%s|%s|%d|%d|%d", cellTag(ref), ref.object.id:lower(),
         math.floor(p.x + 0.5), math.floor(p.y + 0.5), math.floor(p.z + 0.5))
+end
+
+-- the plugin that placed it and its reference number there: stable across moves and load-order changes
+local function refKey(ref)
+    local form = ref.sourceFormId
+    if not form or form == 0 then return oldKey(ref) end
+    return string.format("%s|%s|%s|%d", cellTag(ref), ref.object.id:lower(), tostring(ref.sourceMod or ""):lower(), form)
+end
+
+-- the key a performer was saved under, by this version or an older one
+local function findKey(mine, ref)
+    if not mine then return nil end
+    local k = refKey(ref)
+    if mine[k] then return k end
+    k = oldKey(ref)
+    if mine[k] then return k end
 end
 
 local function hiddenMap(create)
@@ -125,8 +143,8 @@ local function settleCell(cell)
         if not mine then return end
         for _, refs in pairs(byMod) do
             for _, ref in ipairs(refs) do
-                local k = refKey(ref)
-                if mine[k] then
+                local k = findKey(mine, ref)
+                if k then
                     mine[k] = nil
                     ref:enable()
                     log("%s: %s shown again", cell.editorName, describe(ref))
@@ -163,8 +181,8 @@ local function settleCell(cell)
     -- the keeper's performers are visible (in case an earlier decision hid them)
     local mine = hiddenMap(false)
     for _, ref in ipairs(byMod[keep:lower()]) do
-        local k = refKey(ref)
-        if mine and mine[k] then
+        local k = findKey(mine, ref)
+        if k then
             mine[k] = nil
             ref:enable()
             log("%s: %s shown again (%s now loads last)", cell.editorName, describe(ref), keep)

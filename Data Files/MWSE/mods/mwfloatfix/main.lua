@@ -56,18 +56,13 @@ local function writeTemp(r, k, v) r.tempData[k] = v end
 
 local function getRefData(ref, key)
     if not ref then return nil end
-    local ok, t = pcall(readTemp, ref)
-    return (ok and t) and t[key] or nil
+    local ok, v = pcall(readTemp, ref, key)
+    return ok and v or nil
 end
 
 local function setRefData(ref, key, val)
     if not ref then return false end
-    local ok, t = pcall(readTemp, ref)
-    if ok and t then
-        t[key] = val
-        return true
-    end
-    return false
+    return (pcall(writeTemp, ref, key, val))
 end
 
 local queue, queued, qHead = {}, {}, 1    -- reviewed: a read index instead of table.remove(queue, 1)

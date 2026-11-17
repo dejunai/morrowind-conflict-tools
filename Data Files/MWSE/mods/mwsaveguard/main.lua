@@ -70,6 +70,9 @@ local function onPreLoad(e)
 
 	local resolvedPath = validator.resolveSavePath(filename)
 	local isValid, reason = validator.validateSave(resolvedPath)
+	if isValid and reason ~= "Valid save" then
+		mwse.log("[mwsaveguard] '%s': %s; loaded anyway.", tostring(resolvedPath), tostring(reason))
+	end
 
 	if not isValid then
 		-- 1. Suppress native engine load call to prevent Morrowind.exe crash / dialog freeze

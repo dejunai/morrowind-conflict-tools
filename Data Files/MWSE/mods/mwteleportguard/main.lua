@@ -28,6 +28,14 @@ local function extractTeleport(cmd)
     if not cmd or cmd == "" then
         return nil, cmd
     end
+    -- a conditional teleport ("if ... PositionCell ... endif") must stay in the script: run here, it would
+    -- happen every time. Comments (after ;) don't count.
+    local code = cmd:gsub(";[^\r\n]*", ""):lower()
+    for _, word in ipairs({ "if", "elseif", "else", "while" }) do
+        if code:find("%f[%w]" .. word .. "%f[%W]") then
+            return nil, cmd
+        end
+    end
 
     local pattern = "[Pp][Ll][Aa][Yy][Ee][Rr]%s*->%s*[Pp][Oo][Ss][Ii][Tt][Ii][Oo][Nn][Cc][Ee][Ll][Ll]%s+([%-%d%.]+)[%s,]+([%-%d%.]+)[%s,]+([%-%d%.]+)[%s,]+([%-%d%.]+)[%s,]+([^\r\n;]+)"
     local x, y, z, rot, rawCell = string.match(cmd, pattern)

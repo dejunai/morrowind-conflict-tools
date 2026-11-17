@@ -16,6 +16,9 @@ local function onReferenceActivated(e)
     end
 
     if not e or not e.reference then return end
+    -- only the mod's people and creatures wait for the quest; its buildings, doors and containers stay put
+    local kind = e.reference.object and e.reference.object.objectType
+    if kind ~= tes3.objectType.npc and kind ~= tes3.objectType.creature then return end
     local src = e.reference.sourceMod
     if src and (src:lower() == sourceMod or src:lower() == "lostheir.esp") then
         if not journalRequirementsAreMet() then

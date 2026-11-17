@@ -54,14 +54,17 @@ end
 --- @return string reason
 function validator.validateSave(filePath)
 	local path = validator.resolveSavePath(filePath)
+	-- not found or not readable here (a save from elsewhere, a path this guard can't resolve): nothing to judge,
+	-- the game is left to load it
 	if not path or not lfs.fileexists(path) then
-		return false, "Save file does not exist on disk"
+		return true, "not found where the guard looks; not checked"
 	end
 
 	local f, err = io.open(path, "rb")
 	if not f then
-		return false, "Could not open save file: " .. tostring(err)
+		return true, "could not be opened to check (" .. tostring(err) .. "); not checked"
 	end
+	local note = nil                     -- something unusual that doesn't make the save unloadable
 
 	local fileSize = f:seek("end")
 	if not fileSize or fileSize < 324 then
@@ -119,8 +122,7 @@ function validator.validateSave(filePath)
 
 	local saveFlags = validator.readUInt32(hedrBody, 5)
 	if saveFlags ~= 32 then
-		f:close()
-		return false, string.format("Invalid save flags (%s != 32)", tostring(saveFlags))
+		note = string.format("unusual save flags (%s, usually 32)", tostring(saveFlags))
 	end
 
 	-- Traverse all records to EOF
@@ -146,10 +148,10 @@ function validator.validateSave(filePath)
 
 	f:close()
 	if offset ~= fileSize then
-		return false, string.format("File size mismatch (expected %d bytes, got %d)", offset, fileSize)
+		note = string.format("%d byte(s) after the last record", fileSize - offset)
 	end
 
-	return true, "Valid save"
+	return true, note or "Valid save"
 end
 
 return validator
