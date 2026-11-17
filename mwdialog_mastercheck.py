@@ -475,7 +475,7 @@ def plugins_in_archive(archive, plugin_name, game_dir=None):
     if not exe:
         return out
     try:
-        listing = subprocess.run([exe, "l", "-slt", "-ba", archive], capture_output=True, timeout=300).stdout
+        listing = subprocess.run([exe, "l", "-slt", "-ba", "--", archive], capture_output=True, timeout=300).stdout
     except (OSError, subprocess.SubprocessError):
         return out
     for line in listing.decode("utf-8", "replace").splitlines():
@@ -483,7 +483,7 @@ def plugins_in_archive(archive, plugin_name, game_dir=None):
             e = line[7:].strip()
             if e.replace("\\", "/").rsplit("/", 1)[-1].lower() == want:
                 try:
-                    data = subprocess.run([exe, "e", "-so", archive, e], capture_output=True, timeout=600).stdout
+                    data = subprocess.run([exe, "e", "-so", "--", archive, e], capture_output=True, timeout=600).stdout
                 except (OSError, subprocess.SubprocessError):
                     continue
                 if data[:4] == b"TES3":

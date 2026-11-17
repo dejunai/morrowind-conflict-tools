@@ -73,3 +73,22 @@ def test_first_sub_refuses_a_subrecord_running_past_its_record():
     body = b"NAME" + struct.pack("<I", 50) + b"short"
     with pytest.raises(T.FormatError):
         T.first_sub(body, b"NAME")
+
+
+def test_a_move_is_journaled_before_it_is_made_and_undo_copes_when_it_never_happened(tmp_path, monkeypatch):
+    staging = tmp_path / "staging"
+    (staging / "Mod").mkdir(parents=True)
+    src, dst = staging / "Mod" / "readme.txt", staging / "Mod" / "Docs" / "readme.txt"
+    src.write_text("r")
+    monkeypatch.setattr(vt, "JOURNAL", str(tmp_path / "journal.jsonl"))
+    seen = []
+
+    def crash(a, b):
+        seen.append(open(vt.JOURNAL).read())                      # what is on disk when the move is made
+        raise OSError("the move fails")
+    monkeypatch.setattr(vt.os, "rename", crash)
+    failed = vt.apply([(str(src), str(dst), "docs")], str(staging))
+    assert failed and '"dst"' in seen[0]                          # journaled first
+    monkeypatch.undo()
+    monkeypatch.setattr(vt, "JOURNAL", str(tmp_path / "journal.jsonl"))
+    assert vt.undo() == 0 and src.read_text() == "r"

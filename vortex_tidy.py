@@ -587,9 +587,11 @@ def apply(moves, staging, progress=None, head_extra=None):
                         progress.append(i)
                     continue
                 os.makedirs(os.path.dirname(dst), exist_ok=True)
-                os.rename(src, dst)          # same drive: a rename, so Vortex's hard links keep their file
+                # journaled (on disk) before the move: a crash between the two never leaves a move --undo can't see
                 j.write(json.dumps({"src": src, "dst": dst}) + "\n")
                 j.flush()
+                os.fsync(j.fileno())
+                os.rename(src, dst)          # same drive: a rename, so Vortex's hard links keep their file
                 done += 1
                 if progress is not None:
                     progress.append(i)
@@ -649,6 +651,8 @@ def undo():
                 os.makedirs(os.path.dirname(op["src"]), exist_ok=True)
                 os.rename(op["dst"], op["src"])
                 back += 1
+            elif os.path.exists(op["src"]):
+                back += 1                             # journaled, but the move itself never happened
             else:
                 print(f"  not put back (no longer there): {op['dst']}", file=sys.stderr)
                 left.append(op)

@@ -1240,6 +1240,7 @@ def apply(fixes, data_dir, game_dir, m, log, dry=False):
     skipped = []
     moves = []
     tmp = os.path.join(game_dir, "mwdialog_tmp_assets")
+    shutil.rmtree(tmp, ignore_errors=True)            # left over from a run that stopped early
     for kind, full, rel, job in fixes:
         if dry:
             done[kind] += 1
@@ -1919,6 +1920,7 @@ def apply_folder(root, fixes, m, game_dir, plugin_name):
                     os.path.exists(p)), None)
     ff = find_ffmpeg()
     tmp = os.path.join(game_dir, "mwdialog_tmp_assets")
+    shutil.rmtree(tmp, ignore_errors=True)            # left over from a run that stopped early
     done, skipped = 0, []
     # every repair of one file is done in this one run: the renames first, then the other fixes find the
     # file under its new name (each fix reads the file as the one before left it)
