@@ -2967,8 +2967,12 @@ def scan(args, plugins, bsas, data_dirs, report):
             print(f"(long-path check failed: {e})", file=sys.stderr)
     world.check(sounds)
     bad = getattr(world, "mismatched_plugins", None)
-    if bad and getattr(args, "disable_mismatched", False) and not getattr(args, "dry_run", False) \
-            and not getattr(args, "_mismatched_done", False):
+    if bad and not getattr(args, "disable_mismatched", False):
+        # every run: a plugin that uses nothing from a master any more and has nothing of its own
+        # (--disable-mismatched: every plugin made for a different master)
+        bad = {p for (p, _m), v in getattr(world, "master_verdicts", {}).items()
+               if p in bad and v.get("none_left") == 0}
+    if bad and not getattr(args, "dry_run", False) and not getattr(args, "_mismatched_done", False):
         args._mismatched_done = True
         try:
             order = read_load_order(args) or [n for n, _p in plugins]

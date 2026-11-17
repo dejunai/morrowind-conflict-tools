@@ -291,3 +291,31 @@ def test_staging_index_and_profiles_can_be_refreshed(tmp_path):
     (st / "ModC" / "C.esp").write_bytes(b"x")
     mc.clear_caches()
     assert not mc._PROFILE_MEMO and mc._staging_index(str(st)).get("c.esp") == "ModC"
+
+
+def test_a_plugin_with_nothing_left_in_a_master_stays_if_it_has_content_of_its_own(game, capsys):
+    g, df = game
+    mor = os.path.getsize(df / "Morrowind.esm")
+    plugin(df / "Fooland Patch.esp", [("Morrowind.esm", mor), ("Fooland.esp", 123456)],
+           [cont("pt_box", ["zz_x", "zz_y"])])
+    run(df)
+    out = " ".join(capsys.readouterr().out.split())
+    assert "none of them are left, but it has 1 record(s) and cell(s) of its own, so it stays enabled" in out
+    assert "taken out of the load order" not in out and not (g / m.LOAD_ORDER_FILE).exists()
+
+
+def test_a_plugin_with_nothing_left_and_nothing_of_its_own_is_taken_out_on_every_run(game, capsys, monkeypatch):
+    g, df = game
+    mor = os.path.getsize(df / "Morrowind.esm")
+    plugin(df / "Fooland Patch.esp", [("Morrowind.esm", mor), ("Fooland.esp", 123456)],
+           [cont("pt_box", ["zz_x", "zz_y"])])
+    real = mc.plugin_facts
+    monkeypatch.setattr(mc, "plugin_facts", lambda data: (
+        {"defs": set(), "refs": {"zz_x", "zz_y"}, "dials": set(), "links": []} if b"pt_box" in data else real(data)))
+    run(df, "--dry-run")
+    assert not (g / m.LOAD_ORDER_FILE).exists()                                  # a dry run changes nothing
+    run(df)                                                                      # no --disable-mismatched
+    out = " ".join(capsys.readouterr().out.split())
+    assert "none of its 2 references into 'Fooland.esp' exist any more" in out
+    order = [s for s in (g / m.LOAD_ORDER_FILE).read_text().splitlines() if s and not s.startswith(";")]
+    assert "Fooland Patch.esp" not in order and "Fooland.esp" in order

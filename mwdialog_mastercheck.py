@@ -787,6 +787,16 @@ def check(world, mw, args=None):
             rm = list(rm) + [x for x in seen if x not in rm]
             conf, kind, info = assess(f2, prof, defined, rm, logs["refgone"].get(plugin_l, {}).get(ml, 0),
                                       (plugin_l, ml) in world.ref_error_masters, orig, inst_size)
+            counted = info["total"] - info["hits"] - (3 if info["cell_ref_errors"] else 0)
+            if not info["hits"] and counted >= 2 and info["size"] != "same size":
+                # nothing it uses from this master is there any more: what else does it have of its own?
+                try:
+                    cells = sum(1 for _o, tg, _f, _b in T.iter_records(data) if tg in ("CELL", "LAND"))
+                except T.FormatError:
+                    cells = 0
+                info["none_left"] = len(facts["defs"]) + cells
+                if not info["none_left"]:            # nothing at all: the plugin does nothing any more
+                    conf, kind = max(conf, DIFFERENT_AT), "different mod"
             v = {"plugin": plugin, "master": master, "why": why, "confidence": conf, "kind": kind,
                  "original_size": orig, "size_source": src, "installed_size": inst_size,
                  "from_archive": (original or {}).get("archive") if original else None, **info}
@@ -810,7 +820,12 @@ def _report(r, v):
         size = (f"; it was saved against a {v['original_size']}-byte '{m}' ({v['size_source']}), the installed one is "
                 f"{v['installed_size']} bytes")
     ex = ", ".join(v["misses"][:5])
-    if v["kind"] == "different mod":
+    if v.get("none_left") == 0:
+        r.add("ERROR", p, "", "", f"none of its {v['total']} references into '{m}' exist any more"
+                                  + (f" ({ex})" if ex else "") + size
+                                  + f"; it uses nothing from the installed '{m}' and has nothing of its own, so it "
+                                    f"is taken out of the load order (add it back to the load order to keep it)")
+    elif v["kind"] == "different mod":
         r.add("WARN", p, "", "", f"made for a different '{m}' than the one installed (confidence {pct}%): "
                                  f"{v['total'] - v['hits']} of {v['total']} references into it don't resolve"
                                  + (f" ({ex})" if ex else "") + size
@@ -820,7 +835,10 @@ def _report(r, v):
         r.add("WARN", p, "", "",
               f"made for another version of '{m}' (confidence it is a different mod: {pct}%): "
               f"{v['total'] - v['hits']} of {v['total']} references into it are gone"
-              + (f" ({ex})" if ex else "") + size + "; the rest lines up, so it stays enabled")
+              + (f" ({ex})" if ex else "") + size
+              + (f"; none of them are left, but it has {v['none_left']} record(s) and cell(s) of its own, so it stays "
+                 f"enabled (--fix drops the dead references)" if v.get("none_left")
+                 else "; the rest lines up, so it stays enabled"))
     elif v["kind"] == "no ties" and v["why"] == "listed as a master" and v["confidence"] >= 0.5:
         r.add("INFO", p, "", "", f"lists '{m}' as a master but none of its records override or name anything in it "
                                  f"(confidence it is a different mod: {pct}%)")
