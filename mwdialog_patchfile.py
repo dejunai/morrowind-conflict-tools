@@ -20,7 +20,7 @@ from mwdialog_tes3 import (  # noqa: E402
 
 def patch_supports(op):
     """Can this fix be expressed as an override in a separate patch plugin?"""
-    return op[0] not in ("drop_ref", "move_ref") and op != ("delete", "local")
+    return op[0] not in ("drop_ref", "move_ref", "remap_ref", "rename_cell") and op != ("delete", "local")
 
 
 PATCH_NAME = "mwdialog_check - ESM fixes.esp"

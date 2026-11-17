@@ -133,6 +133,7 @@ from mwdialog_restore import (  # noqa: E402,F401
     BAK_RE, CLEANUP_BAK_RE, DATES_UNDO_FILE, restore_all, restore_backups, restore_dates, run_clean_up)
 
 ENC = "cp1252"
+REMAP_RADIUS = 64       # a renumbered master reference is the same object within this many units
 
 
 ASSET_UNREMOVABLE = {"LTEX"}       # a plugin's land refers to its landscape textures by number
@@ -472,7 +473,7 @@ class World:
             if sname == "FRMR":
                 nrefs += 1
                 if len(sdata) >= 4:
-                    cur = [struct.unpack_from("<I", sdata)[0], "", False, temporary]
+                    cur = [struct.unpack_from("<I", sdata)[0], "", False, temporary, None]
                     blocks.append(cur)
                     continue
             elif sname == "DNAM" and nrefs:
@@ -486,9 +487,11 @@ class World:
                     cur[1] = cstr(sdata)
                 elif sname == "DELE":
                     cur[2] = True
+                elif sname == "DATA" and cur[4] is None and len(sdata) >= 12:
+                    cur[4] = sdata                    # decoded only if the reference needs re-matching
         self.cell_loads.append((len(self.loaded), name, key, cstr(nm or b"").strip(), nrefs))
         masters = self.masters.get(name.lower(), [])
-        for v, obj, deleted, temp in blocks:
+        for v, obj, deleted, temp, pos in blocks:
             k = v >> 24
             o = obj.lower()
             if not deleted and o and o not in self.all_ids:
@@ -504,7 +507,7 @@ class World:
                 continue
             if k > len(masters):
                 continue
-            self.ref_mods.append((name, off, key, label, v, obj, temp))   # FRMR high byte = 1-based master
+            self.ref_mods.append((name, off, key, label, v, obj, temp, pos, deleted))   # FRMR high byte = master
             rkey = (masters[k - 1].lower(), key, v & 0xFFFFFF)
             if deleted and rkey not in self.ref_gone:
                 self.ref_gone.add(rkey)
@@ -1575,7 +1578,8 @@ class World:
         if bad:
             self.item_fixes = [f for f in self.item_fixes if str(f.get("plugin", "")).lower() not in bad]
             self.r.fixes = [f for f in self.r.fixes if not (str(f[0]).lower() in bad
-                                                             and f[2][0] in ("drop_ref", "move_ref", "sync_master"))]
+                                                             and f[2][0] in ("drop_ref", "move_ref", "sync_master",
+                                                                             "remap_ref", "rename_cell"))]
 
     def _check_headers(self):
         """tes3cmd header --synchronize: record counts and master sizes."""
@@ -1651,15 +1655,16 @@ class World:
         r = self.r
         needed = defaultdict(set)          # master lower -> cell keys
         resolved = []
-        for plugin, off, key, label, v, obj, temp in self.ref_mods:
+        for plugin, off, key, label, v, obj, temp, pos, deleted in self.ref_mods:
             masters = self.masters.get(plugin.lower(), [])
             k = v >> 24
             if k > len(masters):
                 continue
             m = masters[k - 1].lower()
             needed[m].add(key)
-            resolved.append((plugin, off, key, label, v, obj, m, temp))
+            resolved.append((plugin, off, key, label, v, obj, m, temp, pos, deleted))
         present = {}
+        homes = defaultdict(dict)          # master lower -> ref index -> (interior cell name, object id)
         for m, keys in needed.items():
             path = self.paths.get(m)
             if not path:
@@ -1669,29 +1674,78 @@ class World:
                 for moff, tag, flags, body in iter_records(data):
                     if tag != "CELL":
                         continue
-                    key, _ = cell_key(body)
+                    key, mlabel = cell_key(body)
                     if key in keys:
-                        idx = present.setdefault((m, key), {})     # ref index -> (object id, temporary?)
-                        pending, mtemp = None, False
+                        idx = present.setdefault((m, key), {})     # ref index -> [object id, temporary?, position]
+                        pending, mtemp, cur_i = None, False, None
                         for sname, sdata in iter_subs(body, moff):
                             if sname == "NAM0":
                                 mtemp = True
                             elif sname == "FRMR" and len(sdata) >= 4:
                                 fv = struct.unpack_from("<I", sdata)[0]
-                                pending = fv if not fv >> 24 else None
+                                pending, cur_i = (fv if not fv >> 24 else None), None
                             elif sname == "NAME" and pending is not None:
-                                idx[pending] = (cstr(sdata).lower(), mtemp)
-                                pending = None
+                                idx[pending] = [cstr(sdata).lower(), mtemp, None]
+                                pending, cur_i = None, pending
+                            elif sname == "DATA" and cur_i is not None and len(sdata) >= 12:
+                                idx[cur_i][2] = sdata         # decoded only when re-matching
+                                cur_i = None
             except (OSError, FormatError):
                 continue
-        for plugin, off, key, label, v, obj, m, temp in resolved:
+        # only for a master that no longer has an interior a plugin edits: where each of its references is now
+        for m, keys in needed.items():
+            if not self.paths.get(m) or not any(k[0] == "i" and (m, k) not in present for k in keys):
+                continue
+            try:
+                for moff, tag, flags, body in iter_records(read_plugin_bytes(self.paths[m])):
+                    if tag != "CELL":
+                        continue
+                    key, mlabel = cell_key(body)
+                    if key is None or key[0] != "i":
+                        continue
+                    pending = None
+                    for sname, sdata in iter_subs(body, moff):
+                        if sname == "FRMR" and len(sdata) >= 4:
+                            fv = struct.unpack_from("<I", sdata)[0]
+                            pending = fv if not fv >> 24 else None
+                        elif sname == "NAME" and pending is not None:
+                            homes[m][pending] = (mlabel, cstr(sdata).lower())
+                            pending = None
+            except (OSError, FormatError):
+                continue
+        claimed = defaultdict(set)         # (master, cell) -> reference indexes some plugin edits
+        for plugin, off, key, label, v, obj, m, temp, pos, deleted in resolved:
+            claimed[(m, key)].add(v & 0xFFFFFF)
+        # an interior the master renamed: every edit of the plugin's cell lands in one other master cell
+        renamed = {}
+        gone_cells = defaultdict(list)
+        for row in resolved:
+            plugin, off, key, label, v, obj, m, temp, pos, deleted = row
+            if key[0] == "i" and (m, key) not in present and m in self.paths:
+                gone_cells[(plugin, off, m)].append(row)
+        for (plugin, off, m), rows in gone_cells.items():
+            places = {homes[m].get(row[4] & 0xFFFFFF, (None, None))[0] for row in rows
+                      if homes[m].get(row[4] & 0xFFFFFF, (None, ""))[1] == row[5].lower()}
+            if len(places) == 1 and None not in places and all(
+                    homes[m].get(row[4] & 0xFFFFFF, (None, ""))[1] == row[5].lower() for row in rows):
+                new_name = places.pop()
+                renamed[(plugin, off)] = new_name
+                master_name = self.masters[plugin.lower()][(rows[0][4] >> 24) - 1]
+                r.add("ERROR", plugin, f"cell {rows[0][3]}", "",
+                      f"edits {len(rows)} reference(s) of '{master_name}' in cell '{rows[0][3]}', which that master "
+                      f"now calls '{new_name}'",
+                      fix=(off, ("rename_cell", new_name.encode(ENC, MW_ERRORS) + b"\0"),
+                           f"renamed the cell to '{new_name}', the master's current name for it"))
+        for plugin, off, key, label, v, obj, m, temp, pos, deleted in resolved:
             if (m, key) not in present and m not in self.paths:
+                continue
+            if (plugin, off) in renamed:
                 continue
             master_name = self.masters[plugin.lower()][(v >> 24) - 1]
             found = present.get((m, key), {}).get(v & 0xFFFFFF)
             if found is None:
                 self.ref_error_masters.add((plugin.lower(), m))
-            there, mtemp = found if found else (None, None)
+            there, mtemp = found[:2] if found else (None, None)
             if there is not None and mtemp != temp:
                 # Mods often file a master's reference in the other group on purpose (e.g. a scripted object
                 # a script acts on must be persistent). Moving it breaks those scripts, so only note it.
@@ -1702,10 +1756,28 @@ class World:
                       f"but the master has it as {want} (left as the mod made it)")
                 continue
             if there is None:
-                r.add("ERROR", plugin, f"cell {label}", obj,
-                      f"changes reference #{v & 0xFFFFFF} in master '{master_name}', which no longer exists in that cell",
-                      fix=(off, ("drop_ref", v), "removed the edit to a reference the master no longer has "
-                                                 "(the game already ignores it)"))
+                # the master renumbered it: the same object, alone within REMAP_RADIUS of where the edit puts it,
+                # not edited by anything else - the edit is pointed there; else it is removed
+                new = None
+                if not deleted and pos is not None:
+                    pos = struct.unpack_from("<3f", pos)
+                    near = [i for i, (o, _t, p) in present.get((m, key), {}).items()
+                            if o == obj.lower() and p is not None and i not in claimed[(m, key)]
+                            and sum((a - b) ** 2 for a, b in zip(struct.unpack_from("<3f", p), pos))
+                            <= REMAP_RADIUS ** 2]
+                    new = near[0] if len(near) == 1 else None
+                if new is not None:
+                    claimed[(m, key)].add(new)
+                    r.add("ERROR", plugin, f"cell {label}", obj,
+                          f"changes reference #{v & 0xFFFFFF} in master '{master_name}', which no longer exists in that "
+                          f"cell; the same object is there now as #{new}",
+                          fix=(off, ("remap_ref", v, (v & 0xFF000000) | new),
+                               f"pointed the edit at the master's current reference #{new} to the same object"))
+                else:
+                    r.add("ERROR", plugin, f"cell {label}", obj,
+                          f"changes reference #{v & 0xFFFFFF} in master '{master_name}', which no longer exists in that "
+                          f"cell", fix=(off, ("drop_ref", v), "removed the edit to a reference the master no longer "
+                                                             "has (the game already ignores it)"))
             elif there != obj.lower():
                 # replacer mods swap the object at an existing reference on purpose; the game accepts it
                 r.add("INFO", plugin, f"cell {label}", obj,
@@ -2735,7 +2807,9 @@ def apply_plan(path, plugin, plan, world, log, collect=None, backup=True):
         if tag == "CELL" and off in plan:
             drops = {op[1] for op, _d, _m in plan[off] if op[0] == "drop_ref"}
             moves = {op[1]: op[2] for op, _d, _m in plan[off] if op[0] == "move_ref"}
-            nb, removed = rewrite_cell_refs(body, off, drops, moves)
+            remaps = {op[1]: op[2] for op, _d, _m in plan[off] if op[0] == "remap_ref"}
+            rename = next((op[1] for op, _d, _m in plan[off] if op[0] == "rename_cell"), None)
+            nb, removed = rewrite_cell_refs(body, off, drops, moves, remaps, rename)
             if removed:
                 out.append(tag.encode("ascii") + struct.pack("<I", len(nb)) + header_rest + nb)
                 for op, desc, msg in plan[off]:

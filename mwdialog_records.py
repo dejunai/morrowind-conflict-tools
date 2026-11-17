@@ -15,9 +15,10 @@ from mwdialog_tes3 import (  # noqa: E402
 print = MT.printer()  # noqa: A001
 
 
-def rewrite_cell_refs(body, off, drops, moves):
-    """Rebuild a CELL body: remove reference blocks whose FRMR is in `drops`, and move blocks whose FRMR
-    is in `moves` (FRMR -> True for temporary, False for persistent). A block runs from its MVRF or FRMR
+def rewrite_cell_refs(body, off, drops, moves, remaps=None, rename=None):
+    """Rebuild a CELL body: remove reference blocks whose FRMR is in `drops`, move blocks whose FRMR
+    is in `moves` (FRMR -> True for temporary, False for persistent), point blocks whose FRMR is in `remaps`
+    at another reference (old FRMR -> new FRMR), and with `rename` (NAME bytes) rename the cell. A block runs from its MVRF or FRMR
     to the next one. NAM0 (count of temporary references) is kept in step. Returns (new body, changes)."""
     head, persistent, temporary, nam0 = [], [], [], None
     block, in_temp = None, False
@@ -47,6 +48,12 @@ def rewrite_cell_refs(body, off, drops, moves):
         return None
 
     changes, temp_delta = 0, 0
+    remaps = remaps or {}
+    if rename is not None:
+        for item in head:
+            if item[0] == "NAME" and item[1] != rename:
+                item[1] = rename
+                changes += 1
     new_p, new_t = [], []
     for group, is_temp in ((persistent, False), (temporary, True)):
         for b in group:
@@ -55,6 +62,9 @@ def rewrite_cell_refs(body, off, drops, moves):
                 changes += 1
                 temp_delta -= 1 if is_temp else 0
                 continue
+            if v in remaps:
+                b = [["FRMR", struct.pack("<I", remaps[v])] if n == "FRMR" else [n, d] for n, d in b]
+                changes += 1
             dest = moves.get(v, is_temp)
             if dest != is_temp:
                 changes += 1
