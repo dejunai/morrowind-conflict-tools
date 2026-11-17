@@ -75,14 +75,21 @@ def read_load_order(args):
     """The active plugins, from mwdialog_load_order.txt. The first time, it is made from Morrowind.ini."""
     game_dir = os.path.dirname(os.path.abspath(args.data_dir))
     path = os.path.join(game_dir, LOAD_ORDER_FILE)
-    if os.path.isfile(path):
+    for source in (path, bak_home(path) + ".bak"):
+        if not os.path.isfile(source):
+            continue
         out = []
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
+        with open(source, "r", encoding="utf-8", errors="replace") as f:
             for line in f:
                 s = line.strip()
                 if s and not s.startswith(";"):
                     out.append(s)
-        return out
+        if out:
+            if source != path:
+                print(f"{LOAD_ORDER_FILE} has no plugins (damaged?): using its backup {source}", file=sys.stderr)
+                write_load_order(game_dir, out, "restored from its backup")
+            return out
+        print(f"{source} lists no plugins (damaged?): not used", file=sys.stderr)
     ini = default_ini(args)
     if not os.path.isfile(ini):
         return None
@@ -107,7 +114,7 @@ def write_load_order(game_dir, order, note=""):
              "; Morrowind.ini's [Game Files] is written from it when a run that changed it ends, and by --play).",
              f"; Last changed {time.strftime('%Y-%m-%d %H:%M')}" + (f" by {note}" if note else "") + ". One plugin per line.",
              ""] + list(order)
-    with open(path, "w", encoding="utf-8") as f:
+    with _T.atomic_open(path, encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
     return os.path.basename(bak)
 
@@ -157,7 +164,7 @@ def read_ini_sections(path):
     cur = None
     with open(path, "r", encoding=_T.ENC, errors="replace") as f:
         for line in f:
-            s = line.strip()
+            s = line.strip().lstrip("\ufeff").removeprefix("\u00ef\u00bb\u00bf")   # a UTF-8 BOM, as read or as cp1252
             if s.startswith("[") and s.endswith("]"):
                 cur = s[1:-1].strip().lower()
             elif cur and "=" in s and not s.startswith(";"):

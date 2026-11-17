@@ -5,6 +5,7 @@ module builds on this one.
 from collections import OrderedDict
 import codecs
 import hashlib
+import contextlib
 import os
 import struct
 
@@ -149,6 +150,22 @@ def validate_plugin_bytes(data):
         raise FormatError("empty file")
 
 
+@contextlib.contextmanager
+def atomic_open(path, encoding="utf-8", errors="strict", newline=None):
+    """Like open(path, "w"), but a crash or error mid-write never leaves a half-written file: the text goes to
+    path.tmp, is flushed to disk, then replaces path in one step."""
+    tmp = os.fspath(path) + ".tmp"
+    try:
+        with open(tmp, "w", encoding=encoding, errors=errors, newline=newline) as f:
+            yield f
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+
+
 def safe_write_bytes(path, data, validate=None, keep_times=None):
     """Write `data` over `path` safely, keeping hard links (Vortex) intact:
       1. the new contents go to <path>.mwdtmp first, flushed to disk, and are read back and checked
@@ -256,6 +273,8 @@ def first_sub(body, wanted):
     while p + 8 <= end:
         name = body[p:p + 4]
         size = struct.unpack_from("<I", body, p + 4)[0]
+        if p + 8 + size > end:
+            raise FormatError(f"subrecord {name!r} runs past the end of its record")
         if name == wanted:
             return body[p + 8:p + 8 + size]
         p += 8 + size

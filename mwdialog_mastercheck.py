@@ -375,10 +375,10 @@ def parse_log(path, cached=None):
         return None
     with open(path, "rb") as f:
         first = f.read(4096)
-        head = hashlib.sha1(first).hexdigest()
+        head = hashlib.sha1(first, usedforsecurity=False).hexdigest()
         facts, start = _empty_log_facts(), 0
         hl = (cached or {}).get("headlen", 0)
-        if cached and hashlib.sha1(first[:hl]).hexdigest() == cached.get("head") and len(first) >= hl \
+        if cached and hashlib.sha1(first[:hl], usedforsecurity=False).hexdigest() == cached.get("head") and len(first) >= hl \
                 and cached.get("offset", 0) <= st.st_size:
             facts, start = cached["facts"], cached["offset"]
             if start == st.st_size:

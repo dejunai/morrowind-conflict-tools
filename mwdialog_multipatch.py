@@ -180,7 +180,7 @@ def object_merges(plugins, known=None, file_ok=None, merged_inputs=None, only=No
                     nm = first_sub(body, b"NAME")
                     if nm and (only is None or (tag, cstr(nm).lower()) in only):
                         dele = bool(fl & 0x20) or first_sub(body, b"DELE") is not None
-                        versions[(tag, cstr(nm).lower())].append((i, hashlib.md5(body).digest(), pos, dele))
+                        versions[(tag, cstr(nm).lower())].append((i, hashlib.md5(body, usedforsecurity=False).digest(), pos, dele))
             except FormatError:
                 continue
     cands = {k: v for k, v in versions.items() if len(v) >= 3 and not any(x[3] for x in v)

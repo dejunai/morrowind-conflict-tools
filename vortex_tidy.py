@@ -655,9 +655,13 @@ def undo():
         except OSError as e:
             print(f"  could not put back {op.get('dst')}: {e}", file=sys.stderr)
             left.append(op)
-    for d in {os.path.dirname(op["dst"]) for op in last["ops"] if "dst" in op}:   # tidy emptied folders
+    top = last["head"].get("staging")         # an old journal without it: no folder is removed
+    top = os.path.normcase(os.path.abspath(top)) if top else None
+    for d in {os.path.dirname(op["dst"]) for op in last["ops"] if "dst" in op} if top else ():   # emptied folders
         try:
-            while d and os.path.isdir(d) and not os.listdir(d):
+            # only folders inside the staging folder: never the staging folder itself or anything above it
+            while d and os.path.normcase(os.path.abspath(d)).startswith(top + os.sep) \
+                    and os.path.isdir(d) and not os.listdir(d):
                 os.rmdir(d)
                 d = os.path.dirname(d)
         except OSError:

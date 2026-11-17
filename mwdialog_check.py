@@ -72,6 +72,7 @@ if sys.modules.get(__name__) is not None:
 
 # The reusable parts live in smaller modules; every name is imported back, so mwdialog_check.X still works.
 from mwdialog_tes3 import (  # noqa: E402,F401
+    atomic_open,
     ACTOR_TAGS, ASSET_SUBS, cell_key, COMPARE_OPS, CONDITION_TYPES, cstr, dec,
     DIAL_TYPES, digest, ENAM_TAGS, enc, first_sub, forget_cached, FormatError,
     has_sub, ICON_TAGS, ID_TAGS, ITEM_TAGS, iter_records, iter_subs, JOURNAL,
@@ -2480,10 +2481,12 @@ def run_repair_sounds(args):
             cmd = [ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", full, "-c:a", "pcm_s16le",
                    "-map_metadata", "-1", "-fflags", "+bitexact", tmp]
         try:
-            ok = subprocess.run(cmd, capture_output=True).returncode == 0 and os.path.getsize(tmp) >= 64
-        except OSError:
+            ok = subprocess.run(cmd, capture_output=True, timeout=600).returncode == 0 and os.path.getsize(tmp) >= 64
+        except (OSError, subprocess.TimeoutExpired):
             ok = False
         if not ok:
+            if os.path.exists(tmp):
+                os.remove(tmp)
             failed.append(rel)
             print(f"  FAILED {rel} ({prob}): ffmpeg couldn't re-save it")
             continue
@@ -4846,7 +4849,7 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
     if earlier and not args.dry_run:
         # wiped before anything is read or asked: this session starts from your own rules only
         shutil.copy2(rules_path, f"{bak_home(rules_path)}.mwdialog-{time.strftime('%Y%m%d-%H%M%S')}.bak")
-        with open(rules_path, "w", encoding="cp1252", errors="replace", newline="\r\n") as f:
+        with atomic_open(rules_path, encoding="cp1252", errors="replace", newline="\r\n") as f:
             f.write(own_text)
         print(f"\nRemoved the {len(earlier)} [Order] rule(s) earlier --cell-conflicts runs added to {RULES_FILE} "
               f"(backed up first); a pair an earlier run decided shows what it chose.")
@@ -5095,7 +5098,7 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
     if new_rules:
         if os.path.exists(rules_path):
             shutil.copy2(rules_path, f"{bak_home(rules_path)}.mwdialog-{time.strftime('%Y%m%d-%H%M%S')}.bak")
-        with open(rules_path, "w", encoding="cp1252", errors="replace", newline="\r\n") as f:
+        with atomic_open(rules_path, encoding="cp1252", errors="replace", newline="\r\n") as f:
             f.write(own_text.rstrip("\n") + "\n" if own_text.strip() else "")
             f.write(f"\n{CONFLICT_RULES_HEADER} {stamp} ----\n")
             for x, y, label in new_rules:
@@ -5377,7 +5380,7 @@ def fix_cell_winners(args, plugins):
             if tag == "LAND":
                 iv, vh = first_sub(body, b"INTV"), first_sub(body, b"VHGT")
                 if iv and vh and len(iv) >= 8 and len(vh) >= 4 + 65 * 65:
-                    land_vers[struct.unpack_from("<ii", iv)].append((pi, hashlib.md5(vh[:4 + 65 * 65]).digest(), off))
+                    land_vers[struct.unpack_from("<ii", iv)].append((pi, hashlib.md5(vh[:4 + 65 * 65], usedforsecurity=False).digest(), off))
                 continue
             if tag in ("MISC", "BOOK", "WEAP", "ARMO", "CLOT", "ALCH", "INGR", "APPA", "LOCK", "PROB", "REPA",
                        "LEVI"):
@@ -6084,7 +6087,7 @@ def _short_mesh(path):
     import hashlib
     folder, fn = os.path.split(path)
     stem, ext = os.path.splitext(fn)
-    tag = hashlib.md5(path.lower().encode("latin-1", "replace")).hexdigest()[:4]
+    tag = hashlib.md5(path.lower().encode("latin-1", "replace"), usedforsecurity=False).hexdigest()[:4]
     room = 31 - (len(folder) + 1 if folder else 0) - len(ext) - 5
     if room < 4:
         folder, room = "mwd", 31 - 4 - len(ext) - 5
@@ -7411,7 +7414,7 @@ def write_context_rules(rules_path, crules, skipped):
     new = "\r\n".join(block + lines) + "\r\n"
     if new.replace("\r\n", "\n").split("\n", 2)[2:] == text.replace("\r\n", "\n").split("\n", 2)[2:]:
         return False                            # same rules (only the date line would change)
-    with open(rules_path, "w", encoding="cp1252", errors="replace", newline="") as f:
+    with atomic_open(rules_path, encoding="cp1252", errors="replace", newline="") as f:
         f.write(new)
     return True
 
@@ -7574,7 +7577,7 @@ def run_sort(args, plugins):
     game_dir = os.path.dirname(os.path.abspath(args.data_dir))
     rules_path = os.path.join(game_dir, RULES_FILE)
     if not os.path.exists(rules_path) and not args.dry_run:
-        with open(rules_path, "w", encoding="cp1252", newline="\r\n") as f:
+        with atomic_open(rules_path, encoding="cp1252", newline="\r\n") as f:
             f.write(DEFAULT_RULES)
         print(f"  Created {RULES_FILE} with the default rules (edit it to add your own).")
     sources = [rules_path]
@@ -7770,7 +7773,7 @@ def full_reset(args, game_dir):
         main([args.data_dir, "--reenable"] + (["--ini", args.ini] if args.ini else []))
     if earlier:
         shutil.copy2(rules_path, backup_path(rules_path))
-        with open(rules_path, "w", encoding="cp1252", errors="replace", newline="\r\n") as f:
+        with atomic_open(rules_path, encoding="cp1252", errors="replace", newline="\r\n") as f:
             f.write(own_text)
     if has_gen:
         main([args.data_dir, "--remove-generated"])

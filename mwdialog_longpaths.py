@@ -102,7 +102,7 @@ def short_rel(rel, taken, mine=()):
     top = parts[0]
     stem, ext = os.path.splitext(parts[-1])
     clean = re.sub(r"[^A-Za-z0-9_\-]", "_", stem)[:STEM_KEEP].rstrip("_") or "f"
-    h = hashlib.sha1(norm(rel).encode("utf-8")).hexdigest()
+    h = hashlib.sha1(norm(rel).encode("utf-8"), usedforsecurity=False).hexdigest()
     for n in (6, 10, 16, 40):
         cand = f"{top}\\{SHORT_DIR}\\{clean}_{h[:n]}{ext}"
         if cand.lower() not in taken or cand.lower() in mine:

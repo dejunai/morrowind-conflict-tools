@@ -239,7 +239,7 @@ def load_config(game_dir=HERE, data_dir=None):
 
 def cfg_hash(cfg):
     keep = {k: v for k, v in cfg.items() if not k.startswith("_")}
-    return hashlib.sha1(json.dumps(keep, sort_keys=True).encode()).hexdigest()[:12] + f"v{VERSION}"
+    return hashlib.sha1(json.dumps(keep, sort_keys=True).encode(), usedforsecurity=False).hexdigest()[:12] + f"v{VERSION}"
 
 
 def mwguard_log_cover(data_dir, cfg, mod_key):
@@ -1863,7 +1863,7 @@ def excluded(path, include_own=False, cfg=None):
 
 
 def sha(b):
-    return hashlib.sha1(b).hexdigest()
+    return hashlib.sha1(b, usedforsecurity=False).hexdigest()
 
 
 def write_in_place(path, data):

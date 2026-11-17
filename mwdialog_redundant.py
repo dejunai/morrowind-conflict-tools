@@ -213,7 +213,7 @@ def plugin_summary(path):
         if rid[0] != tag:
             rid = (tag,) + tuple(rid[1:])
         counts[tag] += 1
-        recs[rid] = hashlib.md5(struct.pack("<I", flags & 0x20) + body).digest()
+        recs[rid] = hashlib.md5(struct.pack("<I", flags & 0x20) + body, usedforsecurity=False).digest()
     info["counts"] = counts
     return recs, info
 
