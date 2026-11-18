@@ -465,6 +465,7 @@ m\Gold_100.NIF	Textures\sn_coin_back_01_n.dds
 m\Gold_100.NIF	Textures\sn_coin_side_01_n.dds
 m\Gold_100.NIF	Textures\sn_coin_top_01_n.dds
 m\misc_dwrv_coin00.nif	Textures\coin01_n.dds
+o\contain_egg_kwama00.NIF	Textures\tx_egg_kwama01_nm.dds
 pc\x\pc_ex_gall_furled.nif	Textures\pc_galleon_window_n.dds
 pc\x\pc_ex_gall_port_ex.nif	Textures\pc_galleon_window_n.dds
 pc\x\pc_ex_gall_unfurled.nif	Textures\pc_galleon_window_n.dds

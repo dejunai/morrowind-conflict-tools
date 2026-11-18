@@ -151,12 +151,16 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
   2. In `updateHerbalismSwitch()`, changes to `switchNode.switchIndex` were made without invoking `sceneNode:update()`, preventing immediate NetImmerse bounding box and visible subtree recalculations.
   3. In `onActivate()`, Graphic Herbalism intercepted the activation and returned `false` without firing `event.trigger("containerClosed", { reference = ref })`. Because `HarvestLights` depends on `containerClosed` to shut off lights associated with glowing mushrooms and flora (`bc mushroom 256`, glowing lichen, etc.), glowing lights remained burning after flora was harvested.
   4. Mushroom replacements in prior patch staging were misplaced under `Meshes/fg/` (Flora Glow paths) instead of standard game paths (`Meshes/f/flora_bc_mushroom_*.nif`), causing conflicting replacers without switch nodes to win file precedence and leaving Seyda Neen courtyard mushrooms un-harvestable visually.
+  5. **Pre-harvest Flora Reversion on Save Load**: Harvested flora state (`ref.data.GH = 1`) persisted in save files, but upon reloading a game, flora reverted visually to unharvested models and became non-interactive. This was caused by two compounding engine/lifecycle bugs:
+     * `onCellChanged` guarded updates behind `if today > (day or 0)`. On Day 0 (start of a new game), `DaysPassed` is 0, so `0 > 0` evaluated to `false`, bypassing cell updates entirely.
+     * When the `loaded` event fires, reference scene nodes (`ref.sceneNode`) are not yet constructed. Graphic Herbalism lacked a `referenceActivated` event listener, so when Morrowind subsequently constructed the 3D meshes, they loaded with default unharvested NIF states (`switchIndex = 0`, `appCulled = false`) and were never switched.
 * **Fix**:
   1. Added universal vaporization fallback: when `switchNode` is missing or invalid on harvest, `sceneNode.appCulled = true` is applied and tracked in `ref.data.GH`. When cell resets/respawns (`index == 0`), `sceneNode.appCulled = false` restores the flora.
   2. Enhanced switch indexing: resolves target children by name (`HARVESTED`/`PICKED`/`NORMAL`/`SPOILED`) with index clamping, unsets `appCulled`, and executes `sceneNode:update()`.
   3. Added `event.trigger("containerClosed", { reference = ref })` inside `onActivate()` so `HarvestLights` immediately disables associated light sources when glowing flora is picked.
   4. Guarded `onActivate` and `onTooltipDrawn` against harvested flora using both `ref.data.GH` and `ref.sceneNode.appCulled`.
   5. Assembled all 816 validated modifying NIFs (base game, DLCs, glowing mushrooms, smoothed marshmerrow, and landmass flora) and 36 associated high-quality textures into a unified Vortex staging override package at [Graphic Herbalism - Ultimate Override Patch](file:///G:/Vortex%20Mods/morrowind/Graphic%20Herbalism%20-%20Ultimate%20Override%20Patch).
+  6. Added a `referenceActivated` event listener to apply `updateHerbalismSwitch(ref, ref.data.GH)` the moment any flora's 3D scene node is attached. Refactored `onCellChanged` to check `if day == nil or today > day` with string cell keys, ensuring Day 0 initialization and cell transitions always execute.
 
 ---
 
@@ -420,3 +424,84 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
   4. **Status Prompts**:
      - Configured `#define STATUS_INTERVAL 2000` so progress outputs claim how many files have been processed every 2,000 files and when segments change.
 
+---
+
+## 34. `altvadder\splash` CTD on `MenuLoading` `updateLayout` (`EXCEPTION_ACCESS_VIOLATION 0xC0000005`)
+
+* **Author**: `altvadder\splash`
+* **File**: [altvadder\splash\main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/altvadder/splash/main.lua#L110-L360)
+* **Bug**:
+  1. `altvadder\splash` intercepts `MenuLoading` via `uiActivated`. Inside `uiActivated`, it called `menu:createImage({ path = chosen })` for uncompressed high-resolution splash `.tga` files (e.g. `Morrowind.tga`, 2048x1024, ~8.4 MB uncompressed D3D surface) followed immediately by a synchronous `menu:updateLayout()`.
+  2. In 32-bit Morrowind (4.00 GiB virtual address space limit), when virtual memory usage reaches 95-98% (here 3.94 GiB / 98.62%), contiguous memory is completely fragmented. D3D/NetImmerse's texture allocation fails and returns NULL. NetImmerse dereferences the pointer during `updateLayout`, triggering a fatal `EXCEPTION_ACCESS_VIOLATION (0xC0000005)`. Because hardware access violations are OS-level structured exceptions, Lua's `pcall` cannot catch or prevent the process from crashing.
+  3. Calling `menu:updateLayout()` synchronously from inside `uiActivated` is re-entrant: the engine is in the middle of constructing the menu widget tree when `uiActivated` fires.
+  4. Additionally, `enforceTimer` was hammering `m:updateLayout()` 10 times a second (`0.1s` interval), and `slideshowTimer` loaded additional uncompressed multi-megabyte textures into NetImmerse's `NiSourceTexture` cache during cell loading without checking available memory.
+* **Fix**:
+  1. Added `isMemorySafe()` guard: queries `mwse.getVirtualMemoryUsage()`. If 32-bit virtual memory exceeds 3400 MB (~83%), custom splash injection and slideshow cycling are automatically bypassed, letting the lightweight vanilla loading screen render safely without crashing.
+  2. Removed the synchronous re-entrant `menu:updateLayout()` from line 259. Morrowind's native UI loop automatically performs initial layout and drawing when `uiActivated` returns.
+  3. Guarded full-screen menu styling and background rect creation: they are only applied after verifying that the image element was successfully created.
+  4. Relaxed `enforceTimer` to 0.25s, added menu visibility and `isMemorySafe()` guards, and wrapped layout calls in protected executions.
+
+---
+
+## 35. MCM Accidental Theft Protection "Books" Crash (`ERROR_NOT_ENOUGH_MEMORY 0x80070008` / `0xC0000005`)
+
+* **Authors**: MWSE Core (`ExclusionsPage.lua`) & `mer.accidentalTheftProtection`
+* **Files**:
+  - [ExclusionsPage.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/core/mcm/components/pages/ExclusionsPage.lua#L20-L245)
+  - [accidentalTheftProtection\main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mer/accidentalTheftProtection/main.lua#L1-L70)
+  - [noAccidentalTheft.json](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/config/noAccidentalTheft.json)
+* **Bug**:
+  1. In MWSE's `ExclusionsPage.lua`, selecting any category with thousands of items (such as "Books" with 8,474+ objects across base game, Tamriel Rebuilt, OAAB, etc.) looped across all items and called `list:createTextSelect` for every single item without any limit or virtualization.
+  2. Creating 8,474+ native C++ UI elements simultaneously in a single scrollable container exhausted the 32-bit heap (virtual memory reached 3.98 GiB / 99.41%), failing with Windows error `0x80070008` ("Not enough memory resources are available to process this command") and an immediate `EXCEPTION_ACCESS_VIOLATION (0xC0000005)` crash to desktop.
+  3. Furthermore, `noAccidentalTheft.json` was previously bloated with 10,437 individual book IDs (including invalid non-UTF8 ANSI characters) in an attempt to whitelist all books for reading without sneaking.
+* **Fix**:
+  1. In `ExclusionsPage.lua`, introduced `MAX_DISPLAY_ITEMS = 200` and updated `distributeLeft` / `distributeRight` / `updateSearch` / `toggleFiltered`:
+     - Renders at most 200 items into each column, appending a notice: `"... and X more items (type in Search to filter)"`.
+     - The search box now dynamically filters the full in-memory list and renders matching items up to 200 items in under 1ms with negligible memory overhead.
+  2. In `accidentalTheftProtection\main.lua`, added native `allowReadingBooks = true` support:
+     - Directly checks `obj.objectType == tes3.objectType.book` in `onActivate(e)`, allowing any book or scroll in any mod to be opened and read without sneaking (while `noAccidentalTheftBookFix` protects the Take button).
+     - Added an MCM toggle for "Allow reading owned books without sneaking".
+  3. Cleaned `noAccidentalTheft.json` to `{ "enabled": true, "allowReadingBooks": true, "blacklist": {} }`, dropping its file size from 363 KB of bloated book IDs down to clean JSON.
+
+---
+
+## 36. MWSE Core File Reading, JSON/Config Loading, & MCM Resilience Audit
+
+* **Author**: MWSE Core
+* **Files**:
+  - [initialize.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/core/initialize.lua#L235-L830)
+  - [mcm\main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/core/mcm/main.lua#L45-L215)
+  - [Template.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/core/mcm/components/templates/Template.lua#L150-L345)
+  - [ConfigVariable.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/core/mcm/variables/ConfigVariable.lua#L10-L40)
+  - [TableVariable.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/core/mcm/variables/TableVariable.lua#L10-L27)
+  - [Dropdown.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/core/mcm/components/settings/Dropdown.lua#L15-L85)
+  - [CycleButton.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/core/mcm/components/settings/CycleButton.lua#L15-L25)
+* **Bug**:
+  1. `json.loadfile` opened files in Windows text mode (`"r"`), risking premature truncation on Ctrl-Z (`0x1A`), did not strip UTF-8 BOM (`\xEF\xBB\xBF`), and did not wrap `json.decode` in `pcall`. Any invalid byte (such as Windows-1252 high bytes `0x91-0x94` from Morrowind record text) or trailing comma caused unhandled parse aborts.
+  2. `json.savefile` and `toml.saveFile` used raw `assert(io.open(...))`. If parent directories did not exist or permissions failed, Lua threw an unhandled crash. Furthermore, `json.savefile` appended `.json` unconditionally, creating `.json.json` when callers included an extension.
+  3. `mwse.loadConfig` and `fixLoadedResult` assumed the loaded config was a table; if corrupted to a boolean or primitive, indexing keys crashed. Subtables in `fixLoadedResult` also failed if a primitive was loaded where defaults expected a table.
+  4. `mwse.loadTranslations` and `loadLocaleFile` called unhandled `error` and hard `assert` when translation files were missing or invalid tables, crashing mod initialization instead of falling back to default keys.
+  5. In MCM components (`main.lua`, `Template.lua`, `Dropdown.lua`, `ConfigVariable.lua`, `TableVariable.lua`), unguarded `#config.favorites`, missing `findMenu` checks, unverified `headerImagePath` elements, missing tab lookups, and uninitialized `options` or `self.table` references caused nil-indexing crashes.
+* **Fix**:
+  1. Updated `json.loadfile` to open in binary mode (`"rb"`), strip UTF-8 BOM, protect decode with `pcall`, and apply automatic multi-stage fallbacks: trailing comma trimming before `}`/`]` and sanitizing Windows-1252 curly quotes/dashes into standard ASCII.
+  2. Updated `json.savefile` and `toml.saveFile`: added `.json` normalization, automatic recursive parent directory creation, safe `io.open` error logging (no assert crash), and protected encoding preventing open handle leaks.
+  3. Hardened `mwse.loadConfig` with `type(result) ~= "table"` reset and updated `fixLoadedResult` to replace primitive values with deep copies of default subtables when schema expects tables.
+  4. Added binary reading, BOM stripping, and empty-file guards to `toml.loadFile` and `yaml.loadFile`.
+  5. Converted `mwse.loadTranslations` and `loadLocaleFile` to non-fatal warning logging with automatic string passthrough fallback if translation tables are missing.
+  6. Added nil-safe guards in MCM components for menus, header images, tab lists, favorites length checks, config variables, and options tables.
+
+---
+
+## 37. Accidental Theft Protection Door Interaction & Erroneous Seyda Neen Tavern Ownership
+
+* **Author**: Mer / OAAB Team
+* **Files**:
+  - [main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mer/accidentalTheftProtection/main.lua)
+  - [main.lua (Vortex Staging)](file:///G:/Vortex%20Mods/morrowind/Accidental%20Theft%20Protection-48264-1-0-1-1590981508/MWSE/mods/mer/accidentalTheftProtection/main.lua)
+  - [Seyda Neen - Damp Little Squat - unshabby.ESP](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/Seyda%20Neen%20-%20Damp%20Little%20Squat%20-%20unshabby.ESP)
+* **Bug**:
+  1. `accidentalTheftProtection` intercepted the `activate` event for all references lacking player ownership (`not tes3.hasOwnershipAccess{target = e.target}`). Because it did not filter by object type, any owned door reference (such as the interior exit door in Seyda Neen Lighthouse owned by Thavere Vedrano) unconditionally returned `false` unless the player was sneaking, trapping the player inside interiors and requiring sneaking to leave buildings.
+  2. In `Seyda Neen - Damp Little Squat - unshabby.ESP`, the exterior doors leading to public establishments—The Dirty Anchor (FRMR 20) and The Glass Parrot (FRMR 21, 22)—erroneously retained `ANAM: indrele rathryon` from copied shack references. Although the doors were unlocked (`INTV: 0`), UI Expansion flagged them as "Owner: Indrele Rathryon" with red activation crosshairs, and `accidentalTheftProtection` dropped activation clicks without sneaking, giving the appearance of being locked in broad daylight.
+* **Fix**:
+  1. Updated `accidentalTheftProtection\main.lua` with door bypass logic: door references are never blocked without sneaking if the player is in an interior cell (`tes3.player.cell.isInterior`), if the door leads to an exterior (`ref.destination.cell and not ref.destination.cell.isInterior`), or if the door is unlocked (`not (ref.lockNode and ref.lockNode.locked)`). Interior door navigation and exits now always work freely.
+  2. Removed spurious `ANAM: indrele rathryon` ownership subrecords from FRMR 20, 21, and 22 in `Seyda Neen - Damp Little Squat - unshabby.ESP` (and synchronized with Vortex staging), restoring the tavern and glass shop doors to standard public unowned access.

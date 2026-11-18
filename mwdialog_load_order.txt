@@ -1,6 +1,6 @@
 ; mwdialog_load_order.txt: the active plugins, in load order (mwdialog_check.py keeps this list;
 ; Morrowind.ini's [Game Files] is written from it when a run that changed it ends, and by --play).
-; Last changed 2026-11-15 02:33 by --multipatch. One plugin per line.
+; Last changed 2026-11-16 23:10 by --multipatch. One plugin per line.
 
 Morrowind.esm
 Tribunal.esm
@@ -795,16 +795,13 @@ TheGardenOfDreams.esp
 avp BTBGI-NE - Uvirith's Legacy.esp
 FM - Unique Items v1.0 - PfP.ESP
 YARR - yet another race revamp v1.2.ESP
-Better Landscapes Stonewood Pass (RP Edit).esp
-LuceEdit - BCOM - MoonlightOnTheOdaiRiver.esp
-seamus_GentleHand_StonewoodPass.ESP
-Imperial Stables.esp
-Dallara Fort Moonmoth.esp
 Friends & Frens - Vvardenfell.ESP
 Casimir's Legacy.esp
 Friends & Frens - TR.ESP
 Illy's Oh my Goddess.ESP
 Dallara Ebonheart.esp
+Imperial Stables.esp
+Dallara Fort Moonmoth.esp
 RepopulatedMorrowind.ESP
 MGO Guild Halls Vanilla.esp
 Thieves Guild Quest Revisions.esp
@@ -824,6 +821,9 @@ The_Vanilla_Quest_Tweaks_RP_Choices_Consequences_Super_Mega_Package_-_Ultimate_E
 Libertarian Magical Services.ESP
 RR_Better_Ships_n_Boats_Eng.esp
 MAH.ESP
+Better Landscapes Stonewood Pass (RP Edit).esp
+LuceEdit - BCOM - MoonlightOnTheOdaiRiver.esp
+seamus_GentleHand_StonewoodPass.ESP
 OAAB Brother Junipers Twin Lamps.esp
 DD_Caldera_Expansion.esp
 SWP - Caldera Mine Patch.ESP

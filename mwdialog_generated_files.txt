@@ -436,6 +436,7 @@
   Textures\tx_bloodworm_jaw01_nm.dds	192
   Textures\tx_bloodworm_teeth_nm.dds	192
   Textures\tx_daedra_glove2_nm.dds	192
+  Textures\tx_egg_kwama01_nm.dds	349680
   Textures\tx_eggmine_metal00_n.dds	192
   Textures\tx_fist_randagulf_01_nm.dds	192
   Textures\tx_fist_randagulf_02_nm.dds	192

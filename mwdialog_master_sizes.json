@@ -10,6 +10,17 @@
   },
   "plugin": "Friends & Frens - base.esm"
  },
+ "mwdialog_check cell fixes.esp": {
+  "masters": {
+   "seyda neen - damp little squat - unshabby.esp": {
+    "installed": 377807,
+    "master": "Seyda Neen - Damp Little Squat - unshabby.ESP",
+    "original": 377882,
+    "seen": "2026-11-17 17:47:10"
+   }
+  },
+  "plugin": "mwdialog_check Cell Fixes.esp"
+ },
  "nod - core.esm": {
   "masters": {
    "oaab_data.esm": {
@@ -103,6 +114,17 @@
    }
   },
   "plugin": "RepopulatedMorrowind.ESM"
+ },
+ "shabby seyda neen.esp": {
+  "masters": {
+   "seyda neen - damp little squat - unshabby.esp": {
+    "installed": 377807,
+    "master": "Seyda Neen - Damp Little Squat - unshabby.ESP",
+    "original": 377882,
+    "seen": "2026-11-17 17:47:10"
+   }
+  },
+  "plugin": "Shabby Seyda Neen.ESP"
  },
  "sound_data.esm": {
   "masters": {

@@ -39,6 +39,9 @@ Rules (thresholds come from MWSE\\config\\mwguard.json when it exists - the same
   I2 a repeating real-time timer that redraws UI keeps running through a save -> skips while saving fix
   I3 a config written inside a save handler (during the save) -> written the frame after it        fix
   H6 tes3.messageBox inside a loop                                                                    report
+  L1 a while loop that walks links (x = x.next) or counts down by a computed step -> capped at 10000   fix
+  M1 an enterFrame handler (it also fires in menus) with no UI work -> returns in menu mode            fix
+  V1 number * vector (-1 * up: no metamethod for that order, errors every call) -> vector * number     fix
 
 Never touched: MWSE's own code (only files under ...\\MWSE\\mods\\ are read; core, lib, config never), and
 your own mods (mwcollide, mwfloatfix, mwguard, mwhangwatch, mwinfoloop, mwperformers, mwsoundguard,
@@ -86,7 +89,7 @@ PLAN_FILE = os.path.join(HERE, "mwdialog_luafix_plan.txt")
 VERSION = 3
 MARK = "mwdialog_luafix"
 
-OWN_MODS = {"mwcollide", "mwfloatfix", "mwguard", "mwhangwatch", "mwinfoloop", "mwperformers", "mwsoundguard",
+OWN_MODS = {"mwcollide", "mwexitguard", "mwfloatfix", "mwguard", "mwhangwatch", "mwinfoloop", "mwperformers", "mwsoundguard",
             "mwstranded", "mwmanager"}
 
 # defaults; mwguard.json (shared with the runtime guard) and mwdialog_luafix.json override them
@@ -724,9 +727,79 @@ class FileAnalysis:
         for r in (self.r_priority, self.r_per_frame, self.r_timers, self.r_one_shot, self.r_data_guard,
                   self.r_keycode, self.r_lookups, self.r_event_fields, self.r_destroy, self.r_console, self.r_info_filter, self.r_reregister,
                   self.r_reload_timers, self.r_globals, self.r_toplevel, self.r_loops, self.r_logger_level,
-                  self.r_log_triggers, self.r_loggers, self.r_save_safe):
+                  self.r_log_triggers, self.r_loggers, self.r_save_safe, self.r_while_caps, self.r_menu_exit,
+                  self.r_vector_order):
             r()
         return self.findings
+
+    def r_while_caps(self):
+        """L1: a while loop that walks a linked structure (x = x.next) or counts a field down by a computed step
+        (t = t - d while t >= ...) hangs the game when the links cycle or the step is 0 -> capped at 10000 turns."""
+        k = 1 + max([int(x) for x in re.findall(r"mwluafix_n(\d+)", self.src)] or [0])
+        for n in self.nodes:
+            if n.kind != "While" or "mwluafix_n" in self.text(n.cond):
+                continue
+            cond_names = {L.dotted(x) for x in L.walk(n.cond) if x.kind in ("Name", "Index")} - {None}
+            why = None
+            for st in L.walk_no_funcs(n.body):
+                if st.kind not in ("Assign", "Local") or len(st.exprs) != 1:
+                    continue
+                tgt = L.dotted(st.targets[0]) if st.kind == "Assign" else st.names[0]
+                ex = st.exprs[0]
+                if tgt not in cond_names:
+                    continue
+                base = ex.obj if ex.kind in ("Index", "Method") else None
+                if base is not None and L.dotted(base) == tgt:
+                    why = f"walks {tgt} = {self.text(ex)[:40]}"
+                elif (ex.kind == "Binop" and ex.op in ("-", "+") and L.dotted(ex.left) == tgt
+                      and ex.right.kind != "Number" and n.cond.kind == "Binop" and L.dotted(n.cond.left) == tgt
+                      and n.cond.op in ((">=", ">") if ex.op == "-" else ("<=", "<"))):
+                    why = f"steps {tgt} by {self.text(ex.right)[:30]} (a step of 0 never ends it)"
+                if why:
+                    break
+            if not why:
+                continue
+            v = f"mwluafix_n{k}"
+            k += 1
+            self.add("L1", n, f"while loop {why}", "stop it after 10000 turns", "high",
+                     [(n.s, n.s, f"local {v} = 0 "), (n.cond.s, n.cond.s, "("),
+                      (n.cond.e, n.cond.e, f") and {v} < 10000"), (n.body.s, n.body.s, f" {v} = {v} + 1 ")])
+
+    def r_menu_exit(self):
+        """M1: an enterFrame handler (enterFrame also fires in menus; simulate doesn't) that does world work and
+        no UI work -> returns at once in menu mode."""
+        ui = re.compile(r"tes3ui|menu|Menu|findChild|updateLayout|createBlock|createLabel|\.visible|messageBox")
+        seen = set()
+        for c, ev, fn, harg, _opts in self.registrations:
+            if ev != "enterFrame" or fn is None or id(fn) in seen:
+                continue
+            seen.add(id(fn))
+            body = "".join(self.text(g.body) for g in self.closure(fn))
+            if ui.search(body):
+                continue
+            name = harg.id if harg.kind == "Name" else "(inline function)"
+            known = ("tes3.", "mwse.", "math.", "string.", "table.", "timer.", "event.", "os.")
+            opaque = [x for g in self.closure(fn) for x in L.walk(g.body) if x.kind == "Call" and not (
+                (L.dotted(x.func) or "").startswith(known) or L.dotted(x.func) in LOGS or self.func_of(x.func))]
+            self.add("M1", c, f"enterFrame handler {name} also runs while a menu is open"
+                     + (f" (calls {self.text(opaque[0].func)[:30]}, which may do UI work)" if opaque else ""),
+                     "return in menu mode", "medium" if opaque else "high", [(fn.params_end, fn.params_end, " if tes3.menuMode() then return end", (0, 0))])
+
+    def r_vector_order(self):
+        """V1: number * vector (-1 * up) has no metamethod for that order in MWSE and errors every call; the
+        product commutes, so the operands are swapped."""
+        vec = re.compile(r"(?i)(up|forward|right|direction|dir|vec|vector|position|pos|normal|offset|velocity)$")
+        for n in self.nodes:
+            if n.kind != "Binop" or n.op != "*":
+                continue
+            lt = n.left.operand if n.left.kind == "Unop" and n.left.op == "-" else n.left
+            if lt.kind != "Number" or n.right.kind in ("Number", "Binop", "Unop"):
+                continue
+            d = L.dotted(n.right) or ""
+            hint = vec.search(d.split(".")[-1]) or re.search(r"tes3vector[234]|:normalized\(|:cross\(", self.text(n.right))
+            self.add("V1", n, f"{self.text(n)[:40]}: a number on the left of *", "put the number on the right",
+                     "high" if hint else "medium",
+                     [(n.s, n.e, f"{self.text(n.right)} * {self.text(n.left)}")])
 
     def r_priority(self):
         lim = self.cfg["priorityLimit"]

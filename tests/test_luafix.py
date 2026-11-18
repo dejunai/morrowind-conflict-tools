@@ -805,3 +805,42 @@ def test_a_tga_the_lua_names_is_pointed_at_a_real_dds(tmp_path):
     assert [(f["rule"], f["what"].split("'")[1]) for f in found] == [("I1", r"Splash\\a.tga")]
     s, e, txt = found[0]["edits"][0]
     assert src[:s] + txt + src[e:] == r'local p = "Splash\\a.dds" local q = "Splash/b.tga" local r = "Splash\\c.tga"'
+
+
+# --- L1 / M1 / V1 (rules added after the 2026-11 hand-edit audit)
+def test_l1_caps_linked_walk_and_countdown():
+    src = ("local function f(c)\n  while c do\n    c = c.parent\n  end\nend\n"
+           "local function g(w, d)\n  while w.elapsed >= w.duration do\n    w.elapsed = w.elapsed - d\n  end\nend\n"
+           "local function h(i)\n  while i > 0 do\n    i = i - 1\n  end\nend\n"
+           "local function u(s, d)\n  while s.left <= 0 do\n    s.left = s.left + d\n  end\nend\n")
+    a = analyse(src)
+    assert [f["rule"] for f in a.findings if f["rule"] == "L1"] == ["L1", "L1", "L1"]   # i - 1 always ends
+    new = patch(src)
+    assert new.count("mwluafix_n1") == 4 and new.count("mwluafix_n2") == 4
+    assert new.count("\n") == src.count("\n")                                    # line numbers kept
+    assert not [f for f in analyse(new).findings if f["rule"] == "L1"]           # idempotent
+
+
+def test_m1_menu_exit_only_without_ui():
+    src = ("event.register('enterFrame', function(e) local p = tes3.player.position end)\n"
+           "event.register('enterFrame', function(e) local m = tes3ui.findMenu('MenuMulti') end)\n"
+           "event.register('simulate', function(e) local p = tes3.player.position end)\n")
+    a = analyse(src)
+    assert [f["line"] for f in a.findings if f["rule"] == "M1"] == [1]
+    new = patch(src)
+    assert new.splitlines()[0].count("if tes3.menuMode() then return end") == 1
+
+
+def test_v1_number_times_vector_swapped():
+    src = "local up = tes3vector3.new(0, 0, 1)\nlocal d = -1 * up\nlocal n = 2 * count\nlocal k = 2 * 3\n"
+    a = analyse(src)
+    assert sorted((f["line"], f["conf"]) for f in a.findings if f["rule"] == "V1") == [(2, "high"), (3, "medium")]
+    assert "local d = up * -1" in patch(src)
+
+
+@need_lua
+def test_l1_patched_cycle_terminates():
+    src = ("local a = {} a.parent = a\nlocal function f(c)\n  local n = 0\n  while c do\n    c = c.parent n = n + 1\n"
+           "  end\n  return n\nend\nreturn f(a)\n")
+    rt = _lj.LuaRuntime()
+    assert rt.execute(patch(src)) == 10000

@@ -133,6 +133,123 @@ from mwdialog_restore import (  # noqa: E402,F401
     BAK_RE, CLEANUP_BAK_RE, DATES_UNDO_FILE, restore_all, restore_backups, restore_dates, run_clean_up)
 
 ENC = "cp1252"
+PUBLIC_PLACE_RE = re.compile(r"tavern|tradehouse|cornerclub|\bclub\b|\binn\b|guild|\bshop\b|smithy|outfitter|"
+                             r"pawnbroker|bookseller|alchemist|apothecary|trader|temple|market", re.I)
+HOME_RE = re.compile(r"house|home|shack|hut|manor|quarters|room|apartment|tent|shanty|hovel|cabin|farmhouse", re.I)
+OFFICIAL_MASTERS = ("morrowind.esm", "tribunal.esm", "bloodmoon.esm")
+
+
+def door_owner_verdicts(doors, placements, npc_class, npc_name, reachable):
+    """Doors whose owner isn't placed behind them: usually ownership copied with a cloned door (a tavern door
+    "owned" by a pauper across town), which makes theft and lock mods treat a public door as private.
+    doors: (cell key, door, owner, destination, owner the official master gave it); placements: (cell key, NPC id)
+    for every placed NPC; npc_class / npc_name: NPC id -> class / full name; reachable: interiors a door leads to.
+    Returns [(door, verdict, action)]: action None leaves the door alone, "" takes the owner off, an NPC id gives it
+    to that NPC. Left out entirely: Bethesda's own owners, guards (a deliberate "keep out"), owners placed nowhere
+    or only where no door leads (holding cells: theft-blockers), an owner in the room it is in (attic, cellar), a
+    one-of-a-kind NPC at or next to the door (a farmer in his yard), in another room of the same building, or named
+    in the destination ("Kalir's House"). Only two cases are changed: a public place (Rule A: the owner comes off)
+    and a home whose one resident is placed nowhere else (Rule B: it is theirs); anything less sure is reported."""
+    where, placed, inside = defaultdict(set), Counter(), defaultdict(set)
+    for key, npc in placements:
+        where[npc].add(key)
+        placed[npc] += 1
+        inside[key].add(npc)
+
+    def near(a, b):
+        return a == b or (a[0] == b[0] == "e" and abs(a[1] - b[1]) <= 1 and abs(a[2] - b[2]) <= 1)
+
+    def building(name):
+        return name.lower().split(":")[0].strip()
+
+    out = []
+    for key, door, owner, dest, vanilla in doors:
+        if not owner or not dest or vanilla == owner:
+            continue
+        if "guard" in owner or "guard" in npc_class.get(owner, ""):
+            continue
+        to = ("i", dest.lower())
+        homes = where.get(owner, set())
+        if owner in npc_class:
+            if to in homes or not homes or (key[0] == "i" and key in homes):
+                continue
+            if placed[owner] == 1 and near(key, next(iter(homes))):
+                continue
+            if all(c[0] == "i" and c[1] not in reachable for c in homes):
+                continue
+            rooms = {building(c[1]) for c in homes if c[0] == "i"}
+            if building(dest) in rooms or (key[0] == "i" and building(key[1]) in rooms):
+                continue
+            if any(len(w) >= 4 and w in dest.lower() for w in re.findall(r"[\w']+", npc_name.get(owner, ""))):
+                continue
+            lives = ", ".join(sorted((c[1] if c[0] == "i" else f"({c[1]}, {c[2]})") for c in homes)[:3])
+            who = f"'{owner}', who is placed in {lives}, not there"
+        else:
+            who = f"'{owner}', which is no NPC (a faction or class name in the person slot?)"
+        residents = sorted(inside.get(to, ()))
+        if PUBLIC_PLACE_RE.search(dest):          # the name says so; a shopkeeper inside alone is too weak a sign
+            out.append((door, f"door to '{dest}' is owned by {who}; it leads to a public place, so the owner was "
+                              f"copied with the door: --fix takes it off", ""))
+        elif (len(residents) == 1 and placed[residents[0]] == 1 and "guard" not in residents[0]
+              and "guard" not in npc_class.get(residents[0], "") and HOME_RE.search(dest)
+              and not re.search(r"common|bunk|barrack|dorm|\bhall\b|hold_", dest, re.I)
+              and dest.lower().split(",")[0] not in {c[1].split(",")[0] for c in homes if c[0] == "i"}):
+            # a home in another settlement than the owner's: an owner in the same one may own several (a camp's
+            # head, a landlord), so those are only reported
+            out.append((door, f"door to '{dest}' is owned by {who}; the one person living there is "
+                              f"'{residents[0]}': --fix gives it to them", residents[0]))
+        else:
+            out.append((door, f"door to '{dest}' is owned by {who}; who it belongs to isn't clear, so it is left "
+                              f"as it is", None))
+    return out
+
+
+def item_owner_verdicts(items, placements, npc_class, npc_name, reachable):
+    """Containers and objects in an interior owned by someone placed elsewhere, grouped per (cell, owner).
+    items: (cell key, item, owner, "container" / "object", owner the official master gave it). Left out as
+    deliberate: Bethesda's own owners, guards, owners placed nowhere or only where no door leads, an unreachable
+    cell, an owner placed outdoors (by their house), in the same town or building, or named in the cell. The one
+    change: a home (not shared quarters) whose one resident is placed nowhere else gets them; ownership is never
+    taken off, which would make the things free to take. Returns [(cell key, owner, [items], verdict, action)]."""
+    where, placed, inside = defaultdict(set), Counter(), defaultdict(set)
+    for key, npc in placements:
+        where[npc].add(key)
+        placed[npc] += 1
+        inside[key].add(npc)
+
+    def towns(name):
+        return {name.split(":")[0].strip(), name.split(",")[0].strip()}
+
+    groups = defaultdict(list)
+    for key, item, owner, kind, vanilla in items:
+        if not owner or key[0] != "i" or vanilla == owner or "guard" in owner or "guard" in npc_class.get(owner, ""):
+            continue
+        homes = where.get(owner, set())
+        if key in homes or not homes or key[1] not in reachable or any(c[0] == "e" for c in homes):
+            continue
+        if all(c[1] not in reachable for c in homes) or towns(key[1]) & {p for c in homes for p in towns(c[1])}:
+            continue
+        if any(len(w) >= 4 and w in key[1] for w in re.findall(r"[\w']+", npc_name.get(owner, "").lower())):
+            continue
+        groups[(key, owner)].append((item, kind))
+    out = []
+    for (key, owner), members in sorted(groups.items(), key=repr):
+        kinds = Counter(k for _i, k in members)
+        lives = ", ".join(sorted(c[1] for c in where[owner])[:3])
+        what = ", ".join(f"{n} {k}(s)" for k, n in sorted(kinds.items()))
+        residents = sorted(inside.get(key, ()))
+        if (len(residents) == 1 and placed[residents[0]] == 1 and "guard" not in residents[0]
+                and "guard" not in npc_class.get(residents[0], "") and HOME_RE.search(key[1])
+                and not re.search(r"common|bunk|barrack|dorm|\bhall\b|hold_", key[1])):
+            # homes only: the one NPC in a cave or shrine is a bandit or hermit, and making loot theirs is theft
+            verdict, action = f"the one person living here is '{residents[0]}': --fix gives them to them", residents[0]
+        else:
+            verdict, action = "who they belong to isn't clear, so they are left as they are", None
+        out.append((key, owner, [i for i, _k in members],
+                    f"{what} here owned by '{owner}', who is placed in {lives}, not here; {verdict}", action))
+    return out
+
+
 REMAP_RADIUS = 64       # a renumbered master reference is the same object within this many units
 
 ORDER_TAIL_EXTRA = ()
@@ -142,6 +259,9 @@ CELL_PATCH_DESCRIPTION = "Rebuilt interiors: the chosen mod's version wins (rebu
 DUMMY_SOURCE_PREFIX = "mwdialog_dummy"
 TEXT_KEY_BACKUP_FEATURE = "text keys"
 PLACE_PATCH_DESCRIPTION = "generated by mwdialog_check.py. Load this LAST."
+
+
+DOOR_OWNERS_LIST = "mwdialog_door_owners.txt"      # per --fix run: door owners changed and left
 
 
 def cell_fixes_report_path(game_dir):
@@ -312,6 +432,11 @@ class World:
         self.r = report
         self.ids = defaultdict(set)        # tag -> lowercase ids
         self.all_ids = {}                  # lowercase id -> tag
+        self.npc_class = {}                # NPC id lower -> class id lower
+        self.npc_name = {}                 # NPC id lower -> full name lower
+        self.owned = {}                    # (cell key, ref key) -> (plugin, cell label, object, owner, faction, door to)
+        self.npc_at = {}                   # (cell key, ref key) -> NPC id placed there (final version of each ref)
+        self.vanilla_owner = {}            # (cell key, ref key) -> owner the official master gave its own ref
         self.actor_script = {}             # actor id -> script id
         self.script_locals = {}            # script id -> set of local names
         self.cell_names = {"wilderness"}   # lowercase names of real cells, plus the unnamed-exterior default
@@ -515,6 +640,9 @@ class World:
         self.last_def_obj[rid] = (name, tag)
         self.deleted_by_obj.pop(rid, None)
         self.all_ids[rid] = tag
+        if tag == "NPC_":
+            self.npc_class[rid] = cstr(first_sub(body, b"CNAM") or b"").lower()
+            self.npc_name[rid] = cstr(first_sub(body, b"FNAM") or b"").lower()
         if tag == "REGN":
             fn = first_sub(body, b"FNAM")
             if fn:
@@ -558,7 +686,7 @@ class World:
             if sname == "FRMR":
                 nrefs += 1
                 if len(sdata) >= 4:
-                    cur = [struct.unpack_from("<I", sdata)[0], "", False, temporary, None]
+                    cur = [struct.unpack_from("<I", sdata)[0], "", False, temporary, None, "", "", ""]
                     blocks.append(cur)
                     continue
             elif sname == "DNAM" and nrefs:
@@ -574,11 +702,31 @@ class World:
                     cur[2] = True
                 elif sname == "DATA" and cur[4] is None and len(sdata) >= 12:
                     cur[4] = sdata                    # decoded only if the reference needs re-matching
+                elif sname == "ANAM":
+                    cur[5] = cstr(sdata).lower()      # owner (an NPC)
+                elif sname == "CNAM":
+                    cur[6] = cstr(sdata).lower()      # owner (a faction)
+                elif sname == "DNAM":
+                    cur[7] = cstr(sdata).strip()      # a door's destination (an interior)
         self.cell_loads.append((len(self.loaded), name, key, cstr(nm or b"").strip(), nrefs))
         masters = self.masters.get(name.lower(), [])
-        for v, obj, deleted, temp, pos in blocks:
+        for v, obj, deleted, temp, pos, owner, faction, dest in blocks:
             k = v >> 24
             o = obj.lower()
+            ref = (name.lower() if k == 0 else (masters[k - 1].lower() if k <= len(masters) else None), v & 0xFFFFFF)
+            if ref[0] is not None:            # the last plugin to place, edit or delete a reference decides
+                if deleted:
+                    self.owned.pop((key, ref), None)
+                    self.npc_at.pop((key, ref), None)
+                else:
+                    if ref[0] == name.lower() and ref[0] in OFFICIAL_MASTERS:
+                        self.vanilla_owner[(key, ref)] = owner
+                    if owner or faction:
+                        self.owned[(key, ref)] = (name, label, o, owner, faction, dest)
+                    else:
+                        self.owned.pop((key, ref), None)
+                    if self.all_ids.get(o) == "NPC_":
+                        self.npc_at[(key, ref)] = o
             if not deleted and o and o not in self.all_ids:
                 self.pending_placed.append((name, off, label, v, obj))
             if not deleted and o:
@@ -1735,6 +1883,30 @@ class World:
             elif cname:
                 t.update(name=cname, plug=name, rec=(bytes(nm), bytes(d)))
 
+    def _check_ownership(self):
+        """Door owners that don't fit (door_owner_verdicts); --fix changes the clear ones in the Cell Fixes patch."""
+        doors = [(key, (plugin, label, obj), owner, dest, self.vanilla_owner.get((key, ref)))
+                 for (key, ref), (plugin, label, obj, owner, _faction, dest) in sorted(self.owned.items(), key=repr)
+                 if self.all_ids.get(obj) == "DOOR"]
+        for (plugin, label, obj), msg, _action in door_owner_verdicts(
+                doors, [(key, npc) for (key, _ref), npc in self.npc_at.items()], self.npc_class, self.npc_name,
+                self.door_dest):
+            self.r.add("WARN", plugin, f"cell {label}", obj, msg)
+        # containers and other objects (item_owner_verdicts), one line per cell and owner
+        items, label_of = [], {}
+        for (key, ref), (plugin, label, obj, owner, _faction, dest) in self.owned.items():
+            if dest or self.all_ids.get(obj) == "DOOR":
+                continue
+            items.append((key, (plugin, obj), owner, "container" if self.all_ids.get(obj) == "CONT" else "object",
+                          self.vanilla_owner.get((key, ref))))
+            label_of[key] = label
+        for key, owner, members, msg, _action in item_owner_verdicts(
+                items, [(key, npc) for (key, _ref), npc in self.npc_at.items()], self.npc_class, self.npc_name,
+                self.door_dest):
+            for plugin in sorted({p for p, _o in members}):
+                objs = sorted({o for p, o in members if p == plugin})
+                self.r.add("WARN", plugin, f"cell {label_of[key]}", owner, f"{msg} (e.g. {', '.join(objs[:3])})")
+
     def _check_refs(self):
         """Every master reference a plugin edits must exist in that master (the game warns otherwise)."""
         r = self.r
@@ -2011,6 +2183,7 @@ class World:
         if self.assets is not None:
             self._check_models()
         self._check_refs()
+        self._check_ownership()
         self._check_missing_placed()
         self._master_guard()
         self._check_headers()
@@ -5526,10 +5699,12 @@ def fix_cell_winners(args, plugins):
     ext_recs = defaultdict(list)                 # (x, y) -> [(plugin index, offset)] of exterior CELL records
     print("  Reading every plugin's cells, doors and pathgrids...", file=sys.stderr)
     actor_ids, cont_ids, loser_text = set(), set(), defaultdict(list)
+    npc_class, npc_name, npc_refs = {}, {}, {}  # NPC id -> class / name; ref key -> (cell key, NPC id) placed
     heads = {}                                   # cell key -> latest head
     xheads = defaultdict(list)                   # chosen interior -> [(plugin, head)] in load order
     xver = defaultdict(list)                     # (interior, ref key) -> [(plugin, group, block)]
     xpgrd = defaultdict(list)                    # interior -> [(plugin, raw PGRD record)]
+    own_last, own_vanilla, door_ids = {}, {}, set()  # owned refs: ref key -> last version / official owner
     door_hist = defaultdict(list)                # ref key -> [(plugin, group, block, cell key)] of doors into them
     revive_hist = defaultdict(list)              # ref key -> [(plugin, group, deleted, NAME, cell key)] of
                                                  # the changes later plugins make to another plugin's object
@@ -5557,6 +5732,11 @@ def fix_cell_winners(args, plugins):
                 nm = first_sub(body, b"NAME")
                 if nm:
                     (cont_ids if tag == "CONT" else actor_ids).add(cstr(nm).lower())
+                if nm and tag == "NPC_":
+                    npc_class[cstr(nm).lower()] = cstr(first_sub(body, b"CNAM") or b"").lower()
+                    npc_name[cstr(nm).lower()] = cstr(first_sub(body, b"FNAM") or b"").lower()
+            if tag == "DOOR" and first_sub(body, b"NAME"):
+                door_ids.add(cstr(first_sub(body, b"NAME")).lower())
             elif tag == "SCPT" and low in losers:
                 loser_text[low].append((first_sub(body, b"SCTX") or b"").lower())
             elif tag == "INFO" and low in losers:
@@ -5601,6 +5781,17 @@ def fix_cell_winners(args, plugins):
                                                     next((d for s_, d in blk if s_ == "NAME"), b"\0"), key))
                         if bk in door_hist or any(s_ == "DNAM" for s_, _d in blk):
                             door_hist[bk].append((low, grp, blk, key))
+                        # shortcut: an NPC_ record read after the CELL placing it (same plugin) is missed; the
+                        # construction set writes NPC_ first, so only a hand-built plugin would do that
+                        oid = next((cstr(d) for s_, d in blk if s_ == "NAME"), "").lower()
+                        if key[0] == "i" and (bk in own_last or any(s_ == "ANAM" for s_, _d in blk)):
+                            own_last[bk] = (low, grp, blk, key)
+                            if bk[0] == low and low in OFFICIAL_MASTERS:
+                                own_vanilla[bk] = next((cstr(d).lower() for s_, d in blk if s_ == "ANAM"), "")
+                        if oid in npc_class and not any(s_ == "DELE" for s_, _d in blk):
+                            npc_refs[bk] = (key, oid)
+                        else:
+                            npc_refs.pop(bk, None)
 
     def has(blk, sub):
         return any(s_ == sub for s_, _d in blk)
@@ -6094,6 +6285,75 @@ def fix_cell_winners(args, plugins):
         if len(revived) > 20:
             print(f"    ... and {len(revived) - 20} more")
 
+    # door owners copied with a cloned door (door_owner_verdicts): only the two clear rules are applied
+    doors, finals = [], {}
+    for bk, hist in door_hist.items():
+        pl, grp, blk, ck = hist[-1]
+        if has(blk, "DELE") or (ck[0] == "i" and ck[1] in cells):
+            continue
+        owner = next((cstr(d).lower() for s_, d in blk if s_ == "ANAM"), "")
+        dest = next((cstr(d).strip() for s_, d in blk if s_ == "DNAM"), "")
+        if not owner or not dest:
+            continue
+        orig = next((h[2] for h in hist if h[0] == bk[0] and bk[0] in OFFICIAL_MASTERS), None)
+        vanilla = next((cstr(d).lower() for s_, d in orig if s_ == "ANAM"), "") if orig is not None else None
+        doors.append((ck, bk, owner, dest, vanilla))
+        finals[bk] = (pl, grp, blk, ck)
+    reachable = {cstr(d).strip().lower() for hist in door_hist.values() for _p, _g, b, _c in hist
+                 for s_, d in b if s_ == "DNAM"}
+    owners_fixed, owners_left = [], []
+    for bk, msg, action in door_owner_verdicts(doors, list(npc_refs.values()), npc_class, npc_name, reachable):
+        if action is None:
+            owners_left.append(f"{name_of.get(finals[bk][0], finals[bk][0])}: {msg}")
+            continue
+        pl, grp, blk, ck = finals[bk]
+        base = out[ck][bk][1] if bk in out.get(ck, {}) else [list(x) for x in blk]
+        nb = [[s_, action.encode(ENC, MW_ERRORS) + b"\0"] if s_ == "ANAM" else [s_, d]
+              for s_, d in base if s_ != "ANAM" or action]
+        put(ck, grp, bk, nb)
+        out_heads.setdefault(ck, heads.get(ck))
+        owners_fixed.append(f"{name_of.get(pl, pl)}: {msg}")
+    if owners_fixed:
+        print(f"  Door owners: {len(owners_fixed)} copied with the door, now fixed:")
+        for t_ in owners_fixed[:20]:
+            print(f"    {t_}")
+        if len(owners_fixed) > 20:
+            print(f"    ... and {len(owners_fixed) - 20} more")
+    if owners_fixed or owners_left:
+        print(f"  Door owners: {len(owners_left)} questionable, left as they are; all are listed in {DOOR_OWNERS_LIST}")
+    # containers and objects owned by someone elsewhere (item_owner_verdicts): only the one-resident rule
+    items, things_fixed = [], 0
+    for bk, (pl, grp, blk, ck) in own_last.items():
+        oid = next((cstr(d) for s_, d in blk if s_ == "NAME"), "").lower()
+        if has(blk, "DELE") or has(blk, "DNAM") or oid in door_ids or ck[1] in cells:
+            continue
+        owner = next((cstr(d).lower() for s_, d in blk if s_ == "ANAM"), "")
+        items.append((ck, bk, owner, "container" if oid in cont_ids else "object", own_vanilla.get(bk)))
+    for ck, owner, members, msg, action in item_owner_verdicts(items, list(npc_refs.values()), npc_class,
+                                                               npc_name, reachable):
+        pls = sorted({name_of.get(own_last[b][0], own_last[b][0]) for b in members})
+        line = f"{', '.join(pls)}: cell {ck[1]}: {msg}"
+        if action is None:
+            owners_left.append(line)
+            continue
+        for bk in members:
+            pl, grp, blk, _ck = own_last[bk]
+            base = out[ck][bk][1] if bk in out.get(ck, {}) else [list(x) for x in blk]
+            put(ck, grp, bk, [[s_, action.encode(ENC, MW_ERRORS) + b"\0"] if s_ == "ANAM" else [s_, d]
+                              for s_, d in base])
+        out_heads.setdefault(ck, heads.get(ck))
+        owners_fixed.append(line)
+        things_fixed += 1
+    if things_fixed:
+        print(f"  Owners of containers and objects: {things_fixed} cell(s) given to the one person living there "
+              f"(listed in {DOOR_OWNERS_LIST})")
+    if not args.dry_run:
+        with open(os.path.join(game_dir, DOOR_OWNERS_LIST), "w", encoding="utf-8") as f:
+            f.write(f"; door owners, {time.strftime('%Y-%m-%d %H:%M:%S')}: changed in {CELL_WINNER_PATCH}, then the "
+                    f"questionable ones left as they are\n")
+            f.writelines(f"CHANGED  {x}\n" for x in owners_fixed)
+            f.writelines(f"LEFT     {x}\n" for x in owners_left)
+
     if not any(out.values()) and not pgrds:
         print("  Nothing to change.")
         drop_patch()
@@ -6162,6 +6422,9 @@ def fix_cell_winners(args, plugins):
     with MT.open_log(os.path.join(game_dir, args.fix_log), "a", encoding="utf-8") as lf:
         lf.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {CELL_WINNER_PATCH}: "
                  + "; ".join(f"{c}: {name_of[w]} over {name_of[l]}" for c, w, l in cells.values()) + "\n")
+        for x in owners_fixed:
+            lf.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {CELL_WINNER_PATCH}: "
+                     f"{'owner' if ': cell ' in x else 'door owner'}: {x}\n")
     print(f"  Wrote {CELL_WINNER_PATCH} ({count} record(s)); it loads near the end, before the Multipatch.")
     return 0
 

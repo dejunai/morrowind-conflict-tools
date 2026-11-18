@@ -10,7 +10,7 @@
 local NAME = "mwplainpaperfix"
 local saved = mwse.loadConfig(NAME, {}) or {}
 -- "blank", not the "whitelist" of earlier versions: those lists also hold maps and other picture-only scrolls
-local config = { enabled = saved.enabled ~= false, blank = saved.blank or {} }
+local config = { enabled = saved.enabled ~= false, requireSneakForOwned = saved.requireSneakForOwned ~= false, blank = saved.blank or {} }
 local function save() mwse.saveConfig(NAME, config) end
 
 local written = {}      -- ids found to have text, this session
@@ -37,8 +37,12 @@ local function onActivate(e)
     local book = ref and ref.object
     if not book or book.objectType ~= tes3.objectType.book then return end
     if not isBlankSheet(book) then return end
+    local isOwned = not tes3.hasOwnershipAccess({ target = ref })
+    if isOwned and config.requireSneakForOwned and not tes3.mobilePlayer.isSneaking then
+        return false
+    end
     local count = math.max(ref.stackSize or 1, 1)
-    local owner = not tes3.hasOwnershipAccess({ target = ref }) and tes3.getOwner({ reference = ref }) or nil
+    local owner = isOwned and tes3.getOwner({ reference = ref }) or nil
 
     -- the item data goes with the item, so it is unhooked from the world object before that is deleted; a world
     -- object left holding item data the inventory also holds is written twice by a save, which can crash it
@@ -61,6 +65,11 @@ event.register("modConfigReady", function()
     page:createYesNoButton({
         label = "Pick up blank sheets without opening them",
         variable = mwse.mcm.createTableVariable({ id = "enabled", table = config }),
+    })
+    page:createYesNoButton({
+        label = "Require sneaking to take owned blank sheets",
+        description = "When enabled, activating an owned blank sheet without sneaking does not pick it up into inventory, respecting Accidental Theft Protection.",
+        variable = mwse.mcm.createTableVariable({ id = "requireSneakForOwned", table = config }),
     })
     template:register()
 end)
