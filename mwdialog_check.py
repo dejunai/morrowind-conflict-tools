@@ -4268,7 +4268,7 @@ def run_auto_merge(args, plugins, bsas, data_dirs):
         if pr is None:
             why = "could not be read"
         elif not low.endswith(".esp"):
-            why = None if False else "master file"
+            why = "master file"
         elif is_our_patch(n) or low in other_merges or low in NOT_A_MOD:
             why = "made by mwdialog_check"
         elif pr["scripts"]:
@@ -8160,10 +8160,19 @@ def run_sort(args, plugins):
         for n, p in changes:
             st = os.stat(p)
             f.write(f"{n}\t{st.st_atime_ns}\t{st.st_mtime_ns}\n")
+    failed = []
     for n, p in changes:
-        os.utime(p, (want[n], want[n]))         # hard links share the date, so Vortex's copy follows
-    print(f"  Dates set on {len(changes)} plugin(s). Old dates saved in {DATES_UNDO_FILE} "
+        try:
+            os.utime(p, (want[n], want[n]))     # hard links share the date, so Vortex's copy follows
+        except OSError as e:                    # locked (the game is running) or read-only: keep going
+            failed.append(f"{n} ({e.strerror or e})")
+    print(f"  Dates set on {len(changes) - len(failed)} plugin(s). Old dates saved in {DATES_UNDO_FILE} "
           f"(undo with --restore-dates).")
+    if failed:
+        print(f"  ERROR: {len(failed)} plugin(s) could not be re-dated, so the order is only partly applied; "
+              f"close the game (or clear read-only) and sort again, or undo with --restore-dates:")
+        for x in failed:
+            print(f"    {x}")
     sync_ini_order(args, order)
     # only a different order calls for --fix and --multipatch again; new dates on the same order don't
     args.sort_changed = bool(moved)
