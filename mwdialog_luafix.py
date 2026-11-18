@@ -89,7 +89,7 @@ PLAN_FILE = os.path.join(HERE, "mwdialog_luafix_plan.txt")
 VERSION = 3
 MARK = "mwdialog_luafix"
 
-OWN_MODS = {"mwcollide", "mwexitguard", "mwfloatfix", "mwguard", "mwhangwatch", "mwinfoloop", "mwperformers", "mwsoundguard",
+OWN_MODS = {"mwcollide", "mwexitguard", "mwfloatfix", "mwguard", "mwhangwatch", "mwinfoloop", "mwperformers", "mwquicktoggle", "mwsoundguard",
             "mwstranded", "mwmanager"}
 
 # defaults; mwguard.json (shared with the runtime guard) and mwdialog_luafix.json override them
