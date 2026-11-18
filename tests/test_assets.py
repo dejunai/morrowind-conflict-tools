@@ -182,3 +182,11 @@ def test_apply_folder_turns_a_wav_into_a_same_stem_mp3_and_keeps_the_wav_in_off(
     assert (done, skipped) == (1, [])
     assert (sound / "a.mp3").read_bytes() == b"ID3mp3 audio" and not (sound / "a.wav").exists()
     assert list((tmp_path / "mod" / "Off").rglob("a.wav"))                    # the original is kept
+
+
+def test_check_folder_survives_a_non_ascii_name_that_is_not_utf8_in_cp1252(tmp_path):
+    # Tamriel Rebuilt: os.path.basename on the cp1252 bytes raised UnicodeDecodeError and stopped the mod's check
+    (tmp_path / "Textures" / "x").mkdir(parents=True)
+    (tmp_path / "Textures" / "x" / "café.tga").write_bytes(b"\0" * 12 + struct.pack("<HH", 64, 64) + b"\x20\0px")
+    issues, _fixes = ah.check_folder(str(tmp_path), m)
+    assert any("non-ASCII" in i[2] for i in issues)

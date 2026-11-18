@@ -1634,7 +1634,7 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None, stats=None):
             except UnicodeEncodeError:
                 tail_b = None                  # Cyrillic etc.: no plugin can name it the way Windows needs
             others = _other_plugins_naming(tail_b, root, data_dir) if tail_b else []
-            base_b = os.path.basename(tail_b.replace(b"\\", b"/")) if tail_b else None
+            base_b = tail_b.replace(b"\\", b"/").rsplit(b"/", 1)[-1] if tail_b else None   # ntpath decodes bytes as UTF-8
             if not others and base_b and _models_naming(base_b, root):
                 issues.append(("WARN", rel, "non-ASCII file name, named so by a model (.nif) in this mod; left "
                                             "as it is (renaming it would leave the model without it)"))
