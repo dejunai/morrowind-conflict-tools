@@ -57,5 +57,5 @@ mlox/
 tools/luajit/
 
 # personal load-order patches: not part of the published suite
-Data Files/MWSE/mods/mwespreplacements/
-Data Files/mwespreplacements-metadata.toml
+Data Files/MWSE/mods/dejespreplacements/
+Data Files/dejespreplacements-metadata.toml

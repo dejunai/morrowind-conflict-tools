@@ -215,7 +215,7 @@ called `event.register` for those mods.
   left alone and logged. The jump patches are computed from the jump found (`jz rel32` becomes `jmp rel32 + 1`
   and a no-op; `jz short` becomes `jmp short`). Each patch keeps the original bytes and can be put back from
   the Mod Config menu.
-- **Settings that could not be saved.** mwteleportguard, mwmouseguard, mweffectinspector, mwespreplacements and
+- **Settings that could not be saved.** mwteleportguard, mwmouseguard, mweffectinspector, dejespreplacements and
   mwpluginpatches handed a config table that holds functions to `template:saveOnClose`. MWSE's JSON encoder
   rejects functions, after the file has been opened for writing, so closing the menu left an empty config
   file. Each `config.save()` now leaves the functions out and the menus call it.
