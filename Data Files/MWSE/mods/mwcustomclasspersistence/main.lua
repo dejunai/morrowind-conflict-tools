@@ -23,6 +23,8 @@ local log = function(fmt, ...) mwse.log("[mwcustomclasspersistence] " .. fmt, ..
 
 local function trim(s) return (s or ""):match("^%s*(.-)%s*$") end
 local function loadSaved() return mwse.loadConfig(CONFIG_FILE, {}) or {} end
+-- settings live apart from the saved classes, which are a plain list
+local settings = mwse.loadConfig("mwcustomclasspersistence", { enabled = true })
 
 --- true when a class of the game or of a plugin already has this name (a saved custom class may be overwritten)
 local function isKnownClassName(name)
@@ -108,6 +110,7 @@ local function prefill(menu, data)
 end
 
 local function onMenuCreateClass(e)
+    if not settings.enabled then return end
     local menu = e.element
 
     if pending then
@@ -204,8 +207,9 @@ local function validClass(data)
 end
 
 local function onMenuChooseClass(e)
-    local menu = e.element
     pending = nil
+    if not settings.enabled then return end
+    local menu = e.element
     local scroll = menu:findChild("MenuChooseClass_ClassScroll")
     local content = scroll and scroll:getContentElement()
     if not content then return end
@@ -268,3 +272,16 @@ end
 
 event.register("uiActivated", onMenuChooseClass, { filter = "MenuChooseClass" })
 event.register("uiActivated", onMenuCreateClass, { filter = "MenuCreateClass" })
+
+event.register("modConfigReady", function()
+    local template = mwse.mcm.createTemplate({ name = "Custom Class Persistence",
+        onClose = function() mwse.saveConfig("mwcustomclasspersistence", settings) end })
+    local page = template:createSideBarPage({ label = "Settings" })
+    page.sidebar:createInfo({ text = "Classes made in the Create Class menu are saved and offered again at the "
+        .. "bottom of the class list in later games. Picking one fills in the Create Class menu for you." })
+    page:createYesNoButton({
+        label = "Save and offer custom classes",
+        variable = mwse.mcm.createTableVariable({ id = "enabled", table = settings }),
+    })
+    template:register()
+end)

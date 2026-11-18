@@ -33,7 +33,7 @@ local defaults = {
         "mwguard", "mwhangwatch", "mwfloatfix", "mwstranded", "mwcollide",
         "mwperformers", "mwinfoloop", "mwsoundguard", "mwsaveguard", "mwwarnsuppression",
         "mwcompanionsneak", "mwpluginpatches", "mweffectinspector", "mwmouseguard",
-        "mwteleportguard", "mwexitguard"
+        "mwteleportguard", "mwexitguard", "mwcustomclasspersistence", "mwplainpaperfix", "mwquicktoggle"
     },
     perFrameHints = {
         "e%.delta", "camera", "velocity", "orientation", "position%s*=", "rotation", "animat",

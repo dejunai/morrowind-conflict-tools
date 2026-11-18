@@ -15,6 +15,7 @@ local TOGGLE = {
     [tes3.objectType.light] = true,
 }
 
+local config = mwse.loadConfig("mwquicktoggle", { enabled = true })
 local qkhe = include("Pirate.QuickKeysHotbarExtended.config")
 local armed, blockSlot
 
@@ -52,7 +53,7 @@ end
 
 local function before(slot)
     armed = nil
-    if not slot or tes3.menuMode() or not tes3.mobilePlayer then return end
+    if not config.enabled or not slot or tes3.menuMode() or not tes3.mobilePlayer then return end
     local item = boundItem(slot)
     if item and TOGGLE[item.objectType] and tes3.player.object:hasItemEquipped(item) then
         armed = { slot = slot, item = item }
@@ -80,3 +81,16 @@ event.register("keybindTested", function(e)
 end)
 
 event.register("loaded", function() armed, blockSlot = nil, nil end)
+
+event.register("modConfigReady", function()
+    local template = mwse.mcm.createTemplate({ name = "Quick Key Toggle",
+        onClose = function() mwse.saveConfig("mwquicktoggle", config) end })
+    local page = template:createSideBarPage({ label = "Settings" })
+    page.sidebar:createInfo({ text = "Pressing the quick key of a weapon, armor, clothing or light that is "
+        .. "already equipped unequips it. Works with the vanilla quick keys and QuickKeys Hotbar Extended." })
+    page:createYesNoButton({
+        label = "Quick keys unequip equipped items",
+        variable = mwse.mcm.createTableVariable({ id = "enabled", table = config }),
+    })
+    template:register()
+end)
