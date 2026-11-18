@@ -1794,8 +1794,10 @@ class World:
                                     "msgs": [(dmsg, "remove the deletion, so the object exists for them")]})
 
     def _master_guard(self):
-        """Patches made for a different master than the installed one (mwdialog_mastercheck): their header
-        size and dead references are not 'repaired' (that would hide the mismatch), only reported."""
+        """Patches made for a different master than the installed one (mwdialog_mastercheck): their header size
+        is not synced and references are not remapped or moved (that would hide the mismatch, or guess wrong).
+        Edits to references the master no longer has are still dropped: the game ignores them anyway, and
+        left in they stop --full on errors nothing else can fix."""
         self.master_verdicts = {}
         if getattr(self, "args_data_dir", None) is None or getattr(getattr(self, "args", None), "no_master_guard", False):
             return
@@ -1811,7 +1813,7 @@ class World:
         if bad:
             self.item_fixes = [f for f in self.item_fixes if str(f.get("plugin", "")).lower() not in bad]
             self.r.fixes = [f for f in self.r.fixes if not (str(f[0]).lower() in bad
-                                                             and f[2][0] in ("drop_ref", "move_ref", "sync_master",
+                                                             and f[2][0] in ("move_ref", "sync_master",
                                                                              "remap_ref", "rename_cell"))]
 
     def _check_headers(self):
@@ -1888,10 +1890,12 @@ class World:
         doors = [(key, (plugin, label, obj), owner, dest, self.vanilla_owner.get((key, ref)))
                  for (key, ref), (plugin, label, obj, owner, _faction, dest) in sorted(self.owned.items(), key=repr)
                  if self.all_ids.get(obj) == "DOOR"]
-        for (plugin, label, obj), msg, _action in door_owner_verdicts(
+        # owners --fix changes are WARN; the questionable ones it leaves alone are INFO (listed in their own file;
+        # nothing to act on in the report)
+        for (plugin, label, obj), msg, action in door_owner_verdicts(
                 doors, [(key, npc) for (key, _ref), npc in self.npc_at.items()], self.npc_class, self.npc_name,
                 self.door_dest):
-            self.r.add("WARN", plugin, f"cell {label}", obj, msg)
+            self.r.add("WARN" if action is not None else "INFO", plugin, f"cell {label}", obj, msg)
         # containers and other objects (item_owner_verdicts), one line per cell and owner
         items, label_of = [], {}
         for (key, ref), (plugin, label, obj, owner, _faction, dest) in self.owned.items():
@@ -1900,12 +1904,13 @@ class World:
             items.append((key, (plugin, obj), owner, "container" if self.all_ids.get(obj) == "CONT" else "object",
                           self.vanilla_owner.get((key, ref))))
             label_of[key] = label
-        for key, owner, members, msg, _action in item_owner_verdicts(
+        for key, owner, members, msg, action in item_owner_verdicts(
                 items, [(key, npc) for (key, _ref), npc in self.npc_at.items()], self.npc_class, self.npc_name,
                 self.door_dest):
             for plugin in sorted({p for p, _o in members}):
                 objs = sorted({o for p, o in members if p == plugin})
-                self.r.add("WARN", plugin, f"cell {label_of[key]}", owner, f"{msg} (e.g. {', '.join(objs[:3])})")
+                self.r.add("WARN" if action is not None else "INFO", plugin, f"cell {label_of[key]}", owner,
+                           f"{msg} (e.g. {', '.join(objs[:3])})")
 
     def _check_refs(self):
         """Every master reference a plugin edits must exist in that master (the game warns otherwise)."""
@@ -5084,6 +5089,7 @@ def run_cell_conflicts(args, plugins, collect=False):
         other = next((x for x in r_.get("pair", []) if x.lower() != who.lower()), "the other")
         what = {"order": f"{other} wins ([Order] rule: {who} loads first)",
                 "cell": f"{who}'s version of the rebuilt interior(s) wins (Cell Fixes)",
+                "keep": f"{who} keeps winning (confirmed; an .esm always loads first)",
                 "off": f"turn off {who}",
                 "skip": "skipped (left as it is)"}.get(r_.get("do"), str(r_.get("do")))
         return what + (f"  [{when}]" if when else "")
@@ -5310,8 +5316,10 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
         elif (b, a) in earlier_l:
             print(f"    (an earlier run chose: {A} after {B})")
         if mixed((a, b)):
-            opts = {}
-            print("    (an .esm always loads before an .esp, so no [Order] rule changes who wins elsewhere)")
+            # an .esm always loads before an .esp: no [Order] rule changes who wins, but the user can still
+            # confirm the winner (remembered, so it is not asked again)
+            opts = {"1": ("keep", B, A, f"keep {B} winning")}
+            print(f"  [1] keep  {B} winning   (an .esm always loads before an .esp; nothing changes)")
         else:
             opts = {"1": ("order", A, B, f"keep {B} winning"), "2": ("order", B, A, f"make {A} win")}
             print(f"  [1] keep  {B} winning   (adds [Order] {A} > {B})")
@@ -5408,6 +5416,9 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
             for k in rebuilt(c):
                 new_winners[k[1]] = (labels.get(k, k[1]), x, y)
             print(f"    -> {label} ({x} wins, built by --fix as {CELL_WINNER_PATCH})")
+            continue
+        if what == "keep":
+            print(f"    -> {x} keeps winning (remembered)")
             continue
         if what == "order":
             new_rules.append((x, y, label))

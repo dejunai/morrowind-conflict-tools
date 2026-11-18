@@ -874,8 +874,9 @@ def _report(r, v):
         r.add("WARN", p, "", "", f"made for a different '{m}' than the one installed (confidence {pct}%): "
                                  f"{v['total'] - v['hits']} of {v['total']} references into it don't resolve"
                                  + (f" ({ex})" if ex else "") + size
-                                 + "; its header and dead references are left alone. Get the matching version, or "
-                                   "take it out of the load order (--disable-mismatched)")
+                                 + "; its header is left alone and --fix drops the dead references (the game ignores "
+                                   "them anyway). Get the matching version, or take it out of the load order "
+                                   "(--disable-mismatched)")
     elif v["kind"] == "other version":
         r.add("WARN", p, "", "",
               f"made for another version of '{m}' (confidence it is a different mod: {pct}%): "

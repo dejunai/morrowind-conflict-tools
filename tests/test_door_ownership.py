@@ -113,6 +113,37 @@ def test_fix_changes_clear_doors_in_the_cell_fixes_patch_and_lists_the_rest(tmp_
     assert log.count("door owner:") == 2 and log.count(": owner:") == 1
 
 
+def test_owners_fix_changes_are_warnings_and_the_rest_info(tmp_path):
+    df = tmp_path / "Data Files"
+    df.mkdir()
+    plugin(df / "Morrowind.esm", [], BASE + [npc("hand1", "Ann"), npc("hand2", "Bob"),
+                                             cell("Town, Barn", ref(6, "hand1"), ref(7, "hand2"))])
+    plugin(df / "Mod.esp", [("Morrowind.esm", (df / "Morrowind.esm").stat().st_size)], [cell("", *[
+        ref(10, "zz_door", owner="hermit", dest="Town, Tavern"),   # public: --fix takes the owner off
+        ref(12, "zz_door", owner="vendor", dest="Town, Barn"),     # two people there: left alone
+    ], x=0)])
+    w = m.World(m.Report())
+    w.file_sizes, w.trace = {}, set()
+    for n in ("Morrowind.esm", "Mod.esp"):
+        w.load_plugin(str(df / n), n)
+    w._check_ownership()
+    sev = {("Tavern" in i[-1]): i[0] for i in w.r.issues if "is owned by" in i[-1]}
+    assert sev == {True: "WARN", False: "INFO"}
+
+
+def test_a_mismatched_patch_still_drops_dead_references_but_nothing_that_guesses():
+    w = m.World(m.Report())
+    w.args_data_dir, w.item_fixes = "x", []
+    w.r.fixes = [("P.esp", 0, ("drop_ref", 1), "drop"), ("P.esp", 0, ("remap_ref", 1, 2), "remap"),
+                 ("P.esp", 0, ("sync_master",), "sync"), ("Other.esp", 0, ("remap_ref", 1, 2), "remap")]
+    fake = type("MC", (), {"DIFFERENT_AT": 0.75, "check": staticmethod(lambda *a: {}),
+                           "mismatched": staticmethod(lambda v, t: {"p.esp"})})
+    from unittest import mock
+    with mock.patch.object(m, "mastercheck_module", return_value=fake):
+        w._master_guard()
+    assert [(f[0], f[2][0]) for f in w.r.fixes] == [("P.esp", "drop_ref"), ("Other.esp", "remap_ref")]
+
+
 def test_containers_owned_by_someone_elsewhere_are_reported_once_per_cell(tmp_path):
     df = tmp_path / "Data Files"
     df.mkdir()
