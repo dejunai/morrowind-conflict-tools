@@ -59,3 +59,6 @@ tools/luajit/
 # personal load-order patches: not part of the published suite
 Data Files/MWSE/mods/dejespreplacements/
 Data Files/dejespreplacements-metadata.toml
+
+# Run lock held by mwdialog_check.py / vortex_tidy.py
+mwdialog.lock

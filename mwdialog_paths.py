@@ -34,6 +34,36 @@ class ToolNotFoundError(Exception):
     """An optional external tool (7-Zip) was needed and was not found."""
 
 
+_RUN_LOCK = None
+
+
+def acquire_run_lock():
+    """Hold mwdialog.lock (beside these tools) until this process ends, so two runs of mwdialog_check.py /
+    vortex_tidy.py cannot overwrite each other's plan and record files. Free again inside the same process
+    (the tools call each other). False when another process holds it."""
+    global _RUN_LOCK
+    if _RUN_LOCK is not None:
+        return True
+    handle = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "mwdialog.lock"), "a+")
+    try:
+        if os.name == "nt":
+            import msvcrt
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        handle.close()
+        return False
+    _RUN_LOCK = handle
+    return True
+
+
+RUN_LOCKED_MESSAGE = ("Another mwdialog_check.py or vortex_tidy.py run (or MWManager) is still working on this "
+                      "game. Let it finish, then run this again.")
+
+
 def is_abs_path(path):
     """True for a POSIX/Windows absolute path, including a drive-letter path on a non-Windows host."""
     if not path:

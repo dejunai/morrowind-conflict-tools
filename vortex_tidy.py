@@ -1054,6 +1054,9 @@ def main():
     ap.add_argument("--lua-log", choices=("flagged", "all", "off"),
                     help="which mods the Lua check gives the log shim: flagged (default), all, off")
     args = ap.parse_args()
+    if not MP.acquire_run_lock():
+        print(MP.RUN_LOCKED_MESSAGE, file=sys.stderr)
+        return 1
     if args.undo:
         return undo()                                 # works from the journal; the plan file plays no part
     try:

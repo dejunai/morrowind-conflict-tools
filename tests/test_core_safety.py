@@ -26,6 +26,47 @@ def test_atomic_open_leaves_the_old_file_when_the_write_fails(tmp_path):
     assert p.read_text() == "new rules\n"
 
 
+def test_a_failed_record_write_keeps_the_previous_added_masters(tmp_path, monkeypatch):
+    S = _load("mwdialog_state")
+    (tmp_path / "Data Files").mkdir()
+    S.write_added_masters(str(tmp_path), {"A.esp": {"Old.esm": {}}})
+    before = (tmp_path / S.ADDED_MASTERS_RECORD).read_text(encoding="utf-8")
+
+    def crash(obj, f, **kw):
+        f.write('{"half')
+        raise RuntimeError("crash mid-write")
+    monkeypatch.setattr(S.json, "dump", crash)
+    with pytest.raises(RuntimeError):
+        S.write_added_masters(str(tmp_path), {"B.esp": {"New.esm": {}}})
+    assert (tmp_path / S.ADDED_MASTERS_RECORD).read_text(encoding="utf-8") == before
+
+
+def test_a_second_process_cannot_take_the_run_lock(tmp_path):
+    import shutil
+    import subprocess
+    import sys
+    # a copy, so the lock file is not the one this test process may already hold from other tests
+    shutil.copy(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "mwdialog_paths.py"),
+                tmp_path)
+    tools = str(tmp_path)
+    hold = ("import sys, time, mwdialog_paths as MP; print(MP.acquire_run_lock(), flush=True); "
+            "sys.stdin.read()")
+    holder = subprocess.Popen([sys.executable, "-c", hold], cwd=tools, stdin=subprocess.PIPE,
+                              stdout=subprocess.PIPE, text=True)
+    try:
+        assert holder.stdout.readline().strip() == "True"
+        second = subprocess.run([sys.executable, "-c", "import mwdialog_paths as MP; "
+                                 "print(MP.acquire_run_lock(), MP.acquire_run_lock())"],
+                                cwd=tools, capture_output=True, text=True)
+        assert second.stdout.strip() == "False False"
+    finally:
+        holder.communicate("")
+    again = subprocess.run([sys.executable, "-c", "import mwdialog_paths as MP; "
+                            "print(MP.acquire_run_lock(), MP.acquire_run_lock())"],
+                           cwd=tools, capture_output=True, text=True)
+    assert again.stdout.strip() == "True True"                      # free after exit; reentrant in-process
+
+
 def test_an_empty_load_order_falls_back_to_its_backup(tmp_path):
     data = tmp_path / "Data Files"
     data.mkdir()

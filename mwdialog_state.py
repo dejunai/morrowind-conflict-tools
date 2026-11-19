@@ -47,7 +47,7 @@ def write_generated_record(rec_path, entries):
     groups, normals = defaultdict(list), []
     for rel, size, plugin in entries.values():
         (normals if NORMAL_MAP_RE.search(rel) else groups[plugin]).append((rel, size))
-    with open(rec_path, "w", encoding="utf-8") as f:
+    with _T.atomic_open(rec_path, encoding="utf-8") as f:
         f.write("; Files mwdialog_check.py --fix put in Data Files: copies of files found in Vortex mod folders but\n"
                 "; never deployed, silent stand-ins for sounds and music, and placeholder textures, under the plugin\n"
                 "; that needs them (indented: path<TAB>size). --remove-generated deletes them.\n")
@@ -98,7 +98,7 @@ def write_merge_record(game_dir, rec):
         if os.path.exists(path):
             os.remove(path)
         return
-    with open(path, "w", encoding="utf-8") as f:
+    with _T.atomic_open(path, encoding="utf-8") as f:
         f.write("\n".join(lines))
 
 
@@ -131,7 +131,7 @@ def write_disabled(game_dir, rec):
              "; same objects in the same spots (two versions of one mod). --add-all-esp leaves them out.",
              "; --reenable NAME (or --reenable with no name for all) turns them back on. One per line: name<TAB>reason", ""]
     lines += [f"{n}\t{w}" for n, w in rec.items()]
-    with open(path, "w", encoding="utf-8") as f:
+    with _T.atomic_open(path, encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
 
 
@@ -262,7 +262,7 @@ def write_cell_winners(game_dir, entries):
         if os.path.exists(path):
             os.replace(path, backup_path(path))
         return
-    with open(path, "w", encoding="utf-8") as f:
+    with _T.atomic_open(path, encoding="utf-8") as f:
         f.write("; interiors two mods rebuilt, and whose version is used (chosen in --cell-conflicts; --fix builds\n"
                 f"; {CELL_WINNER_PATCH} from this; --full starts over without it)\n"
                 "; interior<TAB>winning plugin<TAB>losing plugin\n")
@@ -308,7 +308,7 @@ def write_redundant(game_dir, off, both, names=None):
     for pair in sorted(both, key=sorted):
         a, b = sorted(pair)
         lines.append(f"both\t{names.get(a, a)}\t{names.get(b, b)}")
-    with open(path, "w", encoding="utf-8") as f:
+    with _T.atomic_open(path, encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
 
 
@@ -344,7 +344,7 @@ def write_merge_rebuild(game_dir, rec):
         if os.path.exists(path):
             os.remove(path)
         return
-    with open(path, "w", encoding="utf-8") as f:
+    with _T.atomic_open(path, encoding="utf-8") as f:
         f.write("; Merged plugins that still contain a plugin --redundant turned off. --auto-merge (and --full)\n"
                 "; rebuild them without it; --unmerge doesn't bring it back. merged<TAB>input|input\n")
         for merged, ins in rec.items():
@@ -385,7 +385,7 @@ def write_added_masters(game_dir, rec):
     bases = record_bases(game_dir)
     if bases:
         rec = MP.convert_added_masters(rec, bases)
-    with open(os.path.join(game_dir, ADDED_MASTERS_RECORD), "w", encoding="utf-8") as f:
+    with _T.atomic_open(os.path.join(game_dir, ADDED_MASTERS_RECORD), encoding="utf-8") as f:
         json.dump({k: v for k, v in rec.items() if v}, f, indent=1, sort_keys=True)
     try:
         note_promoted_rules(game_dir, rec)

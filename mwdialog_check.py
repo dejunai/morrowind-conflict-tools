@@ -9117,6 +9117,9 @@ def apply_load_order_to_ini(args):
 
 def main(argv=None):
     MT.install()
+    if not MP.acquire_run_lock():
+        print(MP.RUN_LOCKED_MESSAGE, file=sys.stderr)
+        return 1
     global MAIN_DEPTH
     MAIN_DEPTH += 1
     finished = False

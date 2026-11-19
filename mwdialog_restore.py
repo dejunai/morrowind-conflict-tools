@@ -8,6 +8,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mwdialog_text as MT  # noqa: E402
+import mwdialog_tes3 as _T  # noqa: E402
 from mwdialog_backup import (  # noqa: E402
     backup_candidates, backup_index, index_dir)
 from mwdialog_console import (  # noqa: E402
@@ -206,7 +207,7 @@ def restore_dates(args):
         if len(parts) == 3 and parts[0].lower() in lookup:
             os.utime(lookup[parts[0].lower()], ns=(int(parts[1]), int(parts[2])))
             n += 1
-    with open(undo, "w", encoding="utf-8") as f:
+    with _T.atomic_open(undo, encoding="utf-8") as f:
         f.write("".join("==== " + b for b in blocks[:-1]))
     print(f"Restored the dates of {n} plugin(s) from the sort of {last[0].strip()}.")
     return 0
