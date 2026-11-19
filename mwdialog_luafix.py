@@ -39,6 +39,8 @@ Rules (thresholds come from MWSE\\config\\mwguard.json when it exists - the same
   I2 a repeating real-time timer that redraws UI keeps running through a save -> skips while saving fix
   I3 a config written inside a save handler (during the save) -> written the frame after it        fix
   H6 tes3.messageBox inside a loop                                                                    report
+  H7 X.f() through local X = require(...) of the same mod, whose table never gets f                  report
+  K1 a known exact bug in one mod's file (KNOWN_FIXES) -> its exact replacement                      fix
   L1 a while loop that walks links (x = x.next) or counts down by a computed step -> capped at 10000   fix
   M1 an enterFrame handler (it also fires in menus) with no UI work -> returns in menu mode            fix
   V1 number * vector (-1 * up: no metamethod for that order, errors every call) -> vector * number     fix
@@ -728,9 +730,18 @@ class FileAnalysis:
                   self.r_keycode, self.r_lookups, self.r_event_fields, self.r_destroy, self.r_console, self.r_info_filter, self.r_reregister,
                   self.r_reload_timers, self.r_globals, self.r_toplevel, self.r_loops, self.r_logger_level,
                   self.r_log_triggers, self.r_loggers, self.r_save_safe, self.r_while_caps, self.r_menu_exit,
-                  self.r_vector_order):
+                  self.r_vector_order, self.r_known):
             r()
         return self.findings
+
+    def r_known(self):
+        """K1: an exact bug in one mod's file that no general rule covers, patched by its exact text."""
+        rel = self.rel.lower()
+        for path, old, new, what in KNOWN_FIXES:
+            i = self.src.find(old) if rel == path else -1
+            if i >= 0:
+                self.findings.append(Finding(rule="K1", line=self.src.count("\n", 0, i) + 1, what=what, fix=new,
+                                             conf="high", edits=[(i, i + len(old), new)], needs=set()))
 
     def r_while_caps(self):
         """L1: a while loop that walks a linked structure (x = x.next) or counts a field down by a computed step
@@ -1623,6 +1634,66 @@ class FileAnalysis:
                 out.append(L.string_value(c.args[0].raw) or "")
         return out
 
+    def module_calls(self):
+        """[(module, field, line)]: X.field(...) calls through a top-level `local X = require("module")`; line 0
+        for a field this file adds to it (function X.field / X.field = ...)."""
+        mods = {}
+        for st in self.tree.body.stats:
+            if st.kind == "Local" and len(st.names) == 1 and len(st.exprs) == 1:
+                c = st.exprs[0]
+                if c.kind == "Call" and c.func.kind == "Name" and c.func.id == "require" and c.args and \
+                        c.args[0].kind == "String":
+                    mods[st.names[0]] = L.string_value(c.args[0].raw) or ""
+        reassigned = {L.dotted(t) for n in self.nodes if n.kind == "Assign" for t in n.targets}
+        out = []
+        for n in self.nodes:
+            if n.kind == "FuncStat" and len(n.path) == 2 and n.path[0] in mods:
+                out.append((mods[n.path[0]], n.path[1], 0))
+            elif n.kind == "Assign":
+                for t in n.targets:
+                    if t.kind == "Index" and t.field and t.obj.kind == "Name" and t.obj.id in mods:
+                        out.append((mods[t.obj.id], t.field, 0))
+        for c in self.calls:
+            f = c.func
+            if f.kind == "Index" and f.field and f.obj.kind == "Name" and f.obj.id in mods \
+                    and f.obj.id not in reassigned:
+                out.append((mods[f.obj.id], f.field, self.line(c)))
+        return out
+
+    def module_fields(self):
+        """The fields of the table this module returns (`local M = {...} ... return M`), or None when that
+        can't be told for sure (built some other way, a metatable, M handed to other code)."""
+        body = self.tree.body.stats
+        if not body or body[-1].kind != "Return" or len(body[-1].exprs) != 1 or \
+                any(L.dotted(c.func) in ("setmetatable", "rawset") for c in self.calls):
+            return None
+        r = body[-1].exprs[0]
+        if r.kind == "Table":
+            return {k for k, _ke, _v in r.fields if k}
+        if r.kind != "Name":
+            return None
+        name, fields, made = r.id, set(), False
+        for st in body:
+            if st.kind == "Local" and st.names == [name] and len(st.exprs) == 1 and st.exprs[0].kind == "Table":
+                fields |= {k for k, _ke, _v in st.exprs[0].fields if k}
+                made = True
+        if not made:
+            return None
+        for n in self.nodes:
+            if n.kind == "FuncStat" and n.path[0] == name and len(n.path) == 2:
+                fields.add(n.path[1])
+            elif n.kind == "Assign":
+                for t in n.targets:
+                    if t.kind == "Name" and t.id == name:
+                        return None                  # M itself replaced
+                    if t.kind == "Index" and t.obj.kind == "Name" and t.obj.id == name:
+                        if not t.field:
+                            return None              # M[k] = ...: fields we can't name
+                        fields.add(t.field)
+            elif n.kind == "Call" and any(a.kind == "Name" and a.id == name for a in n.args):
+                return None                          # M handed to code that may add to it
+        return fields
+
 
 # ---------------------------------------------------------------------------------------------- what we add
 SAVE_HELPER = ('local mwluafix_save do mwluafix_save = package.loaded["mwluafix_savestate"] '
@@ -1666,6 +1737,17 @@ def image_findings(src, roots):
                 break
     return out
 
+
+# K1: (file under MWSE\mods, lower case with /; exact text; replacement on the same number of lines; why)
+KNOWN_FIXES = [
+    ("attendmemwse/followers.lua",
+     "if ref and ref.mobile and not ref.mobile.isDead then",
+     "local mwluafix_ok, mwluafix_alive = pcall(function() return ref.mobile and not ref.mobile.isDead end) "
+     "if ref and mwluafix_ok and mwluafix_alive then",
+     "refresh() reads .mobile on the references it kept from the last pass; one that was deleted since raises "
+     "'sol: received nil for self' every timer tick, and the list is never rebuilt (MWSE.log 2026-11-18)"),
+]
+assert all(o.count("\n") == n.count("\n") for _p, o, n, _w in KNOWN_FIXES)
 
 GATE_HELPER = ("local mwluafix_gate do local last, clock = {}, os.clock mwluafix_gate = function(k, s) "
                "local t = clock() local l = last[k] if l and t >= l and t - l < s then return true end "
@@ -2085,7 +2167,8 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
         analyses = {}
         roots = [r for r in (data_dir, os.path.dirname(os.path.dirname(mroot)) if mroot else None) if r]
         for p, rel in files:
-            ent = {"rel": rel, "mod": key, "findings": [], "error": None, "patch": None, "logs": 0, "requires": []}
+            ent = {"rel": rel, "mod": key, "findings": [], "error": None, "patch": None, "logs": 0, "requires": [],
+                   "mcalls": [], "mfields": None}
             rep.files[p] = ent
             try:
                 st = os.stat(p)
@@ -2095,8 +2178,10 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
             ckey = "luafix1:" + os.path.normcase(os.path.abspath(p))
             if cache is not None:
                 hit = cache.get(ckey, ah.stamp_of(st))
-                if hit is not None and hit.get("cfg") == ch:
+                if hit is not None and hit.get("cfg") == ch and "mc" in hit:
                     ent.update(error=hit.get("err"), logs=hit.get("logs", 0), requires=hit.get("req", []),
+                               mcalls=[tuple(x) for x in hit["mc"]],
+                               mfields=set(hit["mf"]) if hit.get("mf") is not None else None,
                                sha=hit.get("sha"), cached=True, old_shim=hit.get("v1", False),
                                findings=[Finding(f, edits=[], needs=set(f.get("needs", []))) for f in hit["f"]])
                     continue
@@ -2105,7 +2190,8 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
             ent["sha"] = sha(b)
             try:
                 a = analyses[p] = _analyse(b.decode("latin-1"), key, rel, cfg)
-                ent.update(findings=a.findings, logs=a.log_calls(), requires=a.requires(), old_shim=a.old_shim)
+                ent.update(findings=a.findings, logs=a.log_calls(), requires=a.requires(), old_shim=a.old_shim,
+                           mcalls=a.module_calls(), mfields=a.module_fields())
             except L.LuaSyntaxError as e:
                 ent["error"] = f"can't be parsed ({e}); left alone"
             except RecursionError:
@@ -2113,10 +2199,12 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
             if cache is not None:
                 cache.put(ckey, ah.stamp_of(st), {
                     "cfg": ch, "err": ent["error"], "logs": ent["logs"], "req": ent["requires"], "sha": ent["sha"],
-                    "v1": ent.get("old_shim", False),
+                    "v1": ent.get("old_shim", False), "mc": ent["mcalls"],
+                    "mf": sorted(ent["mfields"]) if ent["mfields"] is not None else None,
                     "f": [dict({k: v for k, v in f.items() if k not in ("edits", "needs")}, needs=sorted(f["needs"]),
                                fixable=bool(f["edits"])) for f in ent["findings"]]})
         _require_cycles(rep, files)
+        _missing_fields(rep, files)
         # F1: does the mod need the log shim? (decided per mod, like mwguard's per-mod allowance)
         scope = log_scope or cfg["log"].get("scope") or "flagged"
         f1 = [f for p, _r in files for f in rep.files[p]["findings"] if f["rule"] == "F1"]
@@ -2173,7 +2261,7 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
                 for f in a.findings:
                     if f["rule"] == "F1":
                         f["conf"] = old.get((f["rule"], f["line"], f["what"]), f["conf"])
-                ent["findings"] = a.findings + [f for f in ent["findings"] if f["rule"] == "H5"]
+                ent["findings"] = a.findings + [f for f in ent["findings"] if f["rule"] in ("H5", "H7")]
             images = image_findings(a.src, roots)
             ent["findings"] = [f for f in ent["findings"] if f["rule"] != "I1"] + images
             new, rules = build_patch(a.src, a.findings + images, key, cfg, level, want_shim)
@@ -2208,6 +2296,31 @@ def verify_patch(old, new, rules, checker, key, rel, cfg, level):
             return res
     res["ok"] = True
     return res
+
+
+def _missing_fields(rep, files):
+    """H7: X.f() through `local X = require("m")` where m is a file of the same mod whose returned table never
+    gets f (seen 2026-11-18: AURA files still calling common.log after common.lua was restored without it)."""
+    mod_of = {}
+    for p, rel in files:
+        name = rel[:-4].replace("/", ".").lower()
+        mod_of[name] = p
+        if name.endswith(".init"):
+            mod_of[name[:-5]] = p
+    added = {(m.lower(), f) for p, _r in files for m, f, ln in rep.files[p].get("mcalls") or () if ln == 0}
+    for p, _rel in files:
+        ent = rep.files[p]
+        if ent["error"]:
+            continue
+        for mod, field, line in ent.get("mcalls") or ():
+            q = mod_of.get(mod.lower())
+            have = rep.files[q].get("mfields") if q and not rep.files[q]["error"] else None
+            if line and have is not None and field not in have and (mod.lower(), field) not in added:
+                ent["findings"].append(Finding(
+                    rule="H7", line=line, what=f"calls {field}() from {rep.files[q]['rel']}, which never defines it "
+                                               f"(errors when this line runs)",
+                    fix="put both files back from the same release (one restored, one still edited?)",
+                    conf="report", edits=[], needs=set()))
 
 
 def _require_cycles(rep, files):

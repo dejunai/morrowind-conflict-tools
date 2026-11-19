@@ -330,6 +330,76 @@ def test_H5_require_cycle(tmp_path):
     assert len(h5) == 1 and "testmod/a.lua" in h5[0]["what"]
 
 
+# the AURA regression of 2026-11-18: Misc/miscMain.lua still calls common.log, common.lua was restored without it
+AURA_COMMON = ("local this = {}\nfunction this.debugLog(m) mwse.log(m) end\nlocal function log(m) end\n"
+               "this.thunArray = {}\nreturn this\n")
+AURA_MISC = ("local common = require('testmod.common')\nlocal function init()\n"
+             "    common.log('loading')\n    common.debugLog('x')\nend\ninit()\n")
+
+
+def _h7(tmp_path, files):
+    data, _root = mod_tree(tmp_path, dict({"main.lua": "dofile('x')"}, **files))
+    rep = lf.check_paths([str(data)], CFG, checker=OkChecker(), use_cache=False)
+    return [f for e in rep.files.values() for f in e["findings"] if f["rule"] == "H7"]
+
+
+def test_H7_call_to_a_field_the_required_module_never_defines(tmp_path):
+    h7 = _h7(tmp_path, {"common.lua": AURA_COMMON, "Misc/miscMain.lua": AURA_MISC})
+    assert len(h7) == 1 and h7[0]["line"] == 3 and "log()" in h7[0]["what"]
+
+
+@pytest.mark.parametrize("common", [
+    AURA_COMMON.replace("local function log(m) end", "this.log = print"),
+    AURA_COMMON.replace("local function log(m) end", "function this.log(m) end"),
+    "return { log = print, debugLog = print }",
+    AURA_COMMON.replace("return this", "setmetatable(this, { __index = mwse }) return this"),
+    AURA_COMMON.replace("return this", "mixin(this) return this"),
+    AURA_COMMON.replace("return this", "this[key] = 1 return this"),
+])
+def test_H7_left_alone_when_the_field_is_there_or_cant_be_told(tmp_path, common):
+    assert not _h7(tmp_path, {"common.lua": common, "Misc/miscMain.lua": AURA_MISC})
+
+
+@pytest.mark.parametrize("other", [
+    "local c = require('testmod.common')\nfunction c.log(m) end\n",             # added by another file
+    "local c = require('testmod.common')\nc.log = print\n",
+])
+def test_H7_field_added_by_another_file_or_in_a_nested_block(tmp_path, other):
+    assert not _h7(tmp_path, {"common.lua": AURA_COMMON, "Misc/miscMain.lua": AURA_MISC, "other.lua": other})
+    nested = AURA_COMMON.replace("local function log(m) end", "do\n function this.log(m) end\nend")
+    assert not _h7(tmp_path / "n", {"common.lua": nested, "Misc/miscMain.lua": AURA_MISC})
+
+
+# the AttendMe regression of 2026-11-18: refresh() indexes a deleted reference from its last pass every tick
+FOLLOWERS = ("local followers = {}\nlocal this = {}\nfunction this.refresh()\n local newList = {}\n"
+             " for _, ref in ipairs(followers) do\n"
+             "        if ref and ref.mobile and not ref.mobile.isDead then\n"
+             "            table.insert(newList, ref)\n        end\n end\n followers = newList\n return #newList\nend\n"
+             "function this.set(l) followers = l end\nreturn this\n")
+
+
+def test_K1_attendme_stale_reference_is_skipped():
+    a = analyse(FOLLOWERS, rel="AttendMeMWSE/followers.lua")
+    k1 = [f for f in a.findings if f["rule"] == "K1"]
+    assert len(k1) == 1 and k1[0]["line"] == 6 and k1[0]["conf"] == "high"
+    new, rules = lf.build_patch(FOLLOWERS, a.findings, "AttendMeMWSE", CFG)
+    assert "K1" in rules and new.count("\n") == FOLLOWERS.count("\n")
+    assert not [f for f in analyse(new, rel="AttendMeMWSE/followers.lua").findings if f["rule"] == "K1"]
+    assert not [f for f in analyse(FOLLOWERS, rel="other/followers.lua").findings if f["rule"] == "K1"]
+    if not HAVE_LUA:
+        return
+    rt = _lj.LuaRuntime()
+    stale = "setmetatable({}, { __index = function() error('sol: received nil for self') end })"
+    good = "{ mobile = { isDead = false } }"
+    m = rt.execute(new)
+    m.set(rt.eval(f"{{ {stale}, {good} }}"))
+    assert m.refresh() == 1                               # the deleted one is dropped, the live one kept
+    old = rt.execute(FOLLOWERS)
+    old.set(rt.eval(f"{{ {stale}, {good} }}"))
+    with pytest.raises(LuaError):
+        old.refresh()
+
+
 # ------------------------------------------------------------------------------------------------ F1 / F2
 SPAM = "local function onSim(e)\n mwse.log('tick %d', 1)\nend\nevent.register('simulate', onSim)\nprint('Init')\n"
 
