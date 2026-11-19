@@ -10,6 +10,23 @@
   },
   "plugin": "Friends & Frens - base.esm"
  },
+ "gitd_wl_rr_interiors.esp": {
+  "masters": {
+   "solstheim tomb of the snow prince.esm": {
+    "installed": 10824044,
+    "master": "Solstheim Tomb of The Snow Prince.esm",
+    "original": 10821912,
+    "seen": "2026-11-18 06:50:41"
+   },
+   "tamriel_data.esm": {
+    "installed": 17198854,
+    "master": "Tamriel_Data.esm",
+    "original": 11522094,
+    "seen": "2026-11-18 06:50:41"
+   }
+  },
+  "plugin": "GITD_WL_RR_Interiors.esp"
+ },
  "mwdialog_check cell fixes.esp": {
   "masters": {
    "seyda neen - damp little squat - unshabby.esp": {
@@ -126,6 +143,17 @@
   },
   "plugin": "Shabby Seyda Neen.ESP"
  },
+ "solstheim tomb of the snow prince.esm": {
+  "masters": {
+   "tamriel_data.esm": {
+    "installed": 17198854,
+    "master": "Tamriel_Data.esm",
+    "original": 11522094,
+    "seen": "2026-11-18 06:50:41"
+   }
+  },
+  "plugin": "Solstheim Tomb of The Snow Prince.esm"
+ },
  "sound_data.esm": {
   "masters": {
    "oaab_data.esm": {
@@ -142,6 +170,68 @@
    }
   },
   "plugin": "Sound_Data.esm"
+ },
+ "totsp td content integration - spiders.esp": {
+  "masters": {
+   "tamriel_data.esm": {
+    "installed": 17198854,
+    "master": "Tamriel_Data.esm",
+    "original": 11522094,
+    "seen": "2026-11-18 06:50:41"
+   }
+  },
+  "plugin": "TOTSP TD Content Integration - Spiders.esp"
+ },
+ "totsp_forceful_travel_npc_override.esp": {
+  "masters": {
+   "solstheim tomb of the snow prince.esm": {
+    "installed": 10824044,
+    "master": "Solstheim Tomb of The Snow Prince.esm",
+    "original": 10821912,
+    "seen": "2026-11-18 06:50:41"
+   },
+   "tamriel_data.esm": {
+    "installed": 17198854,
+    "master": "Tamriel_Data.esm",
+    "original": 11522094,
+    "seen": "2026-11-18 06:50:41"
+   }
+  },
+  "plugin": "TOTSP_Forceful_Travel_NPC_Override.ESP"
+ },
+ "totsp_patch_for_purists_4.0.2.esp": {
+  "masters": {
+   "patch for purists.esm": {
+    "installed": 5489659,
+    "master": "Patch for Purists.esm",
+    "original": 2994440,
+    "seen": "2026-11-18 06:50:41"
+   },
+   "tamriel_data.esm": {
+    "installed": 17198854,
+    "master": "Tamriel_Data.esm",
+    "original": 7824672,
+    "seen": "2026-11-18 06:50:41"
+   }
+  },
+  "plugin": "TOTSP_Patch_for_Purists_4.0.2.esp"
+ },
+ "totsp_patch_for_purists_5.0.6.esp": {
+  "masters": {
+   "patch for purists.esm": {
+    "installed": 5489659,
+    "master": "Patch for Purists.esm",
+    "original": 2994440,
+    "seen": "2026-11-18 06:50:41"
+   },
+   "tamriel_data.esm": {
+    "installed": 17198854,
+    "master": "Tamriel_Data.esm",
+    "original": 11522094,
+    "seen": "2026-11-18 06:50:41"
+   }
+  },
+  "plugin": "TOTSP_Patch_for_Purists_5.0.6.esp"
  },
  "tr_mainland.esm": {
   "masters": {

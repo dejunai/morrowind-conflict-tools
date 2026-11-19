@@ -162,7 +162,7 @@ avp BTBGI-NE - Factions - TR_Factions.esp
 avp BTBGI-NE - Uvirith's Legacy.esp
 FM - Unique Items v1.0 - PfP.ESP
 
-; ---- added by --cell-conflicts 2026-11-16 22:58 ----
+; ---- added by --cell-conflicts 2026-11-18 10:28 ----
 
 [Order]
 Sheogorad - Groves of the North.esp
@@ -260,6 +260,11 @@ Ebonheart Lighthouse.ESP
 ; keep Ebonheart Lighthouse.ESP winning where they conflict
 
 [Order]
+Sheogorad - Groves of the North.esp
+Cait's Critters Unleashed 2.0.esp
+; keep Cait's Critters Unleashed 2.0.esp winning where they conflict
+
+[Order]
 New Arenthia 1.2.ESP
 OAAB Brother Junipers Twin Lamps.esp
 ; keep OAAB Brother Junipers Twin Lamps.esp winning where they conflict
@@ -285,11 +290,6 @@ Creatures and Critters.ESP
 ; keep Creatures and Critters.ESP winning where they conflict
 
 [Order]
-Rise of House Telvanni.esm
-RepopulatedMorrowind.ESM
-; keep RepopulatedMorrowind.ESM winning where they conflict
-
-[Order]
 HelnimREDUXskriak.ESP
 abotWindowsGlowTR1912.esp
 ; keep abotWindowsGlowTR1912.esp winning where they conflict
@@ -300,14 +300,14 @@ ST_Alchemy_Replacer_1.3.esp
 ; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
 
 [Order]
-Dallara Ebonheart.esp
-Imperial Stables.esp
-; make Imperial Stables.esp win where they conflict
-
-[Order]
 BB2_Peasant_Gowns.esp
 Dallara Pelagiad PFP.esp
 ; keep Dallara Pelagiad PFP.esp winning where they conflict
+
+[Order]
+Clean Tales of Seyda Neen.esp
+Seyda Neen - Damp Little Squat - unshabby.ESP
+; keep Seyda Neen - Damp Little Squat - unshabby.ESP winning where they conflict
 
 [Order]
 Seyda Neen - Damp Little Squat - unshabby.ESP
@@ -330,6 +330,11 @@ Clean_Waterfowl_Of_Morrowind_Expanded.esp
 ; keep Clean_Waterfowl_Of_Morrowind_Expanded.esp winning where they conflict
 
 [Order]
+OAAB_Grazelands.ESP
+Cait's Critters Unleashed 2.0.esp
+; keep Cait's Critters Unleashed 2.0.esp winning where they conflict
+
+[Order]
 DM_SuranRoof.ESP
 Hanging Gardens of Suran.esp
 ; keep Hanging Gardens of Suran.esp winning where they conflict
@@ -338,11 +343,6 @@ Hanging Gardens of Suran.esp
 Dallara Ebonheart.esp
 The_Vanilla_Quest_Tweaks_RP_Choices_Consequences_Super_Mega_Package_-_Ultimate_Edition.ESP
 ; keep The_Vanilla_Quest_Tweaks_RP_Choices_Consequences_Super_Mega_Package_-_Ultimate_Edition.ESP winning where they conflict
-
-[Order]
-Better Bounties.esp
-Windows Glow - Tribunal Eng.esp
-; keep Windows Glow - Tribunal Eng.esp winning where they conflict
 
 [Order]
 Tel_Aruhn_Chronicles.ESP
@@ -375,14 +375,14 @@ Animated_Morrowind - Danaes Edits - Vv.esp
 ; keep Animated_Morrowind - Danaes Edits - Vv.esp winning where they conflict
 
 [Order]
-Seyda Neen - Damp Little Squat - unshabby.ESP
-mistify.ESP
-; keep mistify.ESP winning where they conflict
-
-[Order]
 Clean_Mines and Caverns.esp
 Expanded Sounds.esp
 ; keep Expanded Sounds.esp winning where they conflict
+
+[Order]
+Seyda Neen - Damp Little Squat - unshabby.ESP
+Realistic_Repair_Add-on.ESP
+; make Realistic_Repair_Add-on.ESP win where they conflict
 
 [Order]
 URH_Ald_Velothi.esp
@@ -393,6 +393,11 @@ Cait's Critters Unleashed 2.0.esp
 Seyda Neen - Damp Little Squat - unshabby.ESP
 Imperial Stables.esp
 ; keep Imperial Stables.esp winning where they conflict
+
+[Order]
+factorestateimprovedv1.ESP
+GITD_WL_RR_Interiors.esp
+; keep GITD_WL_RR_Interiors.esp winning where they conflict
 
 [Order]
 The Vestiges of Tukushapal.ESP
@@ -457,7 +462,7 @@ logs on Fire.esp
 [Order]
 Morag Tong Polished.esp
 Stav_WebofMephala.ESP
-; make Stav_WebofMephala.ESP win where they conflict
+; keep Stav_WebofMephala.ESP winning where they conflict
 
 [Order]
 Clean_Mines and Caverns.esp
@@ -520,6 +525,11 @@ Sload and Slavers.ESP
 ; keep Sload and Slavers.ESP winning where they conflict
 
 [Order]
+Better Landscapes Stonewood Pass (RP Edit).esp
+LuceEdit - BCOM - MoonlightOnTheOdaiRiver.esp
+; keep LuceEdit - BCOM - MoonlightOnTheOdaiRiver.esp winning where they conflict
+
+[Order]
 Skar_face.ESP
 VY_Under_Skar.esp
 ; keep VY_Under_Skar.esp winning where they conflict
@@ -532,12 +542,7 @@ RR_Better_Ships_n_Boats_Eng.esp
 [Order]
 Illy's Oh my Goddess.ESP
 Dallara Ebonheart.esp
-; make Dallara Ebonheart.esp win where they conflict
-
-[Order]
-Better Landscapes Stonewood Pass (RP Edit).esp
-LuceEdit - BCOM - MoonlightOnTheOdaiRiver.esp
-; make LuceEdit - BCOM - MoonlightOnTheOdaiRiver.esp win where they conflict
+; keep Dallara Ebonheart.esp winning where they conflict
 
 [Order]
 Dallara Ebonheart.esp
@@ -568,11 +573,6 @@ Dallara Ebonheart.esp
 Sheogorad - Groves of the North.esp
 Landscape Waterfalls MW (OTR).ESP
 ; keep Landscape Waterfalls MW (OTR).ESP winning where they conflict
-
-[Order]
-factorestateimprovedv1.ESP
-GITD_WL_RR_Interiors.esp
-; keep GITD_WL_RR_Interiors.esp winning where they conflict
 
 [Order]
 URH_Ald_Velothi.esp
@@ -670,17 +670,17 @@ logs on Fire.esp
 ; keep logs on Fire.esp winning where they conflict
 
 [Order]
-HSN - Lighthouse Only.esp
-Expanded Sounds.esp
-; keep Expanded Sounds.esp winning where they conflict
-
-[Order]
 Clean_Mines and Caverns.esp
 Yet Another Guard Diversity - Regular.ESP
 ; keep Yet Another Guard Diversity - Regular.ESP winning where they conflict
 
 [Order]
 DD_Caldera_Expansion.esp
+Expanded Sounds.esp
+; keep Expanded Sounds.esp winning where they conflict
+
+[Order]
+HSN - Lighthouse Only.esp
 Expanded Sounds.esp
 ; keep Expanded Sounds.esp winning where they conflict
 
@@ -775,11 +775,6 @@ RepopulatedCreatures.ESP
 ; keep RepopulatedCreatures.ESP winning where they conflict
 
 [Order]
-Shipyards of Vvardenfell.esp
-RR_Better_Ships_n_Boats_Eng.esp
-; keep RR_Better_Ships_n_Boats_Eng.esp winning where they conflict
-
-[Order]
 Sheogorad - Groves of the North.esp
 DN-Lighted_Dwemer_Towers.ESP
 ; keep DN-Lighted_Dwemer_Towers.ESP winning where they conflict
@@ -810,11 +805,6 @@ Expansions Integrated - Fewer BM Creatures.esp
 ; keep Expansions Integrated - Fewer BM Creatures.esp winning where they conflict
 
 [Order]
-Dallara Fort Moonmoth.esp
-Yet Another Guard Diversity - Regular.ESP
-; keep Yet Another Guard Diversity - Regular.ESP winning where they conflict
-
-[Order]
 Dallara Ebonheart.esp
 Yet Another Guard Diversity - Regular.ESP
 ; keep Yet Another Guard Diversity - Regular.ESP winning where they conflict
@@ -830,14 +820,19 @@ Tribunal Main Quest Reforged - SSE.esp
 ; keep Tribunal Main Quest Reforged - SSE.esp winning where they conflict
 
 [Order]
+Dallara Fort Moonmoth.esp
+Yet Another Guard Diversity - Regular.ESP
+; keep Yet Another Guard Diversity - Regular.ESP winning where they conflict
+
+[Order]
+Shipyards of Vvardenfell.esp
+RR_Better_Ships_n_Boats_Eng.esp
+; keep RR_Better_Ships_n_Boats_Eng.esp winning where they conflict
+
+[Order]
 RepopulatedMainland.ESP
 abotWindowsGlowTR1912.esp
 ; keep abotWindowsGlowTR1912.esp winning where they conflict
-
-[Order]
-Vvardenfell Distribution - Seyda Neen Coast Guard.ESP
-Yet Another Guard Diversity - Regular.ESP
-; keep Yet Another Guard Diversity - Regular.ESP winning where they conflict
 
 [Order]
 Vivec Striderport.ESP
@@ -878,11 +873,6 @@ Creatures and Critters.ESP
 Clean_Mines and Caverns.esp
 DreamersExpansion.ESP
 ; keep DreamersExpansion.ESP winning where they conflict
-
-[Order]
-Shabby Seyda Neen.ESP
-abotWindowsGlow.esp
-; keep abotWindowsGlow.esp winning where they conflict
 
 [Order]
 The Mountain of Fear.ESP
@@ -930,6 +920,11 @@ RepopulatedCreatures.ESP
 ; keep RepopulatedCreatures.ESP winning where they conflict
 
 [Order]
+Vvardenfell Distribution - Seyda Neen Coast Guard.ESP
+Yet Another Guard Diversity - Regular.ESP
+; keep Yet Another Guard Diversity - Regular.ESP winning where they conflict
+
+[Order]
 MGO Guild Halls Vanilla.esp
 logs on Fire.esp
 ; keep logs on Fire.esp winning where they conflict
@@ -938,6 +933,11 @@ logs on Fire.esp
 VY_Under_Skar.esp
 logs on Fire.esp
 ; keep logs on Fire.esp winning where they conflict
+
+[Order]
+Shabby Seyda Neen.ESP
+abotWindowsGlow.esp
+; keep abotWindowsGlow.esp winning where they conflict
 
 [Order]
 Justice4Khartag.esp
@@ -1042,7 +1042,7 @@ abotWindowsGlowTR1912.esp
 [Order]
 Better Landscapes Stonewood Pass (RP Edit).esp
 DD_Caldera_Expansion.esp
-; make DD_Caldera_Expansion.esp win where they conflict
+; keep DD_Caldera_Expansion.esp winning where they conflict
 
 [Order]
 RevampedDarkBrotherhood.ESP
@@ -1073,16 +1073,6 @@ Local Lore - Silt Striders and Caravaners.ESP
 Ashlander Travel.ESP
 KS_Julan_Ashlander Companion_3.0_beta.esp
 ; keep KS_Julan_Ashlander Companion_3.0_beta.esp winning where they conflict
-
-[Order]
-Seyda Neen - Damp Little Squat - unshabby.ESP
-Yet Another Guard Diversity - Regular.ESP
-; keep Yet Another Guard Diversity - Regular.ESP winning where they conflict
-
-[Order]
-Seyda Neen - Damp Little Squat - unshabby.ESP
-abotWindowsGlow.esp
-; keep abotWindowsGlow.esp winning where they conflict
 
 [Order]
 Justice4Khartag.esp
@@ -1240,6 +1230,11 @@ BLLDV_ALL.esp
 ; keep BLLDV_ALL.esp winning where they conflict
 
 [Order]
+Seyda Neen - Damp Little Squat - unshabby.ESP
+Yet Another Guard Diversity - Regular.ESP
+; keep Yet Another Guard Diversity - Regular.ESP winning where they conflict
+
+[Order]
 Molten Glass.ESP
 Yet Another Guard Diversity - Regular.ESP
 ; keep Yet Another Guard Diversity - Regular.ESP winning where they conflict
@@ -1315,14 +1310,19 @@ Windows Glow.esp
 ; keep Windows Glow.esp winning where they conflict
 
 [Order]
+OAAB Brother Junipers Twin Lamps.esp
+Yet Another Guard Diversity - Regular.ESP
+; keep Yet Another Guard Diversity - Regular.ESP winning where they conflict
+
+[Order]
+Seyda Neen - Damp Little Squat - unshabby.ESP
+abotWindowsGlow.esp
+; keep abotWindowsGlow.esp winning where they conflict
+
+[Order]
 Yet Another Guard Diversity - Regular.ESP
 OAAB_Tel Mora_Female Guards.ESP
 ; keep OAAB_Tel Mora_Female Guards.ESP winning where they conflict
-
-[Order]
-OAAB Brother Junipers Twin Lamps.esp
-Yet Another Guard Diversity - Regular.ESP
-; make Yet Another Guard Diversity - Regular.ESP win where they conflict
 
 [Order]
 MaiqMainland.esp
@@ -1388,36 +1388,6 @@ Dissident_Ordinators.ESP
 Nice Telvanni Council House.ESP
 MAH.ESP
 ; keep MAH.ESP winning where they conflict
-
-[Order]
-Seyda Neen - Damp Little Squat - unshabby.ESP
-Vvardenfell Distribution - Seyda Neen Coast Guard.ESP
-; keep Vvardenfell Distribution - Seyda Neen Coast Guard.ESP winning where they conflict
-
-[Order]
-Seyda Neen - Damp Little Squat - unshabby.ESP
-Local Lore - Silt Striders and Caravaners.ESP
-; keep Local Lore - Silt Striders and Caravaners.ESP winning where they conflict
-
-[Order]
-The_Stolen_Sweetrolls.esp
-Expanded Sounds.esp
-; keep Expanded Sounds.esp winning where they conflict
-
-[Order]
-Seyda Neen - Damp Little Squat - unshabby.ESP
-PR Perfect Scum.esp
-; keep PR Perfect Scum.esp winning where they conflict
-
-[Order]
-Seyda Neen - Damp Little Squat - unshabby.ESP
-Animated_Morrowind - Danaes Edits - Vv.esp
-; keep Animated_Morrowind - Danaes Edits - Vv.esp winning where they conflict
-
-[Order]
-Fighters Guild Improved.esp
-Yet Another Guard Diversity - Regular.ESP
-; keep Yet Another Guard Diversity - Regular.ESP winning where they conflict
 
 [Order]
 Molag Mar Outskirts - Bonesaint Guardians.ESP
@@ -1665,6 +1635,11 @@ MAH.ESP
 ; keep MAH.ESP winning where they conflict
 
 [Order]
+The_Stolen_Sweetrolls.esp
+Expanded Sounds.esp
+; keep Expanded Sounds.esp winning where they conflict
+
+[Order]
 DM_CrownOfUrshilaku.ESP
 ST_Alchemy_Replacer_1.3.esp
 ; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
@@ -1718,11 +1693,6 @@ ST_Alchemy_Replacer_1.3.esp
 OAAB - Foyada Mamaea.ESP
 ST_Alchemy_Replacer_1.3.esp
 ; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
-
-[Order]
-Clean_Mines and Caverns.esp
-Join All Vampire Clans.esp
-; keep Join All Vampire Clans.esp winning where they conflict
 
 [Order]
 Clean_Mines and Caverns.esp
@@ -1785,11 +1755,6 @@ ST_Alchemy_Replacer_1.3.esp
 ; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
 
 [Order]
-Better Bounties.esp
-abotWindowsGlow.esp
-; keep abotWindowsGlow.esp winning where they conflict
-
-[Order]
 The Sable Dragon 1.6 mmc.esp
 ST_Alchemy_Replacer_1.3.esp
 ; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
@@ -1801,18 +1766,18 @@ abotWindowsGlow.esp
 
 [Order]
 Dallara Pelagiad PFP.esp
-Casimir's Legacy.esp
-; keep Casimir's Legacy.esp winning where they conflict
-
-[Order]
-Dallara Pelagiad PFP.esp
 Friends & Frens - Vvardenfell.ESP
 ; keep Friends & Frens - Vvardenfell.ESP winning where they conflict
 
 [Order]
+Dallara Pelagiad PFP.esp
+Casimir's Legacy.esp
+; keep Casimir's Legacy.esp winning where they conflict
+
+[Order]
 Friends & Frens - Vvardenfell.ESP
 Casimir's Legacy.esp
-; make Casimir's Legacy.esp win where they conflict
+; keep Casimir's Legacy.esp winning where they conflict
 
 [Order]
 KS_Julan_Ashlander Companion_3.0_beta.esp
@@ -1905,16 +1870,6 @@ MAH.ESP
 ; keep MAH.ESP winning where they conflict
 
 [Order]
-Vampire Clans - Clutter Monkey Overhaul.ESP
-Vampire Clan Services.ESP
-; keep Vampire Clan Services.ESP winning where they conflict
-
-[Order]
-Vampire Clans - Clutter Monkey Overhaul.ESP
-DN-Lighted_Dwemer_Towers.ESP
-; keep DN-Lighted_Dwemer_Towers.ESP winning where they conflict
-
-[Order]
 Improved Inns Expanded.esp
 Livelier Lucky Lockup.ESP
 ; keep Livelier Lucky Lockup.ESP winning where they conflict
@@ -1923,6 +1878,11 @@ Livelier Lucky Lockup.ESP
 Cutting Room Floor - Taverns.esp
 Suran_Underworld_v3.ESP
 ; keep Suran_Underworld_v3.ESP winning where they conflict
+
+[Order]
+Fighters Guild Improved.esp
+Yet Another Guard Diversity - Regular.ESP
+; keep Yet Another Guard Diversity - Regular.ESP winning where they conflict
 
 [Order]
 EbonheartEastEmpireCo.esp
@@ -2011,8 +1971,18 @@ Windows Glow.esp
 
 [Order]
 OAAB Brother Junipers Twin Lamps.esp
+ST_Alchemy_Replacer_1.3.esp
+; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
+
+[Order]
+OAAB Brother Junipers Twin Lamps.esp
+RevampedDarkBrotherhood.ESP
+; keep RevampedDarkBrotherhood.ESP winning where they conflict
+
+[Order]
+OAAB Brother Junipers Twin Lamps.esp
 DD_Caldera_Expansion.esp
-; make DD_Caldera_Expansion.esp win where they conflict
+; keep DD_Caldera_Expansion.esp winning where they conflict
 
 [Order]
 DD_Caldera_Expansion.esp
@@ -2020,9 +1990,34 @@ Animated_Morrowind - Danaes Edits - Vv.esp
 ; keep Animated_Morrowind - Danaes Edits - Vv.esp winning where they conflict
 
 [Order]
-OAAB Brother Junipers Twin Lamps.esp
-RevampedDarkBrotherhood.ESP
-; make RevampedDarkBrotherhood.ESP win where they conflict
+Seyda Neen - Damp Little Squat - unshabby.ESP
+Vvardenfell Distribution - Seyda Neen Coast Guard.ESP
+; keep Vvardenfell Distribution - Seyda Neen Coast Guard.ESP winning where they conflict
+
+[Order]
+Seyda Neen - Damp Little Squat - unshabby.ESP
+Local Lore - Silt Striders and Caravaners.ESP
+; keep Local Lore - Silt Striders and Caravaners.ESP winning where they conflict
+
+[Order]
+Seyda Neen - Damp Little Squat - unshabby.ESP
+PR Perfect Scum.esp
+; keep PR Perfect Scum.esp winning where they conflict
+
+[Order]
+Seyda Neen - Damp Little Squat - unshabby.ESP
+Animated_Morrowind - Danaes Edits - Vv.esp
+; keep Animated_Morrowind - Danaes Edits - Vv.esp winning where they conflict
+
+[Order]
+Vampire Clans - Clutter Monkey Overhaul.ESP
+Vampire Clan Services.ESP
+; keep Vampire Clan Services.ESP winning where they conflict
+
+[Order]
+Vampire Clans - Clutter Monkey Overhaul.ESP
+DN-Lighted_Dwemer_Towers.ESP
+; keep DN-Lighted_Dwemer_Towers.ESP winning where they conflict
 
 [Order]
 Animated_Morrowind - Danaes Edits - Vv.esp
@@ -2033,11 +2028,6 @@ RPNR_Library.ESP
 Yet Another Guard Diversity - Regular.ESP
 mwse_Containers.esp
 ; keep mwse_Containers.esp winning where they conflict
-
-[Order]
-OAAB Brother Junipers Twin Lamps.esp
-ST_Alchemy_Replacer_1.3.esp
-; keep ST_Alchemy_Replacer_1.3.esp winning where they conflict
 
 ;; ==== content rules promoted to masters (written by mwdialog_check --sort; don't edit) ====
 ;; Each was an [Order] rule found from what the patch changes; the patch now lists the mod as a

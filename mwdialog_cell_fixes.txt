@@ -74,8 +74,8 @@ falasmaryon, lower level	2 of RepopulatedMorrowind.ESM's	moved by The Northern S
 falasmaryon, upper level	1 of Expanded Sounds.esp's	moved by The Northern Strongholds.esp
 falensarano, lower level	6 of The Northern Strongholds.esp's	moved by ruinsoffalensarano.ESP
 favel ancestral tomb	1 of Expanded Sounds.esp's	moved by OAAB - Tombs and Towers.esm
-fort frostmoth, curtain wall	1 of AnthologySolstheimPatched.esm's	moved by The Sable Dragon 1.6 mmc.esp
 fort frostmoth, imperial cult shrine	1 of AnthologySolstheimPatched.esm's	moved by Dallara Fort Frostmoth.esp
+fort frostmoth, imperial cult shrine	1 of Solstheim Tomb of The Snow Prince.esm's	moved by Dallara Fort Frostmoth.esp
 galom daeus, entry	1 of Vampire Clans - Clutter Monkey Overhaul.ESP's	moved by DN-Lighted_Dwemer_Towers.ESP
 galom daeus, observatory	1 of Vampire Clans - Clutter Monkey Overhaul.ESP's	moved by DN_Dwemer_Tileset.esm
 galom daeus, observatory	1 of Expanded Sounds.esp's	moved by Vampire Clans - Clutter Monkey Overhaul.ESP
@@ -111,8 +111,7 @@ pulk	1 of Bloated Morrowind Magnified Mines & Caverns compatible.esp's	moved by 
 pulk	1 of Expanded Sounds.esp's	moved by Clean_Mines and Caverns.esp
 punammu	2 of Bloated Morrowind Magnified Mines & Caverns compatible.esp's	moved by Clean_Mines and Caverns.esp
 ramimilk, shrine	1 of Expanded Sounds.esp's	moved by Daedric Shrine Overhaul FULL.esp
-raven rock, factor's estate	3 of factorestateimprovedv1.ESP's	moved by GITD_WL_RR_Interiors.esp
-raven rock, factor's estate	1 of Expanded Sounds.esp's	moved by factorestateimprovedv1.ESP
+raven rock, supply ship	4 of RR_Better_Ships_n_Boats_Eng.esp's	moved by Solstheim Tomb of The Snow Prince.esm
 raviro ancestral tomb	1 of Expanded Sounds.esp's	moved by OAAB - Tombs Extended.ESP
 rethan manor	1 of TR_Mainland.esm's	moved by OAAB Odai Plateau.esp
 rethan manor	1 of Expanded Sounds.esp's	moved by OAAB Odai Plateau.esp

@@ -30,7 +30,6 @@ avp BTBGI-NE - Game Settings - Merged.esp
 MuseumQuestFix.esp
 Brighter Torches.esp
 avp BTBGI-NE - Factions.esp
-Expanded Sounds TLAD Patch v1.0.ESP
 Missing Dialoge Additions TR.ESP
 Larrius Varro fix.ESP
 No Idles for Outskirts.ESP
@@ -40,8 +39,6 @@ TR_PlantLightRadiusIncrease.esp
 Friends & Frens - Prim & Proper.esp
 Diverse Blood - Tamriel Rebuilt.esp
 Grave Goods.esp
-Barb Fix.esp
-Better Banner Signs + Expanded Sounds.esp
 MW Containers Animated + LeFemmArmor.esp
 MW Containers Animated + Adamantium Armor.esp
 TR Guard fix.esp
@@ -57,7 +54,6 @@ Dwemer Loot Wares .esp
 Entertainers Expanded Again.ESP
 avp BTBGI-NE - Bloodmoon Rebalance.esp
 OAAB - Tombs and Towers - Diverse Blood Patch.esp
-LW - Regional Weather Tweaks.ESP
 avp There Can Be Only One - tribunal rebalance.esp
 OAAB - Bloodmoon Rebalance Patch.ESP
 RepopulatedMorrowind_CamonnaTongChitin.ESP
@@ -123,6 +119,10 @@ Courtesy.ESP
 Fargoth in Distress.ESP
 MCA - Illy's OMG Addon.esp
 TGoD_DiverseBlood.ESP
+Expanded Sounds TLAD Patch v1.0.ESP
+Better Banner Signs + Expanded Sounds.esp
+Shipyards of Vvardenfell_greeting.esp
+TOTSP_Forceful_Travel_NPC_Override.ESP
 Glowing Flames - NoMoreLightlessFlames v1.1.ESP
 Glowing Flames - TrueLightsAndDarkness Tweaks.ESP
 Rational Names Merged.esp

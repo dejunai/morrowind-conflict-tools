@@ -1,6 +1,6 @@
 ; mwdialog_load_order.txt: the active plugins, in load order (mwdialog_check.py keeps this list;
 ; Morrowind.ini's [Game Files] is written from it when a run that changed it ends, and by --play).
-; Last changed 2026-11-16 23:10 by --multipatch. One plugin per line.
+; Last changed 2026-11-18 10:30. One plugin per line.
 
 Morrowind.esm
 Tribunal.esm
@@ -39,6 +39,7 @@ va_imperialbank.esm
 NOD - Core.esm
 Westly Prim & Proper Core.esm
 Sound_Data.esm
+Solstheim Tomb of The Snow Prince.esm
 mwdialog_check - ESM fixes.esp
 Vibrant Ivy.ESP
 Trellis addon.ESP
@@ -86,7 +87,6 @@ Bow to the Daedra.ESP
 EKM Traveling Trader.ESP
 The Doors - Caldera 1.31.esp
 Dungeon Expansion Pack.ESP
-Seyda Neen - Damp Little Squat - unshabby.ESP
 TASG.ESP
 Properly clothed NPCs.ESP
 Destroyed Fort.esp
@@ -354,7 +354,6 @@ Tealpanda's Alchemy Essentials.esp
 BitterAndBlightedRemastered.ESP
 NPC Faction Affiliation Corrector (Maximalistic).ESP
 _The_Cheese_Smugglers_of_Vos_Part_1_ENG.ESP
-Realistic_Repair_Add-on.ESP
 Hortator.ESP
 RR_Telvanni_Lighthouse_Tel Vos_Eng.ESP
 Redoran Freeloaders.esp
@@ -393,7 +392,6 @@ Tribunal - Rare Durzogs In Vvardenfell Caves.esp
 GITD_WL_RR_Interiors.esp
 Original Faces 1.4.esp
 sb_smith.ESP
-Vvardenfell Distribution - Seyda Neen Coast Guard.ESP
 Llervu Ancestral Tomb Expanded.ESP
 Vivec_Mages_Guild_Expanded.ESP
 Cutting Room Floor - Stronghold Homes.esp
@@ -418,7 +416,6 @@ RFD_Heartthrum.ESP
 GAMA.esp
 DN_Dwemer_Tileset_TR.esp
 Continue Bal Molagmer After TG Questline.esp
-Local Lore - Silt Striders and Caravaners.ESP
 Vvardenfell Distribution - Uvirith's Grave.ESP
 TR_DarkDungeons.esp
 CompletePropylonNetworkForTR.ESP
@@ -521,7 +518,6 @@ What Thieves Guild.ESP
 Quest Voice Greetings.ESP
 Sky_Main_greeting.esp
 Hla Odai.esp
-PR Perfect Scum.esp
 Uvirith's Legacy_3.53.esp
 Holy Art.ESP
 Improved Inns Expanded - TR Addon.esp
@@ -563,10 +559,6 @@ DM_PilgrimageOfIncenseBTR.ESP
 Caldera Fighters Guild.ESP
 Tamrielic Treasures_Caldera Shop.ESP
 Entertainers Expanded.esp
-HSN - Lighthouse Only.esp
-Shabby Seyda Neen.ESP
-Shipyards of Vvardenfell.esp
-Shabby Interiors.ESP
 MWSE Lanterns - Merged.esp
 NPC_Schedule(beta) - Patch.esp
 BugMuskPerfume.esp
@@ -615,14 +607,12 @@ Imperial Knights Faction.ESP
 FortGhostmoth.ESP
 Dallara Fort Buckmoth.esp
 Dallara Pelagiad PFP.esp
-Cait's Critters Unleashed 2.0.esp
 KS_Julan_Ashlander Companion_3.0_beta.esp
 Dallara Fort Darius.esp
 OAAB - There Can Be Only One Patch.ESP
 Uvirith's Legacy 3.53 Sorrow heart of tel fyr patch.ESP
 Sloads of the Mainland - TR addon.esp
 The Sanguine Rose.ESP
-Shipyards of Vvardenfell_greeting.esp
 TD&OAAB Leveled Creatures.esp
 Addon - Umbra Blademaster - Non-Umbra Weapons are Ebony.ESP
 Better Morrowind Armor - TD.esp
@@ -645,10 +635,6 @@ ruinsoffalensarano.ESP
 Vurt's Grazelands Unique Trees.ESP
 Portal to Catalepsy.ESP
 Clan Aundae Vampire Dungeons.ESP
-Quests for Clans and Vampire Legends.ESP
-Vampire Clans - Clutter Monkey Overhaul.ESP
-DN-Lighted_Dwemer_Towers.ESP
-Vampire Clan Services.ESP
 Improved Inns Expanded.esp
 Livelier Lucky Lockup.ESP
 Cutting Room Floor - Taverns.esp
@@ -662,7 +648,6 @@ LB_ImpBusiness_DRP.ESP
 Suran_Underworld_v3.ESP
 RR_Gnisis_Arch_Eng.ESP
 SU3fixes.ESP
-DLR_DRP_Compatibility_Patch.esp
 FMI_Legion_Dialogue.ESP
 LDM - Vampire Talk.ESP
 Privileges&Services 1.1.esp
@@ -800,8 +785,6 @@ Casimir's Legacy.esp
 Friends & Frens - TR.ESP
 Illy's Oh my Goddess.ESP
 Dallara Ebonheart.esp
-Imperial Stables.esp
-Dallara Fort Moonmoth.esp
 RepopulatedMorrowind.ESP
 MGO Guild Halls Vanilla.esp
 Thieves Guild Quest Revisions.esp
@@ -815,12 +798,8 @@ OAAB Odai Plateau.esp
 Windows Glow.esp
 Windows Glow - Tribunal Eng.esp
 abotWindowsGlowTR1912.esp
-abotWindowsGlow.esp
-The_Stolen_Sweetrolls - Seyda Neen Patch.esp
 The_Vanilla_Quest_Tweaks_RP_Choices_Consequences_Super_Mega_Package_-_Ultimate_Edition.ESP
 Libertarian Magical Services.ESP
-RR_Better_Ships_n_Boats_Eng.esp
-MAH.ESP
 Better Landscapes Stonewood Pass (RP Edit).esp
 LuceEdit - BCOM - MoonlightOnTheOdaiRiver.esp
 seamus_GentleHand_StonewoodPass.ESP
@@ -830,23 +809,49 @@ SWP - Caldera Mine Patch.ESP
 SWP - Foyada Mamaea Overhaul Patch.ESP
 RevampedDarkBrotherhood.ESP
 Clean_Severa Magia Fix.ESP
-Animated_Morrowind - Danaes Edits - Vv.esp
-FMI_HulStop 1.6.ESP
-RPNR_Library.ESP
-Yet Another Guard Diversity - Regular.ESP
 Sotha Sil Expanded.ESP
 Tribunal Main Quest Reforged - SSE.esp
 TMQR_Patch.ESP
 ST_Alchemy_Replacer_1.3.esp
 OAAB Brother Junipers Twin Lamps - Camonna Tong Compatibility Patch.esp
 SecretsOfTheCrystalCity.esp
-Expanded Sounds.esp
 DM_MassamaDarkness.ESP
 Julan Companion - Merged.esp
 Sotha Sil Expanded - NPCs do not get disabled.ESP
 Sotha Sil Expanded - Reduced Light Brightness.ESP
-OAAB_Tel Mora_Female Guards.ESP
+Barb Fix.esp
+LW - Regional Weather Tweaks.ESP
 Finished Morrowind - GRAPHICS AND SOUND.ESP
+Seyda Neen - Damp Little Squat - unshabby.ESP
+Realistic_Repair_Add-on.ESP
+Vvardenfell Distribution - Seyda Neen Coast Guard.ESP
+Local Lore - Silt Striders and Caravaners.ESP
+PR Perfect Scum.esp
+Cait's Critters Unleashed 2.0.esp
+Quests for Clans and Vampire Legends.ESP
+Vampire Clans - Clutter Monkey Overhaul.ESP
+DN-Lighted_Dwemer_Towers.ESP
+Vampire Clan Services.ESP
+DLR_DRP_Compatibility_Patch.esp
+Imperial Stables.esp
+Dallara Fort Moonmoth.esp
+Animated_Morrowind - Danaes Edits - Vv.esp
+FMI_HulStop 1.6.ESP
+RPNR_Library.ESP
+Yet Another Guard Diversity - Regular.ESP
+OAAB_Tel Mora_Female Guards.ESP
+HSN - Lighthouse Only.esp
+Expanded Sounds.esp
+Shabby Seyda Neen.ESP
+abotWindowsGlow.esp
+Shipyards of Vvardenfell.esp
+RR_Better_Ships_n_Boats_Eng.esp
+MAH.ESP
+Shabby Interiors.ESP
+The_Stolen_Sweetrolls - Seyda Neen Patch.esp
+TOTSP TD Content Integration - Spiders.esp
+Missing snow armor.esp
+TOTSP_Patch_for_Purists_5.0.6.esp
 TLAD LogFl Necro Colors - Merged Patches.esp
 mwse_Containers.esp
 Uvirith's Legacy_3.53 - Script Fix.esp
