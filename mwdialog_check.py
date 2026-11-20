@@ -119,6 +119,7 @@ from mwdialog_masters import (  # noqa: E402,F401
     remove_master, write_inplace)
 from mwdialog_patchfile import (  # noqa: E402,F401
     apply_item_fixes, fix_item_body, next_free_date, PATCH_NAME, patch_supports, PLACEHOLDER_CELL, placeholder_cell,
+    read_td_renames, renamed_copy,
     placeholder_record, write_patch)
 from mwdialog_redundant import (  # noqa: E402,F401
     AUTO_SKIP_TAGS, describe_overlap, describe_plugin, find_redundant, _id_text, lua_named_plugins, lua_required_plugins,
@@ -483,6 +484,7 @@ class World:
         self.obj_refs = defaultdict(list)  # object id lower -> [(plugin, tag, id, refs or None if deleted)]
         self.obj_events = {}               # object id lower -> [(load index, plugin, tag, deleted?)]
         self.item_fixes = []               # dangling SCRI/ENAM/NPCO in the winning record (see _check_item_refs)
+        self._td_renames = None            # Tamriel Data's Translation.txt: {old id: new id}
         self.cell_regions = {}             # exterior cell key -> [(plugin, region or None)] in load order
         self.cell_name_hist = {}           # cell key -> [(plugin, name)] in load order
         self.cell_final = {}               # cell key -> the name it ends up with
@@ -1142,11 +1144,21 @@ class World:
             gone = {e.lower() for e in entries if e and e.lower() not in self.all_ids}
             if not gone or is_our_patch(plugin):
                 continue
-            msg = (f"{tag} '{oid}' lists {len(gone)} object(s) that exist nowhere: "
-                   f"{', '.join(sorted(gone)[:4])}" + (" ..." if len(gone) > 4 else ""))
-            self.r.add("ERROR", plugin, "", oid, msg)
+            rename = {g: n for g in gone if (n := self.td_rename(g))}
+            gone -= set(rename)
+            msgs = []
+            if rename:
+                msgs.append((f"{tag} '{oid}' lists {len(rename)} object(s) under names Tamriel Data has renamed: "
+                             f"{', '.join(sorted(rename)[:4])}" + (" ..." if len(rename) > 4 else ""),
+                             "use their current names"))
+            if gone:
+                msgs.append((f"{tag} '{oid}' lists {len(gone)} object(s) that exist nowhere: "
+                             f"{', '.join(sorted(gone)[:4])}" + (" ..." if len(gone) > 4 else ""),
+                             "drop those entries from the list"))
+            for msg, _action in msgs:
+                self.r.add("ERROR", plugin, "", oid, msg)
             self.item_fixes.append({"plugin": plugin, "tag": tag, "id": oid, "set": {}, "npco": set(),
-                                    "lev_drop": gone, "msgs": [(msg, "drop those entries from the list")]})
+                                    "lev_drop": gone, "rename": rename, "msgs": msgs})
 
     def _texture_stand_ins(self, win):
         """A used object's model exists but some of its textures don't: put the real texture in from an
@@ -1524,6 +1536,17 @@ class World:
             region = fixed
         hist.append((name, region))
 
+    def td_rename(self, oid, tag=None):
+        """The current ID of an object Tamriel Data renamed (its Docs\\Translation.txt maps old IDs to new ones),
+        when that ID exists in this load order (as a `tag` record, if given); else None."""
+        if self._td_renames is None:
+            self._td_renames = read_td_renames(getattr(self, "args_data_dir", None) or "")
+        new = self._td_renames.get((oid or "").lower())
+        if not new:
+            return None
+        known = self.ids[tag] if tag else self.all_ids
+        return new if new.lower() in known else None
+
     def _check_item_refs(self):
         """The winning version of each object: does its script, enchantment and inventory exist?
         A stale override (e.g. a price or balance mod made for an older version of its master) often
@@ -1540,6 +1563,12 @@ class World:
             for field, (ttag, what) in targets.items():
                 val = refs.get(field)
                 if not val or val.lower() in self.ids[ttag]:
+                    continue
+                renamed = self.td_rename(val, ttag)
+                if renamed:
+                    setf[field] = renamed
+                    msgs.append((f"{tag} '{oid}': {what} '{val}' doesn't exist",
+                                 f"use '{renamed}', its current name (Tamriel Data renamed it)"))
                     continue
                 fixed, src = None, None
                 for p2, _t2, _o2, refs2 in reversed(defs[:-1]):
@@ -1560,8 +1589,15 @@ class World:
                 else:
                     action = f"remove it (no other plugin defines {oid}, so there is no working {what} to take)"
                 msgs.append((f"{tag} '{oid}': {what} '{val}' doesn't exist", action))
+            rename = {}
             for item in refs.get("NPCO", ()):
-                if item.lower() not in self.all_ids and item.lower() not in drop:
+                if item.lower() not in self.all_ids and item.lower() not in drop and item.lower() not in rename:
+                    renamed = self.td_rename(item)
+                    if renamed:
+                        rename[item.lower()] = renamed
+                        msgs.append((f"{tag} '{oid}': inventory item '{item}' doesn't exist",
+                                     f"use '{renamed}', its current name (Tamriel Data renamed it)"))
+                        continue
                     drop.append(item.lower())
                     msgs.append((f"{tag} '{oid}': inventory item '{item}' doesn't exist", "remove it from the inventory"))
             if not msgs:
@@ -1569,7 +1605,7 @@ class World:
             for msg, action in msgs:
                 r.add("ERROR", plugin, "", "", msg)
             self.item_fixes.append({"plugin": plugin, "tag": tag, "id": oid, "set": setf,
-                                    "npco": set(drop), "msgs": msgs})
+                                    "npco": set(drop), "rename": rename, "msgs": msgs})
 
     def _check_scripts(self):
         """Object IDs a script names that don't exist once everything is loaded (the game logs
@@ -3665,7 +3701,8 @@ def run_fix(args, plugins, bsas, data_dirs, report, world, only, hidden=frozense
 
     def build_place():
         """(Re)build the placeholder patch: coins and the hidden cell. It loads last."""
-        extra = [r for r in (placeholder_record(world, v["id"]) for v in placeholders.values()) if r]
+        extra = [r for r in (renamed_copy(world, v["id"]) or placeholder_record(world, v["id"])
+                             for v in placeholders.values()) if r]
         if placements:
             extra.append(placeholder_cell([v["id"] for v in placements.values()]))
         write_dated(place_path, [], [], place_log, backup=not place_built[0], extra=extra,

@@ -58,11 +58,19 @@ def fix_item_body(body, fx):
             if s[0] == "INDX":
                 s[1] = struct.pack("<I", kept)
         body = b"".join(pack_sub(n, d) for n, d in subs)
+    rename = fx.get("rename") or {}
     out = []
     in_head = True
     for n, d in iter_subs(body):
         if n in ("FRMR", "MVRF", "NAM0"):
             in_head = False
+        if rename and n == "NPCO" and len(d) >= 36 and cstr(d[4:36]).lower() in rename:
+            new = rename[cstr(d[4:36]).lower()].encode(_T.ENC, MW_ERRORS)[:31]
+            out.append(pack_sub(n, d[:4] + new.ljust(32, b"\0") + d[36:]))     # a fixed 32-byte name
+            continue
+        if rename and n in ("INAM", "CNAM") and fx["tag"] in ("LEVI", "LEVC") and cstr(d).lower() in rename:
+            out.append(pack_sub(n, rename[cstr(d).lower()].encode(_T.ENC, MW_ERRORS) + b"\0"))
+            continue
         if fx.get("head_only") and not in_head and n in fx["set"]:
             out.append(pack_sub(n, d))
             continue
@@ -139,6 +147,56 @@ def apply_item_fixes(path, plugin, fixes, log, backup=True, collect=None):
     if backup:
         log.append((plugin, "", f"backup saved as {os.path.basename(bak)}"))
     return changes
+
+
+def read_td_renames(data_dir):
+    """{old id: new id} from Tamriel Data's Translation.txt ("old:new" per line), wherever its docs went under
+    Data Files\\Docs; {} when it isn't installed. A file of that name that isn't such a map is ignored."""
+    docs = os.path.join(data_dir, "Docs") if data_dir else ""
+    for base, _dirs, files in os.walk(docs) if docs and os.path.isdir(docs) else ():
+        for name in files:
+            if name.lower() != "translation.txt":
+                continue
+            renames = {}
+            try:
+                with open(os.path.join(base, name), encoding="cp1252", errors="replace") as f:
+                    for line in f:
+                        old, sep, new = line.strip().partition(":")
+                        if sep and old and new and len(new) <= 31:
+                            renames[old.strip().lower()] = new.strip()
+            except OSError:
+                continue
+            if len(renames) > 1000 and sum(1 for n in renames.values() if n.lower().startswith("t_")) > 500:
+                return renames
+    return {}
+
+
+def renamed_copy(world, oid):
+    """A script names an object Tamriel Data renamed: a copy of the current object under the old ID (a compiled
+    script keeps the old name, so it can't be rewritten), instead of a placeholder coin. None when there is none."""
+    new = world.td_rename(oid) if hasattr(world, "td_rename") else None
+    found = world.last_def_obj.get(new.lower()) if new else None
+    path = dict(getattr(world, "plugin_paths_by_name", {}) or {}).get(found[0].lower()) if found else None
+    if not path:
+        for p in getattr(world, "plugin_paths", []) or []:
+            if found and os.path.basename(p).lower() == found[0].lower():
+                path = p
+                break
+    if not path or len(oid) > 31:
+        return None
+    try:
+        data = open(path, "rb").read()
+    except OSError:
+        return None
+    for _off, tag, _flags, body in iter_records(data):
+        if tag != found[1]:
+            continue
+        subs = list(iter_subs(body))
+        if not subs or subs[0][0] != "NAME" or cstr(subs[0][1]).lower() != new.lower():
+            continue
+        nb = b"".join(pack_sub(n, oid.encode(_T.ENC, MW_ERRORS) + b"\0" if n == "NAME" else d) for n, d in subs)
+        return tag.encode("ascii") + struct.pack("<III", len(nb), 0, 0) + nb
+    return None
 
 
 def placeholder_record(world, oid):
