@@ -14,6 +14,7 @@ local expandedSounds = require("mwpluginpatches.patches.expandedSounds")
 local talesHandwritingFix = require("mwpluginpatches.patches.talesHandwritingFix")
 local trainerLogUnlock = require("mwpluginpatches.patches.trainerLogUnlock")
 local doorLockCompatibility = require("mwpluginpatches.patches.doorLockCompatibility")
+local coastGuardContraband = require("mwpluginpatches.patches.coastGuardContraband")
 
 local function onInitialized()
     mwse.log("[mwpluginpatches] Initializing unified plugin compatibility patches...")
@@ -86,6 +87,9 @@ local function onInitialized()
     -- 13. abot Door Locks + Accidental Theft Prevention + Modern Lockpicking ordering
     if config.doorLockCompatibilityEnabled then
         doorLockCompatibility.init()
+    end
+    if config.coastGuardContrabandEnabled then
+        coastGuardContraband.init()
     end
 
     mwse.log("[mwpluginpatches] Unified plugin compatibility patches initialized.")

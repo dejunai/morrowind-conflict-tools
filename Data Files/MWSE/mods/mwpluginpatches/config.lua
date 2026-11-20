@@ -85,6 +85,11 @@ function config.isExpandedSoundsActive()
     return tes3.isModActive("Expanded Sounds.esp")
 end
 
+function config.isCoastGuardContrabandActive()
+    return tes3.isModActive("Vvardenfell Distribution - Seyda Neen Coast Guard.ESP")
+        or tes3.findDialogue("contraband") ~= nil
+end
+
 function config.isDoorLockSuiteInstalled()
     local function installed(path)
         return tes3.getFileExists("MWSE/mods/" .. path) or tes3.getFileExists("Data Files/MWSE/mods/" .. path)
@@ -111,8 +116,20 @@ local function getDynamicDefaults()
     local tales = config.isTalesOfSeydaNeenActive()
     local trainerLog = config.isTrainerLogActive()
     local doorLocks = config.isDoorLockSuiteInstalled()
+    local coastGuard = config.isCoastGuardContrabandActive()
 
     return {
+        -- Coast Guard Contraband Bulk Turn-In & Filter
+        coastGuardContrabandEnabled = coastGuard,
+        coastGuardBulkTurnIn = true,
+        coastGuardHideExhausted = true,
+        coastGuardTurnInSkooma = true,
+        coastGuardTurnInRawEbony = true,
+        coastGuardTurnInRawGlass = true,
+        coastGuardTurnInMoonSugar = true,
+        coastGuardTurnInAshStatues = true,
+        coastGuardTurnInVampireDust = false,
+
         -- AutoStartup: Morrowind Comes Alive
         mcaEnabled = mca,
         mcaCompanions = false,

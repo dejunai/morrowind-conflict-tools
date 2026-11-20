@@ -310,4 +310,57 @@ doorCategory:createYesNoButton({
     variable = mwse.mcm.createTableVariable({ id = "doorLockedNotification", table = config }),
 })
 
+-- SECTION 14: SEYDA NEEN COAST GUARD: CONTRABAND
+local cgCategory = page:createCategory(string.format("Seyda Neen Coast Guard: Contraband%s",
+    getStatusText(config.isCoastGuardContrabandActive())))
+
+cgCategory:createYesNoButton({
+    label = "Enable Bulk Contraband Turn-In",
+    description = "Turns in all units of the current contraband type in a single press rather than 1 at a time, "
+        .. "awarding the full 10% market value finder's fee at once.",
+    variable = mwse.mcm.createTableVariable({ id = "coastGuardBulkTurnIn", table = config }),
+})
+
+cgCategory:createYesNoButton({
+    label = "Hide Topic When All Contraband Surrendered",
+    description = "Removes the 'contraband' topic from dialogue once all eligible and enabled contraband has been surrendered.",
+    variable = mwse.mcm.createTableVariable({ id = "coastGuardHideExhausted", table = config }),
+})
+
+cgCategory:createYesNoButton({
+    label = "Turn In: Skooma (50 gold/bottle)",
+    description = "When enabled, skooma is surrendered for bounty. When disabled, skooma is kept in your inventory and the guard checks the next contraband type.",
+    variable = mwse.mcm.createTableVariable({ id = "coastGuardTurnInSkooma", table = config }),
+})
+
+cgCategory:createYesNoButton({
+    label = "Turn In: Raw Ebony (20 gold/chunk)",
+    description = "When enabled, raw ebony is surrendered for bounty. When disabled, raw ebony is kept in your inventory.",
+    variable = mwse.mcm.createTableVariable({ id = "coastGuardTurnInRawEbony", table = config }),
+})
+
+cgCategory:createYesNoButton({
+    label = "Turn In: Raw Glass (20 gold/piece)",
+    description = "When enabled, raw glass is surrendered for bounty. When disabled, raw glass is kept in your inventory.",
+    variable = mwse.mcm.createTableVariable({ id = "coastGuardTurnInRawGlass", table = config }),
+})
+
+cgCategory:createYesNoButton({
+    label = "Turn In: Moon Sugar (5 gold/portion)",
+    description = "When enabled, moon sugar is surrendered for bounty. When disabled, moon sugar is kept in your inventory.",
+    variable = mwse.mcm.createTableVariable({ id = "coastGuardTurnInMoonSugar", table = config }),
+})
+
+cgCategory:createYesNoButton({
+    label = "Turn In: 6th House Ash Statues (25 gold/statue)",
+    description = "When enabled, 6th House ash statues are surrendered for bounty. When disabled, ash statues are kept in your inventory.",
+    variable = mwse.mcm.createTableVariable({ id = "coastGuardTurnInAshStatues", table = config }),
+})
+
+cgCategory:createYesNoButton({
+    label = "Turn In: Vampire Dust (50 gold/portion) [Lore Addition]",
+    description = "Optional lore-friendly extension: allow surrendering forbidden vampire dust to the Census and Excise for a 10% finder's fee (50 gold per portion).",
+    variable = mwse.mcm.createTableVariable({ id = "coastGuardTurnInVampireDust", table = config }),
+})
+
 mwse.mcm.register(template)
