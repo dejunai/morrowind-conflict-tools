@@ -3524,7 +3524,7 @@ def run_fix(args, plugins, bsas, data_dirs, report, world, only, hidden=frozense
                     group[pl] = [fx for fx in group[pl] if fx.get("longpath") not in failed]
                     if not group[pl]:
                         del group[pl]
-        print(f"  Data Files: {len(lp_plan) - len(failed)} file(s) moved to a short path"
+        print(f"  Long paths: {len(lp_plan) - len(failed)} file(s) in Data Files moved to a short path"
               + (f", {len(failed)} could not be" if failed else ""))
     for plugin, fixes in item_esp.items():
         try:
@@ -3535,11 +3535,12 @@ def run_fix(args, plugins, bsas, data_dirs, report, world, only, hidden=frozense
     if generated:
         made = write_generated(os.path.abspath(args.data_dir), os.path.dirname(os.path.abspath(args.data_dir)),
                                generated, log)
-        print(f"  Data Files: {len(made)} silent stand-in file(s) created")
+        print(f"  Missing files: {len(made)} stand-in(s) put in Data Files for files plugins name but no mod has "
+              f"(listed in {GENERATED_RECORD}; --remove-generated takes them out)")
     if shrink:
         n, saved = reduce_textures(os.path.abspath(args.data_dir), os.path.dirname(os.path.abspath(args.data_dir)),
                                    shrink, log)
-        print(f"  Data Files: {n} texture(s) reduced to {TEXTURE_MAX_EDGE}, {saved / 2**30:.1f} GB smaller. Vortex may "
+        print(f"  Large textures: {n} reduced to {TEXTURE_MAX_EDGE}, {saved / 2**30:.1f} GB smaller. Vortex may "
               f"report them as changed outside Vortex: keep the changes, or choose Revert to get the full size back "
               f"(don't save them into the mod, or the staging folder loses its full-size copies).")
 
@@ -3560,11 +3561,11 @@ def run_fix(args, plugins, bsas, data_dirs, report, world, only, hidden=frozense
                             f"rewritten with Windows line endings (original: {bak})"))
             except OSError as e:
                 print(f"  {rel}: NOT changed ({e})")
-        print(f"  Data Files: {done} mesh/animation file(s) had their text keys rewritten with Windows line endings")
+        print(f"  Animation text keys: {done} mesh/animation file(s) rewritten with Windows line endings")
 
     if health:
         dd = os.path.abspath(args.data_dir)
-        print("  Data Files: " + asset_health_module().apply(health, dd, os.path.dirname(dd), sys.modules[__name__],
+        print("  Asset repairs in Data Files: " + asset_health_module().apply(health, dd, os.path.dirname(dd), sys.modules[__name__],
                                                              log, dry=args.dry_run))
 
     patch_path = os.path.join(args.data_dir, PATCH_NAME)
@@ -5008,7 +5009,8 @@ def run_cell_conflicts(args, plugins, collect=False):
             print(f"  (could not write {COLLIDE_DATA}: {e})", file=sys.stderr)
         # each step below reads every plugin again without a word: say what is going on (a minute or more
         # with Tamriel Rebuilt's masters)
-        print("  distant land: checking which hidden objects to leave out of it...", file=sys.stderr, flush=True)
+        print("  Working through distant land (which hidden objects to leave out of it), please be patient...",
+              file=sys.stderr, flush=True)
         try:                                       # MGE XE never sees those hides: keep them out of distant land
             write_ghost_statics(os.path.dirname(os.path.abspath(args.data_dir)), args.data_dir, plugins)
         except (OSError, ValueError, FormatError) as e:
@@ -5020,7 +5022,7 @@ def run_cell_conflicts(args, plugins, collect=False):
         arrivals[dest].append(to)
         doors_at[ckey].append((at, dest, to))
     lost = []
-    print("  Checking for rearranged cells and stranded doors...", file=sys.stderr, flush=True)
+    print("  Working through rearranged cells and stranded doors, please be patient...", file=sys.stderr, flush=True)
     report_rearranged(order, own_pos, deletions, new_objs, labels, pos, name_of, deps, cells_of,
                       doors_at, arrivals, lost)
     if not args.dry_run:
