@@ -97,7 +97,8 @@ from mwdialog_records import (  # noqa: E402,F401
     block_digest, block_key, clean_cell, COND_KINDS, defined_names, extract_record, height_at,
     index_masters, JUNKCELL_SUBTYPES, land_heights, merge_fields, MERGE_FILE_FIELDS, MERGE_GROUPS, merge_levlist,
     MERGE_LISTS, merge_object, MERGE_REF_FIELDS, parse_levlist, plugin_references, record_refs, remap_frmr,
-    rewrite_cell_refs, SPEAKER_SUBS, split_cell, unresolved_refs)
+    rewrite_cell_refs, SPEAKER_SUBS, split_cell, unresolved_refs,
+    late_scales, misplaced_duplicates, drop_cell_refs, deleted_refs_cell)
 from mwdialog_state import (  # noqa: E402,F401
     ADDED_MASTERS_RECORD, CELL_WINNER_PATCH, CELL_WINNERS_FILE, CONFLICT_ANSWERS_FILE, CONFLICT_BLACKLIST_DEFAULT, CONFLICT_BLACKLIST_FILE, conflict_blacklisted,
     CONFLICT_RULE_NOTE, CONFLICT_RULES_HEADER, DISABLED_RECORD, mark_merge_rebuild, MERGE_REBUILD_RECORD, MERGE_RECORD, merged_away,
@@ -3431,7 +3432,8 @@ def run_fix(args, plugins, bsas, data_dirs, report, world, only, hidden=frozense
     health = list(getattr(world, "asset_health", [])) if only is None else []
     if not esp_plans and not esm_plans and not placeholders and not placements and not early and not early_placed \
             and not item_esp and not item_esm and not generated and not shrink and not keyfix and not health \
-            and not (only is None and getattr(world, "longpath_plan", None)):
+            and not (only is None and getattr(world, "longpath_plan", None)) \
+            and not getattr(args, "_cell_deletes", None):
         print("  Nothing that can be fixed automatically.")
         return
     total = print_plan("", esp_plans)
@@ -3671,8 +3673,24 @@ def run_fix(args, plugins, bsas, data_dirs, report, world, only, hidden=frozense
         patch_sources = dict(esm_plans)
         for winner in conflict_winners:
             patch_sources.setdefault(winner, {})
+        cell_deletes = getattr(args, "_cell_deletes", None) or {}
+        for esm in cell_deletes:
+            patch_sources.setdefault(esm, {})
         masters = master_closure(world, plugins, patch_sources)
         extra = list(conflict_records)
+        index_of = {n.lower(): i + 1 for i, (n, _p) in enumerate(masters)}
+        for esm, found in cell_deletes.items():
+            by_cell = defaultdict(list)
+            for f in found:
+                by_cell[f["cell"]].append(f)
+            # shortcut: a cell the patch also carries for another fix gets a second CELL record; merge them if
+            # that ever happens
+            for cell, fs in by_cell.items():
+                extra.append(deleted_refs_cell(fs[0]["head"], [((index_of[esm.lower()] << 24) | f["frmr"], f["name"])
+                                                               for f in fs]))
+                for f in fs:
+                    patch_log.append((PATCH_NAME, f"{esm}: '{f['name']}' placed again in cell {cell}, which its "
+                                                  f"position is not in", "deleted that copy in the patch"))
         for winner in conflict_winners:
             patch_log.append((PATCH_NAME, f"major-master record conflicts resolved in favor of {winner}",
                               "copied the selected record into the ESM patch"))
@@ -3720,7 +3738,8 @@ def run_fix(args, plugins, bsas, data_dirs, report, world, only, hidden=frozense
 
     conflict_records_for_patch, _conflict_winners = major_master_patch_records(
         {name.lower(): path for name, path in plugins})
-    if esm_plans or early or early_placed or item_esm or os.path.exists(patch_path) or conflict_records_for_patch:
+    if esm_plans or early or early_placed or item_esm or os.path.exists(patch_path) or conflict_records_for_patch \
+            or getattr(args, "_cell_deletes", None):
         build_patch()                      # also clears out what older versions put in it
     if placeholders or placements or os.path.exists(place_path):
         build_place()
@@ -6589,6 +6608,7 @@ def fix_omwaddon_masters(args):
         bak = write_inplace(path, recs)
         fixed += 1
         print(f"  {name}: {what} (backup {os.path.basename(bak)})")
+        note_own(name, f"its header names a master that isn't there: {what}")
         with MT.open_log(os.path.join(game_dir, args.fix_log), "a", encoding="utf-8") as lf:
             lf.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {name}: master renamed {what}\n")
     if fixed:
@@ -6802,6 +6822,8 @@ def fix_long_names(args, plugins, bsas):
             bak = write_inplace(path, out)
             fixed += 1
             print(f"  {name}: {changed} record(s) changed (backup {os.path.basename(bak)})")
+            note_own(name, f"{changed} record(s) with names longer than the game keeps (31 characters): cut to "
+                           f"31, or pointed at a short copy of the mesh")
             with MT.open_log(os.path.join(game_dir, args.fix_log), "a", encoding="utf-8") as lf:
                 lf.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {name}: {changed} record(s): names cut to "
                          f"31 characters (short meshes in {SHORT_MESH_RECORD})\n")
@@ -6952,10 +6974,145 @@ def fix_ref_groups(args, plugins):
         changed += 1
         bak = write_inplace(path, out)
         print(f"    moved to the master's group (backup {os.path.basename(bak)})")
+        note_own(name, f"{len(moved)} master reference(s) listed as persistent where the master keeps them "
+                       f"temporary (\"missing in master file\"): moved to the master's group, e.g. "
+                       + ", ".join(f"{o} in {c}" for c, o, g in moved[:3]))
         with MT.open_log(os.path.join(game_dir, args.fix_log), "a", encoding="utf-8") as lf:
             lf.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {name}: {len(moved)} master reference(s) moved to "
                      f"the master's group: " + "; ".join(f"{o} in {c}" for c, o, g in moved) + "\n")
     return changed
+
+
+# What --fix's steps before the scan repaired (or could only report) that is a plugin's own fault, for its
+# <plugin>.bugreport.txt: {plugin: [(repaired?, text)]}
+OWN_FIXES = defaultdict(list)
+
+
+def note_own(plugin, text, repaired=True):
+    """A --fix step found a fault of the plugin itself: listed in its bug report, so the author can be told."""
+    OWN_FIXES[plugin].append((repaired, text))
+
+
+def _cell_ref_used_by(esm, found, plugins):
+    """A plugin (other than the master) that changes this copy of the master's reference in that cell: then
+    deleting the copy could take that change with it, and it is left alone."""
+    for name, path in plugins:
+        if name.lower() == esm.lower() or is_our_patch(name):
+            continue
+        try:
+            with open(path, "rb") as f:
+                data = f.read()
+            masters = [x.lower() for x in plugin_masters(data)]
+        except (OSError, FormatError):
+            continue
+        if esm.lower() not in masters:
+            continue
+        value = struct.pack("<I", ((masters.index(esm.lower()) + 1) << 24) | found["frmr"])
+        if value not in data:
+            continue
+        for off, tag, _flags, body in iter_records(data):
+            if tag != "CELL":
+                continue
+            head, persistent, _n0, temporary = split_cell(body, off)
+            cd = next((d for s_, d in head if s_ == "DATA" and len(d) >= 12), None)
+            if cd is None or struct.unpack_from("<I", cd)[0] & 1 or struct.unpack_from("<ii", cd, 4) != found["cell"]:
+                continue
+            if any(d == value for blk in persistent + temporary for s_, d in blk if s_ == "FRMR"):
+                return name
+    return None
+
+
+def fix_cell_layouts(args, plugins):
+    """--fix: CELL references MGE XE's distant land generator rejects (the game itself copes with them):
+      - an XSCL (scale) after its reference's DATA/DELE: moved before it
+      - the plugin's own reference placed identically in two exterior cells, one of them not the cell its
+        position is in: the misplaced copy goes
+    An .esp is repaired in place (.bak first, date kept). An .esm is never edited: its misplaced copy is deleted in
+    the ESM patch (unless another plugin changes that copy), its late scales are only reported. Each finding goes
+    in the plugin's bug report. Each plugin's result is cached by its size and date (TR_Mainland takes seconds)."""
+    data_dir = os.path.abspath(args.data_dir)
+    game_dir = os.path.dirname(data_dir)
+    ah = asset_health_module()
+    cache = ah.shared_cache(game_dir)
+    args._cell_deletes = {}
+    lines = []
+    for name, path in plugins:
+        if is_our_patch(name):
+            continue
+        try:
+            stamp = ah.stamp_of(os.stat(path))
+        except OSError:
+            continue
+        key = "cellrefs:" + name.lower()
+        got = cache.get(key, stamp)
+        if got is None:
+            try:
+                with open(path, "rb") as f:
+                    data = f.read()
+                scales = late_scales(data)[1]
+                found, left = misplaced_duplicates(data)
+            except (OSError, FormatError, struct.error) as e:
+                lines.append(f"  {name}: not checked ({e})")
+                continue
+            got = {"s": scales, "l": left,
+                   "f": [dict(f, cell=list(f["cell"]), head=[[n, d.hex()] for n, d in f["head"]]) for f in found]}
+            cache.put(key, stamp, got)
+        if not (got["s"] or got["f"] or got["l"]):
+            continue
+        found = [dict(f, cell=tuple(f["cell"]), head=[[n, bytes.fromhex(d)] for n, d in f["head"]])
+                 for f in got["f"]]
+        dup_text = "; ".join(f"'{f['name']}' (FRMR {f['frmr']:#x}) placed again in cell {f['cell']}, which its "
+                             f"position is not in" for f in found[:5]) + (" ..." if len(found) > 5 else "")
+        scale_text = f"{got['s']} reference scale(s) (XSCL) after the reference's DATA/DELE"
+        if got["l"]:
+            lines.append(f"  {name}: {got['l']} reference(s) placed in more than one exterior cell with different "
+                         f"data; left for review")
+            note_own(name, f"{got['l']} reference(s) placed in more than one exterior cell with different data "
+                           f"(MGE XE's distant land rejects them); not changed", repaired=False)
+        if name.lower().endswith(FIXABLE_EXT) and (got["s"] or found):
+            what = ", ".join(x for x in (scale_text if got["s"] else "",
+                                         f"{len(found)} misplaced duplicate placement(s)" if found else "") if x)
+            if args.dry_run:
+                lines.append(f"  {name}: {what} (dry run: not changed)")
+                continue
+            with open(path, "rb") as f:
+                data = f.read()
+            data = late_scales(data)[0]
+            if found:
+                data = drop_cell_refs(data, found)
+            bak = write_inplace(path, [data[o:o + 16 + len(b)] for o, _t, _f, b in iter_records(data)])
+            lines.append(f"  {name}: {what} repaired (backup {os.path.basename(bak)})")
+            if got["s"]:
+                note_own(name, scale_text + " (MGE XE's distant land rejects them): moved before it")
+            if found:
+                note_own(name, dup_text + ": that copy removed")
+            with MT.open_log(os.path.join(game_dir, args.fix_log), "a", encoding="utf-8") as lf:
+                lf.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {name}: CELL references repaired: {what}\n")
+            continue
+        if got["s"]:
+            lines.append(f"  {name}: {scale_text}; a master is never edited, only reported")
+            note_own(name, scale_text + " (MGE XE's distant land rejects them); not changed (a master)", repaired=False)
+        keep = []
+        for f in found:
+            user = _cell_ref_used_by(name, f, plugins)
+            if user:
+                lines.append(f"  {name}: '{f['name']}' placed again in cell {f['cell']}; {user} changes that copy, "
+                             f"so it is left alone")
+                note_own(name, f"'{f['name']}' (FRMR {f['frmr']:#x}) placed again in cell {f['cell']}, which its "
+                               f"position is not in; not changed ({user} changes that copy)", repaired=False)
+            else:
+                keep.append(f)
+        if keep:
+            args._cell_deletes[name] = keep
+            lines.append(f"  {name}: {len(keep)} misplaced duplicate placement(s) deleted in {PATCH_NAME}")
+            note_own(name, "; ".join(f"'{f['name']}' (FRMR {f['frmr']:#x}) placed again in cell {f['cell']}, which "
+                                     f"its position is not in" for f in keep[:5])
+                     + f": that copy deleted in {PATCH_NAME}")
+    cache.flush()
+    if lines:
+        print("\n" + "=" * 70 + "\nCELL REFERENCES MGE XE'S DISTANT LAND REJECTS\n" + "=" * 70)
+        for line in lines:
+            print(line)
 
 
 def drop_performers_patch(args):
@@ -9001,6 +9158,7 @@ def _main(argv=None):
         plugins, bsas, data_dirs = resolve(args, report)     # those plugins now find their masters
     if args.fix:
         fix_ref_groups(args, plugins)
+        fix_cell_layouts(args, plugins)
     if args.fix and fix_long_names(args, plugins, bsas) and not args.dry_run:
         plugins, bsas, data_dirs = resolve(args, report)
     if args.fix and not args.no_doubled:
@@ -9142,6 +9300,10 @@ def write_bug_reports(args, plugins, report, world):
     for plugin, off, op, desc, label, topic, info in report.fixes:
         if plugin and plugin.lower() in names and not is_our_patch(plugin):
             per[plugin.lower()]["repaired"].append(f"  - {label}: {desc}")
+    for plugin, items in OWN_FIXES.items():           # found by --fix's steps before the scan
+        if plugin.lower() in names and not is_our_patch(plugin):
+            for repaired, text in items:
+                per[plugin.lower()]["repaired" if repaired else "WARN"].append(f"  - {text}")
     for item in getattr(world, "generated", []):
         rel, why = item[0], item[1]
         pl = item[3] if len(item) > 3 else ""

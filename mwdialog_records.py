@@ -80,6 +80,118 @@ def rewrite_cell_refs(body, off, drops, moves, remaps=None, rename=None):
     return b"".join(pack_sub(n, d) for n, d in out), changes
 
 
+# ---------------------------------------------------------------------------------------------------------
+# CELL references laid out so MGE XE's distant land generator rejects them (mwdialog_check --fix)
+# ---------------------------------------------------------------------------------------------------------
+_REF_BREAK = {"FRMR", "MVRF", "NAM0"}
+
+
+def late_scales(data):
+    """(new bytes, n): each XSCL after its reference's DATA/DELE moved before it (the game reads it either way;
+    MGE XE's distant land generator rejects the reference)."""
+    out, n = [], 0
+    for off, tag, _flags, body in iter_records(data):
+        raw = data[off:off + 16 + len(body)]
+        if tag == "CELL" and b"XSCL" in body:
+            subs = [[s_, d] for s_, d in iter_subs(body, off)]
+            moved, i = 0, 0
+            while i < len(subs):
+                if subs[i][0] != "FRMR":
+                    i += 1
+                    continue
+                end = i + 1
+                while end < len(subs) and subs[end][0] not in _REF_BREAK:
+                    end += 1
+                term = next((j for j in range(i + 1, end) if subs[j][0] in ("DATA", "DELE")), None)
+                late = [x for x in subs[term + 1:end] if x[0] == "XSCL"] if term is not None else []
+                if late:
+                    subs[term:end] = late + [subs[term]] + [x for x in subs[term + 1:end] if x[0] != "XSCL"]
+                    moved += len(late)
+                i = end
+            if moved:
+                nb = b"".join(pack_sub(s_, d) for s_, d in subs)
+                raw = raw[:4] + struct.pack("<I", len(nb)) + raw[8:16] + nb
+                n += moved
+        out.append(raw)
+    return (b"".join(out), n) if n else (data, 0)
+
+
+def _exterior_cells(data):
+    for off, tag, _flags, body in iter_records(data):
+        if tag != "CELL":
+            continue
+        head, persistent, _nam0, temporary = split_cell(body, off)
+        cd = next((d for s_, d in head if s_ == "DATA" and len(d) >= 12), None)
+        if cd is None or struct.unpack_from("<I", cd)[0] & 1:
+            continue
+        yield off, struct.unpack_from("<ii", cd, 4), head, persistent + temporary
+
+
+def misplaced_duplicates(data):
+    """The plugin's own references placed in two exterior cells, identical in both, one of them the cell their
+    position is in: ([{"cell": (x, y) of the wrong copy, "off": its CELL record, "frmr": the FRMR value, "name":
+    the object id, "head": [[sub, data]] of that CELL's header}], n copies that differ, left for review)."""
+    import math
+    seen, dup = set(), set()
+    for _off, _cell, _head, blocks in _exterior_cells(data):
+        for blk in blocks:
+            fr = next((d for s_, d in blk if s_ == "FRMR" and len(d) >= 4), None)
+            if fr is not None and not struct.unpack_from("<I", fr)[0] >> 24:
+                v = struct.unpack_from("<I", fr)[0]
+                (dup if v in seen else seen).add(v)
+    if not dup:
+        return [], 0
+    copies = {v: [] for v in dup}
+    for off, cell, head, blocks in _exterior_cells(data):
+        for blk in blocks:
+            fr = next((d for s_, d in blk if s_ == "FRMR" and len(d) >= 4), None)
+            v = struct.unpack_from("<I", fr)[0] if fr else None
+            if v not in copies:
+                continue
+            pos = next((d for s_, d in blk if s_ == "DATA" and len(d) >= 24), None)
+            home = None
+            if pos is not None:
+                x, y = struct.unpack_from("<ff", pos)
+                if math.isfinite(x) and math.isfinite(y):
+                    home = (math.floor(x / 8192), math.floor(y / 8192))
+            name = cstr(next((d for s_, d in blk if s_ == "NAME"), b""))
+            copies[v].append((off, cell, home, b"".join(pack_sub(s_, d) for s_, d in blk), name, head))
+    found, left = [], 0
+    for v, cs in copies.items():
+        right = [c for c in cs if c[1] == c[2]]
+        if len(right) == 1 and len({c[3] for c in cs}) == 1:
+            found += [{"cell": c[1], "off": c[0], "frmr": v, "name": c[4], "head": c[5]}
+                      for c in cs if c[1] != right[0][1]]
+        else:
+            left += len(cs) - 1
+    return found, left
+
+
+def drop_cell_refs(data, found):
+    """data without the reference copies misplaced_duplicates() found."""
+    drops = defaultdict(set)
+    for f in found:
+        drops[f["off"]].add(f["frmr"])
+    out = []
+    for off, tag, _flags, body in iter_records(data):
+        raw = data[off:off + 16 + len(body)]
+        if off in drops:
+            nb, _changes = rewrite_cell_refs(body, off, drops[off], {})
+            raw = raw[:4] + struct.pack("<I", len(nb)) + raw[8:16] + nb
+        out.append(raw)
+    return b"".join(out)
+
+
+def deleted_refs_cell(head, refs):
+    """A CELL record (exterior: its NAME and DATA from `head`) that marks references of a master deleted:
+    refs [(FRMR value as the patch numbers its masters, object id)]."""
+    body = b"".join(pack_sub(s_, d) for s_, d in head if s_ in ("NAME", "DATA"))
+    for v, name in refs:
+        body += (pack_sub("FRMR", struct.pack("<I", v)) + pack_sub("NAME", name.encode(_T.ENC, MW_ERRORS) + b"\0")
+                 + pack_sub("DELE", b"\0\0\0\0"))
+    return b"CELL" + struct.pack("<III", len(body), 0, 0) + body
+
+
 def extract_record(path, tag, oid):
     """Raw bytes of the last record of this type with this NAME in a plugin (None if absent)."""
     found = None

@@ -1,13 +1,13 @@
-"""Tidy's asset check repairs a plugin's CELL references MGE XE's distant land generator chokes on: an XSCL after
-the reference's DATA (Tamriel Rebuilt - Yet Another Border Fix.esp), and one reference placed identically in two
-exterior cells, one of them not the cell its position is in (TR_Mainland.esm: ex_cave_entrance_wg_01, FRMR 0x03B13D,
-in (27,-24) as well as (27,-26))."""
+"""--fix repairs CELL references MGE XE's distant land generator rejects: an XSCL after the reference's DATA
+(Tamriel Rebuilt - Yet Another Border Fix.esp), and one reference placed identically in two exterior cells, one of
+them not the cell its position is in (TR_Mainland.esm: ex_cave_entrance_wg_01, FRMR 0x03B13D, in (27,-24) as well as
+(27,-26)). An .esp is repaired in place; an .esm is never edited: its misplaced copy is deleted in the ESM patch.
+Each finding goes in the plugin's bug report."""
 import os
 import struct
+import types
 
 from conftest import m, plugin, rec, sub, z
-
-import mwdialog_assets as ah
 
 
 def exterior(x, y, refs):
@@ -27,32 +27,83 @@ def subs_of(data, x, y):
             return [n for n, _d in subs]
 
 
-def test_tidy_moves_late_scales_and_drops_the_misplaced_copy(tmp_path):
-    mod = tmp_path / "staging" / "Border Fix"
-    mod.mkdir(parents=True)
-    path = mod / "Border Fix.esp"
-    door = ref(0x03B13D, "ex_cave_entrance_wg_01", 227365.625, -207674.969)
-    plugin(path, [], [exterior(11, -57, [ref(8103, "flora_tree_gl_08", 90200.0, -466000.0, scale_last=True)]),
-                      exterior(27, -24, [door]), exterior(27, -26, [door])])
+DOOR = ref(0x03B13D, "ex_cave_entrance_wg_01", 227365.625, -207674.969)
+TREE = ref(8103, "flora_tree_gl_08", 90200.0, -466000.0, scale_last=True)
+
+
+def setup(tmp_path, name):
+    data_dir = tmp_path / "Morrowind" / "Data Files"
+    data_dir.mkdir(parents=True)
+    path = data_dir / name
+    plugin(path, [], [exterior(11, -57, [TREE]), exterior(27, -24, [DOOR]), exterior(27, -26, [DOOR])])
     os.utime(path, (1000000000, 1000000000))                 # the plugin's date: its place in the load order
-    issues, fixes = ah.check_folder(str(mod), m, str(tmp_path / "Data Files"))
-    cell = [f for f in fixes if f[0] == "cellrefs"]
-    assert cell and cell[0][3] == {"xscl": 1, "dupes": 1}, issues
-    done, skipped = ah.apply_folder(str(mod), cell, m, str(tmp_path), "Border Fix")
-    assert (done, skipped) == (1, [])
+    m.OWN_FIXES.clear()
+    args = types.SimpleNamespace(data_dir=str(data_dir), dry_run=False, fix_log="fix.log")
+    return data_dir, path, args
+
+
+def test_an_esp_is_repaired_in_place_and_its_bug_report_says_so(tmp_path):
+    _data_dir, path, args = setup(tmp_path, "Border Fix.esp")
+    m.fix_cell_layouts(args, [(path.name, str(path))])
     data = path.read_bytes()
     assert subs_of(data, 11, -57) == ["NAME", "DATA", "FRMR", "NAME", "XSCL", "DATA"]
     assert "FRMR" not in subs_of(data, 27, -24) and "FRMR" in subs_of(data, 27, -26)
     assert os.stat(path).st_mtime == 1000000000
-    kept = [os.path.join(b, f) for b, _d, fs in os.walk(mod / "Off") for f in fs]
-    assert len(kept) == 1 and kept[0].endswith("Border Fix.esp")
-    assert ah.cell_ref_repairs(data, m)[1:] == (0, 0, 0)
+    assert m.late_scales(data)[1] == 0 and m.misplaced_duplicates(data) == ([], 0)
+    texts = [t for _r, t in m.OWN_FIXES["Border Fix.esp"]]
+    assert any("XSCL" in t for t in texts) and any("ex_cave_entrance_wg_01" in t for t in texts)
+    assert not args._cell_deletes
+
+
+def test_an_esm_is_not_edited_its_misplaced_copy_is_deleted_in_the_esm_patch(tmp_path):
+    _data_dir, path, args = setup(tmp_path, "TR_Mainland.esm")
+    before = path.read_bytes()
+    m.fix_cell_layouts(args, [(path.name, str(path))])
+    assert path.read_bytes() == before
+    [found] = args._cell_deletes["TR_Mainland.esm"]
+    assert (found["cell"], found["frmr"], found["name"]) == ((27, -24), 0x03B13D, "ex_cave_entrance_wg_01")
+    assert [r for r, t in m.OWN_FIXES["TR_Mainland.esm"] if "XSCL" in t] == [False]     # reported, not changed
+    cell = m.deleted_refs_cell(found["head"], [((1 << 24) | found["frmr"], found["name"])])
+    body = cell[16:]
+    assert [n for n, _d in m.iter_subs(body)] == ["NAME", "DATA", "FRMR", "NAME", "DELE"]
+    assert dict(m.iter_subs(body))["FRMR"] == struct.pack("<I", 0x0103B13D)
+
+
+def test_a_copy_another_plugin_changes_is_left_alone(tmp_path):
+    data_dir, path, args = setup(tmp_path, "TR_Mainland.esm")
+    other = data_dir / "Moves the door.esp"
+    plugin(other, [("TR_Mainland.esm", path.stat().st_size)],
+           [exterior(27, -24, [ref(0x0103B13D, "ex_cave_entrance_wg_01", 0.0, 0.0)])])
+    m.fix_cell_layouts(args, [(path.name, str(path)), (other.name, str(other))])
+    assert not args._cell_deletes
+    assert any("Moves the door.esp changes that copy" in t for _r, t in m.OWN_FIXES["TR_Mainland.esm"])
 
 
 def test_copies_that_differ_are_left_for_review(tmp_path):
-    a = ref(0x0100, "door_a", 227365.625, -207674.969)
-    b = ref(0x0100, "door_b", 227365.625, -207674.969)
     path = tmp_path / "X.esp"
-    plugin(path, [], [exterior(27, -24, [a]), exterior(27, -26, [b])])
-    data = path.read_bytes()
-    assert ah.cell_ref_repairs(data, m) == (data, 0, 0, 1)
+    plugin(path, [], [exterior(27, -24, [ref(0x0100, "door_a", 227365.625, -207674.969)]),
+                      exterior(27, -26, [ref(0x0100, "door_b", 227365.625, -207674.969)])])
+    assert m.misplaced_duplicates(path.read_bytes()) == ([], 1)
+
+
+def test_a_fix_run_writes_the_deletion_into_the_esm_patch(tmp_path):
+    g = tmp_path / "Morrowind"
+    df = g / "Data Files"
+    df.mkdir(parents=True)
+    (g / "Morrowind.ini").write_text("[Game Files]\n")
+    master = df / "TR_Mainland.esm"
+    plugin(master, [], [exterior(27, -24, [DOOR]), exterior(27, -26, [DOOR])])
+    m.OWN_FIXES.clear()
+    m.main([str(df), "--plugins", master.name, "--no-vortex", "--no-archive-lookup", "--fix", "--yes",
+            "--fix-log", str(g / "mwdialog_fixes.log")])
+    deleted = []
+    for off, tag, _f, body in m.iter_records((df / m.PATCH_NAME).read_bytes()):
+        if tag == "CELL":
+            subs = list(m.iter_subs(body, off))
+            cell = struct.unpack_from("<ii", next(d for n, d in subs if n == "DATA"), 4)
+            deleted += [(cell, struct.unpack("<I", d)[0]) for n, d in subs if n == "FRMR"] if any(
+                n == "DELE" for n, _d in subs) else []
+    assert deleted == [((27, -24), 0x0103B13D)]
+    assert master.read_bytes().count(b"ex_cave_entrance_wg_01") == 2          # the master itself unchanged
+    reports = [r.read_text(encoding="utf-8") for r in tmp_path.rglob("TR_Mainland*.bugreport.txt")]
+    assert any("ex_cave_entrance_wg_01" in r and "deleted in" in r for r in reports), reports   # for the author
