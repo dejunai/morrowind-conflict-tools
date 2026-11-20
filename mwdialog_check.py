@@ -2523,6 +2523,40 @@ def split_exact_groups(args):
     return out
 
 
+def drop_grass_plugins(plugin_paths):
+    """(kept, left out): an MGE XE grass plugin is read by the distant land generator from Data Files\\Grass and
+    never loaded by the game. One in the load order (put in Data Files by mistake) is never checked, sorted,
+    fixed or patched. Each plugin's record tags are skimmed first: anything but STAT/ACTI/CELL rules it out."""
+    import struct
+    grass_tags = {b"TES3", b"STAT", b"ACTI", b"CELL"}
+
+    def only_grass_tags(path):
+        try:
+            with open(path, "rb") as f:
+                while True:
+                    head = f.read(16)
+                    if len(head) < 16:
+                        return True
+                    if head[:4] not in grass_tags:
+                        return False
+                    f.seek(struct.unpack_from("<I", head, 4)[0], 1)
+        except OSError:
+            return False
+
+    kept, dropped = [], []
+    for p in plugin_paths:
+        if p.lower().endswith(".esp") and only_grass_tags(p):
+            try:
+                from vortex_tidy import is_grass_plugin
+            except ImportError:
+                is_grass_plugin = None
+            if is_grass_plugin is not None and is_grass_plugin(p):
+                dropped.append(p)
+                continue
+        kept.append(p)
+    return kept, dropped
+
+
 def resolve(args, report):
     """Return (list of (name, path) in load order, list of BSA paths)."""
     data_dirs = [args.data_dir]
@@ -2585,6 +2619,10 @@ def resolve(args, report):
             if p:
                 bsa_paths.append(p)
 
+    plugin_paths, grass = drop_grass_plugins(plugin_paths)
+    if grass:
+        print("MGE XE grass plugin(s) left out of this run (they belong in Data Files\\Grass, not the load "
+              "order): " + ", ".join(os.path.basename(p) for p in grass), file=sys.stderr)
     if not preserve_order:
         plugin_paths = sort_vanilla(plugin_paths)
     return [(os.path.basename(p), p) for p in plugin_paths], bsa_paths, data_dirs
