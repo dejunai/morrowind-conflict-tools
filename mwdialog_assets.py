@@ -28,7 +28,6 @@ print = MT.printer()  # noqa: A001
 
 TEX_DIRS = ("textures", "icons", "bookart", "splash")
 SOUND_DIRS = ("sound", "music")
-SPLASH_DDS_PIXELS = 1024 * 1024    # bigger splash TGAs get a DDS beside them (2048x1024 is 8 MB uncompressed)
 ASSET_DIRS = ("meshes",) + TEX_DIRS + SOUND_DIRS + ("video", "fonts")
 NIF_HEAD = b"NetImmerse File Format, Version 4.0.0.2"
 UNUSED_RECORD = "mwdialog_unused_assets.txt"
@@ -432,7 +431,7 @@ def kf_model_name(rel):
 
 
 FEATURE_OF = {"snd": "sound", "tex": "textures", "keys": "text keys", "abs": "texture paths",
-              "broken": "broken", "orphan": "orphaned", "unused": "unused"}
+              "broken": "broken", "orphan": "orphaned", "unused": "unused", "splash": "splash screens"}
 
 
 def broken_dest(root_or_mod, rel, sub="broken", plugin=None):
@@ -788,6 +787,114 @@ def _walk(data_dir, tops):
             for f in fs:
                 full = os.path.join(dp, f)
                 yield top, os.path.relpath(full, data_dir), full
+
+
+# ---------------------------------------------------------------------------------------------------------
+# Loading-screen splashes: the game shows only TGAs (a DDS-only Splash folder showed none), and reads RLE TGAs. A
+# 2048x1024 one is 6-8 MB in memory, a 4096x2048 one 24-32: at most 1024 wide is plenty for a loading screen.
+# ---------------------------------------------------------------------------------------------------------
+SPLASH_MAX_WIDTH = 1024
+SPLASH_IMAGE_EXTS = (".tga", ".dds", ".bmp", ".png", ".jpg", ".jpeg")
+
+
+def _tga_width(path):
+    try:
+        with open(path, "rb") as f:
+            head = f.read(18)
+        return struct.unpack_from("<H", head, 12)[0] if len(head) == 18 else 0
+    except OSError:
+        return 0
+
+
+def _tga_read(data):
+    """(width, height, bytes per pixel, rows top to bottom) of an uncompressed or RLE true-colour TGA."""
+    id_len, cmap_type, kind = data[0], data[1], data[2]
+    cmap_len, cmap_depth = struct.unpack_from("<H", data, 5)[0], data[7]
+    w, h = struct.unpack_from("<HH", data, 12)
+    depth, desc = data[16], data[17]
+    if cmap_type or kind not in (2, 10) or depth not in (24, 32):
+        raise ValueError(f"not a 24/32-bit true-colour TGA (type {kind}, {depth} bits)")
+    bpp = depth // 8
+    pos = 18 + id_len + cmap_len * ((cmap_depth + 7) // 8)
+    need = w * h * bpp
+    if kind == 2:
+        pixels = data[pos:pos + need]
+    else:
+        out = bytearray()
+        while len(out) < need:
+            head = data[pos]
+            pos += 1
+            count = (head & 0x7F) + 1
+            if head & 0x80:
+                out += data[pos:pos + bpp] * count
+                pos += bpp
+            else:
+                out += data[pos:pos + count * bpp]
+                pos += count * bpp
+        pixels = bytes(out[:need])
+    rows = [pixels[i * w * bpp:(i + 1) * w * bpp] for i in range(h)]
+    if not desc & 0x20:                       # stored bottom row first
+        rows.reverse()
+    return w, h, bpp, rows
+
+
+def _tga_rle_row(row, bpp):
+    out = bytearray()
+    n = len(row) // bpp
+    px = [row[i * bpp:(i + 1) * bpp] for i in range(n)]
+    i = 0
+    while i < n:
+        j = i + 1
+        while j < n and j - i < 128 and px[j] == px[i]:
+            j += 1
+        if j - i > 1:
+            out.append(0x80 | (j - i - 1))
+            out += px[i]
+            i = j
+            continue
+        j = i + 1
+        while j < n and j - i < 128 and not (j + 1 < n and px[j] == px[j + 1]):
+            j += 1
+        out.append(j - i - 1)
+        out += b"".join(px[i:j])
+        i = j
+    return bytes(out)
+
+
+def _tga_write(w, h, bpp, rows):
+    """Bottom-up like the game's own splashes; RLE when that is smaller."""
+    bottom_up = rows[::-1]
+    raw = b"".join(bottom_up)
+    rle = b"".join(_tga_rle_row(r, bpp) for r in bottom_up)
+    kind, body = (10, rle) if len(rle) < len(raw) else (2, raw)
+    return struct.pack("<BBBHHBHHHHBB", 0, 0, kind, 0, 0, 0, 0, 0, w, h, bpp * 8, 8 if bpp == 4 else 0) + body
+
+
+def _texconv_tga(path, texconv, tmp, width=None, height=None):
+    """(width, height, bytes per pixel, rows) of `path` converted by texconv to a 32-bit TGA, resized if asked."""
+    a = [texconv, "-nologo", "-y", "-ft", "tga", "-f", "B8G8R8A8_UNORM", "-if", "FANT", "-o", tmp]
+    if width:
+        a += ["-w", str(width), "-h", str(height)]
+    res = run_tool(a + [path])
+    out = os.path.join(tmp, os.path.splitext(os.path.basename(path))[0] + ".tga")
+    if res.returncode or not os.path.exists(out):
+        raise OSError("texconv: " + (res.stdout + res.stderr).strip()[-100:])
+    with open(out, "rb") as f:
+        result = _tga_read(f.read())
+    os.remove(out)
+    return result
+
+
+def splash_tga(path, texconv, tmp):
+    """A splash image (TGA, DDS, BMP...) as the TGA bytes to ship: at most SPLASH_MAX_WIDTH wide (aspect kept),
+    24-bit unless it has alpha, RLE when smaller."""
+    w, h, bpp, rows = _texconv_tga(path, texconv, tmp)
+    if w > SPLASH_MAX_WIDTH:
+        w, h, bpp, rows = _texconv_tga(path, texconv, tmp, SPLASH_MAX_WIDTH, max(1, round(h * SPLASH_MAX_WIDTH / w)))
+    if all(min(row[3::4]) == 255 for row in rows):           # no alpha: 24-bit
+        rows = [b"".join(row[i:i + 3] for i in range(0, len(row), 4)) for row in rows]
+        bpp = 3
+    return _tga_write(w, h, bpp, rows)
 
 
 def _tga_pixels(path):
@@ -1610,7 +1717,7 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None, stats=None):
         stamp = stamp_of(st)
         key = mod_key + norm_rel(rel)
         got = cache.get(key, stamp)
-        if got is not None and got.get("c"):
+        if got is not None and got.get("c") and top != "splash":     # splashes: a few, always looked at
             if top == "meshes":
                 tn = (got.get("f") or {}).get("tn")
                 if tn is None and low.endswith(".nif"):        # an older record: the model is read once
@@ -1649,13 +1756,23 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None, stats=None):
             issues.append(("ERROR", rel, "empty file (0 bytes) -> kept in Off\\...\\broken\\, stand-in put there"))
             fixes.append(("broken", full, rel, "empty"))
             continue
-        if top == "splash" and low.endswith(".tga") and not os.path.exists(full[:-4] + ".dds") \
-                and _tga_pixels(full) > SPLASH_DDS_PIXELS:
-            # a big loading screen as TGA is held uncompressed; the engine loads a DDS of the same name instead.
-            # The TGA stays: the splash list may be read by name.
-            issues.append(("WARN", rel, "large splash screen as TGA -> a DDS beside it (compressed, no mipmaps); "
-                                        "the TGA stays"))
-            fixes.append(("tex", full, rel, {"convert": ".dds", "nomips": True, "keep": True}))
+        if top == "splash" and low.endswith(SPLASH_IMAGE_EXTS):
+            # the game shows only TGA splashes; one at most SPLASH_MAX_WIDTH wide is left as it is
+            if low.endswith(".tga"):
+                if _tga_width(full) > SPLASH_MAX_WIDTH:
+                    issues.append(("WARN", rel, f"splash screen wider than {SPLASH_MAX_WIDTH} -> {SPLASH_MAX_WIDTH} wide, "
+                                                f"RLE TGA (the original kept in Off)"))
+                    fixes.append(("splash", full, rel, None))
+            elif rel.replace("/", "\\").count("\\") > 1:
+                pass                                 # Splash\<folder>\: the game never picks it; only a mod's code does
+            elif os.path.isdir(os.path.join(root, "MWSE")):
+                # a mod with MWSE code may load its own splash by this very name (Regional Splash Screens did)
+                issues.append(("WARN", rel, "splash screen that is not a TGA; the game shows only TGA splashes, but "
+                                            "this mod's MWSE code may load it by name, so it is left as it is"))
+            else:
+                issues.append(("ERROR", rel, "splash screen that is not a TGA (the game shows only TGA splashes) -> "
+                                             f"RLE TGA, at most {SPLASH_MAX_WIDTH} wide (the original kept in Off)"))
+                fixes.append(("splash", full, rel, None))
             continue
         if top in TEX_DIRS and low.endswith(".dds"):
             msgs, job = _examine_dds(rel, full, size, m, want_mips, pending[5])
@@ -1758,7 +1875,7 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None, stats=None):
     return issues, fixes
 
 
-FIX_ORDER = {"ascii": 0, "broken": 1, "orphan": 2, "snd": 3, "keys": 4, "abs": 5, "tex": 6}
+FIX_ORDER = {"ascii": 0, "broken": 1, "orphan": 2, "snd": 3, "keys": 4, "abs": 5, "tex": 6, "splash": 6}
 
 
 def _backup_in_mod(root, rel, full, plugin_name, feature="converted"):
@@ -1967,6 +2084,27 @@ def apply_folder(root, fixes, m, game_dir, plugin_name):
                 if not os.path.exists(dest):
                     shutil.copy2(full, dest)
                 m.replace_asset_in_place(full, m.stand_in_bytes(rel))
+                done += 1
+                continue
+            if kind == "splash":                      # at most 1024 wide, RLE TGA; a DDS/BMP... becomes a .tga
+                if not texconv:
+                    skipped.append(f"{rel} (texconv.exe not found)")
+                    continue
+                os.makedirs(tmp, exist_ok=True)
+                new = splash_tga(full, texconv, tmp)
+                target = full if full.lower().endswith(".tga") else os.path.splitext(full)[0] + ".tga"
+                if target != full and os.path.exists(target):
+                    skipped.append(f"{rel} (a TGA of that name exists already)")
+                    continue
+                if not was_fixed(rel) or full in orig_rel:
+                    _backup_in_mod(root, orig_rel.get(full, rel), full, plugin_name, FEATURE_OF[kind])
+                if target == full:
+                    m.replace_asset_in_place(full, new)          # in place: Vortex's hard link stays
+                else:
+                    with open(target, "wb") as f:
+                        f.write(new)
+                    os.remove(full)                              # its original is in Off
+                mark_fixed(rel)
                 done += 1
                 continue
             if kind == "keys":

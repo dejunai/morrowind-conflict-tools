@@ -21,6 +21,7 @@ tes3 = {
   player = {}, mobilePlayer = { isSneaking = false },
   getLocked = function(p) return p.reference.locked end,
   lock = function(p) p.reference.locked, p.reference.level = true, p.level end,
+  unlock = function(p) p.reference.locked = false; if p.reference.lockNode then p.reference.lockNode.locked = false end end,
   getOwner = function(p) return p.reference.owner end,
   hasOwnershipAccess = function(p) return p.target.access end,
   playSound = function(p) sounds[#sounds + 1] = p.sound end,
@@ -49,18 +50,17 @@ local function check(ok, message) if not ok then error(message, 2) end end
 package.path = [[''' + PATCHES + r'''\?.lua;]] .. package.path
 require("doorLockCompatibility").init()
 
-local opened
-function tes3.player:activate(target)
-  local innerResult = handlers[9200]({ target = target, activator = self })
-  check(innerResult == nil, "recursive exit activation is allowed")
-  opened = not target.lockNode.locked and target.data.ab01drlkbl == 1
-end
-
 local outside = { isInterior = false, isOrBehavesAsExterior = true }
 local exit = door(outside, false); exit.locked = true; exit.lockNode = { locked = true, level = 38 }
-check(activate(exit) == false and opened, "locked interior exit opens silently")
-check(exit.lockNode.locked and exit.data.ab01drlkbl == nil, "exit lock and temporary abot bypass are restored")
+check(activate(exit) == nil, "locked interior exit allows activation through without sneak or pick")
+check(not exit.locked and not exit.lockNode.locked, "locked interior exit is unlocked")
+check(exit.data.ab01drlkbl == 1, "abot bypass flag is set during activation")
+handlers[9000]({ target = exit })
+check(exit.data.ab01drlkbl == nil, "abot bypass flag is cleaned up after abot")
 check(#sounds == 0 and #notices == 0, "interior exit produces no lock alert")
+
+local unlockedExit = door(outside, false); unlockedExit.locked = false
+check(activate(unlockedExit) == nil, "unlocked owned interior exit allows activation without sneak")
 
 local absent = door(cell(), false)
 check(activate(absent) == false, "standing activation is consumed")

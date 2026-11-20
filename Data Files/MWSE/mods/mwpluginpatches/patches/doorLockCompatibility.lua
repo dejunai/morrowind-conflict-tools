@@ -2,7 +2,6 @@ local config = require("mwpluginpatches.config")
 
 local this = {}
 local bypassed = setmetatable({}, { __mode = "k" })
-local openingExit = setmetatable({}, { __mode = "k" })
 
 local function isDoor(ref)
     return ref and ref.object and ref.object.objectType == tes3.objectType.door
@@ -29,25 +28,12 @@ end
 local function isInteriorExit(ref)
     local source = ref.cell or (tes3.player and tes3.player.cell)
     local destination = ref.destination and ref.destination.cell
-    return source and source.isInterior
-        and destination and (destination.isOrBehavesAsExterior or not destination.isInterior)
-end
-
-local function openLockedExit(door, activator)
-    local lock = door.lockNode
-    local data = door.data or {}
-    local wasBlacklisted = data.ab01drlkbl
-    door.data = data
-    data.ab01drlkbl = 1
-    openingExit[door] = true
-    lock.locked = false
-    local ok, err = pcall(activator.activate, activator, door)
-    lock.locked = true
-    openingExit[door] = nil
-    data.ab01drlkbl = wasBlacklisted
-    if not ok then
-        error(err, 0)
+    if not source or not destination then
+        return false
     end
+    local sourceIsInterior = source.isInterior and not source.isOrBehavesAsExterior
+    local destIsExterior = destination.isOrBehavesAsExterior or not destination.isInterior
+    return sourceIsInterior and destIsExterior
 end
 
 local function beforeActivate(e)
@@ -55,7 +41,19 @@ local function beforeActivate(e)
     if e.activator ~= tes3.player or not isDoor(door) then
         return
     end
-    if openingExit[door] then
+
+    -- Conceptually, nobody locks you in after hours; they just want you to leave.
+    -- When exiting an interior to the exterior, never require sneaking or lockpicking,
+    -- even if the door is owned and locked.
+    if isInteriorExit(door) then
+        if tes3.getLocked({ reference = door }) then
+            tes3.unlock({ reference = door })
+        end
+        door.data = door.data or {}
+        if not door.data.ab01drlkbl then
+            door.data.ab01drlkbl = 1
+            bypassed[door] = true
+        end
         return
     end
 
@@ -64,10 +62,6 @@ local function beforeActivate(e)
     end
 
     if tes3.getLocked({ reference = door }) then
-        if isInteriorExit(door) then
-            openLockedExit(door, e.activator)
-            return false
-        end
         if not tes3.mobilePlayer.isSneaking then
             tes3.playSound({ sound = "LockedDoor", reference = door })
             if config.doorLockedNotification then
