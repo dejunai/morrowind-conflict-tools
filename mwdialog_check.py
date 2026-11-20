@@ -5006,6 +5006,9 @@ def run_cell_conflicts(args, plugins, collect=False):
             write_collide_data(args, order, new_objs, labels, pos, name_of, deps, cells_of)
         except (OSError, ValueError) as e:
             print(f"  (could not write {COLLIDE_DATA}: {e})", file=sys.stderr)
+        # each step below reads every plugin again without a word: say what is going on (a minute or more
+        # with Tamriel Rebuilt's masters)
+        print("  distant land: checking which hidden objects to leave out of it...", file=sys.stderr, flush=True)
         try:                                       # MGE XE never sees those hides: keep them out of distant land
             write_ghost_statics(os.path.dirname(os.path.abspath(args.data_dir)), args.data_dir, plugins)
         except (OSError, ValueError, FormatError) as e:
@@ -5017,6 +5020,7 @@ def run_cell_conflicts(args, plugins, collect=False):
         arrivals[dest].append(to)
         doors_at[ckey].append((at, dest, to))
     lost = []
+    print("  Checking for rearranged cells and stranded doors...", file=sys.stderr, flush=True)
     report_rearranged(order, own_pos, deletions, new_objs, labels, pos, name_of, deps, cells_of,
                       doors_at, arrivals, lost)
     if not args.dry_run:
