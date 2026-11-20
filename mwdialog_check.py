@@ -4766,6 +4766,8 @@ def run_clean(args, plugins, only):
                 continue
             f.write("".join(f"{name}: cleaned {d}\n" for d in details))
             f.write(f"{name}: backup saved as {os.path.basename(bak)}\n")
+            note_own(name, "dirty: " + ", ".join(f"{n} {k}" for k, n in sorted(stats.items()))
+                     + " (records that repeat their master or the game's defaults): removed, as tes3cmd clean does")
     print(f"  Cleaned {len(results)} plugin(s); details in {args.fix_log}")
     return {n: True for n in results}
 
@@ -6608,7 +6610,6 @@ def fix_omwaddon_masters(args):
         bak = write_inplace(path, recs)
         fixed += 1
         print(f"  {name}: {what} (backup {os.path.basename(bak)})")
-        note_own(name, f"its header names a master that isn't there: {what}")
         with MT.open_log(os.path.join(game_dir, args.fix_log), "a", encoding="utf-8") as lf:
             lf.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {name}: master renamed {what}\n")
     if fixed:
@@ -9292,6 +9293,8 @@ def write_bug_reports(args, plugins, report, world):
     names = {n.lower(): (n, p) for n, p in plugins}
     per = defaultdict(lambda: {"ERROR": [], "WARN": [], "repaired": [], "missing": []})
     for sev, plugin, topic, info, msg in report.issues:
+        if sev == "INFO" and msg.endswith("(a master; not changed)"):
+            sev = "WARN"                    # a master's own fault (its header, its masters): the author's to fix
         if sev not in ("ERROR", "WARN") or is_our_patch(plugin) or plugin.lower() not in names \
                 or NOT_OWN_BUG.search(msg):
             continue
