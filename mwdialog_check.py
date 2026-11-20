@@ -5445,7 +5445,7 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
             if use_all:
                 print("  > (new conflict: no answer yet; left for you)")
                 continue
-        if use_all or ((only_new or auto_known) and last):
+        if use_all or ((only_new or auto_known) and last and default):
             ans = default or "s"
             print(f"  > {ans}  (last time's answer)")
         else:
