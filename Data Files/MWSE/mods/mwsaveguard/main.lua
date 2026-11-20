@@ -9,14 +9,33 @@ local defaults = {
 	enabled = true,
 	settleWindow = 5.0,
 	validateOnLoad = true,
-	logToMWSE = true,
+	copyNoticesToMWSELog = false,   -- every save's notices go to MWSE\logs\mwsaveguard.log; this copies them too
 	cleanClones = true,
 }
 local config = mwse.loadConfig(CONFIG_NAME, defaults)
 
+-- Routine notices (each save requested, deferred, completed) go to their own log, one per session: in MWSE.log
+-- they buried everything else. Problems (a corrupt save blocked, a save that failed, a player clone) still go to
+-- MWSE.log too.
+local LOG_DIR = "Data Files\\MWSE\\logs"
+local logFile, logTried = nil, false
+
 local function logMsg(fmt, ...)
-	if config.logToMWSE then
-		mwse.log(fmt, ...)
+	local line = string.format(fmt, ...)
+	if not logFile and not logTried then
+		logTried = true
+		pcall(lfs.mkdir, LOG_DIR)
+		logFile = io.open(LOG_DIR .. "\\mwsaveguard.log", "w")
+		if logFile then
+			logFile:write(os.date("mwsaveguard log, session started %Y-%m-%d %H:%M:%S\n"))
+		end
+	end
+	if logFile then
+		logFile:write(os.date("%H:%M:%S  "), line, "\n")
+		logFile:flush()
+	end
+	if config.copyNoticesToMWSELog or not logFile then
+		mwse.log("%s", line)
 	end
 end
 
@@ -463,9 +482,11 @@ event.register(tes3.event.modConfigReady, function()
 	})
 
 	page:createOnOffButton({
-		label = "Log Notices to MWSE.log",
-		description = "Outputs notices to MWSE.log when a save is deferred or an issue is caught.",
-		variable = mwse.mcm.createTableVariable({ id = "logToMWSE", table = config }),
+		label = "Also copy save notices to MWSE.log",
+		description = "Every save's notices (requested, deferred, completed) are written to "
+			.. "Data Files\\MWSE\\logs\\mwsaveguard.log. This copies them to MWSE.log as well. Problems (a corrupt "
+			.. "save blocked, a failed save, a player clone) always reach MWSE.log.",
+		variable = mwse.mcm.createTableVariable({ id = "copyNoticesToMWSELog", table = config }),
 	})
 
 	template:register()

@@ -664,7 +664,7 @@ def test_patched_priorities_are_below_mwguards_report_limit():
     assert all(abs(lf.compress_priority(p, CFG)) < CFG["priorityLimit"] for p in (10000, -10 ** 9, float("inf")))
 
 
-# ------------------------------------------------------------------------------------------------ nil guards (A1-A4)
+# ------------------------------------------------------------------------------------------------ nil guards (A1-A5)
 def nil_findings(a, rule):
     return [f for f in a.findings if f["rule"] == rule]
 
@@ -799,6 +799,30 @@ def test_A4_nullable_event_field_is_guarded_and_alias_too():
     assert " if a then a:say('hi') end\n" in new
     assert " e.target:disable()\n" in new                       # activate always has a target
     assert patch(new) is None
+
+
+def test_A5_an_npcs_head_or_hair_is_guarded():
+    """Tamriel Data's fixVampireHeadAssignment read baseObject.head.id for every NPC: "attempt to index field 'head'
+    (a nil value)" in MWSE.log for an NPC whose record names no head (or hair)."""
+    src = ("local function fix(e)\n"
+           " if e.reference.mobile.object.baseObject.head.id == 'T_Head' then e.bodyPart = nil\n"
+           " elseif e.reference.mobile.object.baseObject.head.id == 'T_Head2' then e.bodyPart = nil end\n"
+           " if e.reference.mobile.object.baseObject.hair.id == 'T_Hair' then e.bodyPart = nil end\n"
+           "end\nevent.register(tes3.event.bodyPartAssigned, fix)\n")
+    new = patch(src)
+    assert " if (e.reference.mobile.object.baseObject.head and e.reference.mobile.object.baseObject.head.id) == " \
+           "'T_Head' then" in new
+    assert " elseif (e.reference.mobile.object.baseObject.head and " in new
+    assert " if (e.reference.mobile.object.baseObject.hair and e.reference.mobile.object.baseObject.hair.id) == " \
+           "'T_Hair' then" in new
+    assert patch(new) is None
+
+
+def test_A5_a_checked_head_and_other_fields_are_left_alone():
+    src = ("local function f(e)\n local o = e.reference.baseObject\n"
+           " if e.reference.baseObject.head and e.reference.baseObject.head.id == 'x' then end\n"
+           " local r = e.reference.baseObject.race.id\nend\nevent.register('bodyPartAssigned', f)\n")
+    assert not nil_findings(analyse(src), "A5")
 
 
 def test_A4_checked_field_is_left_alone():

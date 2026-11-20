@@ -19,7 +19,9 @@ Rules (thresholds come from MWSE\\config\\mwguard.json when it exists - the same
      without a check -> guarded                                                                        fix
   A4 an event field that can be nil (damage e.attacker, attack e.targetMobile, cellChanged
      e.previousCell, uiObjectTooltip e.reference...) used without a check -> guarded                  fix
-     Nil guards (A1-A4): inside a condition, an and-guard: (x and x.y == z); a standalone call or
+  A5 an NPC's .head / .hair (through .baseObject or .object) used without a check: nil for an NPC whose
+     record names no such part, or one no loaded mod defines -> guarded                               fix
+     Nil guards (A1-A5): inside a condition, an and-guard: (x and x.y == z); a standalone call or
      assignment: if x then ... end; a local's value: local v = (x and f(x.y)). Nothing changes while the
      value is there. Where none of these fits with certainty the finding stays a report, with the reason.
   B1 a UI element used after :destroy()                                                               report
@@ -132,6 +134,11 @@ NIL_LOOKUPS = {"tes3.getObject", "tes3.getReference", "tes3.getPlayerTarget", "t
 _DMG = {"attacker", "attackerReference", "projectile", "magicSourceInstance", "magicEffectInstance"}
 _ATK = {"targetMobile", "targetReference"}
 _CAST = {"target"}
+# A5: an NPC's body parts that can be nil - its record names none, or one no loaded mod defines (a bodyPartAssigned
+# handler reading baseObject.head.id failed for every such NPC: Tamriel Data's fixVampireHeadAssignment)
+NULLABLE_OBJECT_FIELDS = {"head", "hair"}
+OBJECT_HOLDERS = {"baseObject", "object"}
+
 NULLABLE_EVENT_FIELDS = {
     "damage": _DMG, "damaged": _DMG, "damageHandToHand": _DMG, "damagedHandToHand": _DMG,
     "attack": _ATK, "attackHit": _ATK, "attackStart": _ATK, "calcHitChance": {"target", "targetMobile"},
@@ -729,7 +736,7 @@ class FileAnalysis:
     # --- rules
     def run(self):
         for r in (self.r_priority, self.r_per_frame, self.r_timers, self.r_one_shot, self.r_data_guard,
-                  self.r_keycode, self.r_lookups, self.r_event_fields, self.r_destroy, self.r_console, self.r_info_filter, self.r_reregister,
+                  self.r_keycode, self.r_lookups, self.r_event_fields, self.r_object_fields, self.r_destroy, self.r_console, self.r_info_filter, self.r_reregister,
                   self.r_reload_timers, self.r_globals, self.r_toplevel, self.r_loops, self.r_logger_level,
                   self.r_log_triggers, self.r_loggers, self.r_save_safe, self.r_while_caps, self.r_menu_exit,
                   self.r_vector_order, self.r_known, self.r_sound_query):
@@ -1394,6 +1401,24 @@ class FileAnalysis:
                     self._nil_fix("A4", u, g, f"{self.text(u)[:50]} - {g} is nil in some {ev} events and is "
                                   f"never checked")
 
+    def r_object_fields(self):
+        """A5: x.baseObject.head.id (or .object.hair...) with no check that the NPC has that body part."""
+        for n in self.nodes:
+            if n.kind != "Index" or n.field not in NULLABLE_OBJECT_FIELDS or n.obj.kind != "Index" \
+                    or n.obj.field not in OBJECT_HOLDERS or self._check_pos(n):
+                continue
+            g = L.dotted(n)
+            u = self._uses_of(n)
+            if g is None or u is None:
+                continue
+            scope = n.parent
+            while scope is not None and scope.kind != "Function":
+                scope = scope.parent
+            if self._guard_checked(scope.body if scope is not None else self.nodes[0], g):
+                continue
+            self._nil_fix("A5", u, g, f"{self.text(u)[:50]} - {g} is nil for an NPC whose record names no "
+                                      f"{n.field} (or one no loaded mod defines), and is never checked")
+
     def r_destroy(self):
         for blk in (n for n in self.nodes if n.kind == "Block"):
             for i, st in enumerate(blk.stats):
@@ -1784,7 +1809,7 @@ GATE_HELPER = ("local mwluafix_gate do local last, clock = {}, os.clock mwluafix
 
 
 def log_name(mod_key):
-    return re.sub(r"[^\w\- ]", ".", mod_key) or "mod"
+    return (re.sub(r"[^\w\- ]", ".", mod_key) or "mod").lower()
 
 
 def lua_str(s):
