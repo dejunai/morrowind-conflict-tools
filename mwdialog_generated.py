@@ -148,16 +148,21 @@ def reduce_textures(data_dir, game_dir, items, log):
             if new is None:
                 continue
             links = hard_link_names(full) if os.stat(full).st_nlink > 1 else []
-            if links:
-                kind, keep = "link", links[0]
-            else:
-                kind, keep = "backup", os.path.join(game_dir, FULLSIZE_DIR, rel)
-                os.makedirs(os.path.dirname(keep), exist_ok=True)
-                shutil.move(full, keep)
             tmp = full + ".mwdtmp"
-            with open(tmp, "wb") as f:
-                f.write(new)
-            os.replace(tmp, full)                    # a new file: a hard link's other copy is untouched
+            try:
+                with open(tmp, "wb") as f:
+                    f.write(new)
+                if links:
+                    kind, keep = "link", links[0]
+                else:                                # a copy, so the original stays in place until the swap
+                    kind, keep = "backup", os.path.join(game_dir, FULLSIZE_DIR, rel)
+                    os.makedirs(os.path.dirname(keep), exist_ok=True)
+                    shutil.copy2(full, keep)
+                os.replace(tmp, full)                # a new file: a hard link's other copy is untouched
+            except OSError:
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+                raise
             done.append((rel, kind, keep))
             saved += len(data) - len(new)
             log.append(("Data Files", f"texture '{rel}' was {dims[0]}x{dims[1]}",
