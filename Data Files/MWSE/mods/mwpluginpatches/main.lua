@@ -1,7 +1,7 @@
 local config = require("mwpluginpatches.config")
 
 local autoStartup = require("mwpluginpatches.patches.autoStartup")
-local psguardfix = require("mwpluginpatches.patches.psguardfix")
+local pandsfixes = require("mwpluginpatches.patches.pandsfixes")
 local ysmirShield = require("mwpluginpatches.patches.ysmirShield")
 local jiubDelay = require("mwpluginpatches.patches.jiubDelay")
 local lostHeirDelay = require("mwpluginpatches.patches.lostHeirDelay")
@@ -10,6 +10,8 @@ local personalEffectsFix = require("mwpluginpatches.patches.personalEffectsFix")
 local noAccidentalTheftBookFix = require("mwpluginpatches.patches.noAccidentalTheftBookFix")
 local caveDripSound = require("mwpluginpatches.patches.caveDripSound")
 local swampSound = require("mwpluginpatches.patches.swampSound")
+local talesHandwritingFix = require("mwpluginpatches.patches.talesHandwritingFix")
+local trainerLogUnlock = require("mwpluginpatches.patches.trainerLogUnlock")
 
 local function onInitialized()
     mwse.log("[mwpluginpatches] Initializing unified plugin compatibility patches...")
@@ -19,9 +21,9 @@ local function onInitialized()
         autoStartup.init()
     end
 
-    -- 2. Privileges & Services Guard Cell Black Screen Fix
-    if config.psGuardFixEnabled and config.isPsGuardActive() then
-        psguardfix.init()
+    -- 2. Privileges & Services Fixes (Guard Cell Black Screen & Target Topic Filter)
+    if (config.pAndSFixesEnabled or config.psGuardFixEnabled) and config.isPAndSActive() then
+        pandsfixes.init()
     end
 
     -- 3. Ysmir Combat Shield (YARR)
@@ -62,6 +64,16 @@ local function onInitialized()
     -- 10. Yet Another Better Sounds Patch: one swamp loop per activator instead of a restart every frame
     if config.swampSoundEnabled and config.isSwampSoundsActive() then
         swampSound.init()
+    end
+
+    -- 11. Clean Tales of Seyda Neen: Illegible Handwriting Dialogue Filter
+    if config.talesHandwritingFixEnabled and config.isTalesOfSeydaNeenActive() then
+        talesHandwritingFix.init()
+    end
+
+    -- 12. Trainer Log: Auto-Unlock Training Topics
+    if config.trainerLogUnlockEnabled and config.isTrainerLogActive() then
+        trainerLogUnlock.init()
     end
 
     mwse.log("[mwpluginpatches] Unified plugin compatibility patches initialized.")

@@ -18,6 +18,21 @@ function config.isPsGuardActive()
         or tes3.findGlobal("ABM_ll_GuardCallCell") ~= nil
         or tes3.getScript("ABM_ll_DetectPCCrimeScript") ~= nil
 end
+config.isPAndSActive = config.isPsGuardActive
+
+function config.isTalesOfSeydaNeenActive()
+    return tes3.isModActive("Clean Tales of Seyda Neen.esp")
+        or tes3.isModActive("Tales of Seyda Neen.esp")
+        or tes3.isModActive("Tales of Seyda Neen.ESP")
+        or tes3.getObject("den_message_bottle2") ~= nil
+end
+
+function config.isTrainerLogActive()
+    return tes3.isModActive("Trainer Log.esp")
+        or tes3.isModActive("Trainer Log - AEA.esp")
+        or tes3.isModActive("Trainer Log - AEA.ESP")
+        or tes3.findDialogue("Training - Block") ~= nil
+end
 
 function config.isYsmirActive()
     return tes3.isModActive("YARR - yet another race revamp v1.2.ESP")
@@ -70,7 +85,7 @@ end
 local function getDynamicDefaults()
     local mca = config.isMcaActive()
     local eu = config.isEbonheartUnderworksActive()
-    local ps = config.isPsGuardActive()
+    local ps = config.isPAndSActive()
     local ysmir = config.isYsmirActive()
     local fnf = config.isFriendsAndFrensActive()
     local lostHeir = config.isLostHeirActive()
@@ -79,6 +94,8 @@ local function getDynamicDefaults()
     local nat = config.isNoAccidentalTheftActive()
     local drips = config.isCaveDripsActive()
     local swamp = config.isSwampSoundsActive()
+    local tales = config.isTalesOfSeydaNeenActive()
+    local trainerLog = config.isTrainerLogActive()
 
     return {
         -- AutoStartup: Morrowind Comes Alive
@@ -97,8 +114,16 @@ local function getDynamicDefaults()
         euRebirth = false,
         euThiefBranch = false,
 
-        -- Privileges & Services Guard Cell Fix
+        -- Privileges & Services Fixes
+        pAndSFixesEnabled = ps,
         psGuardFixEnabled = ps,
+
+        -- Clean Tales of Seyda Neen: Illegible Handwriting filter
+        talesHandwritingFixEnabled = tales,
+
+        -- Trainer Log: Auto-Unlock Training Topics
+        trainerLogUnlockEnabled = trainerLog,
+        trainerLogAutoUnlockOnLoad = true,
 
         -- Ysmir Combat Shield (YARR)
         ysmirShieldEnabled = ysmir,

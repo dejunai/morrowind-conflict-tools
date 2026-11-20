@@ -1,6 +1,6 @@
 local config = require("mwpluginpatches.config")
 
-local psguardfix = {}
+local pandsfixes = {}
 
 local SCRIPTS = {
     "ABM_ll_DetectPCCrimeScript",
@@ -178,12 +178,23 @@ local function onInfoFilter(e)
                 e.passes = false
                 return false
             end
+            -- Must be speaking to a P&S companion/guard if target selection is not active
+            local ref = e.reference
+            if ref and targetVal <= 0 then
+                local obj = ref.object.baseObject or ref.object
+                local sId = (obj.script and obj.script.id or ""):lower()
+                local oId = (obj.id or ""):lower()
+                if not (sId:find("abm_") or sId:find("companion") or oId:find("abm_")) then
+                    e.passes = false
+                    return false
+                end
+            end
         end
     end
 end
 
-function psguardfix.init()
-    if not config.psGuardFixEnabled or not config.isPsGuardActive() then
+function pandsfixes.init()
+    if not config.pAndSFixesEnabled or not config.isPAndSActive() then
         return
     end
 
@@ -211,4 +222,4 @@ function psguardfix.init()
     mwse.log("[mwpluginpatches] Privileges & Services guard call, fade, and target-topic filter active.")
 end
 
-return psguardfix
+return pandsfixes

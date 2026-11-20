@@ -206,6 +206,89 @@ event.register(tes3.event.loaded, function()
     timer.delayOneFrame(settleActive)
 end)
 
+-- bard audio & visual fixes -----------------------------------------------------------------------
+local activeDialogueBard = nil
+
+local function isBardRef(ref)
+    if not ref or not ref.object then return false end
+    local base = ref.object.baseObject or ref.object
+    if base.objectType ~= tes3.objectType.npc then return false end
+    if matches(base.mesh, ANIM_PATTERNS) then return true end
+    if base.script and matches(base.script.id, SCRIPT_PATTERNS) then return true end
+    return false
+end
+
+-- Fix lute placement on Animated Morrowind bards (am_bard2 has a duplicate lute on its back)
+local function fixBardVisuals(ref)
+    if not ref or not ref.sceneNode then return end
+    local base = ref.object.baseObject or ref.object
+    local mesh = base and base.mesh
+    if mesh and mesh:lower():find("am_bard2") then
+        local spine = ref.sceneNode:getObjectByName("Bip01 Spine2")
+        if spine then
+            local backLute = spine:getObjectByName("Misc_de_lute_01")
+            if backLute then
+                backLute.appCulled = true
+            end
+        end
+    end
+end
+
+-- Allow non-Argonians to equip AM_Lute in hand (Bards of Bardenfell restricted AM_Lute_Bp to Argonian)
+event.register(tes3.event.bodyPartAssigned, function(e)
+    if e.object and e.object.id and e.object.id:lower() == "am_lute" then
+        local bp = tes3.getObject("AM_Lute_Bp")
+        if bp then
+            e.bodyPart = bp
+        end
+    end
+end)
+
+event.register(tes3.event.mobileActivated, function(e)
+    if isBardRef(e.reference) then
+        fixBardVisuals(e.reference)
+    end
+end)
+
+-- Stop singing when talking to the bard
+local function onMenuDialogActivated(e)
+    local target = tes3ui.getServiceActor()
+    if not target then
+        local menu = e.element or tes3ui.findMenu("MenuDialog")
+        local mobileActor = menu and menu:getPropertyObject("PartHyperText_actor")
+        target = mobileActor
+    end
+    if not target then
+        target = tes3.getPlayerTarget()
+    end
+
+    if target and target.reference and isBardRef(target.reference) then
+        activeDialogueBard = target.reference
+        tes3.removeSound({ reference = activeDialogueBard })
+        if target.stopDialogue then
+            target:stopDialogue()
+        end
+        log("%s: silenced singing during dialogue", describe(activeDialogueBard))
+    else
+        activeDialogueBard = nil
+    end
+end
+event.register(tes3.event.uiActivated, onMenuDialogActivated, { filter = "MenuDialog" })
+
+local function onMenuDialogDestroyed()
+    activeDialogueBard = nil
+end
+event.register(tes3.event.menuExit, onMenuDialogDestroyed)
+
+-- Block voiceover songs on the bard while in dialogue
+event.register(tes3.event.addSound, function(e)
+    if activeDialogueBard and e.reference == activeDialogueBard then
+        if e.isVoiceover or (e.sound and e.sound.id:lower():find("bard")) then
+            return false
+        end
+    end
+end)
+
 -- Mod Config menu ---------------------------------------------------------------------------------
 event.register(tes3.event.modConfigReady, function()
     local template = mwse.mcm.createTemplate({ name = "One Band Per Inn" })

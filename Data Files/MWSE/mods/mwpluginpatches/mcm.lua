@@ -29,10 +29,12 @@ Active Plugin Status:
   • Personal Effects: %s
   • No Accidental Theft: %s
   • Cave Drips: %s
-  • Yet Another Better Sounds Patch: %s]],
+  • Yet Another Better Sounds Patch: %s
+  • Clean Tales of Seyda Neen: %s
+  • Trainer Log: %s]],
     config.isMcaActive() and "Active" or "Not Active",
     config.isEbonheartUnderworksActive() and "Active" or "Not Active",
-    config.isPsGuardActive() and "Active" or "Not Active",
+    config.isPAndSActive() and "Active" or "Not Active",
     config.isYsmirActive() and "Active" or "Not Active",
     config.isFriendsAndFrensActive() and "Active" or "Not Active",
     config.isLostHeirActive() and "Active" or "Not Active",
@@ -40,7 +42,9 @@ Active Plugin Status:
     config.isPersonalEffectsActive() and "Active" or "Not Active",
     config.isNoAccidentalTheftActive() and "Active" or "Not Active",
     config.isCaveDripsActive() and "Active" or "Not Active",
-    config.isSwampSoundsActive() and "Active" or "Not Active"),
+    config.isSwampSoundsActive() and "Active" or "Not Active",
+    config.isTalesOfSeydaNeenActive() and "Active" or "Not Active",
+    config.isTrainerLogActive() and "Active" or "Not Active"),
 })
 
 -- SECTION 1: FRIENDS & FRENS (JIUB COMPANION DELAY)
@@ -84,12 +88,12 @@ lostHeirCategory:createYesNoButton({
 })
 
 -- SECTION 3: PRIVILEGES & SERVICES
-local psCategory = page:createCategory(string.format("Privileges & Services: Guard Cell Fix%s", getStatusText(config.isPsGuardActive())))
+local psCategory = page:createCategory(string.format("Privileges & Services: Guard & Topic Fixes%s", getStatusText(config.isPAndSActive())))
 
 psCategory:createYesNoButton({
-    label = "Enable Guard Cell Black Screen Fix",
-    description = "Dynamically resolves non-vanilla interior cells to architectural guard factions to prevent permanent black screen fadeouts.",
-    variable = mwse.mcm.createTableVariable({ id = "psGuardFixEnabled", table = config }),
+    label = "Enable Privileges & Services Fixes",
+    description = "Fixes the guard cell black screen fadeout in non-vanilla interiors and suppresses the rogue °(target) topic on ordinary NPCs.",
+    variable = mwse.mcm.createTableVariable({ id = "pAndSFixesEnabled", table = config }),
 })
 
 -- SECTION 4: YARR - YSMIR COMBAT SHIELD
@@ -249,6 +253,32 @@ swampCategory:createYesNoButton({
         .. "on, each swamp sound source keeps one loop until day turns to night (or back) or the weather turns bad. "
         .. "Takes effect after a restart.",
     variable = mwse.mcm.createTableVariable({ id = "swampSoundEnabled", table = config }),
+})
+
+-- SECTION 11: CLEAN TALES OF SEYDA NEEN
+local talesCategory = page:createCategory(string.format("Clean Tales of Seyda Neen: Dialogue Fix%s",
+    getStatusText(config.isTalesOfSeydaNeenActive())))
+
+talesCategory:createYesNoButton({
+    label = "Filter 'Illegible Handwriting' Topic",
+    description = "Hides the 'illegible handwriting' topic from NPCs once the quest 'den_bottle' is completed (journal >= 50) or if the player does not have the note.",
+    variable = mwse.mcm.createTableVariable({ id = "talesHandwritingFixEnabled", table = config }),
+})
+
+-- SECTION 12: TRAINER LOG
+local trainerCategory = page:createCategory(string.format("Trainer Log: Auto-Unlock Topics%s",
+    getStatusText(config.isTrainerLogActive())))
+
+trainerCategory:createYesNoButton({
+    label = "Enable Training Topic Auto-Unlock",
+    description = "Automatically unlocks all 27 'Training - <Skill>' topics when speaking to any training service provider or on save load, bypassing the Caius Cosades / Socucius Ergalla dialogue prerequisites.",
+    variable = mwse.mcm.createTableVariable({ id = "trainerLogUnlockEnabled", table = config }),
+})
+
+trainerCategory:createYesNoButton({
+    label = "Unlock Immediately on Load",
+    description = "Adds the training topics immediately when loading a saved game rather than waiting until talking to a trainer NPC.",
+    variable = mwse.mcm.createTableVariable({ id = "trainerLogAutoUnlockOnLoad", table = config }),
 })
 
 mwse.mcm.register(template)

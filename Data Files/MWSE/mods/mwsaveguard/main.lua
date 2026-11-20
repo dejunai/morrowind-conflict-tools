@@ -333,11 +333,6 @@ local function onSave(e)
 	-- Always purge duplicate player clones before save proceeds or gets queued
 	purgePlayerClones()
 
-	-- If our own deferred execution triggered this, allow it straight through
-	if isExecutingDeferredSave then
-		return
-	end
-
 	local dh = tes3.dataHandler
 	local ndd = dh and dh.nonDynamicData
 	local isVolatileTransition = ndd and ndd.isSavingOrLoading
@@ -346,6 +341,24 @@ local function onSave(e)
 	local now = os.clock()
 	local cellElapsed = now - lastCellChangeTime
 	local charGenElapsed = now - lastCharGenFinishTime
+	local cell = tes3.player and tes3.player.cell
+
+	logMsg(
+		"[mwsaveguard] Save requested: file='%s', name='%s', cell='%s', menu=%s, background=%s, volatile=%s, cellElapsed=%.1fs, deferred=%s",
+		tostring(e.filename),
+		tostring(e.name),
+		tostring(cell and (cell.displayName or cell.id) or "<none>"),
+		tostring(tes3ui.menuMode()),
+		tostring(dh and dh.backgroundThreadRunning or false),
+		tostring(isVolatileTransition or false),
+		cellElapsed,
+		tostring(isExecutingDeferredSave)
+	)
+
+	-- If our own deferred execution triggered this, allow it straight through
+	if isExecutingDeferredSave then
+		return
+	end
 
 	-- Calculate the minimum elapsed time across all settling triggers
 	local minElapsed = math.min(cellElapsed, charGenElapsed)
@@ -380,6 +393,15 @@ end
 
 -- Priority 10000 ensures this intercepts before any other save handlers (like SSS or native)
 event.register("save", onSave, { priority = 10000 })
+
+local function onSaved(e)
+	logMsg(
+		"[mwsaveguard] Save completed: file='%s', name='%s'",
+		tostring(e.filename),
+		tostring(e.name)
+	)
+end
+event.register("saved", onSaved)
 
 -- While a save is waiting, the options menu (Esc) stays shut: quitting or loading from it would lose that save.
 local function onOptionsMenu()
