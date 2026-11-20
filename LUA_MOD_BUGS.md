@@ -505,3 +505,29 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 * **Fix**:
   1. Updated `accidentalTheftProtection\main.lua` with door bypass logic: door references are never blocked without sneaking if the player is in an interior cell (`tes3.player.cell.isInterior`), if the door leads to an exterior (`ref.destination.cell and not ref.destination.cell.isInterior`), or if the door is unlocked (`not (ref.lockNode and ref.lockNode.locked)`). Interior door navigation and exits now always work freely.
   2. Removed spurious `ANAM: indrele rathryon` ownership subrecords from FRMR 20, 21, and 22 in `Seyda Neen - Damp Little Squat - unshabby.ESP` (and synchronized with Vortex staging), restoring the tavern and glass shop doors to standard public unowned access.
+
+---
+
+## 38. UI Expansion Dialogue Topic Cached Info Lookup Bug
+
+* **Author**: NullCascade
+* **Files**:
+  - `Data Files\MWSE\mods\UI Expansion\MenuDialog.lua` (lines 111-135)
+  - the same file in its Vortex staging folder (`UI Expansion v1.7.3-46071-1-7-3-1729551917`)
+* **Bug**:
+  1. In `MenuDialog.lua` line 113, inside `updateTopicsList`, the cached dialogue info property lookup queries an empty string:
+     ```lua
+     local info = element:getPropertyObject("") or dialogue:getInfo({ actor = mobileActor })
+     ```
+  2. In line 128, the element stores this property under the key `"MenuDialog_UIEXP_info"`:
+     ```lua
+     element:setPropertyObject("MenuDialog_UIEXP_info", info)
+     ```
+     and line 72 retrieves it via `e.source:getPropertyObject("MenuDialog_UIEXP_info")`.
+  3. Because `element:getPropertyObject("")` queries an empty key name, it always returns `nil`. As a result, the cached info object is never retrieved, forcing `dialogue:getInfo({ actor = mobileActor })` to re-execute unconditionally on every topic click and hyperlink update.
+  4. For NPCs with actor-unique dialogue (such as Silt Strider caravaners like Darvame Hleran, quest NPCs, or faction authorities), once the player hears a unique line, `e.info.firstHeardFrom = e.actor` is recorded. However, because line 113 never retrieves the cached info, subsequent evaluations can resolve alternate unread lines or fail to reflect the recorded `firstHeardFrom` state. Consequently, topics with actor-unique responses fail to grey out (`state = 2`) and remain stuck permanently in the unique/blue active state (`state = 4`).
+  5. Because `updateTopicsList` is a local closure registered directly to `preUpdate` and `mouseClick` UI callbacks, patching this behavior from an external Lua script is not feasible without overriding or rewriting the entire dialogue menu component.
+* **Fix**:
+  1. In `MenuDialog.lua` line 113, corrected `element:getPropertyObject("")` to `element:getPropertyObject("MenuDialog_UIEXP_info")`.
+  2. Topic buttons now properly retrieve their cached info, allowing topics with exhausted actor-unique lines to transition smoothly to seen/greyed (`state = 2`).
+  3. Hardlink parity (`nlink=2`) with its Vortex staging folder is preserved.

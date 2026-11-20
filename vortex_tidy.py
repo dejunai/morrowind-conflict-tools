@@ -1106,10 +1106,13 @@ def fresh_plan(args):
 
 
 def plan_main(args):
-    text, _parts, _moves, _l, _a = fresh_plan(args)
+    text, _parts, moves, lres, ares = fresh_plan(args)
     PF.write_atomic(PLAN, text)
     print(f"\nFull plan: {PLAN}")
-    print("\nNothing changed. Purge in Vortex, review the plan, run again with --apply, then Deploy.")
+    if moves or REVIEW or (lres and lres["n_ok"]) or assets_pending(ares):
+        print("\nNothing changed. Purge in Vortex, review the plan, run again with --apply, then Deploy.")
+    else:
+        print("\nNothing to fix.")
     return 0
 
 

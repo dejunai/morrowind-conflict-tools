@@ -6810,6 +6810,12 @@ def fix_long_names(args, plugins, bsas):
     return fixed
 
 
+# shortcut: plugins whose .esm-owned references --fix moves to the temporary group anyway (the game reports their
+# "missing in master file" and the flip clears it, checked in the editor); a rule that tells a safe flip from one a
+# script needs persistent should replace this list
+FLIP_ESM_REFS = {"clean_piran.esp"}
+
+
 def fix_ref_groups(args, plugins):
     """--fix: a reference the master keeps in its temporary group, but a plugin changes as a persistent one:
     the game looks for it among the master's persistent references, can't find it ("Object reference ...
@@ -6901,7 +6907,7 @@ def fix_ref_groups(args, plugins):
                             want = groups.get((bk[0], key, bk[1])) if bk and bk[0] != name.lower() else None
                             # Only an .esp master trips the game ("missing in master file"); references of an .esm
                             # are found in either group, and scripts may rely on the plugin making them persistent.
-                            if bk and bk[0].endswith(".esm"):
+                            if bk and bk[0].endswith(".esm") and name.lower() not in FLIP_ESM_REFS:
                                 want = None
                             # only this direction loses the reference: kept temporary by the master but listed
                             # as persistent here ("missing in master file"). The other way round the game copes.

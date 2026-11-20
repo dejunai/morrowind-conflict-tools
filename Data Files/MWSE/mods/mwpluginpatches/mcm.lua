@@ -30,6 +30,7 @@ Active Plugin Status:
   • No Accidental Theft: %s
   • Cave Drips: %s
   • Yet Another Better Sounds Patch: %s
+  • Expanded Sounds: %s
   • Clean Tales of Seyda Neen: %s
   • Trainer Log: %s]],
     config.isMcaActive() and "Active" or "Not Active",
@@ -43,6 +44,7 @@ Active Plugin Status:
     config.isNoAccidentalTheftActive() and "Active" or "Not Active",
     config.isCaveDripsActive() and "Active" or "Not Active",
     config.isSwampSoundsActive() and "Active" or "Not Active",
+    config.isExpandedSoundsActive() and "Active" or "Not Active",
     config.isTalesOfSeydaNeenActive() and "Active" or "Not Active",
     config.isTrainerLogActive() and "Active" or "Not Active"),
 })
@@ -255,6 +257,16 @@ swampCategory:createYesNoButton({
     variable = mwse.mcm.createTableVariable({ id = "swampSoundEnabled", table = config }),
 })
 
+local expandedCategory = page:createCategory(string.format("Expanded Sounds: Water and Boat Loops%s",
+    getStatusText(config.isExpandedSoundsActive())))
+
+expandedCategory:createYesNoButton({
+    label = "Start Expanded Sounds Loops Once",
+    description = "Runs Float and Sound_Boat_Creak in Lua, preserving Float's boat rocking while starting its water "
+        .. "loop and each boat-creak loop only once per loaded source. Takes effect after a restart.",
+    variable = mwse.mcm.createTableVariable({ id = "expandedSoundsEnabled", table = config }),
+})
+
 -- SECTION 11: CLEAN TALES OF SEYDA NEEN
 local talesCategory = page:createCategory(string.format("Clean Tales of Seyda Neen: Dialogue Fix%s",
     getStatusText(config.isTalesOfSeydaNeenActive())))
@@ -279,6 +291,23 @@ trainerCategory:createYesNoButton({
     label = "Unlock Immediately on Load",
     description = "Adds the training topics immediately when loading a saved game rather than waiting until talking to a trainer NPC.",
     variable = mwse.mcm.createTableVariable({ id = "trainerLogAutoUnlockOnLoad", table = config }),
+})
+
+-- SECTION 13: DOOR LOCK COMPATIBILITY
+local doorCategory = page:createCategory(string.format("Door Locks: Compatibility%s",
+    getStatusText(config.isDoorLockSuiteInstalled())))
+
+doorCategory:createYesNoButton({
+    label = "Coordinate Door Locking and Lockpicking",
+    description = "Locks an NPC-owned interior door when its owner is absent. Standing at a locked door plays "
+        .. "the locked-door sound; sneak to pass it to Modern Lockpicking. Owned unlocked doors also require sneaking.",
+    variable = mwse.mcm.createTableVariable({ id = "doorLockCompatibilityEnabled", table = config }),
+})
+
+doorCategory:createYesNoButton({
+    label = "Show 'The Door is Locked' Notification",
+    description = "Also shows a visual notification when a locked door is tried while standing.",
+    variable = mwse.mcm.createTableVariable({ id = "doorLockedNotification", table = config }),
 })
 
 mwse.mcm.register(template)

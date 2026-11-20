@@ -1,4 +1,4 @@
-"""mwpluginpatches' Lua runs of two plugin sound scripts the engine restarts every frame: run in LuaJIT with
+"""mwpluginpatches' Lua runs of known plugin sound scripts the engine restarts every frame: run in LuaJIT with
 stub MWSE calls in which the engine always says "not playing" (the case mwsoundguard logs as RUNAWAY)."""
 import os
 import subprocess
@@ -26,8 +26,11 @@ tes3 = {
 mwse = { overrideScript = function(id, fn) overrides[id] = fn end, log = function() end }
 event = { register = function(name, fn) handlers[name] = fn end }
 math.randomseed(1)
-function ref(id, cell) return { id = id, cell = cell, position = { x = 1, y = 2, z = 3 }, context = {} } end
-function frames(script, r, n) for _ = 1, n do overrides[script]({ reference = r }) end end
+function ref(id, cell)
+  return { id = id, cell = cell, position = { x = 1, y = 2, z = 3 }, context = {},
+           orientation = { x = 0, y = 0, z = 0 }, startingOrientation = { x = 0, y = 0, z = 0 } }
+end
+function frames(script, r, n) for _ = 1, n do overrides[script]({ reference = r, delta = 1 / 60 }) end end
 function check(ok, what) if not ok then error(what, 2) end end
 """
 
@@ -77,4 +80,23 @@ check(#plays == 2 and removes[#removes]:find("swampNight", 1, true), "bad weathe
 local inside = ref("cellar", { isInterior = true })
 frames("SwampSoundScript", inside, 20)
 check(#plays == 2, "nothing indoors")
+""")
+
+
+def test_expanded_sounds_keeps_one_loop_and_preserves_float_rocking():
+    run(r"""
+require("expandedSounds").init()
+local boat = ref("rowboat", {})
+frames("Float", boat, 30)
+check(#plays == 1 and plays[1] == "rowboat:plx_ES_Water:loop", "one water loop")
+check(boat.orientation.x > 0 and boat.context.swingTime == 1, "Float still rocks the boat")
+frames("Float", boat, 211)
+check(#plays == 1 and math.abs(boat.orientation.x) < 0.000001 and boat.context.timer == 0,
+      "Float completes and resets its four-second rocking cycle")
+local creak = ref("creak", {})
+frames("Sound_Boat_Creak", creak, 300)
+check(#plays == 2 and plays[2] == "creak:Boat Creak:loop", "one boat-creak loop")
+handlers.referenceDeactivated({ reference = boat })
+frames("Float", boat, 1)
+check(#plays == 3, "water loop restarts after the source reloads")
 """)

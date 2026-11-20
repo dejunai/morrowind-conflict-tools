@@ -1,0 +1,72 @@
+import os
+import subprocess
+
+import pytest
+
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+LUAJIT = os.environ.get("MWMANAGER_LUAJIT", os.path.join(ROOT, "tools", "luajit", "luajit.exe"))
+PATCHES = os.path.join(ROOT, "Data Files", "MWSE", "mods", "mwpluginpatches", "patches")
+pytestmark = pytest.mark.skipif(not os.path.isfile(LUAJIT), reason="LuaJIT not available")
+
+
+def test_owned_door_locking_and_activation_order():
+    script = r'''
+handlers, sounds, notices = {}, {}, {}
+local config = { doorLockedNotification = true }
+package.preload["mwpluginpatches.config"] = function() return config end
+tes3 = {
+  objectType = { door = 1, npc = 2 },
+  event = { activate = "activate" },
+  player = {}, mobilePlayer = { isSneaking = false },
+  getLocked = function(p) return p.reference.locked end,
+  lock = function(p) p.reference.locked, p.reference.level = true, p.level end,
+  getOwner = function(p) return p.reference.owner end,
+  hasOwnershipAccess = function(p) return p.target.access end,
+  playSound = function(p) sounds[#sounds + 1] = p.sound end,
+}
+tes3ui = { showNotifyMenu = function(s) notices[#notices + 1] = s end }
+mwse = { log = function() end }
+event = { register = function(_, fn, opts) handlers[opts.priority] = fn end }
+local owner = { objectType = tes3.objectType.npc }
+local function cell(actors)
+  local c = { isInterior = true, actors = actors or {} }
+  function c:iterateReferences()
+    local i = 0
+    return function() i = i + 1; return self.actors[i] end
+  end
+  return c
+end
+local function door(dest, access)
+  return { object = { objectType = tes3.objectType.door }, destination = { cell = dest },
+           owner = owner, access = access, data = {} }
+end
+local function activate(target)
+  return handlers[9200]({ target = target, activator = tes3.player })
+end
+local function check(ok, message) if not ok then error(message, 2) end end
+
+package.path = [[''' + PATCHES + r'''\?.lua;]] .. package.path
+require("doorLockCompatibility").init()
+
+local absent = door(cell(), false)
+check(activate(absent) == false, "standing activation is consumed")
+check(absent.locked and absent.level == 38, "absent owner's door gets abot's standard lock level")
+check(sounds[1] == "LockedDoor" and notices[1] == "The Door is Locked", "audible and optional visual feedback")
+
+local present = door(cell({ { object = owner, disabled = false } }), false)
+check(activate(present) == false and not present.locked, "present owner's unlocked door requires sneaking")
+
+tes3.mobilePlayer.isSneaking = true
+local locked = door(cell(), false); locked.locked = true
+check(activate(locked) == nil and locked.data.ab01drlkbl == 1, "sneaking bypasses abot")
+handlers[9000]({ target = locked })
+check(locked.data.ab01drlkbl == nil, "temporary bypass is gone before Modern Lockpicking")
+
+local blacklisted = door(cell(), false); blacklisted.locked = true; blacklisted.data.ab01drlkbl = 1
+activate(blacklisted); handlers[9000]({ target = blacklisted })
+check(blacklisted.data.ab01drlkbl == 1, "user's abot blacklist is preserved")
+print("ok")
+'''
+    result = subprocess.run([LUAJIT, "-"], input=script, text=True, capture_output=True, timeout=60)
+    assert result.returncode == 0 and result.stdout.strip() == "ok", result.stderr + result.stdout

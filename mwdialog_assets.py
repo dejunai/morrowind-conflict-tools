@@ -21,7 +21,7 @@ Originals of changed files go to <mod>\\Off\\<plugin>\\<path> (backup_asset_orig
 (not copied) and listed in mwdialog_unused_assets.txt, which --restore-unused uses to put them back.
 Not checked: mesh vertex counts (the 4.0.0.2 format can't exceed 65535) and folder-name case duplicates
 (the same folder on Windows)."""
-import os, re, struct, shutil, subprocess, sys, time
+import math, os, re, struct, shutil, subprocess, sys, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mwdialog_text as MT  # noqa: E402
 print = MT.printer()  # noqa: A001
@@ -432,7 +432,7 @@ def kf_model_name(rel):
 
 
 FEATURE_OF = {"snd": "sound", "tex": "textures", "keys": "text keys", "abs": "texture paths",
-              "broken": "broken", "orphan": "orphaned", "unused": "unused"}
+              "broken": "broken", "orphan": "orphaned", "unused": "unused", "cellrefs": "cell references"}
 
 
 def broken_dest(root_or_mod, rel, sub="broken", plugin=None):
@@ -1754,11 +1754,150 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None, stats=None):
                 issues.append(("WARN", rel, ", ".join(why) + " -> converted"))
                 fixes.append(("snd", full, rel, job))
     settle()
+    _check_plugin_cells(root, m, cache, mod_key, issues, fixes)
     cache.flush()
     return issues, fixes
 
 
-FIX_ORDER = {"ascii": 0, "broken": 1, "orphan": 2, "snd": 3, "keys": 4, "abs": 5, "tex": 6}
+# ---------------------------------------------------------------------------------------------------------
+# A plugin's CELL references laid out so MGE XE's distant land generator rejects or doubles them
+# ---------------------------------------------------------------------------------------------------------
+_REF_BREAK = {"FRMR", "MVRF", "NAM0"}
+
+
+def _late_scales(data, m):
+    """(new bytes, n): an XSCL after a reference's DATA/DELE moved before it (MGE XE's distant land rejects
+    the reference otherwise)."""
+    out, n = [], 0
+    for off, tag, _flags, body in m.iter_records(data):
+        raw = data[off:off + 16 + len(body)]
+        if tag == "CELL":
+            subs = [[s, d] for s, d in m.iter_subs(body, off)]
+            moved, i = 0, 0
+            while i < len(subs):
+                if subs[i][0] != "FRMR":
+                    i += 1
+                    continue
+                end = i + 1
+                while end < len(subs) and subs[end][0] not in _REF_BREAK:
+                    end += 1
+                term = next((j for j in range(i + 1, end) if subs[j][0] in ("DATA", "DELE")), None)
+                late = [x for x in subs[term + 1:end] if x[0] == "XSCL"] if term is not None else []
+                if late:
+                    subs[term:end] = late + [subs[term]] + [x for x in subs[term + 1:end] if x[0] != "XSCL"]
+                    moved += len(late)
+                i = end
+            if moved:
+                nb = b"".join(m.pack_sub(s, d) for s, d in subs)
+                raw = raw[:4] + struct.pack("<I", len(nb)) + raw[8:16] + nb
+                n += moved
+        out.append(raw)
+    return (b"".join(out), n) if n else (data, 0)
+
+
+def _cell_exteriors(data, m):
+    for off, tag, _flags, body in m.iter_records(data):
+        if tag != "CELL":
+            continue
+        head, persistent, _nam0, temporary = m.split_cell(body, off)
+        cd = next((d for s, d in head if s == "DATA" and len(d) >= 12), None)
+        if cd is None or struct.unpack_from("<I", cd)[0] & 1:
+            continue
+        yield off, struct.unpack_from("<ii", cd, 4), persistent + temporary
+
+
+def _duplicate_placements(data, m):
+    """(new bytes, n removed, n left): the same own reference (FRMR) placed in two exterior cells, identical in
+    both: the copy in the cell its position isn't in is dropped. Copies that differ are left for review."""
+    seen, dup = set(), set()
+    for _off, _cell, blocks in _cell_exteriors(data, m):
+        for blk in blocks:
+            fr = next((d for s, d in blk if s == "FRMR" and len(d) >= 4), None)
+            if fr is None:
+                continue
+            v = struct.unpack_from("<I", fr)[0]
+            if not v >> 24:
+                (dup if v in seen else seen).add(v)
+    if not dup:
+        return data, 0, 0
+    copies = {v: [] for v in dup}
+    for off, cell, blocks in _cell_exteriors(data, m):
+        for blk in blocks:
+            fr = next((d for s, d in blk if s == "FRMR" and len(d) >= 4), None)
+            v = struct.unpack_from("<I", fr)[0] if fr else None
+            if v not in copies:
+                continue
+            pos = next((d for s, d in blk if s == "DATA" and len(d) >= 24), None)
+            home = None
+            if pos is not None:
+                x, y = struct.unpack_from("<ff", pos)
+                if math.isfinite(x) and math.isfinite(y):
+                    home = (math.floor(x / 8192), math.floor(y / 8192))
+            copies[v].append((off, cell, home, b"".join(m.pack_sub(s, d) for s, d in blk)))
+    drops, removed, left = {}, 0, 0
+    for v, cs in copies.items():
+        right = [c for c in cs if c[1] == c[2]]
+        if len(right) == 1 and len({c[3] for c in cs}) == 1:
+            for off, cell, _home, _raw in cs:
+                if cell != right[0][1]:
+                    drops.setdefault(off, set()).add(v)
+                    removed += 1
+        else:
+            left += len(cs) - 1
+    if not drops:
+        return data, 0, left
+    out = []
+    for off, tag, _flags, body in m.iter_records(data):
+        raw = data[off:off + 16 + len(body)]
+        if off in drops:
+            nb, _ch = m.rewrite_cell_refs(body, off, drops[off], {})
+            raw = raw[:4] + struct.pack("<I", len(nb)) + raw[8:16] + nb
+        out.append(raw)
+    return b"".join(out), removed, left
+
+
+def cell_ref_repairs(data, m):
+    """(new bytes, late XSCL moved, duplicate placements removed, duplicates left for review) for a plugin."""
+    data, scales = _late_scales(data, m)
+    data, dupes, left = _duplicate_placements(data, m)
+    return data, scales, dupes, left
+
+
+def _check_plugin_cells(root, m, cache, mod_key, issues, fixes):
+    """check_folder's part for the mod's own plugins (at its root): CELL reference layouts MGE XE can't use."""
+    for fn in sorted(os.listdir(root)):
+        full = os.path.join(root, fn)
+        if not fn.lower().endswith((".esp", ".esm")) or not os.path.isfile(full):
+            continue
+        try:
+            stamp = stamp_of(os.stat(full))
+        except OSError:
+            continue
+        key = mod_key + "cellrefs|" + fn.lower()
+        got = cache.get(key, stamp)
+        if got is not None and got.get("c"):
+            continue
+        try:
+            with open(full, "rb") as f:
+                _new, scales, dupes, left = cell_ref_repairs(f.read(), m)
+        except (OSError, ValueError, struct.error, getattr(m, "FormatError", ValueError)) as e:
+            issues.append(("WARN", fn, f"CELL references not checked ({e})"))
+            continue
+        why = []
+        if scales:
+            why.append(f"{scales} reference scale(s) (XSCL) after the reference's DATA/DELE")
+        if dupes:
+            why.append(f"{dupes} placement(s) repeated in a cell their position is not in")
+        if why:
+            issues.append(("ERROR", fn, "; ".join(why) + " (MGE XE's distant land rejects them) -> repaired"))
+            fixes.append(("cellrefs", full, fn, {"xscl": scales, "dupes": dupes}))
+        if left:
+            issues.append(("WARN", fn, f"{left} reference(s) placed in more than one exterior cell with different "
+                                       f"data; left for review"))
+        cache.put(key, stamp, {"c": not why and not left})
+
+
+FIX_ORDER = {"ascii": 0, "broken": 1, "orphan": 2, "snd": 3, "keys": 4, "abs": 5, "tex": 6, "cellrefs": 7}
 
 
 def _backup_in_mod(root, rel, full, plugin_name, feature="converted"):
@@ -1967,6 +2106,17 @@ def apply_folder(root, fixes, m, game_dir, plugin_name):
                 if not os.path.exists(dest):
                     shutil.copy2(full, dest)
                 m.replace_asset_in_place(full, m.stand_in_bytes(rel))
+                done += 1
+                continue
+            if kind == "cellrefs":                    # a plugin: its date is its place in the load order
+                new = cell_ref_repairs(data, m)[0]
+                if new == data:
+                    continue
+                m.validate_plugin_bytes(new)
+                if not was_fixed(rel):
+                    _backup_in_mod(root, rel, full, plugin_name, FEATURE_OF[kind])
+                m.safe_write_bytes(full, new, keep_times=os.stat(full))
+                mark_fixed(rel)
                 done += 1
                 continue
             if kind == "keys":

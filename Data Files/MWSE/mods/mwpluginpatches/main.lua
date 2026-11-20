@@ -10,8 +10,10 @@ local personalEffectsFix = require("mwpluginpatches.patches.personalEffectsFix")
 local noAccidentalTheftBookFix = require("mwpluginpatches.patches.noAccidentalTheftBookFix")
 local caveDripSound = require("mwpluginpatches.patches.caveDripSound")
 local swampSound = require("mwpluginpatches.patches.swampSound")
+local expandedSounds = require("mwpluginpatches.patches.expandedSounds")
 local talesHandwritingFix = require("mwpluginpatches.patches.talesHandwritingFix")
 local trainerLogUnlock = require("mwpluginpatches.patches.trainerLogUnlock")
+local doorLockCompatibility = require("mwpluginpatches.patches.doorLockCompatibility")
 
 local function onInitialized()
     mwse.log("[mwpluginpatches] Initializing unified plugin compatibility patches...")
@@ -66,6 +68,11 @@ local function onInitialized()
         swampSound.init()
     end
 
+    -- Expanded Sounds: keep the Float rocking and boat creak, but start each loop once
+    if config.expandedSoundsEnabled and config.isExpandedSoundsActive() then
+        expandedSounds.init()
+    end
+
     -- 11. Clean Tales of Seyda Neen: Illegible Handwriting Dialogue Filter
     if config.talesHandwritingFixEnabled and config.isTalesOfSeydaNeenActive() then
         talesHandwritingFix.init()
@@ -74,6 +81,11 @@ local function onInitialized()
     -- 12. Trainer Log: Auto-Unlock Training Topics
     if config.trainerLogUnlockEnabled and config.isTrainerLogActive() then
         trainerLogUnlock.init()
+    end
+
+    -- 13. abot Door Locks + Accidental Theft Prevention + Modern Lockpicking ordering
+    if config.doorLockCompatibilityEnabled then
+        doorLockCompatibility.init()
     end
 
     mwse.log("[mwpluginpatches] Unified plugin compatibility patches initialized.")

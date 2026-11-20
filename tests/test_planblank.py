@@ -111,6 +111,15 @@ def test_tidy_second_apply_is_a_no_op(tidy, capsys):
     assert PF.state(vt.PLAN) == "pending" and "late.txt  ->" in open(vt.PLAN).read()
 
 
+def test_tidy_clean_plan_ends_with_nothing_to_fix(tidy, capsys):
+    os.remove(tidy.mod / "readme.txt")
+    os.remove(tidy.mod / "notes.txt")
+    assert tidy() == 0
+    out = capsys.readouterr().out
+    assert out.rstrip().endswith("Nothing to fix.")
+    assert "run again with --apply" not in out
+
+
 def test_tidy_partial_failure_leaves_only_what_was_not_applied(tidy, monkeypatch):
     tidy()
     real = os.rename

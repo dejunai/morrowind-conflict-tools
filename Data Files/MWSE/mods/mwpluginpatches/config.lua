@@ -81,6 +81,19 @@ function config.isSwampSoundsActive()
     return tes3.isModActive("Yet Another Better Sounds Patch.esp") or tes3.getScript("SwampSoundScript") ~= nil
 end
 
+function config.isExpandedSoundsActive()
+    return tes3.isModActive("Expanded Sounds.esp")
+end
+
+function config.isDoorLockSuiteInstalled()
+    local function installed(path)
+        return tes3.getFileExists("MWSE/mods/" .. path) or tes3.getFileExists("Data Files/MWSE/mods/" .. path)
+    end
+    return installed("abot/Door Locks/main.lua")
+        and installed("mer/accidentalTheftProtection/main.lua")
+        and installed("tauer/modern-lockpicking/main.lua")
+end
+
 -- Resolve dynamic defaults based on whether target plugin is active in load order
 local function getDynamicDefaults()
     local mca = config.isMcaActive()
@@ -94,8 +107,10 @@ local function getDynamicDefaults()
     local nat = config.isNoAccidentalTheftActive()
     local drips = config.isCaveDripsActive()
     local swamp = config.isSwampSoundsActive()
+    local expandedSounds = config.isExpandedSoundsActive()
     local tales = config.isTalesOfSeydaNeenActive()
     local trainerLog = config.isTrainerLogActive()
+    local doorLocks = config.isDoorLockSuiteInstalled()
 
     return {
         -- AutoStartup: Morrowind Comes Alive
@@ -150,6 +165,11 @@ local function getDynamicDefaults()
         -- Looping sound scripts the engine restarts every frame (mwsoundguard RUNAWAY entries)
         caveDripSoundEnabled = drips,
         swampSoundEnabled = swamp,
+        expandedSoundsEnabled = expandedSounds,
+
+        -- Coordinate owned doors, sneak-to-steal, and Modern Lockpicking activation.
+        doorLockCompatibilityEnabled = doorLocks,
+        doorLockedNotification = false,
     }
 end
 
