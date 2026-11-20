@@ -1,8 +1,10 @@
 """Tidy's splash rule: the game shows only TGA splashes from the top of Splash\\ (a DDS-only Splash folder showed none;
-subfolders are never picked). Every splash becomes at most 1024 wide, 24-bit unless it has alpha, RLE when smaller,
-the original kept in the mod's Off\\splash screens\\. A non-TGA at the top is converted, unless the mod has MWSE code
-that may load it by name; one in a subfolder is only a mod's own, and is left alone."""
+subfolders are never picked). Wider than 2048 is cut to 2048 (1024 lost too much detail); a loading screen has no use
+for alpha, so every splash is 24-bit; one at most 2048 wide is only re-encoded (same pixels) when that saves at least
+10%. The original is kept in the mod's Off\\splash screens\\. A non-TGA at the top is converted, unless the mod has
+MWSE code that may load it by name; one in a subfolder is only a mod's own, and is left alone."""
 import os
+import random
 import shutil
 import struct
 import subprocess
@@ -18,14 +20,20 @@ TEXCONV = os.path.join(GAME, "texconv.exe")
 pytestmark = pytest.mark.skipif(not os.path.isfile(TEXCONV), reason="texconv.exe not available")
 
 
-def tga(path, w, h, bpp=3):
+def tga(path, w, h, bpp=3, noisy=False):
+    """An uncompressed TGA: one colour, or varied pixels RLE can't shrink."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    pixel = bytes([40, 80, 120, 255][:bpp])
+    if noisy:
+        rnd = random.Random(w * h * bpp)
+        pixels = b"".join(bytes(rnd.randrange(256) for _ in range(3)) + (b"\x80" if bpp == 4 else b"")
+                          for _ in range(w * h))
+    else:
+        pixels = bytes([40, 80, 120, 255][:bpp]) * (w * h)
     head = struct.pack("<BBBHHBHHHHBB", 0, 0, 2, 0, 0, 0, 0, 0, w, h, bpp * 8, 8 if bpp == 4 else 0)
-    path.write_bytes(head + pixel * (w * h))
+    path.write_bytes(head + pixels)
 
 
-def size_of(path):
+def header(path):
     data = path.read_bytes()
     return struct.unpack_from("<HH", data, 12) + (data[16], data[2])
 
@@ -43,26 +51,31 @@ def dds_from(tga_path, out_dir):
     tga_path.unlink()
 
 
-def test_wide_and_non_tga_splashes_become_1024_wide_rle_tga_with_the_original_in_off(game):
+def test_splashes_are_capped_at_2048_made_24_bit_and_kept_in_off(game):
     mod = game / "staging" / "Splash Pack"
-    tga(mod / "Splash" / "wide.tga", 2048, 8)
-    tga(mod / "Splash" / "fine.tga", 1024, 8)
-    tga(mod / "Splash" / "pic.tga", 2048, 8)
+    tga(mod / "Splash" / "huge.tga", 4096, 8)
+    tga(mod / "Splash" / "alpha.tga", 2048, 8, bpp=4, noisy=True)       # same pixels, 24-bit: 25% smaller
+    tga(mod / "Splash" / "fine.tga", 1024, 8, noisy=True)               # 24-bit, RLE can't help: left alone
+    tga(mod / "Splash" / "pic.tga", 64, 8)
     dds_from(mod / "Splash" / "pic.tga", mod / "Splash")
     tga(mod / "Splash" / "regional" / "mine.tga", 64, 8)
     dds_from(mod / "Splash" / "regional" / "mine.tga", mod / "Splash" / "regional")
+    before = ah._tga_read((mod / "Splash" / "alpha.tga").read_bytes())[3]
     issues, fixes = ah.check_folder(str(mod), m, str(game / "Data Files"))
     splash = sorted(rel.replace("\\", "/") for kind, _f, rel, _j in fixes if kind == "splash")
-    assert splash == ["Splash/pic.dds", "Splash/wide.tga"], issues
+    assert splash == ["Splash/alpha.tga", "Splash/huge.tga", "Splash/pic.dds"], issues
     done, skipped = ah.apply_folder(str(mod), [f for f in fixes if f[0] == "splash"], m, str(game), "Splash Pack")
-    assert (done, skipped) == (2, [])
-    assert size_of(mod / "Splash" / "wide.tga")[:3] == (1024, 4, 24)
-    assert size_of(mod / "Splash" / "pic.tga")[:3] == (1024, 4, 24)
+    assert (done, skipped) == (3, [])
+    assert header(mod / "Splash" / "huge.tga")[:3] == (2048, 4, 24)
+    assert header(mod / "Splash" / "alpha.tga")[:3] == (2048, 8, 24)
+    after = ah._tga_read((mod / "Splash" / "alpha.tga").read_bytes())[3]
+    assert [b"".join(r[i:i + 3] for i in range(0, len(r), 4)) for r in before] == after       # same colours
+    assert header(mod / "Splash" / "pic.tga")[:3] == (64, 8, 24)
     assert not (mod / "Splash" / "pic.dds").exists()
-    assert size_of(mod / "Splash" / "fine.tga") == (1024, 8, 24, 2)          # already small enough: untouched
+    assert header(mod / "Splash" / "fine.tga") == (1024, 8, 24, 2)
     assert (mod / "Splash" / "regional" / "mine.dds").exists()              # a subfolder: a mod's own
     kept = sorted(p.name for p in (mod / "Off").rglob("*") if p.is_file() and not p.name.endswith(".sha256"))
-    assert kept == ["pic.dds", "wide.tga"]
+    assert kept == ["alpha.tga", "huge.tga", "pic.dds"]
     _issues, again = ah.check_folder(str(mod), m, str(game / "Data Files"))
     assert not [f for f in again if f[0] == "splash"]                       # nothing left to do
 

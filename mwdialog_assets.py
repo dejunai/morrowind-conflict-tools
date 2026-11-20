@@ -791,9 +791,14 @@ def _walk(data_dir, tops):
 
 # ---------------------------------------------------------------------------------------------------------
 # Loading-screen splashes: the game shows only TGAs (a DDS-only Splash folder showed none), and reads RLE TGAs. A
-# 2048x1024 one is 6-8 MB in memory, a 4096x2048 one 24-32: at most 1024 wide is plenty for a loading screen.
+# 4096x2048 one is 24-32 MB in memory: wider than 2048 is cut to 2048 (1024 lost too much detail). A loading screen
+# is drawn full-screen over nothing, so an alpha channel has no use: every splash is 24-bit (230 of 706 in one install
+# were 32-bit). One at most 2048 wide is only re-encoded - alpha dropped, RLE when smaller - and only when that saves
+# at least SPLASH_MIN_GAIN of the file.
 # ---------------------------------------------------------------------------------------------------------
-SPLASH_MAX_WIDTH = 1024
+SPLASH_MAX_WIDTH = 2048
+SPLASH_MIN_GAIN = 0.10
+SPLASH_RULE = 3                       # in the asset cache: a splash checked under this rule is not decoded again
 SPLASH_IMAGE_EXTS = (".tga", ".dds", ".bmp", ".png", ".jpg", ".jpeg")
 
 
@@ -885,16 +890,25 @@ def _texconv_tga(path, texconv, tmp, width=None, height=None):
     return result
 
 
+def splash_needs_texconv(path):
+    """A splash that has to be resized or converted (not only re-encoded)."""
+    return not path.lower().endswith(".tga") or _tga_width(path) > SPLASH_MAX_WIDTH
+
+
 def splash_tga(path, texconv, tmp):
     """A splash image (TGA, DDS, BMP...) as the TGA bytes to ship: at most SPLASH_MAX_WIDTH wide (aspect kept),
-    24-bit unless it has alpha, RLE when smaller."""
+    24-bit (a loading screen has no use for alpha), RLE when smaller. A TGA that needs no resizing keeps its pixels."""
+    if not splash_needs_texconv(path):
+        with open(path, "rb") as f:
+            w, h, bpp, rows = _tga_read(f.read())
+        if bpp == 4:
+            rows = [b"".join(row[i:i + 3] for i in range(0, len(row), 4)) for row in rows]
+        return _tga_write(w, h, 3, rows)
     w, h, bpp, rows = _texconv_tga(path, texconv, tmp)
     if w > SPLASH_MAX_WIDTH:
         w, h, bpp, rows = _texconv_tga(path, texconv, tmp, SPLASH_MAX_WIDTH, max(1, round(h * SPLASH_MAX_WIDTH / w)))
-    if all(min(row[3::4]) == 255 for row in rows):           # no alpha: 24-bit
-        rows = [b"".join(row[i:i + 3] for i in range(0, len(row), 4)) for row in rows]
-        bpp = 3
-    return _tga_write(w, h, bpp, rows)
+    rows = [b"".join(row[i:i + 3] for i in range(0, len(row), 4)) for row in rows]      # 24-bit
+    return _tga_write(w, h, 3, rows)
 
 
 def _tga_pixels(path):
@@ -1717,7 +1731,7 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None, stats=None):
         stamp = stamp_of(st)
         key = mod_key + norm_rel(rel)
         got = cache.get(key, stamp)
-        if got is not None and got.get("c") and top != "splash":     # splashes: a few, always looked at
+        if got is not None and got.get("c") and (top != "splash" or got.get("sr") == SPLASH_RULE):
             if top == "meshes":
                 tn = (got.get("f") or {}).get("tn")
                 if tn is None and low.endswith(".nif"):        # an older record: the model is read once
@@ -1758,11 +1772,22 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None, stats=None):
             continue
         if top == "splash" and low.endswith(SPLASH_IMAGE_EXTS):
             # the game shows only TGA splashes; one at most SPLASH_MAX_WIDTH wide is left as it is
+            pending[5]["sr"] = SPLASH_RULE
             if low.endswith(".tga"):
                 if _tga_width(full) > SPLASH_MAX_WIDTH:
                     issues.append(("WARN", rel, f"splash screen wider than {SPLASH_MAX_WIDTH} -> {SPLASH_MAX_WIDTH} wide, "
                                                 f"RLE TGA (the original kept in Off)"))
                     fixes.append(("splash", full, rel, None))
+                else:
+                    try:
+                        smaller = 1 - len(splash_tga(full, None, None)) / size
+                    except (OSError, ValueError, struct.error):
+                        smaller = 0
+                    if smaller >= SPLASH_MIN_GAIN:
+                        issues.append(("WARN", rel, f"splash screen stored {round(smaller * 100)}% larger than it needs "
+                                                    f"(an alpha channel a loading screen has no use for, or no RLE) -> "
+                                                    f"24-bit RLE TGA, same pixels (the original kept in Off)"))
+                        fixes.append(("splash", full, rel, None))
             elif rel.replace("/", "\\").count("\\") > 1:
                 pass                                 # Splash\<folder>\: the game never picks it; only a mod's code does
             elif os.path.isdir(os.path.join(root, "MWSE")):
@@ -2086,8 +2111,8 @@ def apply_folder(root, fixes, m, game_dir, plugin_name):
                 m.replace_asset_in_place(full, m.stand_in_bytes(rel))
                 done += 1
                 continue
-            if kind == "splash":                      # at most 1024 wide, RLE TGA; a DDS/BMP... becomes a .tga
-                if not texconv:
+            if kind == "splash":                      # at most 2048 wide, RLE TGA; a DDS/BMP... becomes a .tga
+                if not texconv and splash_needs_texconv(full):
                     skipped.append(f"{rel} (texconv.exe not found)")
                     continue
                 os.makedirs(tmp, exist_ok=True)
