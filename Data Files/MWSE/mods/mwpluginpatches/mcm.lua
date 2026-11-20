@@ -27,7 +27,9 @@ Active Plugin Status:
   • The Lost Heir: %s
   • Mabrigash Distribution: %s
   • Personal Effects: %s
-  • No Accidental Theft: %s]],
+  • No Accidental Theft: %s
+  • Cave Drips: %s
+  • Yet Another Better Sounds Patch: %s]],
     config.isMcaActive() and "Active" or "Not Active",
     config.isEbonheartUnderworksActive() and "Active" or "Not Active",
     config.isPsGuardActive() and "Active" or "Not Active",
@@ -36,7 +38,9 @@ Active Plugin Status:
     config.isLostHeirActive() and "Active" or "Not Active",
     config.isMabrDistActive() and "Active" or "Not Active",
     config.isPersonalEffectsActive() and "Active" or "Not Active",
-    config.isNoAccidentalTheftActive() and "Active" or "Not Active"),
+    config.isNoAccidentalTheftActive() and "Active" or "Not Active",
+    config.isCaveDripsActive() and "Active" or "Not Active",
+    config.isSwampSoundsActive() and "Active" or "Not Active"),
 })
 
 -- SECTION 1: FRIENDS & FRENS (JIUB COMPANION DELAY)
@@ -220,6 +224,31 @@ natCategory:createDropdown({
         { label = "Hidden", value = "hidden" },
     },
     variable = mwse.mcm.createTableVariable({ id = "ownedBookTakeMode", table = config }),
+})
+
+-- SECTION 10: LOOPING SOUND SCRIPTS
+local dripCategory = page:createCategory(string.format("Cave Drips: Drip Sound%s",
+    getStatusText(config.isCaveDripsActive())))
+
+dripCategory:createYesNoButton({
+    label = "Start Each Drip Loop Once",
+    description = "Runs Cave Drips' R0_Sound_Cave_Drip_scr in Lua. The engine can report the drip loop as not playing "
+        .. "while it plays, so the original script restarts it every frame (mwsoundguard RUNAWAY entries). With this "
+        .. "on, each drip starts its loop once while it is loaded; the drip visuals are placed as before. "
+        .. "Takes effect after a restart.",
+    variable = mwse.mcm.createTableVariable({ id = "caveDripSoundEnabled", table = config }),
+})
+
+local swampCategory = page:createCategory(string.format("Yet Another Better Sounds Patch: Swamp Sounds%s",
+    getStatusText(config.isSwampSoundsActive())))
+
+swampCategory:createYesNoButton({
+    label = "One Swamp Loop Per Sound Source",
+    description = "Runs SwampSoundScript in Lua with the same day, night and weather choices. The original starts "
+        .. "a new random swamp loop every frame because the engine reports the playing one as stopped. With this "
+        .. "on, each swamp sound source keeps one loop until day turns to night (or back) or the weather turns bad. "
+        .. "Takes effect after a restart.",
+    variable = mwse.mcm.createTableVariable({ id = "swampSoundEnabled", table = config }),
 })
 
 mwse.mcm.register(template)

@@ -8,6 +8,8 @@ local lostHeirDelay = require("mwpluginpatches.patches.lostHeirDelay")
 local mabrDist = require("mwpluginpatches.patches.mabrDist")
 local personalEffectsFix = require("mwpluginpatches.patches.personalEffectsFix")
 local noAccidentalTheftBookFix = require("mwpluginpatches.patches.noAccidentalTheftBookFix")
+local caveDripSound = require("mwpluginpatches.patches.caveDripSound")
+local swampSound = require("mwpluginpatches.patches.swampSound")
 
 local function onInitialized()
     mwse.log("[mwpluginpatches] Initializing unified plugin compatibility patches...")
@@ -50,6 +52,16 @@ local function onInitialized()
     -- 8. No Accidental Theft - Book Reading Fix
     if config.noAccidentalTheftBookFixEnabled and config.isNoAccidentalTheftActive() then
         noAccidentalTheftBookFix.init()
+    end
+
+    -- 9. Cave Drips: one drip loop per activator instead of a restart every frame
+    if config.caveDripSoundEnabled and config.isCaveDripsActive() then
+        caveDripSound.init()
+    end
+
+    -- 10. Yet Another Better Sounds Patch: one swamp loop per activator instead of a restart every frame
+    if config.swampSoundEnabled and config.isSwampSoundsActive() then
+        swampSound.init()
     end
 
     mwse.log("[mwpluginpatches] Unified plugin compatibility patches initialized.")

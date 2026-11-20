@@ -58,6 +58,14 @@ function config.isNoAccidentalTheftActive()
         or tes3.isModActive("accidentalTheftProtection")
 end
 
+function config.isCaveDripsActive()
+    return tes3.isModActive("Cave Drips.ESP") or tes3.getScript("R0_Sound_Cave_Drip_scr") ~= nil
+end
+
+function config.isSwampSoundsActive()
+    return tes3.isModActive("Yet Another Better Sounds Patch.esp") or tes3.getScript("SwampSoundScript") ~= nil
+end
+
 -- Resolve dynamic defaults based on whether target plugin is active in load order
 local function getDynamicDefaults()
     local mca = config.isMcaActive()
@@ -69,6 +77,8 @@ local function getDynamicDefaults()
     local mabr = config.isMabrDistActive()
     local pe = config.isPersonalEffectsActive()
     local nat = config.isNoAccidentalTheftActive()
+    local drips = config.isCaveDripsActive()
+    local swamp = config.isSwampSoundsActive()
 
     return {
         -- AutoStartup: Morrowind Comes Alive
@@ -111,6 +121,10 @@ local function getDynamicDefaults()
         -- No Accidental Theft: Allow Reading Owned Books while Standing
         noAccidentalTheftBookFixEnabled = nat,
         ownedBookTakeMode = "hidden", -- "hidden" (no Take button) or "disabled" (Take button tinted red)
+
+        -- Looping sound scripts the engine restarts every frame (mwsoundguard RUNAWAY entries)
+        caveDripSoundEnabled = drips,
+        swampSoundEnabled = swamp,
     }
 end
 
