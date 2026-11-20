@@ -314,6 +314,28 @@ def test_report_only_rules():
     assert g5["conf"] == "report-high" and "mwse.saveConfig" in g5["what"]
 
 
+def test_S1_sound_query_on_a_non_actor_is_reported_never_patched():
+    aura = ("local this = {}\nfunction this.getTrackPlaying(track, ref)\n"
+            "    if track and ref and tes3.getSoundPlaying { sound = track, reference = ref } then\n"
+            "        return track\n    end\nend\nreturn this\n")
+    a = analyse(aura)
+    s1 = [f for f in a.findings if f["rule"] == "S1"]
+    assert len(s1) == 1 and s1[0]["line"] == 3 and not s1[0]["edits"] and s1[0]["conf"] == "report"
+    assert "mwsoundguard" in s1[0]["what"] and "starts looping" not in s1[0]["what"]
+    assert patch(aura) is None                                       # report only: nothing to write
+    flies = ("local function tick(ref)\n  if not tes3.getSoundPlaying({ sound = 'Flies', reference = ref.data.f }) "
+             "then\n    tes3.playSound{ sound = 'Flies', reference = ref.data.f, loop = true }\n  end\nend\n"
+             "timer.start{ duration = 1, iterations = -1, callback = tick }\n")
+    assert "this file starts looping sounds" in next(f for f in analyse(flies).findings if f["rule"] == "S1")["what"]
+    for fine in ("local p = tes3.player if tes3.getSoundPlaying{ sound = 's', reference = player } then end",
+                 "if tes3.getSoundPlaying{ sound = 's', reference = mp.reference } then end",
+                 "if tes3.getSoundPlaying{ sound = 's' } then end",
+                 "local function f(ref) local ot = ref.object.objectType\n"
+                 "if ot == tes3.objectType.npc or ot == tes3.objectType.creature then\n"
+                 "return tes3.getSoundPlaying{ sound = 's', reference = ref } end end"):
+        assert "S1" not in rules(analyse(fine)), fine
+
+
 def test_H2_simulate_timer_restarted_on_load_is_fine_real_one_is_not():
     base = "event.register('loaded', function() timer.start{{ type = {t}, duration = 1, iterations = -1, " \
            "callback = function() end }} end)"

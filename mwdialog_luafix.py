@@ -43,6 +43,8 @@ Rules (thresholds come from MWSE\\config\\mwguard.json when it exists - the same
   K1 a known exact bug in one mod's file (KNOWN_FIXES) -> its exact replacement                      fix
   L1 a while loop that walks links (x = x.next) or counts down by a computed step -> capped at 10000   fix
   M1 an enterFrame handler (it also fires in menus) with no UI work -> returns in menu mode            fix
+  S1 tes3.getSoundPlaying{ reference = <not the player> }: on a non-actor the engine can say "not
+     playing" while a loop plays, so a restart on that answer repeats (mwsoundguard caps it)          report
   V1 number * vector (-1 * up: no metamethod for that order, errors every call) -> vector * number     fix
 
 Never touched: MWSE's own code (only files under ...\\MWSE\\mods\\ are read; core, lib, config never), and
@@ -730,7 +732,7 @@ class FileAnalysis:
                   self.r_keycode, self.r_lookups, self.r_event_fields, self.r_destroy, self.r_console, self.r_info_filter, self.r_reregister,
                   self.r_reload_timers, self.r_globals, self.r_toplevel, self.r_loops, self.r_logger_level,
                   self.r_log_triggers, self.r_loggers, self.r_save_safe, self.r_while_caps, self.r_menu_exit,
-                  self.r_vector_order, self.r_known):
+                  self.r_vector_order, self.r_known, self.r_sound_query):
             r()
         return self.findings
 
@@ -742,6 +744,33 @@ class FileAnalysis:
             if i >= 0:
                 self.findings.append(Finding(rule="K1", line=self.src.count("\n", 0, i) + 1, what=what, fix=new,
                                              conf="high", edits=[(i, i + len(old), new)], needs=set()))
+
+    def r_sound_query(self):
+        """S1: tes3.getSoundPlaying asked about a reference that is not the player. For a loop on a non-actor
+        (door, activator, light, static) the engine can answer "not playing" while it plays, so code that
+        restarts the loop on that answer starts it again and again. Report only: a safe rewrite needs to know
+        where the mod stops the sound (see the guide, Category I); mwsoundguard keeps one copy at runtime."""
+        starts_loops = any(L.dotted(c.func) == "tes3.playSound" and c.args and c.args[0].kind == "Table"
+                           and (v := table_field(c.args[0], "loop")) is not None and self.text(v) == "true"
+                           for c in self.calls)
+        for c in self.calls:
+            if L.dotted(c.func) != "tes3.getSoundPlaying" or not c.args:
+                continue
+            arg = c.args[0].expr if c.args[0].kind == "Paren" else c.args[0]
+            ref = table_field(arg, "reference")
+            if ref is None:
+                continue
+            who = self.text(ref)
+            if re.search(r"(?i)player|mobile|\bmp\b|actor|npc|creature", who):
+                continue                             # an actor: the engine tracks its sounds
+            body = self.src[max(0, c.s - 600):c.e]
+            if "tes3.objectType.npc" in body or "tes3.objectType.creature" in body:
+                continue                             # the code already tells actors from other references
+            self.add("S1", c, f"asks the engine whether a sound plays on {who}; for a loop on a door, activator, "
+                     "light or static it can say no while it plays, so restarting on that answer repeats the loop"
+                     + (" (this file starts looping sounds)" if starts_loops else "")
+                     + ". Check MWSE\\logs\\mwsoundguard.log for this mod's runaway entries; mwsoundguard "
+                     "keeps one copy at runtime.", conf="report")
 
     def r_while_caps(self):
         """L1: a while loop that walks a linked structure (x = x.next) or counts a field down by a computed step
