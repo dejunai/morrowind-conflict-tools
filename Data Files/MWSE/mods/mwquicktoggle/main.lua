@@ -1,5 +1,6 @@
 --[[
-    mwquicktoggle - pressing the quick key of an item that is already equipped unequips it.
+    mwquicktoggle - pressing the quick key of an item that is already equipped unequips it and restores
+    equipment that item displaced.
 
     Works with the vanilla quick keys and with mods that equip from the same keys. QuickKeys Hotbar Extended's
     three bars are read from its own data (its modifier keys pick the bar). How: before any other handler sees
@@ -17,7 +18,36 @@ local TOGGLE = {
 
 local config = mwse.loadConfig("mwquicktoggle", { enabled = true })
 local qkhe = include("Pirate.QuickKeysHotbarExtended.config")
-local armed, blockSlot
+local armed, pending, blockSlot
+local previous = setmetatable({}, { __mode = "k" })
+
+local function equipmentSnapshot()
+    local result = {}
+    for _, stack in pairs(tes3.player.object.equipment) do
+        result[#result + 1] = { item = stack.object, itemData = stack.itemData }
+    end
+    return result
+end
+
+local function rememberDisplaced(item, equipment)
+    if not tes3.player.object:hasItemEquipped(item) then return end
+    local displaced = {}
+    for _, stack in ipairs(equipment) do
+        if not tes3.player.object:hasItemEquipped(stack.item, stack.itemData) then
+            displaced[#displaced + 1] = stack
+        end
+    end
+    previous[item] = #displaced > 0 and displaced or nil
+end
+
+local function toggleOff(item)
+    tes3.mobilePlayer:unequip({ item = item })
+    local displaced = previous[item]
+    previous[item] = nil
+    for _, stack in ipairs(displaced or {}) do
+        tes3.mobilePlayer:equip({ item = stack.item, itemData = stack.itemData })
+    end
+end
 
 -- QuickKeys Hotbar Extended's bar for this press, or nil when it isn't handling the quick keys
 local function qkheBar()
@@ -52,21 +82,30 @@ local function slotFor(code, mouse)
 end
 
 local function before(slot)
-    armed = nil
+    armed, pending = nil, nil
     if not config.enabled or not slot or tes3.menuMode() or not tes3.mobilePlayer then return end
     local item = boundItem(slot)
-    if item and TOGGLE[item.objectType] and tes3.player.object:hasItemEquipped(item) then
-        armed = { slot = slot, item = item }
+    if item and TOGGLE[item.objectType] then
+        if tes3.player.object:hasItemEquipped(item) then
+            armed = { slot = slot, item = item }
+        else
+            pending = { item = item, equipment = equipmentSnapshot() }
+        end
     end
 end
 
 local function after()
     local a = armed
-    armed = nil
-    if not a or not tes3.mobilePlayer then return end
-    tes3.mobilePlayer:unequip({ item = a.item })
-    blockSlot = a.slot
-    timer.delayOneFrame(function() blockSlot = nil end)
+    local p = pending
+    armed, pending = nil, nil
+    if not tes3.mobilePlayer then return end
+    if a then
+        toggleOff(a.item)
+        blockSlot = a.slot
+        timer.delayOneFrame(function() blockSlot = nil end)
+    elseif p then
+        timer.delayOneFrame(function() rememberDisplaced(p.item, p.equipment) end)
+    end
 end
 
 event.register("keyDown", function(e) before(slotFor(e.keyCode, false)) end, { priority = 10000 })
@@ -80,14 +119,30 @@ event.register("keybindTested", function(e)
     end
 end)
 
-event.register("loaded", function() armed, blockSlot = nil, nil end)
+event.register("weaponReadied", function(e)
+    if e.reference ~= tes3.player then return end
+    local light = tes3.getEquippedItem({ actor = tes3.player, objectType = tes3.objectType.light })
+    local displaced = light and previous[light.object]
+    for _, stack in ipairs(displaced or {}) do
+        if stack.item.objectType == tes3.objectType.armor and stack.item.slot == tes3.armorSlot.shield then
+            toggleOff(light.object)
+            return
+        end
+    end
+end)
+
+event.register("loaded", function()
+    armed, pending, blockSlot = nil, nil, nil
+    previous = setmetatable({}, { __mode = "k" })
+end)
 
 event.register("modConfigReady", function()
     local template = mwse.mcm.createTemplate({ name = "Quick Key Toggle",
         onClose = function() mwse.saveConfig("mwquicktoggle", config) end })
     local page = template:createSideBarPage({ label = "Settings" })
     page.sidebar:createInfo({ text = "Pressing the quick key of a weapon, armor, clothing or light that is "
-        .. "already equipped unequips it. Works with the vanilla quick keys and QuickKeys Hotbar Extended." })
+        .. "already equipped unequips it and restores displaced equipment. Readying a weapon also replaces "
+        .. "a toggled light with its remembered shield. Works with vanilla quick keys and QuickKeys Hotbar Extended." })
     page:createYesNoButton({
         label = "Quick keys unequip equipped items",
         variable = mwse.mcm.createTableVariable({ id = "enabled", table = config }),

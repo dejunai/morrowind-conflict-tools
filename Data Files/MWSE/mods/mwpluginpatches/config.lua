@@ -99,6 +99,7 @@ function config.isDoorLockSuiteInstalled()
         and installed("tauer/modern-lockpicking/main.lua")
 end
 
+
 -- Resolve dynamic defaults based on whether target plugin is active in load order
 local function getDynamicDefaults()
     local mca = config.isMcaActive()
@@ -119,6 +120,7 @@ local function getDynamicDefaults()
     local coastGuard = config.isCoastGuardContrabandActive()
 
     return {
+
         -- Coast Guard Contraband Bulk Turn-In & Filter
         coastGuardContrabandEnabled = coastGuard,
         coastGuardBulkTurnIn = true,

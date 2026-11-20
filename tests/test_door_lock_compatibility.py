@@ -38,7 +38,7 @@ local function cell(actors)
   return c
 end
 local function door(dest, access)
-  return { object = { objectType = tes3.objectType.door }, destination = { cell = dest },
+  return { object = { objectType = tes3.objectType.door }, cell = cell(), destination = { cell = dest },
            owner = owner, access = access, data = {} }
 end
 local function activate(target)
@@ -48,6 +48,19 @@ local function check(ok, message) if not ok then error(message, 2) end end
 
 package.path = [[''' + PATCHES + r'''\?.lua;]] .. package.path
 require("doorLockCompatibility").init()
+
+local opened
+function tes3.player:activate(target)
+  local innerResult = handlers[9200]({ target = target, activator = self })
+  check(innerResult == nil, "recursive exit activation is allowed")
+  opened = not target.lockNode.locked and target.data.ab01drlkbl == 1
+end
+
+local outside = { isInterior = false, isOrBehavesAsExterior = true }
+local exit = door(outside, false); exit.locked = true; exit.lockNode = { locked = true, level = 38 }
+check(activate(exit) == false and opened, "locked interior exit opens silently")
+check(exit.lockNode.locked and exit.data.ab01drlkbl == nil, "exit lock and temporary abot bypass are restored")
+check(#sounds == 0 and #notices == 0, "interior exit produces no lock alert")
 
 local absent = door(cell(), false)
 check(activate(absent) == false, "standing activation is consumed")

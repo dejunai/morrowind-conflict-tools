@@ -363,4 +363,5 @@ cgCategory:createYesNoButton({
     variable = mwse.mcm.createTableVariable({ id = "coastGuardTurnInVampireDust", table = config }),
 })
 
+
 mwse.mcm.register(template)

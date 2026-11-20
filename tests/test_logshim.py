@@ -117,6 +117,7 @@ def test_config_luafix_log_section_and_legacy_keys(tmp_path):
     assert lf.DEFAULTS["log"]["perSecond"] == 50                # defaults untouched
     shim = lf.log_shim("testmod", c)
     assert "init = 7," in shim and "perSecond = 9," in shim and "maxBytes = 1048576," in shim
+    assert 'name = "tew.aura"' in lf.log_shim("tew/AURA", c)
 
 
 @need_lua
