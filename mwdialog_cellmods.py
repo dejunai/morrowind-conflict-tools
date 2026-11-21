@@ -1,5 +1,6 @@
 """mwdialog_cellmods.py - what --cell-conflicts hands to the MWSE mods: doubled objects for mwcollide
-(mwcollide_data.json) and objects stranded by a rebuilt interior for mwstranded (mwstranded_data.json).
+(mwcollide_data.json), loose items that could float for mwfloatfix (mwfloatfix_data.json) and objects stranded
+by a rebuilt interior for mwstranded (mwstranded_data.json).
 """
 from collections import defaultdict
 import json
@@ -13,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mwdialog_text as MT  # noqa: E402
 from mwdialog_tes3 import (  # noqa: E402
     FormatError, ITEM_TAGS, cstr, first_sub, iter_records, read_plugin_bytes)
+from mwdialog_records import height_at, land_heights  # noqa: E402
 print = MT.printer()  # noqa: A001
 
 COLLIDE_DATA = "mwcollide_data.json"           # Data Files\MWSE\config\, read by the mwcollide MWSE mod
@@ -37,8 +39,136 @@ def write_collide_data(args, order, new_objs, labels, pos, name_of, deps, cells_
     patch covers (a plugin with both as masters that has a record for the cell) are left alone, and so
     are people, creatures, doors, containers and anything with a script."""
     data_dir = os.path.abspath(args.data_dir)
-    tag_of, model_of, scripted = object_info(order)   # scripted: a script may need this very copy, never hidden
     cells, count = {}, 0
+    for key, hide in doubled_objects(args, order, new_objs, pos, name_of, deps, cells_of).items():
+        ck = (labels.get(key) or key[1]).lower() if key[0] == "i" else f"#{key[1]},{key[2]}"
+        cells[ck] = [
+            {"id": v[0], "pos": [k[1], k[2], k[3]], "from": v[1], "kept": v[2], "keptObject": v[3]}
+            for k, v in sorted(hide.items())]
+        count += len(hide)
+    out_dir = os.path.join(data_dir, "MWSE", "config")
+    os.makedirs(out_dir, exist_ok=True)
+    payload = {"version": 2, "generated": time.strftime("%Y-%m-%d %H:%M:%S"), "radius": COLLIDE_RADIUS,
+               "count": count, "cells": cells}
+    tmp = os.path.join(out_dir, COLLIDE_DATA + ".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=1)
+    os.replace(tmp, os.path.join(out_dir, COLLIDE_DATA))
+    print(f"  mwcollide data: {count} doubled object(s) in {len(cells)} cell(s) for the game to hide "
+          f"(MWSE\\config\\{COLLIDE_DATA})")
+    return count
+
+
+FLOAT_DATA = "mwfloatfix_data.json"            # Data Files\MWSE\config\, read by the mwfloatfix MWSE mod
+
+FLOAT_ITEM_TAGS = {"MISC", "BOOK", "INGR", "ALCH", "WEAP", "AMMO", "ARMO", "CLOT", "APPA", "LOCK", "PROB", "REPA"}
+
+FLOAT_SUPPORT_TAGS = {"STAT", "CONT", "ACTI"}  # what an item can rest on (Morrowind's furniture is statics)
+
+FLOAT_TOLERANCE = 4.0                          # mwfloatfix's default: a gap up to this still rests
+
+# shortcut: no NIF bounds, so "on it" is within this many units across (times its scale) and from FLOAT_BELOW to
+# FLOAT_ABOVE over its origin; reading each mesh's bounding box would make this exact
+FLOAT_REACH, FLOAT_BELOW, FLOAT_ABOVE = 128.0, -32.0, 256.0
+
+FLOAT_ON_LAND = 32.0                           # an item at most this far above the land it was placed on rests on it
+
+
+def float_items(ref_hist, land_v, deps, tag_of, tol=FLOAT_TOLERANCE):
+    """What write_float_data lists: cell key ("name" / "#x,y") -> {(id, x, y, z): (plugin, why)} for loose items
+    whose final version sits on something changed by a plugin the item's plugin doesn't know about: a static,
+    container or activator within reach below it moved, rescaled or deleted, or, outside, the land under it
+    lowered by more than tol. (A replacer's new mesh isn't counted: without NIF bounds nearly every piece of
+    furniture would count.) ref_hist: cell key -> ref ->
+    [(plugin index, plugin, object, (x, y, z) or None, scale, deleted)]; land_v: grid -> [(plugin index,
+    plugin, VHGT)]."""
+    lands = {g: sorted(v, key=lambda t: t[0]) for g, v in land_v.items() if len(v) > 1}
+    heights = {}
+
+    def height(g, i, x, y):
+        if (g, i) not in heights:
+            heights[(g, i)] = land_heights(lands[g][i][2])
+        return height_at(heights[(g, i)], g, x, y)
+
+    found = defaultdict(dict)
+    for key, refs in ref_hist.items():
+        items, grid = [], defaultdict(list)
+        for vs in refs.values():
+            vs.sort(key=lambda t: t[0])
+            oid = next((v[2] for v in vs if v[2]), "")
+            tag = tag_of.get(oid.lower())
+            if tag in FLOAT_ITEM_TAGS:
+                if not vs[-1][5] and vs[-1][3]:
+                    items.append((oid, vs[-1]))
+            elif tag in FLOAT_SUPPORT_TAGS and len(vs) > 1:
+                for v in vs:                       # filed under every spot it was ever at
+                    if v[3]:
+                        grid[(int(v[3][0] // FLOAT_REACH), int(v[3][1] // FLOAT_REACH))].append((oid, vs))
+        if not items:
+            continue
+        for oid, last in items:
+            known = deps(last[1]) | {last[1]}
+            x, y, z = last[3]
+            why, looked = None, set()
+            gx, gy = int(x // FLOAT_REACH), int(y // FLOAT_REACH)
+            for sid, vs in (s for dx in (-2, -1, 0, 1, 2) for dy in (-2, -1, 0, 1, 2) for s in grid.get((gx + dx, gy + dy), ())):
+                if id(vs) in looked:
+                    continue
+                looked.add(id(vs))
+                seen = next((v for v in reversed(vs) if v[1] in known), None)
+                if seen is None or seen[5] or not seen[3]:
+                    continue                       # not there when the item was put down
+                sx, sy, sz = seen[3]
+                reach = min(FLOAT_REACH * max(seen[4], 0.1), 2 * FLOAT_REACH)
+                if (x - sx) ** 2 + (y - sy) ** 2 > reach * reach or not FLOAT_BELOW <= z - sz <= FLOAT_ABOVE:
+                    continue
+                fin = vs[-1]
+                if fin[1] != seen[1] and (fin[5] or not fin[3] or abs(fin[4] - seen[4]) > 0.01
+                                          or max(abs(a - b) for a, b in zip(fin[3], seen[3])) > tol):
+                    why = f"{sid} {'deleted' if fin[5] else 'moved'} by {fin[1]}"
+                    break
+            if why is None and key[0] == "e":
+                g = (int(math.floor(x / 8192)), int(math.floor(y / 8192)))
+                lv = lands.get(g)
+                si = next((i for i in range(len(lv) - 1, -1, -1) if lv[i][1] in known), None) if lv else None
+                if si is not None and si != len(lv) - 1:
+                    was, now = height(g, si, x, y), height(g, len(lv) - 1, x, y)
+                    if was is not None and now is not None and z - was <= FLOAT_ON_LAND and was - now > tol:
+                        why = f"land lowered {was - now:.0f} by {lv[-1][1]}"
+            if why:
+                ck = key[1] if key[0] == "i" else f"#{int(math.floor(x / 8192))},{int(math.floor(y / 8192))}"
+                found[ck][(oid, int(math.floor(x + 0.5)), int(math.floor(y + 0.5)), int(math.floor(z + 0.5)))] = (last[1], why)
+    return found
+
+
+def write_float_data(args, order, ref_hist, land_v, labels, name_of, deps):
+    """For the mwfloatfix MWSE mod: the loose items that could float (float_items), so it checks only those."""
+    data_dir = os.path.abspath(args.data_dir)
+    tag_of, _model_of, _scripted = object_info(order)
+    found = float_items(ref_hist, land_v, deps, tag_of)
+    cells, count = {}, 0
+    for ck, hits in sorted(found.items()):
+        name = ck if ck.startswith("#") else (labels.get(("i", ck)) or ck).lower()
+        cells[name] = [{"id": k[0], "pos": [k[1], k[2], k[3]], "from": name_of.get(v[0], v[0]), "why": v[1]}
+                       for k, v in sorted(hits.items())]
+        count += len(hits)
+    out_dir = os.path.join(data_dir, "MWSE", "config")
+    os.makedirs(out_dir, exist_ok=True)
+    payload = {"version": 1, "generated": time.strftime("%Y-%m-%d %H:%M:%S"), "count": count, "cells": cells}
+    tmp = os.path.join(out_dir, FLOAT_DATA + ".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=1)
+    os.replace(tmp, os.path.join(out_dir, FLOAT_DATA))
+    print(f"  mwfloatfix data: {count} loose item(s) that could float in {len(cells)} of {len(ref_hist)} cell(s) "
+          f"for the game to check (MWSE\\config\\{FLOAT_DATA})")
+    return count
+
+
+def doubled_objects(args, order, new_objs, pos, name_of, deps, cells_of):
+    """What write_collide_data lists: cell key -> {(id, x, y, z): (id, losing plugin, winning plugin, the
+    winner's object, (owner, index) of the losing reference, its group "p"/"t")}."""
+    tag_of, model_of, scripted = object_info(order)   # scripted: a script may need this very copy, never hidden
+    found = {}
     any_r = float(getattr(args, "collide_radius", COLLIDE_ANY_RADIUS) or 0)
     reach = max(COLLIDE_RADIUS, any_r)
     r2, a2 = COLLIDE_RADIUS * COLLIDE_RADIUS, any_r * any_r
@@ -86,24 +216,10 @@ def write_collide_data(args, order, new_objs, labels, pos, name_of, deps, cells_
                                     and tag_of.get(qid) not in ("LEVC", "LEVI", "NPC_", "CREA")
                                 if (same and d2 <= r2) or close:
                                     k = (oid, int(math.floor(o[1] + 0.5)), int(math.floor(o[2] + 0.5)), int(math.floor(o[3] + 0.5)))
-                                    hide.setdefault(k, (o[0], name_of.get(a, a), name_of.get(b, b), q[0]))
+                                    hide.setdefault(k, (o[0], name_of.get(a, a), name_of.get(b, b), q[0], o[4], o[5]))
         if hide:
-            ck = (labels.get(key) or key[1]).lower() if key[0] == "i" else f"#{key[1]},{key[2]}"
-            cells[ck] = [
-                {"id": v[0], "pos": [k[1], k[2], k[3]], "from": v[1], "kept": v[2], "keptObject": v[3]}
-                for k, v in sorted(hide.items())]
-            count += len(hide)
-    out_dir = os.path.join(data_dir, "MWSE", "config")
-    os.makedirs(out_dir, exist_ok=True)
-    payload = {"version": 2, "generated": time.strftime("%Y-%m-%d %H:%M:%S"), "radius": COLLIDE_RADIUS,
-               "count": count, "cells": cells}
-    tmp = os.path.join(out_dir, COLLIDE_DATA + ".tmp")
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, indent=1)
-    os.replace(tmp, os.path.join(out_dir, COLLIDE_DATA))
-    print(f"  mwcollide data: {count} doubled object(s) in {len(cells)} cell(s) for the game to hide "
-          f"(MWSE\\config\\{COLLIDE_DATA})")
-    return count
+            found[key] = hide
+    return found
 
 
 REWORK_MIN_DELETED = 20       # a plugin that deletes at least this many of a cell's original objects...

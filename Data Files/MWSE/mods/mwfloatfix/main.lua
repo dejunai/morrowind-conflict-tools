@@ -6,10 +6,15 @@
     and towards its four bottom corners. If none of them meets something within a few units, the item
     isn't resting on anything, so it is lowered onto the highest surface below it.
 
+    Only items a plugin placed are checked: anything a script spawned or that was made in game is left alone.
     Left alone: items with nothing below them within reach (no floor found), items under water, items
     up against a wall (mounted weapons, shields) or hanging from something just above, lights (unless turned on in the menu),
     and anything already checked once (each item is checked the first time its cell loads).
     Moves are written to MWSE\logs\mwfloatfix.log.
+
+    With MWSE\config\mwfloatfix_data.json (written by mwdialog_check --cell-conflicts) only the items it
+    lists are checked: those resting on something a later mod moved, rescaled or deleted, or on land a
+    later mod lowered. Without it, every loose item is checked as above.
 
     Blacklist: look at an object (or click it with the console open) and press the blacklist key
     (Shift+Delete by default). After you confirm, that one object, in that spot, is hidden now and in
@@ -98,10 +103,14 @@ local function isRefValid(ref)
 end
 
 local function getRefObject(r) return r.object end
+local function getSourceMod(r) return r.sourceMod end
 
 local function isCandidate(ref)
     if not isRefValid(ref) then return false end
     if checkedThisSession[ref] then return false end
+    -- only what a plugin placed: a script's spawns (birds, dropped loot) and anything made in game have no sourceMod
+    local okSrc, src = pcall(getSourceMod, ref)
+    if not okSrc or not src then return false end
     local ok, obj = pcall(getRefObject, ref)
     if not ok or not obj then return false end
 
@@ -472,8 +481,52 @@ local function undoLast()
     return e
 end
 
+-- MWSE\config\mwfloatfix_data.json (mwdialog_check --cell-conflicts): the loose items that could float, by
+-- cell. When it is there only those are checked, and every other cell costs one table lookup.
+local floatList                          -- cell key -> object id -> { {x, y, z}, ... }; nil: check everything
+do
+    local data = mwse.loadConfig("mwfloatfix_data")
+    if data and type(data.cells) == "table" then
+        floatList = {}
+        for cellId, entries in pairs(data.cells) do
+            local set = {}
+            for _, e in ipairs(entries) do
+                if type(e.id) == "string" and type(e.pos) == "table" and #e.pos >= 3 then
+                    local id = e.id:lower()
+                    set[id] = set[id] or {}
+                    table.insert(set[id], e.pos)
+                end
+            end
+            floatList[cellId:lower()] = set
+        end
+    end
+end
+
+local function listKey(cell)
+    if cell.isInterior then return cell.id:lower() end
+    return string.format("#%d,%d", cell.gridX, cell.gridY)
+end
+
+local lastCell, lastSet
+local function isListed(ref)
+    local cell = ref.cell
+    if not cell then return false end
+    if cell ~= lastCell then lastCell, lastSet = cell, floatList[listKey(cell)] end
+    local spots = lastSet and ref.object and lastSet[ref.object.id:lower()]
+    if not spots then return false end
+    local p = ref.startingPosition or ref.position
+    for _, s in ipairs(spots) do
+        if math.abs(p.x - s[1]) <= 4 and math.abs(p.y - s[2]) <= 4 and math.abs(p.z - s[3]) <= 4 then return true end
+    end
+    return false
+end
+
 local function enqueue(ref)
     if not config.enabled or queued[ref] then return end
+    if floatList then
+        local ok, listed = pcall(isListed, ref)
+        if not ok or not listed then return end
+    end
     if not isCandidate(ref) then return end
     queued[ref] = true
     queue[#queue + 1] = ref
@@ -604,7 +657,9 @@ event.register(tes3.event.modConfigReady, function()
         label = "Settings",
         description = "Lowers loose items that float above the surface under them, once, the first time "
             .. "their cell loads. Items against a wall, under water, or with no floor within reach are left "
-            .. "alone. Each move is written to MWSE\\logs\\mwfloatfix.log.",
+            .. "alone. Each move is written to MWSE\\logs\\mwfloatfix.log."
+            .. (floatList and "\n\nOnly the items in MWSE\\config\\mwfloatfix_data.json are checked (written by "
+                .. "mwdialog_check --cell-conflicts)." or ""),
     })
     page:createOnOffButton({ label = "Enabled", variable = mwse.mcm.createTableVariable({ id = "enabled", table = config }) })
     page:createSlider({ label = "Still resting when the gap is up to (units)", min = 1, max = 16, step = 1,
@@ -613,7 +668,9 @@ event.register(tes3.event.modConfigReady, function()
         variable = mwse.mcm.createTableVariable({ id = "maxDrop", table = config }) })
     page:createSlider({ label = "Counts as mounted on a wall within (units)", min = 0, max = 32, step = 1,
         variable = mwse.mcm.createTableVariable({ id = "wallGap", table = config }) })
-    page:createOnOffButton({ label = "Also carryable lights", variable = mwse.mcm.createTableVariable({ id = "lights", table = config }) })
+    if not floatList then                -- the list never names lights
+        page:createOnOffButton({ label = "Also carryable lights", variable = mwse.mcm.createTableVariable({ id = "lights", table = config }) })
+    end
     page:createOnOffButton({ label = "Write moves to MWSE\\logs\\mwfloatfix.log",
         variable = mwse.mcm.createTableVariable({ id = "log", table = config }) })
     page:createKeyBinder({ label = "Hide key (look at an object, or click it in the console, then press)",

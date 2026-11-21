@@ -10,6 +10,10 @@
     --cell-conflicts (or --full) again, and the next visit follows the new list: anything no longer
     listed is shown again. The Mod Config menu turns it off (everything shows again) or re-applies it to
     where you are. What it does goes to Data Files\MWSE\logs\mwcollide.log.
+
+    --fix now deletes most of these in "mwdialog_check Cell Fixes.esp" (listed in mwdialog_doubled_deleted.txt);
+    this mod is left for the ones it can't (another mod changes that copy) and to show again, in older saves,
+    what it hid before.
 ]]
 
 local CONFIG_NAME = "mwcollide"
