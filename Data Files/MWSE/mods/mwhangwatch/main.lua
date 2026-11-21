@@ -51,7 +51,7 @@ local SOUND_TOP    = 10     -- most frequent sounds listed with each count
 
 local CONFIG_NAME  = "mwhangwatch"
 local config = mwse.loadConfig(CONFIG_NAME, {
-    enabled    = true,   -- the whole watch
+    enabled    = false,   -- the whole watch
     audio      = true,   -- sound events, music and sound-blocking mods
     soundLines = 40,     -- max sound lines per second (rest are counted)
     memWarn    = true,   -- warn on screen when memory is nearly used up

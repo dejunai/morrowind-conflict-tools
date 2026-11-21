@@ -28,7 +28,7 @@
 ]]
 
 local CONFIG_NAME = "mwstranded"
-local config = mwse.loadConfig(CONFIG_NAME, { enabled = true, move = true, hide = true, log = true })
+local config = mwse.loadConfig(CONFIG_NAME, { enabled = false, move = true, hide = true, log = true })
 
 local LOG_DIR = "Data Files\\MWSE\\logs"
 local logFile

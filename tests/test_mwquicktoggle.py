@@ -51,7 +51,7 @@ end
 function tes3.mobilePlayer:unequip(p) remove(p.item) end
 
 mwse = {
-  loadConfig = function(_, defaults) return defaults end,
+  loadConfig = function(_, defaults) defaults.enabled = true; return defaults end,   -- switched on in its MCM
   saveConfig = function() end,
   mcm = { createTemplate = function() error("MCM should not run") end },
 }

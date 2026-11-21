@@ -24,7 +24,7 @@ local log = function(fmt, ...) mwse.log("[mwcustomclasspersistence] " .. fmt, ..
 local function trim(s) return (s or ""):match("^%s*(.-)%s*$") end
 local function loadSaved() return mwse.loadConfig(CONFIG_FILE, {}) or {} end
 -- settings live apart from the saved classes, which are a plain list
-local settings = mwse.loadConfig("mwcustomclasspersistence", { enabled = true })
+local settings = mwse.loadConfig("mwcustomclasspersistence", { enabled = false })
 
 --- true when a class of the game or of a plugin already has this name (a saved custom class may be overwritten)
 local function isKnownClassName(name)

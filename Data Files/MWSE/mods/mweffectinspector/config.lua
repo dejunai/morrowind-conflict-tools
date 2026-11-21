@@ -1,7 +1,7 @@
 local CONFIG_NAME = "mweffectinspector"
 
 local defaultConfig = {
-    enabled = true,
+    enabled = false,
     showVFXNodes = true,          -- Detect and log lingering particle systems and attached VFX nodes
     logToMWSE = true,             -- Mirror inspect summaries to MWSE.log
     interactivePopup = true,      -- Display an in-game MessageBox with Dispel / Purge option

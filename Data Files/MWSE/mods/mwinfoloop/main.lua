@@ -36,7 +36,7 @@ local lfs = lfs or require("lfs")
 local M = {} -- returned for the test harness; MWSE ignores a main.lua return value
 
 local config = mwse.loadConfig("mwinfoloop", {
-    enabled = true,
+    enabled = false,
     startupCheck = true,
     liveGuard = true,
     breakWithLine = true,    -- let one line through when a walk goes round in a circle

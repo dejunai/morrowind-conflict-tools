@@ -22,7 +22,7 @@
 
 local CONFIG_NAME = "mwguard"
 local defaults = {
-    enabled = true,
+    enabled = false,
     priorityLimit = 10000,
     sampleEvery = 8,             -- time 1 call in every N (statistically accurate, near-zero overhead)
     reportSeconds = 30,          -- interval between reports (seconds)

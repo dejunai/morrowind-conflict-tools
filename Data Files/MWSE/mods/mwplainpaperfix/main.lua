@@ -10,7 +10,7 @@
 local NAME = "mwplainpaperfix"
 local saved = mwse.loadConfig(NAME, {}) or {}
 -- "blank", not the "whitelist" of earlier versions: those lists also hold maps and other picture-only scrolls
-local config = { enabled = saved.enabled ~= false, requireSneakForOwned = saved.requireSneakForOwned ~= false, blank = saved.blank or {} }
+local config = { enabled = saved.enabled == true, requireSneakForOwned = saved.requireSneakForOwned ~= false, blank = saved.blank or {} }
 local function save() mwse.saveConfig(NAME, config) end
 
 local written = {}      -- ids found to have text, this session

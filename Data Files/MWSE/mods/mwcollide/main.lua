@@ -13,7 +13,7 @@
 ]]
 
 local CONFIG_NAME = "mwcollide"
-local config = mwse.loadConfig(CONFIG_NAME, { enabled = true, log = true })
+local config = mwse.loadConfig(CONFIG_NAME, { enabled = false, log = true })
 
 local LOG_DIR = "Data Files\\MWSE\\logs"
 local logFile

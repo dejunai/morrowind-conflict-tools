@@ -1,7 +1,7 @@
 local CONFIG_NAME = "mwmouseguard"
 
 local defaultConfig = {
-    enabled = true,
+    enabled = false,
     lockInMenus = true,
     lockInGame = true,
     releaseOnPause = false,

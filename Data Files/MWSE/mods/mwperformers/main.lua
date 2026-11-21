@@ -18,7 +18,7 @@
 ]]
 
 local CONFIG_NAME = "mwperformers"
-local config = mwse.loadConfig(CONFIG_NAME, { enabled = true, log = true })
+local config = mwse.loadConfig(CONFIG_NAME, { enabled = false, log = true })
 
 local ANIM_PATTERNS = { "bard", "lute", "drum", "perform", "musician" }
 local SCRIPT_PATTERNS = { "bard", "lute", "drum", "perform", "musician", "minstrel" }

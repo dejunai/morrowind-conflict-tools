@@ -126,6 +126,7 @@ local function getDynamicDefaults()
     local coastGuard = config.isCoastGuardContrabandActive()
 
     return {
+        enabled = false,          -- the whole mod
 
         -- Coast Guard Contraband Bulk Turn-In & Filter
         coastGuardContrabandEnabled = coastGuard,

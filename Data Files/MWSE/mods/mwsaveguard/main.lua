@@ -6,7 +6,7 @@ package.loaded["corruptsaveguard"] = true
 
 local CONFIG_NAME = "mwsaveguard"
 local defaults = {
-	enabled = true,
+	enabled = false,
 	settleWindow = 5.0,
 	validateOnLoad = true,
 	copyNoticesToMWSELog = false,   -- every save's notices go to MWSE\logs\mwsaveguard.log; this copies them too

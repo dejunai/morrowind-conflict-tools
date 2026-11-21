@@ -1,7 +1,7 @@
 local CONFIG_NAME = "mwcompanionsneak"
 
 local defaultConfig = {
-    enabled = true,
+    enabled = false,
     includeCreatures = true,       -- Include creature companions (pets, pack guars, summons)
     includeEscorts = true,         -- Include escort quest targets as companions
     blacklistAllCreatures = true,  -- Auto-blacklist ALL creatures from stealth detection

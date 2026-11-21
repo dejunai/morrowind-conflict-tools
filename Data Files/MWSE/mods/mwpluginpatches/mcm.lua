@@ -7,6 +7,12 @@ local page = template:createSideBarPage({
     label = "Patches",
 })
 
+page:createOnOffButton({
+    label = "Enabled",
+    description = "The whole mod. Off: no patch below is applied. Takes effect after a restart.",
+    variable = mwse.mcm.createTableVariable({ id = "enabled", table = config }),
+})
+
 local function getStatusText(isActive)
     return isActive and " [Detected Active]" or " [Not Installed / Inactive]"
 end

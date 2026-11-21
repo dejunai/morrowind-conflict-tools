@@ -1,7 +1,7 @@
 local CONFIG_NAME = "mwexitguard"
 
 local defaultConfig = {
-    enabled = true,
+    enabled = false,
     skipConfirmation = false,
     enableAltF4 = true,
     logToMWSE = true,

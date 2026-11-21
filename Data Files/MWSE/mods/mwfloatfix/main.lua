@@ -20,7 +20,7 @@
 
 local CONFIG_NAME = "mwfloatfix"
 local defaults = {
-    enabled      = true,
+    enabled      = false,
     tolerance    = 4,       -- a gap up to this many units still counts as resting on something
     maxDrop      = 160,     -- never lower an item further than this (a gap larger than this is left alone)
     wallGap      = 6,       -- an item this close to a wall counts as mounted on it

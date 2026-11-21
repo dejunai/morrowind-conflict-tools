@@ -16,7 +16,7 @@ local TOGGLE = {
     [tes3.objectType.light] = true,
 }
 
-local config = mwse.loadConfig("mwquicktoggle", { enabled = true })
+local config = mwse.loadConfig("mwquicktoggle", { enabled = false })
 local qkhe = include("Pirate.QuickKeysHotbarExtended.config")
 local armed, pending, blockSlot
 local previous = setmetatable({}, { __mode = "k" })

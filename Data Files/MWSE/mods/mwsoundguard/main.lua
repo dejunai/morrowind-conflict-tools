@@ -28,7 +28,7 @@
 ]]
 
 local DEFAULTS = {
-    enabled = true,
+    enabled = false,
     loopGap = 1.0,            -- s: a second start of the same loop on the same object this soon is a duplicate
     suspectLimit = 3,         -- this many duplicates of one loop -> runaway
     loopWindow = 10,          -- s

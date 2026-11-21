@@ -1,7 +1,7 @@
 local CONFIG_NAME = "mwteleportguard"
 
 local defaultConfig = {
-    enabled = true,
+    enabled = false,
     fadeTransition = true,
     fadeDuration = 0.5,
     teleportCompanions = true,

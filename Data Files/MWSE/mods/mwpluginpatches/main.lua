@@ -18,6 +18,10 @@ local coastGuardContraband = require("mwpluginpatches.patches.coastGuardContraba
 local graphicHerbalismRespawn = require("mwpluginpatches.patches.graphicHerbalismRespawn")
 
 local function onInitialized()
+    if not config.enabled then
+        mwse.log("[mwpluginpatches] Off: no patch is applied (turn it on in its MCM, then restart).")
+        return
+    end
     mwse.log("[mwpluginpatches] Initializing unified plugin compatibility patches...")
 
     -- 1. AutoStartup (MCA & Ebonheart Underworks)

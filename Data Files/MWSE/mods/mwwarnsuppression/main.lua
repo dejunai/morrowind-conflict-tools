@@ -14,6 +14,7 @@
 
 local CONFIG_NAME = "mwwarnsuppression"
 local defaults = {
+    enabled = false,
     suppressBodyPartWarnings = true,
     suppressShutdownWarnings = true,
 }
@@ -147,6 +148,7 @@ local function applyShutdownPatch(enable)
 end
 
 local function onInitialized()
+    if not config.enabled then return end
     if config.suppressBodyPartWarnings then
         applyBodyPartPatch(true)
     end
@@ -162,13 +164,19 @@ event.register(tes3.event.modConfigReady, function()
     template:saveOnClose(CONFIG_NAME, config)
     template.onClose = function()
         mwse.saveConfig(CONFIG_NAME, config)
-        applyBodyPartPatch(config.suppressBodyPartWarnings)
-        applyShutdownPatch(config.suppressShutdownWarnings)
+        applyBodyPartPatch(config.enabled and config.suppressBodyPartWarnings)
+        applyShutdownPatch(config.enabled and config.suppressShutdownWarnings)
     end
 
     local page = template:createSideBarPage({
         label = "Settings",
         description = "mwwarnsuppression cleans harmless engine warning spam from MWSE.log and Warnings.txt without hiding genuine mod issues or errors.\n\nToggle features on or off as desired.",
+    })
+
+    page:createOnOffButton({
+        label = "Enabled",
+        description = "Off: no warning is suppressed and the game's code is left as it is.",
+        variable = mwse.mcm.createTableVariable({ id = "enabled", table = config }),
     })
 
     page:createOnOffButton({
