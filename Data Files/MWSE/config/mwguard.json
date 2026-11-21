@@ -1,5 +1,4 @@
 {
-  "enabled":true,
   "priorityLimit":10000,
   "sampleEvery":8,
   "reportSeconds":30,
@@ -7,5 +6,6 @@
   "costMs":0.75,
   "logNoticeToMWSE":true,
   "exemptMods":["mwcollide","mwcompanionsneak","mweffectinspector","mwexitguard","mwfloatfix","mwguard","mwhangwatch","mwinfoloop","mwmouseguard","mwperformers","mwpluginpatches","mwsaveguard","mwsoundguard","mwstranded","mwteleportguard","mwwarnsuppression","mwcustomclasspersistence","mwplainpaperfix","mwquicktoggle"],
+  "enabled":false,
   "perFrameHints":["e%.delta","camera","velocity","orientation","position%s*=","rotation","animat","drag","mouse","lerp","smooth","interpolat","fade","tes3ui","menu","controls","keybind","inputcontroller","positioncell"]
 }

@@ -347,23 +347,53 @@ local function reset()
     refs = setmetatable({}, { __mode = "k" })
 end
 
-if config.enabled then
-    event.register(tes3.event.addSound, onSound, { priority = -100 })
-    event.register(tes3.event.addTempSound, onSound, { priority = -100 })
-    registered = true
-    event.register(tes3.event.referenceDeactivated, forget)
-    local function startSummaryTimer()
-        timer.start({ type = timer.real, duration = config.summarySeconds, iterations = -1, persist = false, callback = summary })
+local summaryTimer = nil
+
+local function startSummaryTimer()
+    if summaryTimer then
+        summaryTimer:cancel()
+        summaryTimer = nil
     end
-    event.register(tes3.event.loaded, function()
-        reset()
-        startSummaryTimer()                          -- MWSE cancels every timer right before `loaded`
-    end)
-    event.register(tes3.event.initialized, function()
-        startSummaryTimer()
-        mwse.log("[mwsoundguard] active (v2)")
-    end)
+    summaryTimer = timer.start({ type = timer.real, duration = config.summarySeconds, iterations = -1, persist = false, callback = summary })
 end
 
+local function applySettings()
+    if config.enabled and not registered then
+        event.register(tes3.event.addSound, onSound, { priority = -100 })
+        event.register(tes3.event.addTempSound, onSound, { priority = -100 })
+        event.register(tes3.event.referenceDeactivated, forget)
+        registered = true
+        startSummaryTimer()
+        mwse.log("[mwsoundguard] enabled (v2)")
+    elseif not config.enabled and registered then
+        pcall(event.unregister, tes3.event.addSound, onSound, { priority = -100 })
+        pcall(event.unregister, tes3.event.addTempSound, onSound, { priority = -100 })
+        pcall(event.unregister, tes3.event.referenceDeactivated, forget)
+        registered = false
+        if summaryTimer then
+            summaryTimer:cancel()
+            summaryTimer = nil
+        end
+        mwse.log("[mwsoundguard] disabled")
+    end
+end
+
+event.register(tes3.event.initialized, function()
+    applySettings()
+end)
+
+event.register(tes3.event.loaded, function()
+    reset()
+    if config.enabled then
+        startSummaryTimer()
+    end
+end)
+
+local function registerModConfig()
+    local mcm = require("mwsoundguard.mcm")
+    mcm.register(config, applySettings)
+end
+event.register(tes3.event.modConfigReady, registerModConfig)
+
 -- for tests and other mods
-return { config = config, stats = stats, refs = function() return refs end, summary = summary, guard = guard }
+return { config = config, stats = stats, refs = function() return refs end, summary = summary, guard = guard, applySettings = applySettings }

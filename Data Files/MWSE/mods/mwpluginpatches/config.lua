@@ -101,6 +101,12 @@ end
 
 
 -- Resolve dynamic defaults based on whether target plugin is active in load order
+function config.isGraphicHerbalismActive()
+    return (lfs and lfs.fileexists and lfs.fileexists("Data Files/MWSE/mods/graphicHerbalism/main.lua"))
+        or (tes3.isModActive and (tes3.isModActive("Graphic Herbalism.esp") or tes3.isModActive("Graphic Herbalism Extra.esp")))
+        or false
+end
+
 local function getDynamicDefaults()
     local mca = config.isMcaActive()
     local eu = config.isEbonheartUnderworksActive()
@@ -189,6 +195,10 @@ local function getDynamicDefaults()
         -- Coordinate owned doors, sneak-to-steal, and Modern Lockpicking activation.
         doorLockCompatibilityEnabled = doorLocks,
         doorLockedNotification = false,
+
+        -- Graphic Herbalism Respawn Delay (days)
+        graphicHerbalismRespawnEnabled = config.isGraphicHerbalismActive(),
+        herbRespawnDays = 30,
     }
 end
 

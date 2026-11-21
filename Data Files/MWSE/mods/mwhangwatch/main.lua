@@ -55,7 +55,7 @@ local config = mwse.loadConfig(CONFIG_NAME, {
     audio      = true,   -- sound events, music and sound-blocking mods
     soundLines = 40,     -- max sound lines per second (rest are counted)
     memWarn    = true,   -- warn on screen when memory is nearly used up
-    memLimit   = 95,     -- ... at this percentage of the 4 GB address space
+    memLimit   = 80,     -- ... at this percentage of the 4 GB address space
 })
 
 local f                         -- the log is opened the first time the watch starts

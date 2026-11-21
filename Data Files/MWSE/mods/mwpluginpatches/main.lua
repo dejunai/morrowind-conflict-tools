@@ -15,6 +15,7 @@ local talesHandwritingFix = require("mwpluginpatches.patches.talesHandwritingFix
 local trainerLogUnlock = require("mwpluginpatches.patches.trainerLogUnlock")
 local doorLockCompatibility = require("mwpluginpatches.patches.doorLockCompatibility")
 local coastGuardContraband = require("mwpluginpatches.patches.coastGuardContraband")
+local graphicHerbalismRespawn = require("mwpluginpatches.patches.graphicHerbalismRespawn")
 
 local function onInitialized()
     mwse.log("[mwpluginpatches] Initializing unified plugin compatibility patches...")
@@ -90,6 +91,9 @@ local function onInitialized()
     end
     if config.coastGuardContrabandEnabled then
         coastGuardContraband.init()
+    end
+    if config.graphicHerbalismRespawnEnabled and config.isGraphicHerbalismActive() then
+        graphicHerbalismRespawn.init()
     end
 
     mwse.log("[mwpluginpatches] Unified plugin compatibility patches initialized.")
