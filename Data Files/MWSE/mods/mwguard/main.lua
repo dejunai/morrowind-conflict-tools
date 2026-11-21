@@ -30,7 +30,7 @@ local defaults = {
     costMs = 0.75,               -- average ms per call to flag as a bottleneck
     logNoticeToMWSE = true,      -- output summary notices of costly handlers to MWSE.log
     exemptMods = {
-        "mwguard", "mwcriminal", "mwhangwatch", "mwfloatfix", "mwstranded", "mwcollide",
+        "mwguard", "mwcriminal", "mwcompanions", "mwhangwatch", "mwfloatfix", "mwstranded", "mwcollide",
         "mwperformers", "mwinfoloop", "mwsoundguard", "mwsaveguard", "mwwarnsuppression",
         "mwcompanionsneak", "mwpluginpatches", "mweffectinspector", "mwmouseguard",
         "mwteleportguard", "mwexitguard", "mwcustomclasspersistence", "mwplainpaperfix", "mwquicktoggle"
