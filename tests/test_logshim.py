@@ -58,7 +58,7 @@ LOGGER = ("local log = mwse.Logger.new()\nlocal L2 = require('logging.logger')\n
 def test_scope_flagged_all_off(tmp_path):
     files = {"main.lua": QUIET}
     e, _ = plan(tmp_path / "a", files)
-    assert e["main.lua"]["patch"] is None                       # flagged: no spam signs, no shim
+    assert e["main.lua"]["patch"] is not None                   # default all: every logging mod gets a shim
     e, rep = plan(tmp_path / "b", files, scope="all")
     assert e["main.lua"]["patch"]["ok"] and "F1" in e["main.lua"]["patch"]["rules"]
     assert rep.mods["testmod"]["shim"] and "--lua-log all" in rep.mods["testmod"]["why"]
@@ -113,8 +113,8 @@ def test_config_luafix_log_section_and_legacy_keys(tmp_path):
          "luafix": {"log": {"perSecond": 9, "maxMB": 1, "scope": "all"}}}))
     c = lf.load_config(str(tmp_path), str(dd))
     assert c["log"]["budgetInit"] == 7 and c["log"]["perSecond"] == 9 and c["log"]["maxMB"] == 1
-    assert c["log"]["scope"] == "all" and c["log"]["budget"] == 10 and c["log"]["exemptMods"] == ["a"]
-    assert lf.DEFAULTS["log"]["perSecond"] == 50                # defaults untouched
+    assert c["log"]["scope"] == "all" and c["log"]["budget"] == 0 and c["log"]["exemptMods"] == ["a"]
+    assert lf.DEFAULTS["log"]["perSecond"] == 25                # defaults untouched
     shim = lf.log_shim("testmod", c)
     assert "init = 7," in shim and "perSecond = 9," in shim and "maxBytes = 1048576," in shim
     assert 'name = "tew.aura"' in lf.log_shim("tew/AURA", c)

@@ -400,14 +400,14 @@ FOLLOWERS = ("local followers = {}\nlocal this = {}\nfunction this.refresh()\n l
              "function this.set(l) followers = l end\nreturn this\n")
 
 
-def test_K1_attendme_stale_reference_is_skipped():
+def test_KB1_attendme_stale_reference_is_skipped():
     a = analyse(FOLLOWERS, rel="AttendMeMWSE/followers.lua")
-    k1 = [f for f in a.findings if f["rule"] == "K1"]
+    k1 = [f for f in a.findings if f["rule"] == "KB1"]
     assert len(k1) == 1 and k1[0]["line"] == 6 and k1[0]["conf"] == "high"
     new, rules = lf.build_patch(FOLLOWERS, a.findings, "AttendMeMWSE", CFG)
-    assert "K1" in rules and new.count("\n") == FOLLOWERS.count("\n")
-    assert not [f for f in analyse(new, rel="AttendMeMWSE/followers.lua").findings if f["rule"] == "K1"]
-    assert not [f for f in analyse(FOLLOWERS, rel="other/followers.lua").findings if f["rule"] == "K1"]
+    assert "KB1" in rules and new.count("\n") == FOLLOWERS.count("\n")
+    assert not [f for f in analyse(new, rel="AttendMeMWSE/followers.lua").findings if f["rule"] == "KB1"]
+    assert not [f for f in analyse(FOLLOWERS, rel="other/followers.lua").findings if f["rule"] == "KB1"]
     if not HAVE_LUA:
         return
     rt = _lj.LuaRuntime()
@@ -433,6 +433,35 @@ def test_F1_log_spam_gets_the_shim_when_mwguard_does_not_cover(tmp_path):
     assert e["patch"]["ok"] and "F1" in e["patch"]["rules"]
     assert 'package.loaded["mwluafix_logshim:testmod"]' in e["patch"]["text"]
     assert e["patch"]["text"].count("\n") == SPAM.count("\n")
+
+
+def test_F1_all_logging_mods_get_a_private_log_by_default(tmp_path):
+    data, _root = mod_tree(tmp_path, {"main.lua": "mwse.log('ordinary detail')\n"})
+    rep = lf.check_paths([str(data)], CFG, checker=OkChecker(), use_cache=False, data_dir=str(tmp_path / "none"))
+    e = next(iter(rep.files.values()))
+    assert CFG["log"]["scope"] == "all"
+    assert e["patch"]["ok"] and "F1" in e["patch"]["rules"]
+
+
+def test_F1_old_embedded_policy_is_replaced_and_current_policy_is_idempotent():
+    old_cfg = dict(CFG, log=dict(CFG["log"], budgetInit=40, budget=10))
+    src = lf.log_shim("testmod", old_cfg) + "mwse.log('detail')\n"
+    a = analyse(src)
+    assert a.old_shim
+    new, rules = lf.build_patch(src, a.findings, "testmod", CFG, want_shim=True)
+    assert rules == ["F1"] and "init = 0, after = 0" in new and "S.v == 3" in new
+    a = analyse(new)
+    assert not a.old_shim
+    assert lf.build_patch(new, a.findings, "testmod", CFG, want_shim=True)[0] is None
+
+
+def test_F1_mod_with_its_own_logger_has_generic_shim_removed(tmp_path):
+    src = lf.log_shim("mwsaveguard", CFG) + "mwse.log('Save completed')\n"
+    data, _root = mod_tree(tmp_path, {"main.lua": src}, name="mwsaveguard")
+    rep = lf.check_paths([str(data)], CFG, include_own=True, checker=OkChecker(), use_cache=False,
+                         data_dir=str(tmp_path / "none"))
+    patch_ = next(iter(rep.files.values()))["patch"]
+    assert patch_["ok"] and "mwluafix_logshim" not in patch_["text"]
 
 
 def test_F1_skipped_when_mwguard_runtime_guard_clearly_covers(tmp_path):
@@ -485,6 +514,29 @@ def test_F1_shim_runs_errors_pass_and_spam_goes_to_the_mod_log(tmp_path):
 
 
 @need_lua
+def test_F1_lifecycle_and_errors_stay_in_mwse_and_are_also_in_the_mod_log(tmp_path):
+    src = "mwse.log('ordinary detail')\nmwse.log('Registered handlers')\nmwse.log('Error: broke')\n"
+    new = lf.log_shim("testmod", CFG) + src
+    logdir = tmp_path / "Data Files" / "MWSE" / "logs"
+    logdir.mkdir(parents=True)
+    rt = _lj.LuaRuntime()
+    rt.execute("lines = {} mwse = { log = function(f, ...) lines[#lines + 1] = string.format(f, ...) end }"
+               " print = function(s) lines[#lines + 1] = s end lfs = { mkdir = function() end } tes3 = {}")
+    cwd = os.getcwd()
+    os.chdir(tmp_path)
+    try:
+        rt.execute(new)
+    finally:
+        os.chdir(cwd)
+    shown = list(rt.globals().lines.values())
+    assert "ordinary detail" not in shown
+    assert "Registered handlers" in shown and "Error: broke" in shown
+    log = logdir / "testmod.log" if os.name == "nt" else tmp_path / "Data Files\\MWSE\\logs\\testmod.log"
+    text = log.read_text()
+    assert "ordinary detail" in text and "Registered handlers" in text and "Error: broke" in text
+
+
+@need_lua
 def test_G2_gate_runs_at_most_every_interval():
     new = patch(PUDDLE) + "\nreturn function() return last end"
     rt = _lj.LuaRuntime()
@@ -515,6 +567,63 @@ def test_core_and_own_mods_are_never_touched(tmp_path):
     assert rep.files == {} and len(rep.skipped) == 6
     rep = lf.check_paths([str(tmp_path)], CFG, include_own=True, checker=OkChecker(), use_cache=False)
     assert sorted(e["rel"] for e in rep.files.values()) == ["mwguard/main.lua", "mwinfoloop/main.lua"]
+
+
+def test_known_bugs_patch_exact_third_party_and_core_fingerprints(tmp_path):
+    ui = tmp_path / "Data Files/MWSE/mods/UI Expansion/MenuDialog.lua"
+    ui.parent.mkdir(parents=True)
+    ui.write_text('local info = element:getPropertyObject("") or dialogue:getInfo({ actor = mobileActor })\n')
+    core = tmp_path / "Data Files/MWSE/core/mcm/components/pages/ExclusionsPage.lua"
+    core.parent.mkdir(parents=True)
+    core.write_text("self.elements.outerContainer.parent:destroyChildren()\n\tself:create(self.elements.outerContainer.parent)\n")
+    rep = lf.check_paths([str(tmp_path)], CFG, checker=OkChecker(), use_cache=False,
+                         data_dir=str(tmp_path / "Data Files"))
+    by_rel = {e["rel"]: e for e in rep.files.values()}
+    assert by_rel["UI Expansion/MenuDialog.lua"]["patch"]["rules"] == ["KB2"]
+    assert by_rel["core/mcm/components/pages/exclusionspage.lua"]["patch"]["rules"] == ["KB3"]
+    lines, _ = lf.format_report(rep)
+    report = "\n".join(lines)
+    assert "(Known Bugs) KB2: line 1: UI Expansion:" in report
+    assert "(Known Bugs) KB3: line 1: MWSE Core:" in report
+    assert "mwluafix_logshim" not in by_rel["core/mcm/components/pages/exclusionspage.lua"]["patch"]["text"]
+    bug_lines = lf.known_bug_report_lines(rep)
+    assert any("DETECTED: (Known Bugs) KB2: UI Expansion:" in line for line in bug_lines)
+    assert any("DETECTED: (Known Bugs) KB3: MWSE Core:" in line for line in bug_lines)
+
+
+def test_KB4_restores_strict_exclusions_pages():
+    path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Data Files", "MWSE", "core", "mcm",
+                        "components", "pages", "ExclusionsPage.lua")
+    fixed = open(path, encoding="latin-1").read()
+    vulnerable = fixed
+    fixes = [(old, new) for rule, _plugin, _rel, old, new, _what in lf.KNOWN_BUGS if rule == "KB4"]
+    assert fixes and all(new in vulnerable for old, new in fixes)
+    for old, new in reversed(fixes):
+        vulnerable = vulnerable.replace(new, old, 1)
+    a = lf.FileAnalysis(vulnerable, "MWSE Core", "core/mcm/components/pages/exclusionspage.lua", CFG)
+    findings = [f for f in a.run() if f["rule"] == "KB4"]
+    assert len(findings) == len(fixes)
+    repaired, rules = lf.build_patch(vulnerable, findings, "MWSE Core", CFG)
+    assert rules == ["KB4"] and "local PAGE_SIZE = 100" in repaired
+    assert 'text = "Next >"' in repaired and "MAX_DISPLAY_ITEMS" not in repaired
+
+
+def test_own_mods_use_the_same_log_policy_when_included(tmp_path):
+    src = "mwse.log('ordinary detail')\nevent.register('x', f, { priority = 10000 })\n"
+    data, _root = mod_tree(tmp_path, {"main.lua": src}, name="mwmouseguard")
+    rep = lf.check_paths([str(data)], CFG, include_own=True, checker=OkChecker(), use_cache=False,
+                         data_dir=str(tmp_path / "none"))
+    e = next(iter(rep.files.values()))
+    assert e["patch"]["ok"] and "mwluafix_logshim" in e["patch"]["text"]
+    assert "priority = 10000" in e["patch"]["text"] and e["patch"]["rules"] == ["F1"]
+
+
+def test_mwhangwatch_log_is_under_mwse_logs():
+    path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Data Files", "MWSE", "mods", "mwhangwatch",
+                        "main.lua")
+    text = open(path, encoding="utf-8").read()
+    assert 'local LOG_DIR      = "Data Files\\\\MWSE\\\\logs"' in text
+    assert 'local LOG_NAME     = LOG_DIR .. "\\\\mwhangwatch.log"' in text
 
 
 def test_syntax_checker_rejects_patch_and_bad_original(tmp_path):
@@ -711,7 +820,7 @@ def test_A2_statement_call_is_wrapped_and_local_value_is_guarded():
            "event.register('keyDown', onKey, { filter = cfg.toggleKey.keyCode })\n"
            "local function f()\n local down = ic:isKeyDown(cfg.modKey.keyCode)\n return down\nend\n")
     new = patch(src)
-    assert "if cfg.toggleKey then event.register('keyDown', onKey, { filter = cfg.toggleKey.keyCode }) end\n" in new
+    assert "event.register('keyDown', onKey, { filter = (cfg.toggleKey and cfg.toggleKey.keyCode) })\n" in new
     assert " local down = (cfg.modKey and ic:isKeyDown(cfg.modKey.keyCode))\n" in new
     assert patch(new) is None
 
@@ -743,6 +852,28 @@ def test_A1_init_then_write_both_guarded_once():
     assert " if ref.data then ref.data.m = ref.data.m or {} end\n if ref.data and ref.data.m then ref.data.m.n = 1 end\n" in new
     assert patch(new) is None
     assert not nil_findings(analyse("local function f(ref)\n if not ref.data then return end\n ref.data.x = 1\nend\n"), "A1")
+
+
+def test_nil_values_in_and_or_table_values_and_generic_for_are_repaired():
+    src = ("local function f(ref)\n"
+           " local crafted = ref.data.crafted or false\n"
+           " local row = { name = ref.data.name }\n"
+           " for item in ref.data.items:iterator() do use(item) end\n"
+           " return crafted, row\nend\n")
+    new = patch(src)
+    assert "local crafted = (ref.data and (ref.data.crafted or false))" in new
+    assert "local row = { name = (ref.data and ref.data.name) }" in new
+    assert "if ref.data then for item in ref.data.items:iterator() do use(item) end end" in new
+    assert patch(new) is None
+
+
+def test_event_reference_guard_also_satisfies_ref_data_guard():
+    src = ("local function tip(e)\n local ref = e.reference\n"
+           " if ref.data and ref.data.GH or ref.sceneNode.appCulled then return end\nend\n"
+           "event.register('uiObjectTooltip', tip)\n")
+    new = patch(src)
+    assert "(ref and ref.data.GH)" in new and "(ref and ref.sceneNode.appCulled)" in new
+    assert patch(new) is None
 
 
 def test_A3_lookup_local_uses_are_guarded():

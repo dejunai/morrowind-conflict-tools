@@ -42,14 +42,14 @@ Rules (thresholds come from MWSE\\config\\mwguard.json when it exists - the same
   I3 a config written inside a save handler (during the save) -> written the frame after it        fix
   H6 tes3.messageBox inside a loop                                                                    report
   H7 X.f() through local X = require(...) of the same mod, whose table never gets f                  report
-  K1 a known exact bug in one mod's file (KNOWN_FIXES) -> its exact replacement                      fix
+  KB<n> a documented bug that requires editing its owning mod/core file -> its exact replacement     fix
   L1 a while loop that walks links (x = x.next) or counts down by a computed step -> capped at 10000   fix
   M1 an enterFrame handler (it also fires in menus) with no UI work -> returns in menu mode            fix
   S1 tes3.getSoundPlaying{ reference = <not the player> }: on a non-actor the engine can say "not
      playing" while a loop plays, so a restart on that answer repeats (mwsoundguard caps it)          report
   V1 number * vector (-1 * up: no metamethod for that order, errors every call) -> vector * number     fix
 
-Never touched: MWSE's own code (only files under ...\\MWSE\\mods\\ are read; core, lib, config never), and
+Never touched: MWSE's own code except exact KNOWN_BUGS fingerprints in named core files, and
 your own mods (mwcollide, mwfloatfix, mwguard, mwhangwatch, mwinfoloop, mwperformers, mwsoundguard,
 mwstranded, MWManager) unless --include-own.
 
@@ -92,11 +92,16 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 JOURNAL = os.path.join(HERE, "mwdialog_luafix_journal.jsonl")
 BACKUP_ROOT = os.path.join(HERE, "mwdialog_backup", "luafix")
 PLAN_FILE = os.path.join(HERE, "mwdialog_luafix_plan.txt")
-VERSION = 3
+KNOWN_BUG_REPORT = os.path.join(HERE, "mwdialog_luafix_known_bugs.txt")
+VERSION = 4
 MARK = "mwdialog_luafix"
 
-OWN_MODS = {"mwcollide", "mwexitguard", "mwfloatfix", "mwguard", "mwhangwatch", "mwinfoloop", "mwperformers", "mwquicktoggle", "mwsoundguard",
-            "mwstranded", "mwmanager"}
+OWN_MODS = {"mwcollide", "mwcompanions", "mwcompanionsneak", "mwcriminal", "mwcustomclasspersistence",
+            "mweffectinspector", "mwexitguard", "mwfloatfix", "mwguard", "mwhangwatch", "mwinfoloop",
+            "mwmouseguard", "mwperformers", "mwplainpaperfix", "mwpluginpatches", "mwquicktoggle", "mwsaveguard",
+            "mwsoundguard", "mwstranded", "mwteleportguard", "mwwarnsuppression", "mwmanager"}
+OWN_LOGGERS = {"mwcollide", "mwfloatfix", "mwguard", "mwhangwatch", "mwinfoloop", "mwperformers", "mwsaveguard",
+               "mwsoundguard", "mwstranded"}
 
 # defaults; mwguard.json (shared with the runtime guard) and mwdialog_luafix.json override them
 DEFAULTS = {
@@ -106,19 +111,20 @@ DEFAULTS = {
     "priorityMode": "keepOrder",     # keepOrder: absurd priorities go to just under the limit (9000..9999), so
                                      # they still sort ahead of every ordinary priority; clamp: clampTo..2*clampTo
     "minInterval": 0.35,             # the guide: at least 0.35 s between repeating calls
-    "exemptMods": sorted(OWN_MODS),
+    "exemptMods": [],
     "log": {                         # the log shim (F1): mwguard.json "luafix": { "log": { ... } } overrides
-        "scope": "flagged",          # flagged: mods with log-spam signs; all: every mod that logs; off: none
-        "budgetInit": 40,            # lines a mod may write to MWSE.log while the game starts
-        "budget": 10,                # ... and after the initialized event
+        "scope": "all",              # every third-party mod that logs gets its own log
+        "budgetInit": 0,             # routine lines never use MWSE.log; lifecycle/error lines below still do
+        "budget": 0,
         "keepPatterns": ["error", "traceback", "exception", "fail", "warn", "stack", "attempt to", "assert",
-                         "invalid", "%.lua:%d+:", "^lua:"],   # lines that always reach MWSE.log (Lua patterns)
-        "perSecond": 50,             # the mod's own log takes at most this many lines a second (0: no cap)
+                         "invalid", "%.lua:%d+:", "^lua:", "initializ", "register", "start", "loaded", "ready",
+                         "version", "active"],  # errors and lifecycle lines always reach MWSE.log (Lua patterns)
+        "perSecond": 25,             # the mod's own log takes at most this many lines a second (0: no cap)
         "maxMB": 2,                  # the mod's own log is rotated at this size ...
         "keepOld": 1,                # ... keeping the previous one as <mod>.old.log (0: none)
         "flushSeconds": 2,           # buffered lines reach the disk at least this often
-        "errorRepeat": 0,            # > 0: the same error line past this many times goes to the mod's log only
-        "exemptMods": [],            # mods that never get the shim (their output stays in MWSE.log)
+        "errorRepeat": 0,            # errors always reach MWSE.log, including repeats
+        "exemptMods": sorted(OWN_LOGGERS),  # these already write MWSE\logs\mw*.log themselves
     },
     "logSpamGuard": True,
     "enabled": True,
@@ -592,7 +598,8 @@ class FileAnalysis:
             cut = m.end() if m else -1
         if cut >= 0:
             self.nodes = [n for n in self.nodes if n.s >= cut]
-        self.old_shim = bool(SHIM_V1_RE.search(src))
+        embedded = SHIM_RE.search(src) or SHIM_V1_RE.search(src)
+        self.old_shim = bool(embedded and embedded.group(0) != log_shim(mod_key, self.cfg))
         self.calls = [n for n in self.nodes if n.kind == "Call"]
         self._lines = None
         self.registrations = []          # (call, event, handler Function or None, handler arg, options)
@@ -744,13 +751,19 @@ class FileAnalysis:
         return self.findings
 
     def r_known(self):
-        """K1: an exact bug in one mod's file that no general rule covers, patched by its exact text."""
+        """KB<n>: documented bugs that cannot be repaired from a separate Lua mod."""
         rel = self.rel.lower()
-        for path, old, new, what in KNOWN_FIXES:
-            i = self.src.find(old) if rel == path else -1
-            if i >= 0:
-                self.findings.append(Finding(rule="K1", line=self.src.count("\n", 0, i) + 1, what=what, fix=new,
-                                             conf="high", edits=[(i, i + len(old), new)], needs=set()))
+        for rule, plugin, path, old, new, what in KNOWN_BUGS:
+            if rel != path:
+                continue
+            if "\r\n" in self.src:
+                old, new = old.replace("\n", "\r\n"), new.replace("\n", "\r\n")
+            start = 0
+            while (i := self.src.find(old, start)) >= 0:
+                self.findings.append(Finding(rule=rule, line=self.src.count("\n", 0, i) + 1,
+                                             what=f"{plugin}: {what}", fix=new, conf="high",
+                                             edits=[(i, i + len(old), new)], needs=set()))
+                start = i + len(old)
 
     def r_sound_query(self):
         """S1: tes3.getSoundPlaying asked about a reference that is not the player. For a loop on a non-actor
@@ -1167,10 +1180,14 @@ class FileAnalysis:
                 return True
             if d == want_d:
                 p = m.parent
-                if p is not None and (p.kind == "Binop" and p.op in ("and", "or") and p.left is m or
-                                      p.kind == "Unop" and p.op == "not" or
-                                      p.kind == "Binop" and p.op in ("==", "~=") or
-                                      p.kind == "If" or p.kind == "Assign" and any(t is m for t in p.targets)):
+                if self._check_pos(m) or p is not None and p.kind == "Assign" and any(t is m for t in p.targets):
+                    return True
+                guarded = m
+                while guarded.parent is not None and guarded.parent.kind == "Index" and guarded.parent.obj is guarded:
+                    guarded = guarded.parent
+                p = guarded.parent
+                if p is not None and p.kind == "Binop" and p.op == "and" and p.right is guarded and any(
+                        x.kind in ("Name", "Index") and L.dotted(x) in (bt, want_d) for x in L.walk(p.left)):
                     return True
         return False
 
@@ -1272,6 +1289,18 @@ class FileAnalysis:
                     p.kind == "Binop" and p.op in ("and", "or") and self._in_condition(n) or \
                     in_slot and p.kind != "Assign" and n.kind == "Index":
                 return self._wrap(n, g, "expr"), "and-guard"
+        if p.kind == "Binop" and p.op in ("and", "or"):
+            st = stmt_of(n)
+            if st.kind == "Assign" and any((L.dotted(t) or "").startswith(g + ".") for t in st.targets):
+                return None, "the assignment itself gets the same guard"
+            value = n
+            while value.parent is not None and value.parent.kind == "Binop" and value.parent.op in ("and", "or"):
+                value = value.parent
+            length = value.e - value.s
+            return ([(value.s, value.s, f"({g} and (", (1, -length)),
+                     (value.e, value.e, "))", (0, length))], "and-guard on the value")
+        if p.kind == "Table" and any(value is n and key is not n for _name, key, value in p.fields):
+            return self._wrap(n, g, "expr"), "and-guard on the table value"
         # 2. climb to the condition operand, the local's value or the statement
         c, crossed_table = n, False
         while c.parent is not None and c.parent.kind not in ("Block", "Function", "If", "While", "Repeat", "Local",
@@ -1295,7 +1324,7 @@ class FileAnalysis:
         st = stmt_of(n)
         if st.parent is None or st.parent.kind != "Block":
             return None, "not inside a statement"
-        if st.kind == "CallStat" or st.kind == "Assign" and len(st.targets) == 1 and len(st.exprs) == 1:
+        if st.kind in ("CallStat", "GenFor") or st.kind == "Assign" and len(st.targets) == 1 and len(st.exprs) == 1:
             t = (L.dotted(st.targets[0]) or "") if st.kind == "Assign" else ""
             if st.kind == "Assign" and t and any(x == t or x.startswith(t + ".") for x in g.split(" and ")):
                 return None, "the statement assigns the value being checked"
@@ -1792,16 +1821,171 @@ def image_findings(src, roots):
     return out
 
 
-# K1: (file under MWSE\mods, lower case with /; exact text; replacement on the same number of lines; why)
-KNOWN_FIXES = [
-    ("attendmemwse/followers.lua",
+# (rule, owner, path under MWSE\mods or MWSE, exact vulnerable text, replacement, bug description)
+KNOWN_BUGS = [
+    ("KB1", "AttendMeMWSE", "attendmemwse/followers.lua",
      "if ref and ref.mobile and not ref.mobile.isDead then",
      "local mwluafix_ok, mwluafix_alive = pcall(function() return ref.mobile and not ref.mobile.isDead end) "
      "if ref and mwluafix_ok and mwluafix_alive then",
      "refresh() reads .mobile on the references it kept from the last pass; one that was deleted since raises "
      "'sol: received nil for self' every timer tick, and the list is never rebuilt (MWSE.log 2026-11-18)"),
+    ("KB2", "UI Expansion", "ui expansion/menudialog.lua",
+     'element:getPropertyObject("") or dialogue:getInfo({ actor = mobileActor })',
+     'element:getPropertyObject("MenuDialog_UIEXP_info") or dialogue:getInfo({ actor = mobileActor })',
+     "the topic updater queries an empty property key, so actor-unique topics never reuse their cached info"),
+    ("KB3", "MWSE Core", "core/mcm/components/pages/exclusionspage.lua",
+     "self.elements.outerContainer.parent:destroyChildren()\n\tself:create(self.elements.outerContainer.parent)",
+     "local parent = self.elements.outerContainer.parent\n\tparent:destroyChildren()\n\tself:create(parent)",
+     "ExclusionsPage destroys outerContainer and then dereferences that destroyed element's parent"),
 ]
-assert all(o.count("\n") == n.count("\n") for _p, o, n, _w in KNOWN_FIXES)
+
+KB4 = "ExclusionsPage builds an unbounded native object list; strict 100-item pages preserve every match"
+KNOWN_BUGS += [
+    ("KB4", "MWSE Core", "core/mcm/components/pages/exclusionspage.lua", "local MAX_DISPLAY_ITEMS = 200",
+     '''local PAGE_SIZE = 100
+
+local function addPager(self, content, listName, total)
+\tlocal pages = math.max(1, math.ceil(total / PAGE_SIZE))
+\tself.pages = self.pages or {}
+\tlocal page = math.min(math.max(self.pages[listName] or 1, 1), pages)
+\tself.pages[listName] = page
+\tlocal first, last = (page - 1) * PAGE_SIZE + 1, page * PAGE_SIZE
+\tif pages == 1 then
+\t\treturn first, last
+\tend
+
+\tlocal row = content:createBlock()
+\trow.flowDirection = tes3.flowDirection.leftToRight
+\trow.autoHeight = true
+\trow.widthProportional = 1.0
+\trow.childAlignX = 0.5
+\tlocal function changePage(delta)
+\t\tself.pages[listName] = page + delta
+\t\tif listName == "leftList" then
+\t\t\tself:distributeLeft(self.currentItems)
+\t\telse
+\t\t\tself:distributeRight(self.currentItems)
+\t\tend
+\t\tlocal menu = self.elements.outerContainer and self.elements.outerContainer:getTopLevelMenu()
+\t\tif menu then menu:updateLayout() end
+\tend
+\tif page > 1 then
+\t\trow:createButton{ text = "< Previous" }:register(tes3.uiEvent.mouseClick, function() changePage(-1) end)
+\tend
+\tlocal label = row:createLabel{ text = string.format("Page %d / %d (%d items)", page, pages, total) }
+\tlabel.borderLeft, label.borderRight = 8, 8
+\tif page < pages then
+\t\trow:createButton{ text = "Next >" }:register(tes3.uiEvent.mouseClick, function() changePage(1) end)
+\tend
+\treturn first, last
+end''', KB4),
+    ("KB4", "MWSE Core", "core/mcm/components/pages/exclusionspage.lua",
+     "function ExclusionsPage:updateSearch(listName)\n\tlocal items = self.currentItems or {}\n\tif listName == \"leftList\" then",
+     "function ExclusionsPage:updateSearch(listName)\n\tlocal items = self.currentItems or {}\n\tself.pages = self.pages or {}\n\tself.pages[listName] = 1\n\tif listName == \"leftList\" then", KB4),
+    ("KB4", "MWSE Core", "core/mcm/components/pages/exclusionspage.lua",
+     "\tlocal count = 0\n\tlocal totalMatches = 0\n\tlocal sourceList = {}",
+     "\tlocal totalMatches = 0\n\tlocal sourceList = {}", KB4),
+    ("KB4", "MWSE Core", "core/mcm/components/pages/exclusionspage.lua",
+     '''\tfor _, name in ipairs(sourceList) do
+\t\tif searchString == "" or name:lower():find(searchString, 1, true) then
+\t\t\ttotalMatches = totalMatches + 1
+\t\t\tif count < MAX_DISPLAY_ITEMS then
+\t\t\t\tcount = count + 1
+\t\t\t\tcontent:createTextSelect{ id = itemID, text = name }:register(tes3.uiEvent.mouseClick, function(e)
+\t\t\t\t\tself:toggle(e)
+\t\t\t\tend)
+\t\t\tend
+\t\tend
+\tend
+
+\tif totalMatches > count then
+\t\tlocal excess = totalMatches - count
+\t\tlocal moreLabel = content:createLabel{
+\t\t\ttext = string.format("... and %d more items (type in Search to filter)", excess)
+\t\t}
+\t\tmoreLabel.color = tes3ui.getPalette(tes3.palette.disabledColor)
+\t\tmoreLabel.borderTop = 4
+\t\tmoreLabel.borderBottom = 4
+\tend''',
+     '''\tfor _, name in ipairs(sourceList) do
+\t\tif searchString == "" or name:lower():find(searchString, 1, true) then
+\t\t\ttotalMatches = totalMatches + 1
+\t\tend
+\tend
+\tlocal first, last = addPager(self, content, "leftList", totalMatches)
+\tlocal match = 0
+\tfor _, name in ipairs(sourceList) do
+\t\tif searchString == "" or name:lower():find(searchString, 1, true) then
+\t\t\tmatch = match + 1
+\t\t\tif match >= first and match <= last then
+\t\t\t\tcontent:createTextSelect{ id = itemID, text = name }:register(tes3.uiEvent.mouseClick, function(e)
+\t\t\t\t\tself:toggle(e)
+\t\t\t\tend)
+\t\t\tend
+\t\tend
+\tend''', KB4),
+    ("KB4", "MWSE Core", "core/mcm/components/pages/exclusionspage.lua",
+     '''\tlocal count = 0
+\tlocal totalMatches = 0
+\tfor _, name in ipairs(self.currentItems) do
+\t\tif not self.variable.value[name] then
+\t\t\tif searchString == "" or name:lower():find(searchString, 1, true) then
+\t\t\t\ttotalMatches = totalMatches + 1
+\t\t\t\tif count < MAX_DISPLAY_ITEMS then
+\t\t\t\t\tcount = count + 1
+\t\t\t\t\tcontent:createTextSelect{ id = itemID, text = name }:register(tes3.uiEvent.mouseClick, function(e)
+\t\t\t\t\t\tself:toggle(e)
+\t\t\t\t\tend)
+\t\t\t\tend
+\t\t\tend
+\t\tend
+\tend
+
+\tif totalMatches > count then
+\t\tlocal excess = totalMatches - count
+\t\tlocal moreLabel = content:createLabel{
+\t\t\ttext = string.format("... and %d more items (type in Search to filter)", excess)
+\t\t}
+\t\tmoreLabel.color = tes3ui.getPalette(tes3.palette.disabledColor)
+\t\tmoreLabel.borderTop = 4
+\t\tmoreLabel.borderBottom = 4
+\tend''',
+     '''\tlocal totalMatches = 0
+\tfor _, name in ipairs(self.currentItems) do
+\t\tif not self.variable.value[name] then
+\t\t\tif searchString == "" or name:lower():find(searchString, 1, true) then
+\t\t\t\ttotalMatches = totalMatches + 1
+\t\t\tend
+\t\tend
+\tend
+\tlocal first, last = addPager(self, content, "rightList", totalMatches)
+\tlocal match = 0
+\tfor _, name in ipairs(self.currentItems) do
+\t\tif not self.variable.value[name] then
+\t\t\tif searchString == "" or name:lower():find(searchString, 1, true) then
+\t\t\t\tmatch = match + 1
+\t\t\t\tif match >= first and match <= last then
+\t\t\t\t\tcontent:createTextSelect{ id = itemID, text = name }:register(tes3.uiEvent.mouseClick, function(e)
+\t\t\t\t\t\tself:toggle(e)
+\t\t\t\t\tend)
+\t\t\t\tend
+\t\t\tend
+\t\tend
+\tend''', KB4),
+    ("KB4", "MWSE Core", "core/mcm/components/pages/exclusionspage.lua",
+     "\t\t\tself:clickFilter(button)\n\t\t\tself:distributeLeft(items)",
+     "\t\t\tself:clickFilter(button)\n\t\t\tself.pages = {}\n\t\t\tself:distributeLeft(items)", KB4),
+]
+
+
+def known_core_context(path):
+    """Return an explicitly authorized core file identity; every other MWSE core file remains excluded."""
+    norm = os.path.abspath(path).replace("\\", "/")
+    low = norm.lower()
+    for _rule, plugin, rel, _old, _new, _what in KNOWN_BUGS:
+        if rel.startswith("core/") and low.endswith("/mwse/" + rel):
+            return norm[:-(len(rel) + 1)], rel, plugin
+    return None
 
 GATE_HELPER = ("local mwluafix_gate do local last, clock = {}, os.clock mwluafix_gate = function(k, s) "
                "local t = clock() local l = last[k] if l and t >= l and t - l < s then return true end "
@@ -1820,7 +2004,9 @@ SHIM_END = "--[[/mwluafix_logshim]]"
 # the version-1 shim (print / mwse.log only, no cap, no logger wrap): replaced by the current one on sight
 SHIM_V1_RE = re.compile(r"local print, mwse = \(function\(_p, _m\) local fmt, find, lower, sub = string\.format, "
                         r"[^\n]*?\{ __index = _m, __newindex = _m \}\) end\)\(print, mwse\) ")
-SHIM_V = 2
+SHIM_V = 3
+SHIM_RE = re.compile(r"local print, mwse, mwluafix_log = \(function\(_p, _m\).*?" +
+                     re.escape(SHIM_END) + r" ")
 LOG_SHIM_LUA = r"""
 local print, mwse, mwluafix_log = (function(_p, _m)
 local S = package.loaded[@KEY@]
@@ -1912,6 +2098,7 @@ if f then toFile(t) end
 return false
 end
 end
+if not f and not dead then open() end
 if f then pending() out(t) dirty = false f:flush() end
 return true
 end
@@ -1925,7 +2112,7 @@ init = init + nl
 return true
 end
 redirected = true
-if not open() then
+if not f and not open() then
 dead = true
 _p(fmt("[%s] %s writes a lot to MWSE.log, but %s can't be opened: leaving it here", MARK, C.name, path))
 return true
@@ -2066,8 +2253,10 @@ def build_patch(src, findings, mod_key, cfg, level="high", want_shim=False):
             edits += [tuple(x) if len(x) > 3 else (x[0], x[1], x[2], (1, 0)) for x in f["edits"]]
             rules.append(f["rule"])
             needs |= set(f["needs"])
-    v1 = SHIM_V1_RE.search(src)
-    if (want_shim or v1) and SHIM_END not in src:
+    old = SHIM_RE.search(src) or SHIM_V1_RE.search(src)
+    replacement = log_shim(mod_key, cfg)
+    outdated = bool(old and old.group(0) != replacement)
+    if want_shim and (old is None or outdated) or outdated:
         needs.add("shim")
         rules.append("F1")
     if not edits and "shim" not in needs:
@@ -2081,9 +2270,9 @@ def build_patch(src, findings, mod_key, cfg, level="high", want_shim=False):
         kept.append((s, e, t))
         last_end = max(last_end, e)
     out = src
-    if v1 and "shim" in needs:                     # upgrade in place: the old shim's span becomes the new one
-        kept = [x for x in kept if x[0] >= v1.end() or x[1] <= v1.start()]
-        kept.append((v1.start(), v1.end(), log_shim(mod_key, cfg)))
+    if old and "shim" in needs:                    # upgrade the embedded policy in place
+        kept = [x for x in kept if x[0] >= old.end() or x[1] <= old.start()]
+        kept.append((old.start(), old.end(), replacement))
         kept.sort(key=lambda x: (x[0], x[1]))
     for s, e, t in reversed(kept):
         out = out[:s] + t + out[e:]
@@ -2091,14 +2280,29 @@ def build_patch(src, findings, mod_key, cfg, level="high", want_shim=False):
     m = MARK_RE.match(out, ip)
     allr = sorted(set(m.group(2).split() if m else []) | set(rules))
     head = f"--[[{MARK} {VERSION}: {' '.join(allr)}]] "
-    if "shim" in needs and not v1 and SHIM_END not in src:
-        head += log_shim(mod_key, cfg)
+    if "shim" in needs and old is None:
+        head += replacement
     if "gate" in needs and "mwluafix_gate = function" not in src:
         head += GATE_HELPER
     if "savestate" in needs and "mwluafix_savestate" not in src:
         head += SAVE_HELPER
     out = out[:ip] + head + out[m.end() if m else ip:]
     return out, sorted(set(rules))
+
+
+def remove_log_shim(src):
+    """Remove our shim when a mod has its own logger; keep any other luafix marker rules."""
+    old = SHIM_RE.search(src) or SHIM_V1_RE.search(src)
+    if old is None:
+        return None
+    out = src[:old.start()] + src[old.end():]
+    ip = insert_point(out)
+    mark = MARK_RE.match(out, ip)
+    if mark:
+        rules = sorted(set(mark.group(2).split()) - {"F1"})
+        head = f"--[[{MARK} {VERSION}: {' '.join(rules)}]] " if rules else ""
+        out = out[:ip] + head + out[mark.end():]
+    return out
 
 
 # ---------------------------------------------------------------------------------------------- files and mods
@@ -2210,12 +2414,17 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
     by_mod = {}
     for root in paths:
         for p in lua_files(root):
+            core = known_core_context(p)
             why = excluded(p, include_own, cfg)
-            if why:
+            if why and not core:
                 rep.skipped.append((p, why))
                 continue
-            mroot, rel = mods_root_of(p)
-            by_mod.setdefault((mroot, mod_key_of(mroot, rel)), []).append((p, rel))
+            if core:
+                mroot, rel, key = core
+            else:
+                mroot, rel = mods_root_of(p)
+                key = mod_key_of(mroot, rel)
+            by_mod.setdefault((mroot, key), []).append((p, rel))
     fix_conf = ("high",) if level == "high" else ("high", "medium")
     for (mroot, key), files in sorted(by_mod.items()):
         analyses = {}
@@ -2257,6 +2466,19 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
                     "mf": sorted(ent["mfields"]) if ent["mfields"] is not None else None,
                     "f": [dict({k: v for k, v in f.items() if k not in ("edits", "needs")}, needs=sorted(f["needs"]),
                                fixable=bool(f["edits"])) for f in ent["findings"]]})
+        if key == "MWSE Core":
+            for p, rel in files:
+                ent = rep.files[p]
+                ent["findings"] = [f for f in ent["findings"] if f["rule"].startswith("KB")]
+                if ent["error"] or not any(f["edits"] and f["conf"] in fix_conf for f in ent["findings"]):
+                    continue
+                a = analyses[p]
+                findings = [f for f in a.findings if f["rule"].startswith("KB")]
+                new, rules = build_patch(a.src, findings, key, cfg, level, False)
+                if new is not None:
+                    ent["patch"] = verify_patch(a.src, new, rules, checker, key, rel, cfg, level,
+                                                {f["rule"] for f in findings})
+            continue
         _require_cycles(rep, files)
         _missing_fields(rep, files)
         # F1: does the mod need the log shim? (decided per mod, like mwguard's per-mod allowance)
@@ -2296,9 +2518,19 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
             ent = rep.files[p]
             if ent["error"]:
                 continue
+            own_rules = {"A1", "A2", "A3", "A4", "A5", "F1"} if include_own and \
+                key.split("/", 1)[0].lower() in OWN_MODS else None
+            if log_exempt(cfg, key):
+                with open(p, encoding="latin-1") as fh:
+                    old_text = fh.read()
+                new_text = remove_log_shim(old_text)
+                if new_text is not None:
+                    ent["patch"] = verify_patch(old_text, new_text, ["F1"], checker, key, rel, cfg, level, own_rules)
+                    continue
             want_shim = shim and ent["logs"] > 0 or bool(analyses.get(p) and analyses[p].old_shim) or \
                 bool(ent.get("old_shim"))
-            fixable = any((f["edits"] or f.get("fixable")) and f["conf"] in fix_conf for f in ent["findings"])
+            fixable = any((f["edits"] or f.get("fixable")) and f["conf"] in fix_conf and
+                          (own_rules is None or f["rule"] in own_rules) for f in ent["findings"])
             if not (fixable or want_shim):
                 continue
             a = analyses.get(p)
@@ -2318,13 +2550,16 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
                 ent["findings"] = a.findings + [f for f in ent["findings"] if f["rule"] in ("H5", "H7")]
             images = image_findings(a.src, roots)
             ent["findings"] = [f for f in ent["findings"] if f["rule"] != "I1"] + images
-            new, rules = build_patch(a.src, a.findings + images, key, cfg, level, want_shim)
+            findings = a.findings + images
+            if own_rules is not None:
+                findings = [f for f in findings if f["rule"] in own_rules]
+            new, rules = build_patch(a.src, findings, key, cfg, level, want_shim)
             if new is not None:
-                ent["patch"] = verify_patch(a.src, new, rules, checker, key, rel, cfg, level)
+                ent["patch"] = verify_patch(a.src, new, rules, checker, key, rel, cfg, level, own_rules)
     return rep
 
 
-def verify_patch(old, new, rules, checker, key, rel, cfg, level):
+def verify_patch(old, new, rules, checker, key, rel, cfg, level, only_rules=None):
     """{"text", "rules", "ok", "why"}: the patched text parses, a second pass changes nothing more, and the
     syntax checker compiles it (the original first: one that doesn't compile is left alone)."""
     res = {"text": new, "rules": rules, "ok": False, "why": ""}
@@ -2339,7 +2574,8 @@ def verify_patch(old, new, rules, checker, key, rel, cfg, level):
     except (L.LuaSyntaxError, RecursionError) as e:
         res["why"] = f"the patched text doesn't parse ({e}) - patch rejected"
         return res
-    again, _r = build_patch(new, [f for f in b.findings if f["rule"] != "F1"], key, cfg, level, False)
+    remaining = [f for f in b.findings if f["rule"] != "F1" and (only_rules is None or f["rule"] in only_rules)]
+    again, _r = build_patch(new, remaining, key, cfg, level, False)
     if again is not None:
         res["why"] = "a second pass would change it again - patch rejected"
         return res
@@ -2571,7 +2807,8 @@ def format_report(rep, show_info=False, indent="  ", done=None, refused=None):
         if e["error"]:
             lines.append(f"{indent}    ! {e['error']}")
         for f in sorted(fs, key=lambda f: (CONF_ORDER.get(f["conf"], 9), f["line"])):
-            lines.append(f"{indent}    {f['rule']} {f['conf']:<11} line {f['line']}: {f['what']}"
+            label = f"(Known Bugs) {f['rule']}:" if f["rule"].startswith("KB") else f"{f['rule']} {f['conf']:<11}"
+            lines.append(f"{indent}    {label} line {f['line']}: {f['what']}"
                          + (f"  -> {f['fix']}" if f["fix"] else ""))
         pt = e.get("patch")
         if pt:
@@ -2594,7 +2831,8 @@ def _format_applied(rep, show_info, indent, done, refused):
         if e["error"]:
             lines.append(f"{indent}    ! {e['error']}")
         for f in sorted(fs, key=lambda f: (CONF_ORDER.get(f["conf"], 9), f["line"])):
-            lines.append(f"{indent}    {finding_status(f, pt, p in done)}: {f['rule']} line {f['line']}: {f['what']}"
+            label = f"(Known Bugs) {f['rule']}:" if f["rule"].startswith("KB") else f"{f['rule']}"
+            lines.append(f"{indent}    {finding_status(f, pt, p in done)}: {label} line {f['line']}: {f['what']}"
                          + (f"  -> {f['fix']}" if f["fix"] else ""))
         if pt:
             why = refused.get(p) or (None if pt["ok"] else pt["why"]) or "not written"
@@ -2621,6 +2859,29 @@ def summary_lines(counts, indent="  "):
     return [f"{indent}{r}: " + ", ".join(f"{n} {c}" for c, n in sorted(by_rule[r].items(),
                                                                        key=lambda x: CONF_ORDER.get(x[0], 9)))
             for r in sorted(by_rule)]
+
+
+def known_bug_report_lines(rep, done=None, refused=None):
+    """Stable author-facing lines for exact KB findings; unlike the plan, these survive an apply."""
+    done, refused = None if done is None else set(done), refused or {}
+    out = []
+    for p, ent in sorted(rep.files.items(), key=lambda x: x[1]["rel"].lower()):
+        pt = ent.get("patch")
+        for f in sorted((x for x in ent["findings"] if x["rule"].startswith("KB")), key=lambda x: x["line"]):
+            status = "DETECTED" if done is None else finding_status(f, pt, p in done)
+            if p in refused:
+                status = "NOT PATCHED"
+            out.append(f"{status}: (Known Bugs) {f['rule']}: {f['what']} [{ent['rel']}:{f['line']}]")
+    return out
+
+
+def write_known_bug_report(rep, done=None, refused=None, path=KNOWN_BUG_REPORT):
+    lines = known_bug_report_lines(rep, done, refused)
+    body = [f"luafix known-bug report, {PF.stamp()}",
+            "Exact source fingerprints only; general MWSE Core scanning remains disabled.", ""]
+    body += lines or ["No vulnerable known-bug fingerprints detected."]
+    PF.write_atomic(path, "\n".join(body) + "\n")
+    return path
 
 
 # ---------------------------------------------------------------------------------------------- CLI
@@ -2653,7 +2914,10 @@ def main(argv=None):
         print(PF.no_plan_message(PLAN_FILE, "mwdialog_luafix.py"))
         return 2
     data_dir = os.path.join(HERE, "Data Files")
-    paths = args.paths or [os.path.join(data_dir, "MWSE", "mods")]
+    paths = args.paths or [os.path.join(data_dir, "MWSE", "mods")] + sorted({
+        os.path.join(data_dir, "MWSE", *rel.split("/"))
+        for _rule, _plugin, rel, _old, _new, _what in KNOWN_BUGS if rel.startswith("core/")
+    })
     cfg = load_config(HERE, data_dir)
     checker = None if args.no_syntax_check else find_checker(args.luajit, HERE)
     print(f"mwdialog_luafix {VERSION}: syntax check {checker.name if checker else 'NONE'}; priority limit "
@@ -2667,6 +2931,7 @@ def main(argv=None):
         return 2
     rep = check_paths(paths, cfg, args.include_own, checker, args.level, data_dir, not args.no_cache,
                       args.log_shim_always, log_scope=args.lua_log)
+    write_known_bug_report(rep)
     lines, counts = format_report(rep, args.all)
     n_ok = sum(1 for e in rep.files.values() if e.get("patch") and e["patch"]["ok"])
     head = [f"mwdialog_luafix plan, {time.strftime('%Y-%m-%d %H:%M')}: {len(rep.files)} Lua file(s) checked, "
@@ -2713,6 +2978,7 @@ def main(argv=None):
                   note="" if finished else "the run was interrupted")
     for p, why in refused:
         print(f"  not patched: {p}: {why}")
+    write_known_bug_report(rep, done, dict(refused))
     print(f"Patched {w} file(s). Journal: {JOURNAL} (--undo puts them back).")
     return 0 if not left else 1
 

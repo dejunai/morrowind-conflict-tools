@@ -1,7 +1,7 @@
 --[[
     mwhangwatch - finds what a hang is doing.
 
-    Writes Morrowind\mwhangwatch.log, flushed after every line so it survives
+    Writes Data Files\MWSE\logs\mwhangwatch.log, flushed after every line so it survives
     a hard hang (kill Morrowind.exe from Task Manager, then read the log).
 
     Every second:  fps, worst frame, process memory, player cell, inventory
@@ -42,7 +42,8 @@
     lines show what is piling up.
 ]]
 
-local LOG_NAME     = "mwhangwatch.log"
+local LOG_DIR      = "Data Files\\MWSE\\logs"
+local LOG_NAME     = LOG_DIR .. "\\mwhangwatch.log"
 local CENSUS_EVERY = 5      -- seconds between reference counts
 local SLOW_FRAME   = 0.25   -- a frame longer than this (seconds) forces a count
 local TOP_N        = 12     -- ids to list per count
@@ -60,7 +61,7 @@ local config = mwse.loadConfig(CONFIG_NAME, {
 
 local f                         -- the log is opened the first time the watch starts
 local function openLog()
-    if not f then f = io.open(LOG_NAME, "w") end
+    if not f then pcall(lfs.mkdir, LOG_DIR) f = io.open(LOG_NAME, "w") end
 end
 local function watchOn() return config.enabled end
 local function audioOn() return config.enabled and config.audio end

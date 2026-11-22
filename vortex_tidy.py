@@ -783,6 +783,18 @@ def lua_apply(args, lres):
         {"staging": args.staging, "lua": True}, **getattr(args, "_journal_extra", {})), done=lres["done"])
     for p, why in refused:
         print(f"    not patched: {os.path.relpath(p, args.staging)}: {why}")
+    import mwdialog_assets as ah
+    refused_map = dict(refused)
+    for d, rep in lres["reps"]:
+        lines = lf.known_bug_report_lines(rep, lres["done"], refused_map)
+        if not lines:
+            continue
+        root = os.path.join(args.staging, d)
+        head = [f"Bug report for {mod_name(d)}", f"Mod: {mod_name(d)}",
+                f"Generated {time.strftime('%Y-%m-%d %H:%M')} by vortex_tidy.",
+                "Paths are relative to the mod's folder (Data Files)."]
+        ah.update_bug_report(os.path.join(root, "bugreports", mod_name(d) + ".bugreport.txt"),
+                             "vortex_tidy (Lua known bugs)", head, lines)
     print(f"  patched {written} Lua file(s) (journal {JOURNAL}; --undo puts them back)")
 
 

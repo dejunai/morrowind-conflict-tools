@@ -531,3 +531,25 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
   1. In `MenuDialog.lua` line 113, corrected `element:getPropertyObject("")` to `element:getPropertyObject("MenuDialog_UIEXP_info")`.
   2. Topic buttons now properly retrieve their cached info, allowing topics with exhausted actor-unique lines to transition smoothly to seen/greyed (`state = 2`).
   3. Hardlink parity (`nlink=2`) with its Vortex staging folder is preserved.
+
+---
+
+## 39. MWSE Core ExclusionsPage Unbounded Object UI (`KB4`)
+
+* **Author**: MWSE Core
+* **File**: `Data Files\MWSE\core\mcm\components\pages\ExclusionsPage.lua`
+* **Bug**:
+  `ExclusionsPage` can receive every object contributed by the full plugin set. The earlier emergency cap rendered
+  only the first 200 entries in each column and offered no way to reach later entries. The original implementation
+  created a native UI element for every object; on a large load order this exhausts Morrowind's 32-bit address space.
+* **Fix**:
+  1. Enforce a strict page size of 100 native item elements per column.
+  2. Add Previous/Next controls with current page, total pages, and matching-item count.
+  3. Clamp pages after moves and reset to page 1 when the search text or object/plugin filter changes.
+  4. Keep filtering and bulk-toggle semantics over the complete logical list; only native UI construction is paged.
+* **Luafix grade**: `(Known Bugs) KB4: MWSE Core: ExclusionsPage builds an unbounded native object list`.
+  This requires editing MWSE Core's local page implementation and cannot be repaired safely by a separate Lua mod.
+* **Related audit**:
+  Core MCM `main.lua` also builds one entry per registered mod and `Dropdown.lua` builds one entry per supplied option.
+  They are not classified as this confirmed bug: registered-mod and ordinary dropdown counts are much smaller, and
+  changing their search/selection semantics without a reproduced memory failure would be speculative.

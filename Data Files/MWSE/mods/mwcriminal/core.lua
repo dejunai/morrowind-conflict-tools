@@ -1,4 +1,4 @@
---[[
+--[[mwdialog_luafix 3: A1]] --[[
     mwcriminal core: the ownership, lock and detection questions every feature asks. Everything is answered on
     demand when the player activates something; nothing is cached, scanned per frame or kept in a growing table.
 ]]
@@ -127,21 +127,21 @@ end
 
 -- applies the verdict; returns true when the door is locked afterwards
 function core.applyVerdict(door, verdict)
-    local ours = door.data.mwcriminalLocked
+    local ours = (door.data and door.data.mwcriminalLocked)
     local locked = tes3.getLocked({ reference = door })
     if locked and (verdict == "open" or (verdict == "unlock" and ours)) then
         tes3.unlock({ reference = door })
-        door.data.mwcriminalLocked = nil
+        if door.data then door.data.mwcriminalLocked = nil end
         return false
     end
     if verdict == "lock" and not locked then
         local level = core.matchesAny(door.destination.cell.id, config.highSecurityNames) and config.highLockLevel
             or config.lockLevel
         tes3.lock({ reference = door, level = level })
-        door.data.mwcriminalLocked = true
+        if door.data then door.data.mwcriminalLocked = true end
         return true
     end
-    if not locked then door.data.mwcriminalLocked = nil end
+    if not locked then if door.data then door.data.mwcriminalLocked = nil end end
     return locked
 end
 

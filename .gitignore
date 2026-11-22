@@ -35,6 +35,7 @@ mwdialog_longpaths.json
 mwdialog_luafix.json
 vortex_tidy_journal.jsonl
 mwdialog_luafix_journal.jsonl
+mwdialog_luafix_known_bugs.txt
 .mwdialog*.tmp
 .*.tmp
 
