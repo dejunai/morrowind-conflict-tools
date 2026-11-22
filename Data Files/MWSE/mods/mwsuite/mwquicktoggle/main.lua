@@ -16,7 +16,11 @@ local TOGGLE = {
     [tes3.objectType.light] = true,
 }
 
-local config = mwse.loadConfig("mwquicktoggle", { enabled = false })
+local defaults = { enabled = false, restoreDisplaced = true }
+local config = mwse.loadConfig("mwquicktoggle", defaults)
+if config.restoreDisplaced == nil then
+    config.restoreDisplaced = defaults.restoreDisplaced
+end
 local qkhe = include("Pirate.QuickKeysHotbarExtended.config")
 local armed, pending, blockSlot
 local previous = setmetatable({}, { __mode = "k" })
@@ -42,7 +46,7 @@ end
 
 local function toggleOff(item)
     tes3.mobilePlayer:unequip({ item = item })
-    local displaced = previous[item]
+    local displaced = config.restoreDisplaced and previous[item] or nil
     previous[item] = nil
     for _, stack in ipairs(displaced or {}) do
         tes3.mobilePlayer:equip({ item = stack.item, itemData = stack.itemData })
@@ -88,7 +92,7 @@ local function before(slot)
     if item and TOGGLE[item.objectType] then
         if tes3.player.object:hasItemEquipped(item) then
             armed = { slot = slot, item = item }
-        else
+        elseif config.restoreDisplaced then
             pending = { item = item, equipment = equipmentSnapshot() }
         end
     end
@@ -120,6 +124,7 @@ event.register("keybindTested", function(e)
 end)
 
 event.register("weaponReadied", function(e)
+    if not config.enabled or not config.restoreDisplaced then return end
     if e.reference ~= tes3.player then return end
     local light = tes3.getEquippedItem({ actor = tes3.player, objectType = tes3.objectType.light })
     local displaced = light and previous[light.object]
@@ -145,8 +150,13 @@ event.register("modConfigReady", function()
         .. "a toggled light with its remembered shield. Works with vanilla quick keys and QuickKeys Hotbar Extended." })
     page:createYesNoButton({
         label = "Quick keys unequip equipped items",
-        description = "Press an equipped item's quick key again to unequip it and restore displaced equipment.",
+        description = "Press an equipped item's quick key again to unequip it.",
         variable = mwse.mcm.createTableVariable({ id = "enabled", table = config }),
+    })
+    page:createYesNoButton({
+        label = "Restore displaced equipment",
+        description = "When unequipping an item via its quick key, or when readying a weapon with a toggled light, re-equip the equipment it replaced (such as a shield replaced by a lantern or two-handed weapon).",
+        variable = mwse.mcm.createTableVariable({ id = "restoreDisplaced", table = config }),
     })
     template:register()
 end)

@@ -446,6 +446,41 @@ check(follower.isPlayerHidden and not follower.isPlayerDetected, "sweep keeps fo
 ''')
 
 
+def test_companion_sweep_does_not_allocate_proximity_lists():
+    """The 0.35 s sweep must not build a nearby-actor table: that lined up with 1+ GiB Lua storms."""
+    run(r'''
+local proximityCalls = 0
+tes3.findActorsInProximity = function() proximityCalls = proximityCalls + 1; return {} end
+local follower = { reference = { object = { id = "f" }, data = {} }, actorType = tes3.actorType.npc, hostileActors = {},
+  aiPlanner = { getActivePackage = function() return { type = tes3.aiPackage.follow, targetActor = tes3.mobilePlayer } end } }
+tes3.mobilePlayer.isSneaking = true
+tes3.mobilePlayer.friendlyActors = { follower }
+handlers.loaded()
+local sweep = timers[#timers].callback
+for _ = 1, 1000 do sweep() end
+check(proximityCalls == 0, "sweep called findActorsInProximity " .. proximityCalls .. " times")
+check(follower.isPlayerHidden and not follower.isPlayerDetected, "followers are still kept hidden")
+
+-- a blacklisted stranger (not a friendly actor) is still suppressed through the detectSneak event
+local chicken = { reference = { id = "chick00", object = { id = "chicken", objectType = tes3.objectType.creature }, data = {} },
+  actorType = tes3.actorType.creature, hostileActors = {} }
+local e = { target = tes3.mobilePlayer, detector = chicken, isDetected = true }
+check(handlers.detectSneak(e) == false and not e.isDetected and chicken.isPlayerHidden,
+  "blacklisted strangers are suppressed per detection event")
+
+-- cost guard: a sweep while standing returns before touching any actor list and allocates nothing
+tes3.mobilePlayer.isSneaking = false
+collectgarbage("collect")
+collectgarbage("stop")
+local before = collectgarbage("count")
+for _ = 1, 10000 do sweep() end
+local grown = collectgarbage("count") - before
+collectgarbage("restart")
+check(grown < 1, string.format("10000 standing sweeps allocated %.1f KB", grown))
+check(proximityCalls == 0, "no proximity scan at all")
+''')
+
+
 def test_plain_paper_settings_migrate_without_overriding_existing_choices():
     run_config(r'''
 local config = require("mwcriminal.config")

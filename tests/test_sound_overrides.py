@@ -96,7 +96,26 @@ check(#plays == 1 and math.abs(boat.orientation.x) < 0.000001 and boat.context.t
 local creak = ref("creak", {})
 frames("Sound_Boat_Creak", creak, 300)
 check(#plays == 2 and plays[2] == "creak:Boat Creak:loop", "one boat-creak loop")
+local hull = ref("hull", {})
+frames("Sound_Boat_Hull", hull, 300)
+check(#plays == 3 and plays[3] == "hull:Boat Hull:loop", "one boat-hull loop")
+handlers.referenceDeactivated({ reference = hull })
+frames("Sound_Boat_Hull", hull, 1)
+check(#plays == 4, "boat hull restarts after reload")
+local waterfall = ref("waterfall", {})
+frames("Sound_Water_Spout", waterfall, 300)
+check(#plays == 5 and plays[5] == "waterfall:Cave_Waterfall:loop", "one waterfall loop")
 handlers.referenceDeactivated({ reference = boat })
 frames("Float", boat, 1)
-check(#plays == 3, "water loop restarts after the source reloads")
+check(#plays == 6, "water loop restarts after the source reloads")
 """)
+
+
+def test_vanilla_float_is_left_alone_without_expanded_sounds():
+    """init() replaces Float, so a vanilla script's presence must never switch that patch on."""
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Data Files", "MWSE", "mods",
+                        "mwsuite", "mwpluginpatches", "config.lua")
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    body = text.split("function config.isExpandedSoundsActive()", 1)[1].split("\nend", 1)[0]
+    assert "getScript" not in body and "Expanded Sounds.esp" in body

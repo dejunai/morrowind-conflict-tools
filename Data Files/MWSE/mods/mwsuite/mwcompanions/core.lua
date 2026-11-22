@@ -69,7 +69,7 @@ end
 function core.isBlacklisted(ref)
     local obj = ref.baseObject
     local id = lower(obj.id)
-    if config.blacklist[id] then return true end
+    if config.blacklist[id] or config.blacklist[obj.id] then return true end
     -- abot's water life and birds carry follow/escort packages of their own; the pack guar is a real follower
     if obj.objectType == tes3.objectType.creature and id ~= "ab01guguarpackmount" then
         if id:sub(1, 4) == "ab01" or (obj.script and lower(obj.script.id):sub(1, 4) == "ab01") then return true end

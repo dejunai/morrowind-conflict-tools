@@ -4,6 +4,7 @@ local autoStartup = require("mwpluginpatches.patches.autoStartup")
 local pandsfixes = require("mwpluginpatches.patches.pandsfixes")
 local ysmirShield = require("mwpluginpatches.patches.ysmirShield")
 local jiubDelay = require("mwpluginpatches.patches.jiubDelay")
+local friendsAndFrensLore = require("mwpluginpatches.patches.friendsAndFrensLore")
 local lostHeirDelay = require("mwpluginpatches.patches.lostHeirDelay")
 local mabrDist = require("mwpluginpatches.patches.mabrDist")
 local caveDripSound = require("mwpluginpatches.patches.caveDripSound")
@@ -14,6 +15,7 @@ local trainerLogUnlock = require("mwpluginpatches.patches.trainerLogUnlock")
 local coastGuardContraband = require("mwpluginpatches.patches.coastGuardContraband")
 local graphicHerbalismRespawn = require("mwpluginpatches.patches.graphicHerbalismRespawn")
 local bardicInstruments = require("mwpluginpatches.patches.bardicInstruments")
+local aiVoicesConsole = require("mwpluginpatches.patches.aiVoicesConsole")
 
 local function onInitialized()
     if not config.enabled then
@@ -40,6 +42,9 @@ local function onInitialized()
     -- 4. Friends & Frens Jiub Companion Delayer
     if config.jiubDelayEnabled and config.isFriendsAndFrensActive() then
         jiubDelay.init()
+    end
+    if config.friendsAndFrensLoreEnabled and config.isFriendsAndFrensActive() then
+        friendsAndFrensLore.init()
     end
 
     -- 5. The Lost Heir Delayer
@@ -85,6 +90,9 @@ local function onInitialized()
     end
     if config.musicalInstrumentsEnabled and config.isBardicInspirationActive() then
         bardicInstruments.init()
+    end
+    if config.aiVoicesConsoleEnabled and config.isAiVoicesActive() then
+        aiVoicesConsole.init()
     end
 
     mwse.log("[mwpluginpatches] Unified plugin compatibility patches initialized.")

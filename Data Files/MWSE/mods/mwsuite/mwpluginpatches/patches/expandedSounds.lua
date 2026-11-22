@@ -46,6 +46,18 @@ local function runBoatCreak(e)
     end
 end
 
+local function runBoatHull(e)
+    if e.reference then
+        start(e.reference, "Boat Hull", 0.4)
+    end
+end
+
+local function runWaterSpout(e)
+    if e.reference then
+        start(e.reference, "Cave_Waterfall", 1.0)
+    end
+end
+
 local function onDeactivated(e)
     started[e.reference] = nil
 end
@@ -57,8 +69,14 @@ function this.init()
     if tes3.getScript("Sound_Boat_Creak") then
         mwse.overrideScript("Sound_Boat_Creak", runBoatCreak)
     end
+    if tes3.getScript("Sound_Boat_Hull") then
+        mwse.overrideScript("Sound_Boat_Hull", runBoatHull)
+    end
+    if tes3.getScript("Sound_Water_Spout") then
+        mwse.overrideScript("Sound_Water_Spout", runWaterSpout)
+    end
     event.register(tes3.event.referenceDeactivated, onDeactivated)
-    mwse.log("[mwpluginpatches] Expanded Sounds: Float and Sound_Boat_Creak run in Lua (one loop per source).")
+    mwse.log("[mwpluginpatches] Expanded Sounds: Float and boat/water loops run in Lua (one loop per source).")
 end
 
 return this

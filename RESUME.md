@@ -1,5 +1,35 @@
 # Resume: Morrowind tools, MWManager and the mw* Lua suite (2026-11-22)
 
+## 2026-11-22: Friends & Frens and generic dialogue (synced and pushed; confirmed in game for Fargoth)
+
+- Its partner scripts declare `nolore`, so converted vanilla NPCs lose every "Not Local nolore = 0" response.
+  patches\friendsAndFrensLore.lua sets it to 1 only where the vanilla script had none. Never a list of NPC IDs.
+- Those NPCs' class and faction changes are the mod's own: their old class's lines are still gone.
+
+## 2026-11-22: bad changes restored
+
+- Never unregister two handlers of one UI event from inside that event: MWSE calls a moved-from function and the
+  game crashes. UI Expansion already does it once on MenuDialog's preUpdate, so add no self-removing one there.
+- Setting `.value` of `context:getVariableData()` changes a copy. Write `ref.context.name = value`.
+- Tests never read the player's MWSE\config files.
+
+## 2026-11-22: behaviour is not a bug, and no per-ID fixes (synced and pushed)
+
+- KB9 is withdrawn: a mod doing what it was written to do, however unwelcome, is never a Known Bug and its file
+  is never edited for it. Hook it from the suite (Voices of Vvardenfell: patches\aiVoicesConsole.lua).
+- The three-ID armour table is withdrawn: fix a cause for every record or not at all. The invisible worn armour
+  is still open: see `mwdialog_backup\handoff-audit-20261122\REVIEW-github-agent.md`.
+
+## 2026-11-22: handoff continuation (synced, committed and pushed later that day)
+
+- Test output is isolated from the live luafix report and asset cache.
+- GUI children carry the job's lock token, and a direct luafix run takes the game lock. The CLI and mastercheck
+  locks were taken back out: they broke the distant-land writer and gave tracebacks when busy.
+- Personal Effects preserves itemData when draining stray chests.
+- Tamriel Data renames now cover ESP reference owner/faction, key, trap and soul fields; masters stay report-only.
+- MWManager's 18 Nexus capture tests now run on Windows Chrome/Edge; Exit Guard's MCM says enabling needs a restart.
+- Details and remaining in-game/engine work: `mwdialog_backup\handoff-audit-20261122\HANDOFF.md`.
+
 ## 2026-11-22: audit fixes (applied here and in MWManager; not tested in game)
 
 - Details, and what is still open: `mwdialog_backup\handoff-audit-20261122\HANDOFF.md`. The files as they were:

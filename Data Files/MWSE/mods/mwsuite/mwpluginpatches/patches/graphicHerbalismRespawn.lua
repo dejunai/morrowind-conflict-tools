@@ -11,7 +11,9 @@ local config = require("mwpluginpatches.config")
 
 local this = {}
 
-local DEFAULT_RESPAWN_DAYS = 30
+local DEFAULT_RESPAWN_DAYS = 3
+local MIN_RESPAWN_DAYS = 1
+local MAX_RESPAWN_DAYS = 90
 
 local function isHerb(ref)
     return ref and ref.object and ref.object.objectType == tes3.objectType.container and ref.object.organic
@@ -23,7 +25,9 @@ local function today()
 end
 
 local function respawnDays()
-    return config.herbRespawnDays or DEFAULT_RESPAWN_DAYS
+    local configured = tonumber(config.herbRespawnDays)
+    if not configured then return DEFAULT_RESPAWN_DAYS end
+    return math.max(MIN_RESPAWN_DAYS, math.min(MAX_RESPAWN_DAYS, math.floor(configured)))
 end
 
 -- Graphic Herbalism's look for a state: 0 normal, 1 picked, 2 spoiled.

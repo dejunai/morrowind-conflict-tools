@@ -82,6 +82,17 @@ fnfCategory:createYesNoButton({
     variable = mwse.mcm.createTableVariable({ id = "jiubSyncAppearance", table = config }),
 })
 
+local fnfLoreCategory = page:createCategory(string.format("Friends & Frens: Dialogue%s",
+    getStatusText(config.isFriendsAndFrensActive())))
+
+fnfLoreCategory:createYesNoButton({
+    label = "Restore Generic Dialogue for Converted NPCs",
+    description = "Friends & Frens' companion scripts block generic topics. This gives them back to the vanilla NPCs it "
+        .. "turned into companions (Fargoth, for one). Its own companions, and NPCs that never had generic topics, are "
+        .. "left alone. What it restores stays in the save. Takes effect after a restart.",
+    variable = mwse.mcm.createTableVariable({ id = "friendsAndFrensLoreEnabled", table = config }),
+})
+
 -- SECTION 2: THE LOST HEIR
 local lostHeirCategory = page:createCategory(string.format("The Lost Heir: Delayer%s", getStatusText(config.isLostHeirActive())))
 
@@ -243,8 +254,9 @@ local expandedCategory = page:createCategory(string.format("Expanded Sounds: Wat
 
 expandedCategory:createYesNoButton({
     label = "Start Expanded Sounds Loops Once",
-    description = "Runs Float and Sound_Boat_Creak in Lua, preserving Float's boat rocking while starting its water "
-        .. "loop and each boat-creak loop only once per loaded source. Takes effect after a restart.",
+    description = "Runs Float, Sound_Boat_Creak, Sound_Boat_Hull and Sound_Water_Spout in Lua, preserving Float's boat "
+        .. "rocking while starting each boat-hull, waterfall and boat-creak loop only once per loaded source. "
+        .. "Takes effect after a restart.",
     variable = mwse.mcm.createTableVariable({ id = "expandedSoundsEnabled", table = config }),
 })
 
@@ -272,6 +284,29 @@ trainerCategory:createYesNoButton({
     label = "Unlock Immediately on Load",
     description = "Adds the training topics immediately when loading a saved game rather than waiting until talking to a trainer NPC.",
     variable = mwse.mcm.createTableVariable({ id = "trainerLogAutoUnlockOnLoad", table = config }),
+})
+
+-- SECTION 13: GRAPHIC HERBALISM
+local graphicHerbalismCategory = page:createCategory(string.format("Graphic Herbalism: Respawn Delay%s",
+    getStatusText(config.isGraphicHerbalismActive())))
+
+graphicHerbalismCategory:createYesNoButton({
+    label = "Enable Harvested Flora Respawn Delay",
+    description = "For MWSE Graphic Herbalism, keeps picked or spoiled organic containers in their harvested state "
+        .. "instead of restoring them when the engine restocks them at the next day. Applies only to compatible "
+        .. "organic containers; the respawn countdown is adjustable below.",
+    variable = mwse.mcm.createTableVariable({ id = "graphicHerbalismRespawnEnabled", table = config }),
+})
+
+graphicHerbalismCategory:createSlider({
+    label = "Harvested Flora Respawn Delay (Days)",
+    description = "Keeps harvested herbs picked or spoiled for this many in-game days. Minimum 1 day, maximum 90 days; "
+        .. "the default is 3 days.",
+    min = 1,
+    max = 90,
+    step = 1,
+    jump = 5,
+    variable = mwse.mcm.createTableVariable({ id = "herbRespawnDays", table = config }),
 })
 
 -- SECTION 14: SEYDA NEEN COAST GUARD: CONTRABAND
@@ -327,6 +362,16 @@ cgCategory:createYesNoButton({
     variable = mwse.mcm.createTableVariable({ id = "coastGuardTurnInVampireDust", table = config }),
 })
 
+
+local voicesCategory = page:createCategory(string.format("Voices of Vvardenfell: Console%s",
+    getStatusText(config.isAiVoicesActive())))
+
+voicesCategory:createYesNoButton({
+    label = "Hide Voice-Line Console Messages",
+    description = "Keeps Voices of Vvardenfell's 'Playing Line' and 'Missing Line' messages out of the console. "
+        .. "Other console output is untouched, and that mod's file is not edited. Takes effect after a restart.",
+    variable = mwse.mcm.createTableVariable({ id = "aiVoicesConsoleEnabled", table = config }),
+})
 
 local instrumentCategory = page:createCategory(string.format("Bardic Inspiration: Musical Instruments%s",
     getStatusText(config.isBardicInspirationActive())))

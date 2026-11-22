@@ -37,7 +37,11 @@
 - mwcriminal: a picked door stays unlocked, and relocking keeps the door's own level.
 - mwcompanions: companions can put their weapon away after a fight.
 - mwpluginpatches: Friends & Frens stealth companions don't cloak for a drawn weapon or readied spell.
+- mwpluginpatches: vanilla NPCs that Friends & Frens converts keep their generic dialogue.
 - mwpluginpatches: `illegible handwriting` is learned again, and goes away when the quest is finished.
+- mwpluginpatches: Voices of Vvardenfell's routine console lines can be hidden; that mod's file is not edited.
+- mwpluginpatches: vanilla `Sound_Boat_Hull` and `Sound_Water_Spout` scripts start one loop per source with Expanded Sounds active, instead of restarting when the engine reports a non-actor loop as not playing.
+- mwpluginpatches: Graphic Herbalism harvested flora now use a suite-owned 1–90 day respawn slider (default 3). The original K archive and live Graphic Herbalism Lua contained no 3-day/30-day direct respawn hardcode, so no third-party Lua restore was required.
 
 # Bards (2026-11-22)
 

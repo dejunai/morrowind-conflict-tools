@@ -83,6 +83,28 @@ def test_missing_input_falls_back_to_the_merged_plugin(tmp_path):
     assert order == active and owner == {}
 
 
+def test_merged_armour_keeps_the_art_mods_parts_whatever_its_id(tmp_path):
+    """The worn parts come from the plugins, never from a list of IDs in the tools."""
+    for k, rid in enumerate(("the_chiding_cuirass", "dwemer_boots of flying", "merisan helm", "any_armour")):
+        def armo(part, rating):
+            return rec("ARMO", sub("NAME", z(rid)) + sub("MODL", z("a\\ground.nif"))
+                       + sub("AODT", struct.pack("<ifiiii", 1, 6.0, 100, 100, 100, rating))
+                       + sub("INDX", b"\x03") + sub("BNAM", z(part)))
+        folder = tmp_path / str(k)
+        folder.mkdir()
+        order = []
+        for name, masters, body in (("Morrowind.esm", [], armo("plain_part", 10)),
+                                    ("Art.esp", [("Morrowind.esm", 0)], armo("art_part", 10)),
+                                    ("Stats.esp", [("Morrowind.esm", 0)], armo("plain_part", 40))):
+            plugin(str(folder / name), masters, [body])
+            order.append((name, str(folder / name)))
+        got = m.object_merges(order, only={("ARMO", rid)})
+        assert len(got) == 1, rid
+        fields = dict(m.iter_subs(got[0][1][16:]))
+        assert m.cstr(fields["BNAM"]) == "art_part", rid
+        assert struct.unpack("<ifiiii", fields["AODT"])[5] == 40, rid
+
+
 def test_automerge_merges_objects_shared_by_inputs(tmp_path):
     """--auto-merge: the inputs' shared object is merged field by field before build_merge writes it."""
     P, _active, _mi = setup(tmp_path)

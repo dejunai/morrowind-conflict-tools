@@ -77,6 +77,10 @@ function config.isCoastGuardContrabandActive()
         or tes3.findDialogue("contraband") ~= nil
 end
 
+function config.isAiVoicesActive()
+    return (lfs and lfs.fileexists and lfs.fileexists("Data Files/MWSE/mods/AI Voices/main.lua")) or false
+end
+
 function config.isBardicInspirationActive()
     return tes3.isModActive("BardicInspiration.esp") == true
 end
@@ -155,6 +159,9 @@ local function getDynamicDefaults()
         jiubSyncAppearance = true,
         jiubExcludeCensusOffice = true,
 
+        -- Friends & Frens: converted vanilla NPCs keep their generic dialogue
+        friendsAndFrensLoreEnabled = fnf,
+
         -- The Lost Heir Delayer
         lostHeirDelayEnabled = lostHeir,
 
@@ -165,6 +172,9 @@ local function getDynamicDefaults()
         caveDripSoundEnabled = drips,
         swampSoundEnabled = swamp,
         expandedSoundsEnabled = expandedSounds,
+
+        -- Voices of Vvardenfell: its routine lines in the player's console
+        aiVoicesConsoleEnabled = config.isAiVoicesActive(),
 
         -- Bardic Inspiration: items that count as instruments besides its lutes (lower-case ids)
         musicalInstrumentsEnabled = bardic,
@@ -182,7 +192,7 @@ local function getDynamicDefaults()
 
         -- Graphic Herbalism Respawn Delay (days)
         graphicHerbalismRespawnEnabled = config.isGraphicHerbalismActive(),
-        herbRespawnDays = 30,
+        herbRespawnDays = 3,
     }
 end
 

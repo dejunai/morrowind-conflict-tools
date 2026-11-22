@@ -50,8 +50,9 @@ function tes3.mobilePlayer:equip(p)
 end
 function tes3.mobilePlayer:unequip(p) remove(p.item) end
 
+local loadedConfig
 mwse = {
-  loadConfig = function(_, defaults) defaults.enabled = true; return defaults end,   -- switched on in its MCM
+  loadConfig = function(_, defaults) defaults.enabled = true; loadedConfig = defaults; return defaults end,   -- switched on in its MCM
   saveConfig = function() end,
   mcm = { createTemplate = function() error("MCM should not run") end },
 }
@@ -82,6 +83,16 @@ check(not equipped(lantern) and equipped(shield), "second press restores exact s
 press9()
 handlers.weaponReadied[0]({ reference = tes3.player, weaponStack = { object = weapon } })
 check(not equipped(lantern) and equipped(shield), "readying weapon replaces lantern with remembered shield")
+
+-- When restoreDisplaced is false
+loadedConfig.restoreDisplaced = false
+press9()
+check(equipped(lantern) and not equipped(shield), "lantern displaces shield again")
+handlers.weaponReadied[0]({ reference = tes3.player, weaponStack = { object = weapon } })
+check(equipped(lantern) and not equipped(shield), "readying weapon leaves lantern when restoreDisplaced is disabled")
+press9()
+check(not equipped(lantern) and not equipped(shield), "second press unequips lantern without restoring shield when disabled")
+
 print("ok")
 '''
     result = subprocess.run([LUAJIT, "-"], input=script, text=True, capture_output=True, timeout=60)

@@ -14,7 +14,7 @@ pytestmark = pytest.mark.skipif(not os.path.isfile(LUAJIT), reason="LuaJIT not a
 
 SCRIPT = r"""
 handlers, day = {}, 10
-package.preload["mwpluginpatches.config"] = function() return { herbRespawnDays = 30 } end
+package.preload["mwpluginpatches.config"] = function() return { herbRespawnDays = 3 } end
 tes3 = { objectType = { container = 2 }, getGlobal = function(name) return name == "DaysPassed" and day or 0 end }
 mwse = { log = function() end }
 event = { register = function(name, fn) handlers[name] = fn end }
@@ -49,12 +49,12 @@ check(s.data.GH == 2 and s.switch.switchIndex == 2, "a spoiled herb stays spoile
 local c = herb(false)
 c.data.GH = 1; day = 12
 handlers.containerClosed({ reference = c })
-day = 20; patch.enforce(c)
+day = 14; patch.enforce(c)
 check(c.sceneNode.appCulled == true, "a mesh without a HerbalismSwitch stays hidden while picked")
 
-day = 41; patch.enforce(h)
+day = 13; patch.enforce(h)
 check(not h.isEmpty and h.data.GH == nil and h.data.GH_harvestDay == nil and h.switch.switchIndex == 0,
-      "after 30 days it grows back")
+      "after 3 days it grows back")
 print("ok")
 """
 
@@ -63,3 +63,23 @@ def test_a_picked_herb_stays_picked_for_its_days_then_grows_back():
     out = subprocess.run([LUAJIT, "-"], input=SCRIPT.replace("PATCHES", PATCHES), capture_output=True, text=True,
                          timeout=60)
     assert out.returncode == 0 and out.stdout.strip().endswith("ok"), out.stderr + out.stdout
+
+
+def test_graphic_herbalism_mcm_defaults_and_bounds():
+    mcm = open(os.path.join(ROOT, "Data Files", "MWSE", "mods", "mwsuite", "mwpluginpatches", "mcm.lua"),
+               encoding="utf-8").read()
+    config = open(os.path.join(ROOT, "Data Files", "MWSE", "mods", "mwsuite", "mwpluginpatches", "config.lua"),
+                  encoding="utf-8").read()
+    assert 'label = "Harvested Flora Respawn Delay (Days)"' in mcm
+    assert "min = 1" in mcm and "max = 90" in mcm
+    assert "herbRespawnDays = 3" in config
+
+
+def test_graphic_herbalism_active_detection_is_plugin_based():
+    config = open(os.path.join(ROOT, "Data Files", "MWSE", "mods", "mwsuite", "mwpluginpatches", "config.lua"),
+                  encoding="utf-8").read()
+    start = config.index("function config.isGraphicHerbalismActive()")
+    end = config.index("\nend", start) + len("\nend")
+    function = config[start:end]
+    assert 'tes3.isModActive("Graphic Herbalism.esp")' in function
+    assert 'tes3.isModActive("Graphic Herbalism Extra.esp")' in function

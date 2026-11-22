@@ -412,3 +412,48 @@ check(not jiub.weaponReady, "put away once nobody fights")
 check(fighter.weaponReady, "a companion still fighting keeps it out")
 check(hired.weaponReady, "only companions")
 ''')
+
+
+def test_mcm_exclusions_page():
+    run(r'''
+local registeredPage
+mwse.mcm = {
+  createTemplate = function(p)
+    return {
+      createSideBarPage = function() return { createYesNoButton = function() end, createCategory = function() return { createYesNoButton = function() end, createSlider = function() end } end } end,
+      createExclusionsPage = function(_, p) registeredPage = p; return p end,
+      register = function() end,
+    }
+  end,
+  createTableVariable = function(p) return p end,
+}
+tes3.iterate = function(t)
+  local i = 0
+  return function()
+    i = i + 1
+    return t[i]
+  end
+end
+
+require("mwcompanions.mcm")
+check(registeredPage ~= nil, "exclusions page created")
+check(registeredPage.label == "Blacklist", "exclusions page label")
+check(registeredPage.leftListLabel == "Never Followers (Blacklisted)", "left list label")
+check(registeredPage.rightListLabel == "Available Actors", "right list label")
+check(registeredPage.showAllBlocked == true, "showAllBlocked is true")
+check(#registeredPage.filters == 3, "has 3 filters")
+check(registeredPage.filters[1].label == "Followers", "first filter is Followers")
+check(type(registeredPage.filters[1].callback) == "function", "Followers filter has callback")
+
+local me = tes3.mobilePlayer
+local f1 = actor("jiub_follower", { package = "follow", companion = 1 })
+party(f1)
+local list = registeredPage.filters[1].callback()
+check(#list == 1 and list[1] == "jiub_follower", "custom exclusion list returns active follower")
+
+-- Case sensitivity test: check both lowercase and preserved case
+config.blacklist["MixedCaseActor"] = true
+local mixedActor = actor("MixedCaseActor", { package = "follow" })
+check(core.isBlacklisted(mixedActor.reference), "isBlacklisted matches preserved casing from MCM")
+''')
+

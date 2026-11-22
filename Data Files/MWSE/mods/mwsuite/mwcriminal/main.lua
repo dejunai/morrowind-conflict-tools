@@ -180,6 +180,7 @@ local function onDetectSneak(e)
     return false   -- Stealth Overhaul (priority 1000) never sees it
 end
 
+-- Only the player's friendly actors are swept: blacklisted strangers are handled per check by onDetectSneak.
 local function onCompanionSweep()
     if not (config.enabled and config.companionDetection) or tes3.menuMode() then return end
     local player = tes3.mobilePlayer
@@ -187,15 +188,6 @@ local function onCompanionSweep()
 
     for mobile in tes3.iterate(player.friendlyActors or {}) do
         if core.isCompanion(mobile) or interop.isBlacklisted(mobile) then
-            mobile.isPlayerDetected = false
-            mobile.isPlayerHidden = true
-            interop.clearSuspicion(mobile.reference)
-        end
-    end
-
-    local nearby = tes3.findActorsInProximity({ reference = tes3.player, range = 2000 })
-    for _, mobile in ipairs(nearby or {}) do
-        if mobile ~= player and interop.isBlacklisted(mobile) then
             mobile.isPlayerDetected = false
             mobile.isPlayerHidden = true
             interop.clearSuspicion(mobile.reference)

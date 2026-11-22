@@ -58,33 +58,39 @@ yesNo(fight, "escortSelfDefense", "Escorted NPCs only defend themselves",
 yesNo(fight, "escortProtection", "Escorted NPCs can't die",
     "A killing blow to an escorted NPC drains its fatigue to zero instead; it stays down while the fight lasts and gets up when it is over.")
 
--- built each time the page opens, so the list is current
-local blacklist = template:createPage({ label = "Blacklist" })
-blacklist:createInfo({ text = "Remove restores follower handling for that actor ID, unless another rule excludes it." })
-blacklist:createCategory({
-    label = "Never followers (water life, guards and the companion suite's list)",
-    postCreate = function(self)
-        local box = self.elements.subcomponentsContainer
-        local ids = {}
-        for id in pairs(config.blacklist) do ids[#ids + 1] = id end
-        table.sort(ids)
-        if #ids == 0 then box:createLabel({ text = "The blacklist is empty." }) end
-        for _, id in ipairs(ids) do
-            local row = box:createBlock()
-            row.flowDirection = tes3.flowDirection.leftToRight
-            row.widthProportional = 1.0
-            row.autoHeight = true
-            row:createButton({ text = "Remove" }):register("mouseClick", function()
-                config.blacklist[id] = nil
-                mwse.saveConfig("mwcompanions", config)
-                row:destroy()
-                box:getTopLevelMenu():updateLayout()
-            end)
-            local label = row:createLabel({ text = id })
-            label.borderLeft = 8
-            label.borderTop = 4
+local function getFollowers()
+    local list = {}
+    local seen = {}
+    local player = tes3.mobilePlayer
+    if player and player.friendlyActors then
+        for actor in tes3.iterate(player.friendlyActors) do
+            if actor ~= player and actor.reference then
+                local ref = actor.reference
+                local base = ref.baseObject or ref.object
+                local id = base and base.id or ref.id
+                if id and not seen[id] then
+                    seen[id] = true
+                    table.insert(list, id)
+                end
+            end
         end
-    end,
+    end
+    table.sort(list)
+    return list
+end
+
+template:createExclusionsPage({
+    label = "Blacklist",
+    description = "Actors on the left are permanently excluded from follower/companion handling (warping, combat protection, AI changes). Click an actor to move it between lists.",
+    leftListLabel = "Never Followers (Blacklisted)",
+    rightListLabel = "Available Actors",
+    showAllBlocked = true,
+    variable = mwse.mcm.createTableVariable({ id = "blacklist", table = config }),
+    filters = {
+        { label = "Followers", callback = getFollowers },
+        { label = "NPCs", type = "Object", objectType = tes3.objectType.npc },
+        { label = "Creatures", type = "Object", objectType = tes3.objectType.creature },
+    },
 })
 
 template:register()
