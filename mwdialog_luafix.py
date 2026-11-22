@@ -100,8 +100,6 @@ OWN_MODS = {"mwcollide", "mwcompanions", "mwcompanionsneak", "mwcriminal", "mwcu
             "mweffectinspector", "mwexitguard", "mwfloatfix", "mwguard", "mwhangwatch", "mwinfoloop",
             "mwmouseguard", "mwperformers", "mwplainpaperfix", "mwpluginpatches", "mwquicktoggle", "mwsaveguard",
             "mwsoundguard", "mwstranded", "mwteleportguard", "mwwarnsuppression", "mwmanager"}
-OWN_LOGGERS = {"mwcollide", "mwfloatfix", "mwguard", "mwhangwatch", "mwinfoloop", "mwperformers", "mwsaveguard",
-               "mwsoundguard", "mwstranded"}
 
 # defaults; mwguard.json (shared with the runtime guard) and mwdialog_luafix.json override them
 DEFAULTS = {
@@ -126,7 +124,7 @@ DEFAULTS = {
         "lifecycleMax": 20,          # lifecycle lines (LIFECYCLE_PATTERNS) reach MWSE.log only before initialized,
                                      # near the start of the line, at most this many per mod
         "errorRepeat": 0,            # errors always reach MWSE.log, including repeats
-        "exemptMods": sorted(OWN_LOGGERS),  # these already write MWSE\logs\mw*.log themselves
+        "exemptMods": sorted(OWN_MODS),    # our mods use native logging; never inject the generic shim
     },
     "logSpamGuard": True,
     "enabled": True,

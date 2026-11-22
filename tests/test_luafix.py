@@ -464,6 +464,29 @@ def test_F1_mod_with_its_own_logger_has_generic_shim_removed(tmp_path):
     assert patch_["ok"] and "mwluafix_logshim" not in patch_["text"]
 
 
+def test_own_mods_remove_shims_even_when_logging_is_flagged(tmp_path):
+    data, _root = mod_tree(tmp_path, {"main.lua": lf.log_shim("mwcompanions", CFG) + SPAM},
+                            name="mwcompanions")
+    rep = lf.check_paths([str(data)], CFG, include_own=True, checker=OkChecker(), use_cache=False,
+                         data_dir=str(tmp_path / "none"))
+    patch_ = next(iter(rep.files.values()))["patch"]
+    assert patch_["ok"] and "mwluafix_logshim" not in patch_["text"]
+
+
+def test_own_mod_sources_do_not_embed_generic_log_shims():
+    mods = os.path.join(lf.HERE, "Data Files", "MWSE", "mods")
+    for mod in lf.OWN_MODS:
+        root = os.path.join(mods, mod)
+        if not os.path.isdir(root):
+            continue
+        for base, _dirs, files in os.walk(root):
+            for name in files:
+                if name.lower().endswith(".lua"):
+                    path = os.path.join(base, name)
+                    with open(path, encoding="latin-1") as source:
+                        assert "mwluafix_logshim" not in source.read(), path
+
+
 def test_F1_skipped_when_mwguard_runtime_guard_clearly_covers(tmp_path):
     data, root = mod_tree(tmp_path, {"main.lua": SPAM})
     dd = tmp_path / "Data Files"
@@ -608,14 +631,13 @@ def test_KB4_restores_strict_exclusions_pages():
     assert 'text = "Next >"' in repaired and "MAX_DISPLAY_ITEMS" not in repaired
 
 
-def test_own_mods_use_the_same_log_policy_when_included(tmp_path):
+def test_own_mods_do_not_get_shims_when_included(tmp_path):
     src = "mwse.log('ordinary detail')\nevent.register('x', f, { priority = 10000 })\n"
     data, _root = mod_tree(tmp_path, {"main.lua": src}, name="mwmouseguard")
     rep = lf.check_paths([str(data)], CFG, include_own=True, checker=OkChecker(), use_cache=False,
                          data_dir=str(tmp_path / "none"))
     e = next(iter(rep.files.values()))
-    assert e["patch"]["ok"] and "mwluafix_logshim" in e["patch"]["text"]
-    assert "priority = 10000" in e["patch"]["text"] and e["patch"]["rules"] == ["F1"]
+    assert e["patch"] is None
 
 
 def test_mwhangwatch_log_is_under_mwse_logs():
