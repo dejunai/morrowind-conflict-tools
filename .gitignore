@@ -29,6 +29,8 @@ mwdialog_mastercheck_facts.json
 mwdialog_asset_cache.json
 mwdialog_asset_cache.sqlite
 mwdialog_asset_cache.json.migrated
+mwdialog_pathgrid_cache.json
+mwdialog_object_cache.json
 mwdialog_backup/
 mwdialog_loadorder_undo.txt
 mwdialog_longpaths.json
@@ -56,6 +58,7 @@ mlox/
 
 # Local LuaJIT copy (place luajit.exe, lua51.dll, jit\ and COPYRIGHT here; see tools/README.md)
 tools/luajit/
+tools/ffprobe.exe
 
 # personal load-order patches: not part of the published suite
 Data Files/MWSE/mods/dejespreplacements/

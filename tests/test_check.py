@@ -371,6 +371,25 @@ def test_M9_duplicate_inventory_entries_stay_separate():
     assert len(fields["NPCO"]) == 2
 
 
+def test_M9_npc_stats_and_autocalc_flag_stay_together():
+    """Mulvisie Othril: Morrowind.esm's auto-calculated NPDT has junk in its unused bytes, a face mod saves zeros
+    there, and a later-loading distribution mod gives her full stats. The stats stay hers and match the flag."""
+    from mwdialog_records import merge_object
+    npc = lambda npdt, flag: sub("NAME", z("mulvisie")) + sub("NPDT", npdt) + sub("FLAG", struct.pack("<I", flag))
+    vanilla = npc(bytes.fromhex("020014000024b40000000000"), 0x19)
+    stats = bytearray(52)
+    struct.pack_into("<H", stats, 38, 45)
+    versions = [(0, vanilla), (1, npc(bytes(stats), 0x09)), (2, npc(bytes.fromhex("020014000000000000000000"), 0x19))]
+    body = merge_object("NPC_", versions, lambda k: 0, None)
+    fields = dict(m.merge_fields("NPC_", body))
+    assert fields["NPDT"][0][1] == bytes(stats) and struct.unpack("<I", fields["FLAG"][0][1])[0] == 0x09
+    # a real stats change from the last mod wins, and the flag follows it back to auto-calculate
+    versions[2] = (2, npc(bytes.fromhex("050014000000000000000000"), 0x19))
+    fields = dict(m.merge_fields("NPC_", merge_object("NPC_", versions, lambda k: 0, None)
+                                 or versions[2][1]))
+    assert len(fields["NPDT"][0][1]) == 12 and struct.unpack("<I", fields["FLAG"][0][1])[0] & 0x10
+
+
 def test_M9_damaged_plugin_left_out_of_object_merge(tmp_path):
     good, bad = tmp_path / "Good.esp", tmp_path / "Bad.esp"
     plugin(good, [], [misc("x")])

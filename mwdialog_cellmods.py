@@ -3,6 +3,8 @@
 by a rebuilt interior for mwstranded (mwstranded_data.json).
 """
 from collections import defaultdict
+import hashlib
+import inspect
 import json
 import math
 import os
@@ -243,9 +245,41 @@ STRANDED_KEEP_TAGS = set()                    # nothing is left in the void: doo
 
 _OBJECT_INFO = {}
 
+OBJECT_CACHE_FILE = "mwdialog_object_cache.json"   # beside Data Files: each plugin's objects, by its content
+OBJECT_CACHE_DAYS = 60                             # an entry no run has used for this long is dropped
+
+
+def _plugin_objects(data):
+    """[[id, tag, scripted 0/1, model or ""]] of one plugin's object records, in file order (up to any damage)."""
+    out = []
+    try:
+        for _off, tag, _flags, body in iter_records(data):
+            if tag in ("CELL", "DIAL", "INFO", "LAND", "PGRD", "TES3", "SCPT", "GMST"):
+                continue
+            nm = first_sub(body, b"NAME")
+            if nm is None:
+                continue
+            md = first_sub(body, b"MODL")
+            out.append([cstr(nm).lower(), tag, 1 if first_sub(body, b"SCRI") else 0,
+                        cstr(md).lower().replace("/", "\\") if md else ""])
+    except FormatError:
+        pass
+    return out
+
+
+def _parser_version():
+    """A change to how a plugin's objects are read starts the cache afresh."""
+    try:
+        src = inspect.getsource(_plugin_objects) + inspect.getsource(iter_records) + inspect.getsource(first_sub)
+    except (OSError, TypeError):
+        src = "unknown"
+    return hashlib.sha1(src.encode("utf-8")).hexdigest()
+
 
 def object_info(order):
-    """(tag_of, model_of, scripted) for every object id the plugins define (the last definition wins)."""
+    """(tag_of, model_of, scripted) for every object id the plugins define (the last definition wins). Each
+    plugin's objects are kept in mwdialog_object_cache.json under the SHA-1 of its bytes, so a plugin is only read
+    record by record again once its content changes."""
     parts = []
     for n, p in order:
         try:
@@ -256,27 +290,51 @@ def object_info(order):
     key = tuple(parts)
     if key in _OBJECT_INFO:
         return _OBJECT_INFO[key]
+    cache_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(order[0][1]))),
+                              OBJECT_CACHE_FILE) if order else None
+    version, cached = _parser_version(), {}
+    if cache_path:
+        try:
+            with open(cache_path, encoding="utf-8") as f:
+                saved = json.load(f)
+            if saved.get("parser") == version and isinstance(saved.get("plugins"), dict):
+                cached = saved["plugins"]
+        except (OSError, ValueError, AttributeError):
+            pass
+    now, changed = int(time.time()), False
     model_of, tag_of, scripted = {}, {}, set()
     for _n, p in order:
         try:
             data = read_plugin_bytes(p)
-            for _off, tag, _flags, body in iter_records(data):
-                if tag in ("CELL", "DIAL", "INFO", "LAND", "PGRD", "TES3", "SCPT", "GMST"):
-                    continue
-                nm = first_sub(body, b"NAME")
-                if nm is None:
-                    continue
-                rid = cstr(nm).lower()
-                tag_of[rid] = tag
-                if first_sub(body, b"SCRI"):
-                    scripted.add(rid)
-                else:
-                    scripted.discard(rid)
-                md = first_sub(body, b"MODL")
-                if md:
-                    model_of[rid] = cstr(md).lower().replace("/", "\\")
+            digest = hashlib.sha1(data).hexdigest()
+            entry = cached.get(digest)
+            if not isinstance(entry, dict) or not isinstance(entry.get("objects"), list):
+                entry = cached[digest] = {"objects": _plugin_objects(data)}
+                changed = True
+            if entry.get("used", 0) < now - 86400:
+                entry["used"], changed = now, True
+            objects = entry["objects"]
         except (OSError, FormatError):
             continue
+        for rid, tag, scr, model in objects:
+            tag_of[rid] = tag
+            if scr:
+                scripted.add(rid)
+            else:
+                scripted.discard(rid)
+            if model:
+                model_of[rid] = model
+    stale = [d for d, e in cached.items() if not isinstance(e, dict) or e.get("used", 0) < now - OBJECT_CACHE_DAYS * 86400]
+    for d in stale:
+        del cached[d]
+    if cache_path and (changed or stale):
+        try:
+            tmp = cache_path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump({"parser": version, "plugins": cached}, f)
+            os.replace(tmp, cache_path)
+        except OSError as e:
+            print(f"  (could not write {OBJECT_CACHE_FILE}: {e})", file=sys.stderr)
     _OBJECT_INFO.clear()
     _OBJECT_INFO[key] = (tag_of, model_of, scripted)
     return _OBJECT_INFO[key]

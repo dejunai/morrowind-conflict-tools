@@ -59,7 +59,7 @@ Following major refactoring passes, the core monolith `mwdialog_check.py` delega
 * `--csv PATH`: Exports the comprehensive diagnostic report to a structured CSV file.
 
 ### 3.2. Dialogue & Record Fixing Subsystem
-* `--fix`: Generates and executes a repair plan for `ERROR` severity issues. ESP files are patched in place (backed up to `.esp.bak`). ESM issues are redirected into a newly generated `mwdialog_check - ESM fixes.esp`.
+* `--fix`: Generates and executes a repair plan for `ERROR` severity issues. ESP files are patched in place (backed up to `.esp.bak`). ESM issues are redirected into a newly generated `mwdialog_check - ESM fixes.esp`. After an unrestricted non-dry run it also writes `MWSE/config/mwsoundguard_data.json` from winning sound records and loose audio. PCM WAV lengths are read directly; other formats require `ffprobe` on PATH, next to the scripts, or in `tools/ffprobe.exe`. Missing or unreadable sounds are reported and omitted. For cached, unchanged one-shot sounds, mwsoundguard waits for the sound length adjusted for pitch before allowing the next request; otherwise it uses its existing limits.
 * `--dry-run`: Simulates the requested actions (fixing, merging, cleaning, or asset processing) and prints the planned operations without modifying any files.
 * `--yes`: Skips interactive terminal confirmation prompts and executes planned changes immediately.
 * `--patch-esm`: Alias for `--fix` (maintained for backwards compatibility with legacy batch scripts).
@@ -101,7 +101,7 @@ Following major refactoring passes, the core monolith `mwdialog_check.py` delega
 * `--collide-radius UNITS`: Distance threshold (in Morrowind engine units) used to identify colliding meshes for `mwcollide` (default: `32` units; `0` checks identical models within 64 units).
 * `--only-new`: Replays previously recorded answers (`mwdialog_conflict_answers.json`) and prompts only for unresolved pairs.
 * `--fresh-answers`: Ignores recorded answers during `--full` and forces a fresh query pass.
-* `--use-answers`: Applies all existing answers in `mwdialog_conflict_answers.json` headlessly without interactive prompts.
+* `--use-answers`: Applies all existing answers in `mwdialog_conflict_answers.json` and, in a console, asks only about new pairs (`--full` does the same before it builds the patches). With `--no-interactive`, or no console, new pairs are left unanswered.
 * `--no-interactive`: Runs cell conflict analysis in reporting mode only, suppressing keyboard prompts.
 * `--performers-patch`: Generates `mwdialog_check Performers Patch.esp` to delete duplicate bard NPCs in inns, rather than relying on runtime hiding via `mwperformers`.
 * `--no-performers`: Disables duplicate inn performer resolution.

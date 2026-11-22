@@ -575,6 +575,19 @@ MERGE_REF_FIELDS = {"SCRI": None, "ENAM": ("ARMO", "CLOT", "WEAP", "BOOK"), "RNA
 
 MERGE_FILE_FIELDS = {"MODL": "mesh", "ITEX": "icon"}
 
+NPC_AUTOCALC = 0x10
+
+
+def _same_field(tag, f, a, b):
+    """Equal, ignoring the unused bytes of an auto-calculated NPC's 12-byte NPDT (Morrowind.esm has junk there;
+    a mod saving them as zeros hasn't changed the NPC's stats)."""
+    if a == b:
+        return True
+    if tag == "NPC_" and f == "NPDT" and a and b and len(a) == len(b) == 1:
+        x, y = a[0][1], b[0][1]
+        return len(x) == len(y) == 12 and x[:5] == y[:5] and x[8:] == y[8:]
+    return False
+
 
 def merge_object(tag, versions, parent_of, known, defined=None, file_ok=None):
     """versions: [(plugin index, body)] in load order. parent_of(k) -> the version index plugin k's changes
@@ -597,7 +610,7 @@ def merge_object(tag, versions, parent_of, known, defined=None, file_ok=None):
                             m[e] = b[e]
                         else:
                             m.pop(e, None)
-            elif a != b:
+            elif not _same_field(tag, f, a, b):
                 if b is None:
                     merged.pop(f, None)
                 else:
@@ -630,6 +643,12 @@ def merge_object(tag, versions, parent_of, known, defined=None, file_ok=None):
     for f in MERGE_LISTS:                            # entries for things no active plugin defines: left out
         if f in merged and known is not None:
             merged[f] = {e: d for e, d in merged[f].items() if e[0] in known or e in (last.get(f) or {})}
+    if tag == "NPC_" and merged.get("NPDT") and merged.get("FLAG"):    # stats and the auto-calculate flag from
+        npdt, (fn, fd) = merged["NPDT"][0][1], merged["FLAG"][0]        # different mods: the flag follows the stats
+        if len(fd) >= 4 and len(npdt) in (12, 52):
+            fl = struct.unpack_from("<I", fd)[0]
+            fl = fl | NPC_AUTOCALC if len(npdt) == 12 else fl & ~NPC_AUTOCALC
+            merged["FLAG"] = [(fn, struct.pack("<I", fl) + fd[4:])]
     order = list(orders[-1])
     for o in reversed(orders[:-1]):
         for i, f in enumerate(o):

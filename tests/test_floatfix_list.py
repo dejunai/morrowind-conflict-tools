@@ -1,10 +1,14 @@
 """mwfloatfix_data.json: the loose items that could float (an item on a table a later plugin moved is listed, an
 untouched cell isn't), and mwfloatfix checks only listed items when the list is there (LuaJIT, stub MWSE)."""
+import json
 import os
+import struct
 import subprocess
+import types
 
 import pytest
 
+from conftest import m, plugin, rec, sub, z
 from mwdialog_cellmods import float_items
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -31,6 +35,35 @@ def test_an_item_on_a_table_a_later_plugin_moved_is_listed_and_an_untouched_cell
     assert set(found) == {"balmora, inn"}
     assert found["balmora, inn"] == {("misc_com_bottle_01", 110, 95, 40): ("morrowind.esm",
                                                                            "furn_de_table moved by tables.esp")}
+
+
+def _cell(*refs):
+    return rec("CELL", sub("NAME", z("")) + sub("DATA", struct.pack("<Iii", 0, 0, 0)) + b"".join(refs))
+
+
+def _ref(index, oid, x, zpos, deleted=False):
+    tail = sub("DELE", struct.pack("<I", 0)) if deleted else sub("DATA", struct.pack("<6f", x, 100.0, zpos, 0, 0, 0))
+    return sub("FRMR", struct.pack("<I", index)) + sub("NAME", z(oid)) + tail
+
+
+def test_a_blacklisted_plugin_still_counts_for_what_it_takes_away(tmp_path):
+    """The conflict blacklist only quiets the report: a dock a blacklisted plugin deletes is gone in game too, so
+    the bucket another plugin put on it is listed (the chargen dock: Ports of Vvardenfell and Damp Little Squat)."""
+    data = tmp_path / "Data Files"
+    data.mkdir()
+    size = len(plugin(data / "Master.esm", [], [
+        rec("STAT", sub("NAME", z("dock")) + sub("MODL", z("dock.nif"))),
+        rec("MISC", sub("NAME", z("bucket")) + sub("MODL", z("bucket.nif"))),
+        _cell(_ref(1, "dock", 100.0, 0.0))]))
+    plugin(data / "Ports.esp", [("Master.esm", size)], [_cell(_ref((1 << 24) | 1, "dock", 0, 0, deleted=True))])
+    plugin(data / "Squat.esp", [("Master.esm", size)], [_cell(_ref(1, "bucket", 110.0, 34.0))])
+    (tmp_path / m.CONFLICT_BLACKLIST_FILE).write_text("Ports.esp\n")
+    order = ["Master.esm", "Ports.esp", "Squat.esp"]
+    args = types.SimpleNamespace(data_dir=str(data), dry_run=False)
+    m.run_cell_conflicts(args, [(n, str(data / n)) for n in order])
+    listed = json.loads((data / "MWSE" / "config" / "mwfloatfix_data.json").read_text())["cells"]
+    assert listed["#0,0"] == [{"id": "bucket", "pos": [110, 100, 34], "from": "Squat.esp",
+                               "why": "dock deleted by ports.esp"}]
 
 
 SCRIPT = r"""
@@ -64,6 +97,16 @@ handlers.simulate()
 if not listed.tempData.mwfloatfixChecked then error("the listed item is checked") end
 if other.tempData.mwfloatfixChecked then error("an item the list doesn't name is skipped") end
 if spawned.tempData.mwfloatfixChecked then error("an item a script placed is skipped") end
+local batch = {}
+for i = 1, 5 do
+  batch[i] = item(110, 95, 40, "Morrowind.esm")
+  handlers.referenceActivated({ reference = batch[i] })
+end
+clock = 20
+handlers.simulate()
+local n = 0
+for _, r in ipairs(batch) do if r.tempData.mwfloatfixChecked then n = n + 1 end end
+if n ~= 2 then error("a frame checks at most 2 items, checked " .. n) end
 print("ok")
 """
 
@@ -73,3 +116,23 @@ def test_mwfloatfix_skips_an_item_the_list_does_not_name():
     out = subprocess.run([LUAJIT, "-"], input=SCRIPT.replace("[[MOD]]", "[[" + MOD + "]]"), capture_output=True,
                          text=True, timeout=60)
     assert out.returncode == 0 and out.stdout.strip().endswith("ok"), out.stderr + out.stdout
+
+
+def test_object_info_reads_a_plugin_again_only_once_its_content_changes(tmp_path, monkeypatch):
+    import mwdialog_cellmods as cm
+    data = tmp_path / "Data Files"
+    data.mkdir()
+    a = plugin(data / "A.esp", [], [rec("STAT", sub("NAME", z("dock")) + sub("MODL", z("x/Dock.nif")))])
+    order = [("A.esp", str(data / "A.esp"))]
+    reads = []
+    real = cm._plugin_objects
+    monkeypatch.setattr(cm, "_plugin_objects", lambda d: reads.append(1) or real(d))
+    monkeypatch.setattr(cm, "_parser_version", lambda: "v")
+    assert cm.object_info(order)[1] == {"dock": "x\\dock.nif"} and len(reads) == 1
+    cm._OBJECT_INFO.clear()                                       # a new run: only the file on disk is left
+    assert cm.object_info(order)[1] == {"dock": "x\\dock.nif"} and len(reads) == 1
+    plugin(data / "A.esp", [], [rec("STAT", sub("NAME", z("dock")) + sub("MODL", z("y.nif")) + sub("SCRI", z("s")))])
+    cm._OBJECT_INFO.clear()
+    tags, models, scripted = cm.object_info(order)
+    assert models == {"dock": "y.nif"} and scripted == {"dock"} and len(reads) == 2
+    assert a and (tmp_path / cm.OBJECT_CACHE_FILE).exists()

@@ -833,6 +833,61 @@ assert(mod.invisible[waiting] and mod.valid(waiting), "never left waiting")
     assert result.returncode == 0, result.stderr
 
 
+SUNRAYS_LUA = """local ffi = require("ffi")
+local TES3_WeatherController_updateSun = ffi.cast("void(__thiscall*)(void*, float)", 0x43FF80)
+
+local function updateSun()
+    local this = ffi.cast("void*", mwse.memory.addressOf(tes3.worldController.weatherController))
+    TES3_WeatherController_updateSun(this, tes3.worldController.hour.value)\t\t-- Updates sceneSunVis
+end
+
+local function disableSunrays(e)
+\tif TES3_WeatherController_updateSun then
+\t\tdo
+\t\t\tupdateSun()
+\t\t\tlocal sunPosition = tes3.worldController.weatherController.sceneSunVis.translation
+\t\t\tseen = sunPosition
+\t\tend
+\tend
+end
+return disableSunrays
+"""
+
+
+@pytest.mark.parametrize("eol", ["\n", "\r\n"])
+def test_KB9_sunrays_skip_the_engine_sun_update_until_there_is_weather(eol):
+    source = SUNRAYS_LUA.replace("\n", eol)
+    path = "directionalsunrays/main.lua"
+    findings = [f for f in analyse(source, path).findings if f["rule"] == "KB9"]
+    assert len(findings) == 2
+    assert not [f for f in analyse(source, "another/main.lua").findings if f["rule"] == "KB9"]
+    repaired, applied = lf.build_patch(source, findings, "directionalsunrays", CFG, "high", False)
+    assert set(applied) == {"KB9"} and repaired.count("\n") == repaired.count(eol)
+    assert not [f for f in analyse(repaired, path).findings if f["rule"] == "KB9"]
+    assert lf.verify_patch(source, repaired, applied, None, "directionalsunrays", path, CFG, "high")["ok"]
+    luajit = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools", "luajit", "luajit.exe")
+    if not os.path.isfile(luajit):
+        pytest.skip("LuaJIT executable not available for behavioral verification")
+    script = r"""
+local calls = 0
+package.loaded.ffi = { cast = function(_t, v)
+  if v == 0x43FF80 then return function(this) assert(this.currentWeather, "engine crash"); calls = calls + 1 end end
+  return v end }
+mwse = { memory = { addressOf = function(o) return o end } }
+local wc = { sceneSunVis = { translation = "sun" } }
+tes3 = { worldController = { weatherController = wc, hour = { value = 12 } } }
+local tick = assert(loadstring([==[SOURCE]==]))()
+tick({})
+assert(calls == 0 and seen == nil, "no weather yet: skipped")
+wc.currentWeather = {}
+tick({})
+assert(calls == 1 and seen == "sun", "updated once there is weather")
+"""
+    result = subprocess.run([luajit, "-"], input=script.replace("SOURCE", repaired.replace("\r", "")),
+                            text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
 def test_KB4_restores_strict_exclusions_pages():
     path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Data Files", "MWSE", "core", "mcm",
                         "components", "pages", "ExclusionsPage.lua")

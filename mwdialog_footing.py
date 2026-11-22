@@ -5,6 +5,7 @@ Footing is worked out from the land heights and the collision triangles of the m
 """
 from collections import defaultdict
 import functools
+import hashlib
 import json
 import math
 import os
@@ -144,6 +145,12 @@ class ModelShapes:
         self.triangles = functools.cache(self._triangles)
         self.radius = functools.cache(self._radius)
         self.placed = functools.cache(self._placed)
+        self.digest = functools.cache(self._digest)
+
+    def _digest(self, model):
+        """The model's bytes as a hash ("" for none): a replacer swapped in changes it."""
+        data = self.read(model)
+        return "" if data is None else hashlib.sha1(data).hexdigest()
 
     def _triangles(self, model):
         data = self.read(model)
@@ -189,7 +196,7 @@ def model_reader(data_dir, archives):
                 return f.read()
         except (OSError, ValueError):
             pass
-        hit = packed.get("meshes\\" + model)
+        hit = packed.get("meshes\\" + model.replace("/", "\\").lower())    # archive names are lowercase
         if hit:
             try:
                 with open(hit[0], "rb") as f:

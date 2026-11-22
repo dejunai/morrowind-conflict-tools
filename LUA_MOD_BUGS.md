@@ -606,3 +606,18 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
   `pcall`. The core edit went with the MWSE update of 2026-11-10, the other with a later copy of `magic.lua`. It
   also hid the symptom only: the warning stayed, and the ghost's ability went unrecognized.
 * **For the author**: Don't read `object.spells` from `magicEffectActivated` before `loaded`.
+
+## 44. Directional Sunrays Sun Update Before There Is Weather (`KB9`)
+
+* **Author**: Kynesifnar (Directional Sunrays v1.3)
+* **File**: `MWSE\mods\DirectionalSunrays\main.lua`, `updateSun` / `disableSunrays`
+* **Bug**: Every `simulate` indoors it calls the engine's `WeatherController::updateSun` (0x43FF80) through FFI.
+  Just after a new game is started from inside the game there is no current weather yet; the engine reads it
+  and crashes: `EXCEPTION_ACCESS_VIOLATION` in `WeatherController::updateSun`, Lua stack
+  `directionalsunrays\main.lua:71` (MWSE.log 2026-11-22). Robenhood, Nocturnal Moths and Tamriel Data log
+  "weather is nil" in the same moment, but those are Lua errors MWSE catches.
+* **Fix**: `updateSun` returns early when `weatherController.currentWeather` is nil, and the sunray pass skips
+  that frame.
+* **Luafix grade**: `(Known Bugs) KB9: Directional Sunrays`.
+* **For the author**: Check `tes3.worldController.weatherController.currentWeather` before calling engine
+  functions through FFI.

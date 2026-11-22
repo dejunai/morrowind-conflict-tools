@@ -34,7 +34,6 @@ local defaults = {
     maxDrop      = 160,     -- never lower an item further than this (a gap larger than this is left alone)
     wallGap      = 6,       -- an item this close to a wall counts as mounted on it
     lights       = false,   -- carryable lights too (lanterns often hang on purpose)
-    perFrame     = 12,      -- items checked per frame
     log          = true,
     blacklistKey = { keyCode = tes3.scanCode.delete, isShiftDown = true, isAltDown = false, isControlDown = false },
     blacklist    = {},
@@ -43,6 +42,11 @@ local defaults = {
 local config = mwse.loadConfig(CONFIG_NAME, defaults)
 config.blacklist = config.blacklist or {}
 config.whitelist = config.whitelist or {}
+config.perFrame = nil          -- old setting (12 a frame); replaced by the fixed limits below
+
+-- one item can cost up to ~44 ray casts: at most 2 items a frame, and stop once a frame has spent 2 ms
+local MAX_PER_FRAME = 2
+local FRAME_BUDGET = 0.002
 
 local ITEM_TYPES = {
     [tes3.objectType.miscItem] = true, [tes3.objectType.book] = true, [tes3.objectType.ingredient] = true,
@@ -655,9 +659,10 @@ event.register(tes3.event.simulate, function()
         end
         queue, qHead, sorted = sortedRefs, 1, true
     end
-    for _ = 1, config.perFrame do
+    local started = os.clock()
+    for _ = 1, MAX_PER_FRAME do
         local ref = queue[qHead]
-        if not ref then break end
+        if not ref or os.clock() - started >= FRAME_BUDGET then break end
         queue[qHead] = false
         qHead = qHead + 1
         queued[ref] = nil

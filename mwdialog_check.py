@@ -137,6 +137,8 @@ from mwdialog_restore import (  # noqa: E402,F401
 from mwdialog_ownership import door_owner_verdicts, item_owner_verdicts  # noqa: E402,F401
 from mwdialog_footing import (  # noqa: E402,F401
     find_footing, ModelShapes, Placements, RESCUE_DATA, SUNK as ACTOR_SUNK, write_rescue_data)
+from mwdialog_pathgrid import (PATHGRID_CACHE_FILE, PATHGRID_FIXES_FILE, load_pathgrid_cache,  # noqa: E402
+                               repair_pathgrids, save_pathgrid_cache)
 
 ENC = "cp1252"
 OFFICIAL_MASTERS = ("morrowind.esm", "tribunal.esm", "bloodmoon.esm")
@@ -3422,7 +3424,7 @@ def run_fix(args, plugins, bsas, data_dirs, report, world, only, hidden=frozense
             and not (only is None and getattr(world, "longpath_plan", None)) \
             and not getattr(args, "_cell_deletes", None):
         print("  Nothing that can be fixed automatically.")
-        return
+        return True
     total = print_plan("", esp_plans)
     total += print_plan(f"   (fixed through {PATCH_NAME})", esm_plans, hidden)
     if item_esp or item_esm:
@@ -3847,6 +3849,7 @@ def run_fix(args, plugins, bsas, data_dirs, report, world, only, hidden=frozense
         print(f"\n{more} more fix(es) became possible because of these changes "
               f"(e.g. links to responses that were just deleted). Run --fix again to apply them.")
     activate_generated_patches(args, plugins, patch_path, place_built, game_dir)
+    return True
 
 
 # --------------------------------------------------------------------------
@@ -4848,7 +4851,8 @@ def run_cell_conflicts(args, plugins, collect=False):
     skip = {x.lower() for x in OUR_PATCHES} | {AUTO_MERGE_NAME.lower(), CELL_WINNER_PATCH.lower()}
     black = read_conflict_blacklist(os.path.dirname(os.path.abspath(args.data_dir)))
     left_out = [n for n, _p in plugins if conflict_blacklisted(n, black)]
-    skip |= {n.lower() for n in left_out}
+    # still read: they load in game, so what they move or delete counts for mwfloatfix and mwcollide
+    quiet = {n.lower() for n in left_out}
     if left_out and not collect:
         print(f"  left out ({CONFLICT_BLACKLIST_FILE}: they always lose): " + ", ".join(left_out))
     order = [(n, p) for n, p in plugins if n.lower() not in skip]
@@ -5074,12 +5078,12 @@ def run_cell_conflicts(args, plugins, collect=False):
                     later_v, earlier_v = (vb, va) if pos[b] > pos[a] else (va, vb)
                     pairs[pk]["settings"].append((key, field, earlier_v, later_v))
                     pairs[pk]["score"] += 3
+    pairs = {k: v for k, v in pairs.items() if not (quiet & set(k))}
     if getattr(args, "only", None):
         only = {o.lower() for o in args.only}
         pairs = {k: v for k, v in pairs.items() if k[0] in only or k[1] in only}
     if not pairs and not collect:
         print("  No conflicts found between plugins that don't know about each other.")
-        return 0
 
     def cell_name(key):
         lab = (labels.get(key) or "").strip()
@@ -5153,6 +5157,8 @@ def run_cell_conflicts(args, plugins, collect=False):
             write_stranded_data(args, order, lost)
         except (OSError, ValueError) as e:
             print(f"  (could not write {STRANDED_DATA}: {e})", file=sys.stderr)
+    if not pairs and not patched:
+        return 0
     if patched:
         print(f"  {len(patched)} pair(s) already handled by a patch (a plugin made for both, covering every cell "
               f"where they conflict); not counted below:")
@@ -5347,7 +5353,10 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
     new_rules, turned_off = [], []
     answers = read_conflict_answers(game_dir)        # last time's answers: the defaults
     answered = {}
+    only_new = bool(getattr(args, "only_new", False))       # --only-new: replay answered pairs, ask the new ones
     use_all = bool(getattr(args, "use_answers", False))     # --use-answers: last time's answer for every pair
+    if use_all and cell_conflicts_interactive(args):        # someone is there: the pairs with no answer are asked
+        use_all, only_new = False, True
     auto_known = False                                       # [a]: the same, but new pairs are still asked
 
     def forget_now(k):
@@ -5373,7 +5382,6 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
             write_conflict_answers(game_dir, cur)
         except (OSError, ValueError):
             pass
-    only_new = bool(getattr(args, "only_new", False))       # --only-new: replay answered pairs, ask the new ones
     unanswered = []                                         # pairs with no answer yet (left for you)
     # An .esm always loads before every .esp, so an [Order] rule can't change who wins between them:
     # list those pairs as warnings and only ask about the rest.
@@ -5505,9 +5513,7 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
                           f"Enter); try again")
                     ans = input("  > ").strip().lower()
             except EOFError:
-                break
-            if ans == "q":
-                break
+                ans = "q"
             if ans == "a":
                 # last time's answers for every pair that has one; a new pair is still asked
                 auto_known = True
@@ -5523,13 +5529,15 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
                             print(f"    '{ans}' isn't one of the choices; try again")
                             ans = input("  > ").strip().lower()
                     except EOFError:
-                        break
-                    if ans == "q":
-                        break
+                        ans = "q"
                     if ans in ("", "a"):
                         ans = default or "s"
             elif ans == "":
                 ans = default or "s"
+            if ans == "q":
+                if not only_new:
+                    break
+                use_all, ans = True, "s"     # stop asking, but the rest still replay: their rules were wiped above
         if ans not in opts:
             if ans == "s":                           # postponed: not remembered, asked again next run
                 POSTPONED.append(pair_key)
@@ -5599,7 +5607,7 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
         print("(--full sorts next, so the changes take effect.)")
         return 0
     what = "--sort --fix --multipatch" if (turned_off or new_winners) else "--sort"
-    if use_all and getattr(args, "use_answers", False):
+    if getattr(args, "use_answers", False):
         ans = "y"
         print(f"\nRunning {what} so the changes take effect (--use-answers).")
     else:
@@ -5803,7 +5811,7 @@ def active_archives(args):
     return [lookup[n.lower()] for n in names if n.lower() in lookup]
 
 
-def fix_cell_winners(args, plugins):
+def fix_cell_winners(args, plugins, report=None):
     """--fix: for each interior in CELL_WINNERS_FILE, the winning plugin's version of the place is used as if
     the losing plugin had never touched it, through CELL_WINNER_PATCH (rebuilt each time; no plugin changed):
       - the loser's own objects there are deleted (not its people and creatures, nor objects its scripts or
@@ -5854,6 +5862,7 @@ def fix_cell_winners(args, plugins):
     xheads = defaultdict(list)                   # chosen interior -> [(plugin, head)] in load order
     xver = defaultdict(list)                     # (interior, ref key) -> [(plugin, group, block)]
     xpgrd = defaultdict(list)                    # interior -> [(plugin, raw PGRD record)]
+    all_pgrd = []                                # (name, grid, plugin index, offset) of every PGRD, in load order
     own_last, own_vanilla, door_ids = {}, {}, set()  # owned refs: ref key -> last version / official owner
     door_hist = defaultdict(list)                # ref key -> [(plugin, group, block, cell key)] of doors into them
     revive_hist = defaultdict(list)              # ref key -> [(plugin, group, deleted, NAME, cell key)] of
@@ -5900,6 +5909,9 @@ def fix_cell_winners(args, plugins):
                 nm = cstr(first_sub(body, b"NAME") or b"").lower()
                 if nm in cells:
                     xpgrd[nm].append((low, b"PGRD" + struct.pack("<III", len(body), 0, fl) + body))
+                gd = first_sub(body, b"DATA")
+                if gd and len(gd) >= 8:
+                    all_pgrd.append((nm, struct.unpack_from("<ii", gd), pi, off))
             elif tag == "CELL":
                 key, _label = cell_key(body)
                 if key is None:
@@ -6495,8 +6507,8 @@ def fix_cell_winners(args, plugins):
 
     # people left over water: what they stood on was taken away. Runs after all that moves or deletes objects.
     people = {bk: (key[1], key[2]) for bk, (key, oid) in npc_refs.items() if key[0] == "e" and oid not in npc_dead}
-    moves, rescue, left = find_footing(Placements(order, ext_recs, land_vers, masters_of), people, out, kept_dry,
-                                       tag_of, model_of, shapes)
+    world = Placements(order, ext_recs, land_vers, masters_of)
+    moves, rescue, left = find_footing(world, people, out, kept_dry, tag_of, model_of, shapes)
     for bk, ck, grp, blk in moves:
         put(ck, grp, bk, blk)
         out_heads.setdefault(ck, heads.get(ck))
@@ -6519,6 +6531,64 @@ def fix_cell_winners(args, plugins):
             write_rescue_data(data_dir, rescue, left)
         except OSError as e:
             print(f"  (could not write {RESCUE_DATA}: {e})", file=sys.stderr)
+
+    # pathgrids walking people into what a mod their plugin doesn't know built. Runs after all that moves objects.
+    ext_pathgrids = {g: (pi, off) for nm, g, pi, off in all_pgrd if nm not in interiors}
+    if ext_pathgrids and not tag_of:
+        print("  Pathgrids: reading what every plugin's objects are...", flush=True)
+        tag_of, model_of, _scripted = object_info(order)
+
+    def pg_progress(done, total):
+        set_title(f"mwdialog_check - pathgrids {done}/{total}")
+        print(f"  Pathgrids: checking {done}/{total} outdoor cells for paths into objects...",
+              end="\n" if done == total else "\r", flush=True)
+    pg_cache_path = os.path.join(game_dir, PATHGRID_CACHE_FILE)
+    pg_cache = load_pathgrid_cache(pg_cache_path)
+    new_pgrds, paths_fixed, paths_left, pg_reused = repair_pathgrids(
+        world, ext_pathgrids, out, tag_of, model_of, shapes,
+        progress=pg_progress if ext_pathgrids else None, cache=pg_cache)
+    if pg_reused:
+        print(f"  Pathgrids: {pg_reused} cell(s) unchanged since an earlier check: taken from {PATHGRID_CACHE_FILE}")
+    if not args.dry_run:
+        try:
+            save_pathgrid_cache(pg_cache_path, pg_cache)
+        except OSError as e:
+            print(f"  (could not write {PATHGRID_CACHE_FILE}: {e})", file=sys.stderr)
+    for g in new_pgrds:
+        out_heads.setdefault(("e",) + g, heads.get(("e",) + g))
+    if paths_fixed:
+        print(f"  Pathgrids: {len(new_pgrds)} cell(s) whose paths ran into objects another mod put there, "
+              f"{len(paths_fixed)} put right:")
+        for line in paths_fixed[:20]:
+            print(f"      {line}")
+        if len(paths_fixed) > 20:
+            print(f"      ... and {len(paths_fixed) - 20} more")
+    if paths_left:
+        print(f"  Pathgrids: {len(paths_left)} left to check (all listed in {PATHGRID_FIXES_FILE}):")
+        for line in paths_left[:10]:
+            print(f"      {line}")
+        if len(paths_left) > 10:
+            print(f"      ... and {len(paths_left) - 10} more")
+    if report is not None:
+        real = {n.lower(): n for n, _p in plugins}
+        for sev, lines, why in (("WARN", paths_fixed, f"--fix reroutes it in {CELL_WINNER_PATCH}"),
+                                ("INFO", paths_left, "left as it is")):
+            for line in lines:
+                m = PATHGRID_LINE_RE.match(line)
+                if m:
+                    report.add(sev, real.get(m["author"], m["author"]), f"pathgrid #{m['cell']}", "",
+                               f"{m['msg']} (an object another plugin placed; {why})")
+                else:
+                    report.add(sev, CELL_WINNER_PATCH, "pathgrid", "", line)
+    pg_file = os.path.join(game_dir, PATHGRID_FIXES_FILE)
+    if not args.dry_run and (paths_fixed or paths_left):
+        with open(pg_file, "w", encoding="utf-8") as f:
+            f.write(f"; pathgrids, {time.strftime('%Y-%m-%d %H:%M:%S')}: FIXED in {CELL_WINNER_PATCH}; REPORTED "
+                    f"with why it was left as it is\n")
+            f.writelines(f"FIXED     {x}\n" for x in paths_fixed)
+            f.writelines(f"REPORTED  {x}\n" for x in paths_left)
+    elif not args.dry_run and os.path.exists(pg_file):
+        os.remove(pg_file)
 
     # door owners copied with a cloned door (door_owner_verdicts): only the two clear rules are applied
     doors, finals = [], {}
@@ -6589,7 +6659,7 @@ def fix_cell_winners(args, plugins):
             f.writelines(f"CHANGED  {x}\n" for x in owners_fixed)
             f.writelines(f"LEFT     {x}\n" for x in owners_left)
 
-    if not any(out.values()) and not pgrds:
+    if not any(out.values()) and not pgrds and not new_pgrds:
         print("  Nothing to change.")
         drop_patch()
         return 0
@@ -6597,7 +6667,8 @@ def fix_cell_winners(args, plugins):
         print(f"  Dry run: {CELL_WINNER_PATCH} not written.")
         return 0
     lookup = index_dir(data_dir)
-    needed = used | {w for _c, w, _l in cells.values()} | losers
+    needed = used | {w for _c, w, _l in cells.values()} | losers \
+        | {world.names[ext_pathgrids[g][0]].lower() for g in new_pgrds}
     masters = [os.path.basename(lookup[m]) for m in sorted(needed, key=lambda m: pos.get(m, -1)) if m in lookup]
     if len(masters) > 250:
         print(f"  WARNING: the fixes touch objects of {len(masters)} plugins, more than a plugin can name as "
@@ -6627,11 +6698,17 @@ def fix_cell_winners(args, plugins):
                 body += b"".join(pack_sub(s_, d) for s_, d in blk)
         recs += b"CELL" + struct.pack("<III", len(body), 0, 0) + body
         count += 1
+        if key[0] == "e" and key[1:] in new_pgrds:       # a cell's pathgrid follows it, as the CS writes them
+            recs += new_pgrds[key[1:]]
+            count += 1
     for key, head in out_heads.items():          # head only: the cell's settings without the loser
         if not out.get(key) and head is not None:
             body = b"".join(pack_sub(s_, d) for s_, d in head)
             recs += b"CELL" + struct.pack("<III", len(body), 0, 0) + body
             count += 1
+            if key[0] == "e" and key[1:] in new_pgrds:
+                recs += new_pgrds[key[1:]]
+                count += 1
     for r in pgrds:
         recs += r
         count += 1
@@ -7378,6 +7455,7 @@ def release_lost_doubles(args):
 
 
 WINNER_RE = re.compile(r"(?:doubled with|conflicts with) (?P<w>.+?)\)?$")
+PATHGRID_LINE_RE = re.compile(r"#(?P<cell>-?\d+,-?\d+) \((?P<author>.+?)'s pathgrid\): (?P<msg>.*)$")
 
 
 def release_lost_winners(args):
@@ -8725,11 +8803,24 @@ def full_redundant_step(args, common):
     return ("redundant plugins (nobody to ask: sure ones turned off, the rest reported)", ["--redundant-auto"] + common)
 
 
+def full_conflict_step(args, common):
+    """--full's cell-conflict step: your remembered answers are replayed and, with someone there (--yes or
+    not), the pairs without one are asked now, so the patches built next already have them. With no answers
+    remembered it only reports: every pair would be a question."""
+    if not getattr(args, "use_answers", False):
+        return ("cell conflicts (report)", ["--cell-conflicts", "--no-interactive"] + common)
+    if cell_conflicts_interactive(args):
+        return ("cell conflicts (your remembered answers; asks the new ones)",
+                ["--cell-conflicts", "--use-answers"] + [c for c in common if c != "--no-interactive"])
+    return ("cell conflicts (your remembered answers)", ["--cell-conflicts", "--use-answers"] + common)
+
+
 def run_full(args):
     """--full, from scratch:
         turn back on what earlier runs turned off (and drop their conflict rules and asset stand-ins),
         undo the auto-merge, turn off redundant plugins (asking in a console; --no-redundant skips it; the
-        choices, in mwdialog_redundant.txt, are kept), report cell conflicts, sort, set the old Multipatch aside, clean and fix with
+        choices, in mwdialog_redundant.txt, are kept), report cell conflicts (asking the
+        new ones), sort, set the old Multipatch aside, clean and fix with
         the asset check, sort again;
         stop and open the report if any error is left; otherwise auto-merge, sort, --all, sort again;
         stop and open the report if any error is left; otherwise offer the interactive --cell-conflicts.
@@ -8773,9 +8864,7 @@ def run_full(args):
         # plugins - a plugin turned off here is not cleaned, fixed, merged, patched or asset-checked
         first.append(full_redundant_step(args, common))
     first += [
-        (("cell conflicts (your remembered answers)", ["--cell-conflicts", "--use-answers"])
-         if getattr(args, "use_answers", False) else
-         ("cell conflicts (report)", ["--cell-conflicts", "--no-interactive"])),
+        full_conflict_step(args, common),
         ("sort", ["--sort", "--no-follow-up"]),
         # The Multipatch is built once, after the auto-merge (which ignores this tool's patches): before it,
         # the old one is set aside and only clean + fix (+ the asset check) run on the unmerged order.
@@ -8811,7 +8900,7 @@ def run_full(args):
                         rc = full_reset(args, game_dir)
                     elif extra == "multipatch_aside":
                         rc = multipatch_aside(args, game_dir)
-                    elif extra and extra[0] in ("--redundant", "--redundant-auto"):
+                    elif extra and extra[0] in ("--redundant", "--redundant-auto", "--cell-conflicts"):
                         rc = main([args.data_dir] + extra)       # carries its own copy of the common flags
                     else:
                         rc = main([args.data_dir] + extra + common)
@@ -8861,7 +8950,11 @@ def run_full(args):
     if new_pairs:
         print(f"\n{len(new_pairs)} new conflict(s) have no remembered answer yet: "
               + ", ".join(p_.replace("|", " vs ") for p_ in new_pairs[:5]) + (" ..." if len(new_pairs) > 5 else ""))
-        if not args.yes and sys.stdin.isatty():
+        if getattr(args, "use_answers", False) and cell_conflicts_interactive(args):
+            # they were asked before the build and put off: asking again would mean building twice
+            print("Put off in this run: the next --full asks again, or run mwdialog_check --cell-conflicts --only-new")
+            new_pairs = None
+        elif not args.yes and sys.stdin.isatty():
             try:
                 ans = input("Answer them now (only the new ones are asked)? [Y/n] ").strip().lower()
             except EOFError:
@@ -9043,10 +9136,12 @@ def _main(argv=None):
     tc.add_argument("--fresh-answers", action="store_true",
                     help="with --full: don't replay the answers remembered in " + CONFLICT_ANSWERS_FILE +
                          " (by default --full replays them, so your rebuilt-interior winners and [Order] choices "
-                         "stand); the conflicts are only reported and you are asked at the end")
+                         "stand, and asks only about new conflicts); the conflicts are only reported and you are "
+                         "asked at the end")
     tc.add_argument("--use-answers", action="store_true",
-                    help="with --cell-conflicts: no questions, take every answer remembered in "
-                         + CONFLICT_ANSWERS_FILE + " (a pair with none is skipped), then run what it needs "
+                    help="with --cell-conflicts: take every answer remembered in " + CONFLICT_ANSWERS_FILE
+                         + " (a pair with none is asked in a console; skipped with --no-interactive or when "
+                         "nobody is there), then run what it needs "
                          "(--sort, and --fix --multipatch if a plugin is turned off or a place's winner chosen). "
                          "With --full: keeps " + CELL_WINNERS_FILE + " and replays the answers in its conflict step")
     tc.add_argument("--conflict-min", type=int, default=5, metavar="N",
@@ -9336,7 +9431,7 @@ def _main(argv=None):
     elif args.fix and not args.dry_run:
         drop_performers_patch(args)       # the mwperformers MWSE mod decides in the game now
     if args.fix:
-        fix_cell_winners(args, plugins)
+        fix_cell_winners(args, plugins, report)
     loaded_patches = {n.lower() for n, _p in plugins} & {x.lower() for x in OUR_PATCHES}
     if args.fix or args.patch_esm or args.multipatch:   # rebuilt from scratch: leave them out of the scan
         names = [n.lower() for n, _p in plugins]
@@ -9435,10 +9530,23 @@ def _main(argv=None):
             write_bug_reports(args, plugins, report, world)
         except Exception as e:                       # a report is a courtesy: never stop the run for it
             print(f"(bug reports not written: {e})", file=sys.stderr)
+    fixed = False
     if args.fix or args.patch_esm:
-        run_fix(args, plugins, bsas, data_dirs, report, world, only, hidden)
+        fixed = run_fix(args, plugins, bsas, data_dirs, report, world, only, hidden)
     if args.multipatch:
         run_multipatch(args, plugins, world)
+
+    if args.fix and fixed and not args.dry_run and only is None and not args.openmw_cfg:
+        from mwdialog_soundcache import write_sound_cache
+        try:
+            final_report = Report()
+            final_plugins, _bsas, _dirs = resolve(args, final_report)
+            if any(issue[0] == "ERROR" for issue in final_report.issues):
+                raise ValueError("the final load order contains missing plugins")
+            write_sound_cache(args.data_dir, final_plugins)
+        except (OSError, FormatError, ValueError) as e:
+            print(f"  sound cache: NOT written ({e})", file=sys.stderr)
+            return 2
 
     return 1 if counts["ERROR"] else 0
 

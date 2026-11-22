@@ -17,8 +17,8 @@
           - engine says it is NOT playing although it was started -> "runaway": every further start is
             blocked (the one copy keeps playing) until the object leaves the active cells or a save loads.
         More than maxLoopStarts starts within loopWindow seconds is also a runaway (slow stacking).
-      * one-shot sounds: at most oneShotPerSecond starts per second; a restart within oneShotMinGap seconds
-        while the engine says it is still playing is dropped. Sustained overruns are reported.
+      * one-shot sounds: when --fix has cached a sound's length and its file is unchanged, wait for that
+        length divided by pitch before allowing the next request. Otherwise use the v2 rate and gap limits.
       * safety net: at most globalCap new object sounds per globalWindow seconds across the whole game.
     Every runaway is reported once per object type and sound: one line in MWSE.log, details (object, cell, sound, file, script and
     the plugins they come from) in Data Files\MWSE\logs\mwsoundguard.log, plus a summary there each minute.
@@ -62,6 +62,31 @@ end
 
 local clock = os.clock
 local T_NPC, T_CREATURE = tes3.objectType.npc, tes3.objectType.creature
+
+local soundLengths
+do
+    local ok, data = pcall(mwse.loadConfig, "mwsoundguard_data")
+    if ok and type(data) == "table" and data.version == 1 and type(data.sounds) == "table" then
+        soundLengths = data.sounds
+    elseif not ok or data ~= nil or lfs.attributes("Data Files\\MWSE\\config\\mwsoundguard_data.json") then
+        mwse.log("[mwsoundguard] sound cache could not be read; using v2 one-shot limits")
+    end
+end
+
+local function cachedDuration(snd, pitch)
+    if not soundLengths or not snd or type(pitch) ~= "number" or pitch <= 0 or pitch >= math.huge
+        or pitch ~= pitch then return nil end
+    if type(snd.id) ~= "string" then return nil end
+    local entry = soundLengths[snd.id:lower()]
+    if type(entry) ~= "table" or type(entry.file) ~= "string" or type(entry.length) ~= "number"
+        or entry.length <= 0 or entry.length >= math.huge or entry.length ~= entry.length then return nil end
+    if type(snd.filename) ~= "string"
+        or snd.filename:gsub("/", "\\"):lower() ~= entry.file:gsub("/", "\\"):lower() then return nil end
+    local ok, attrs = pcall(lfs.attributes, "Data Files\\Sound\\" .. entry.file:gsub("/", "\\"))
+    if not ok or not attrs or attrs.size ~= entry.size or attrs.modification ~= entry.mtime then return nil end
+    local duration = entry.length / pitch
+    return duration < math.huge and duration or nil
+end
 
 -- ---------------------------------------------------------------- state
 -- refs[reference] = false (never guarded: actor) or { [sound object or temp path] = record }
@@ -196,6 +221,7 @@ local function guard(e)
     local rec = per[key]
     local now = clock()
     local loop = e.flags == 1                         -- documented: 1 = looping, 0 = not
+    local duration = not loop and cachedDuration(snd, e.pitch) or nil
 
     if rec == nil then
         if snd and next(config.exemptSounds) and config.exemptSounds[snd.id:lower()] then
@@ -262,26 +288,35 @@ local function guard(e)
             end
         end
     else
-        if now - rec.w0 >= 1.0 then
-            if rec.n > config.oneShotPerSecond then rec.over = rec.over + 1 else rec.over = 0 end
-            rec.w0, rec.n = now, 0
-        end
-        rec.n = rec.n + 1
-        if rec.n > config.oneShotPerSecond then
-            stats.oneShotBlocks = stats.oneShotBlocks + 1
-            e.block = true
-            noteBlock(ref, snd, path, rec)
-            if rec.over >= 2 and not rec.reported then
-                rec.reported = true
-                reportRunaway(ref, snd, path, rec, string.format("over %d starts per second for 3 s", config.oneShotPerSecond))
+        if duration then
+            if rec.oneShotUntil and now < rec.oneShotUntil then
+                stats.oneShotBlocks = stats.oneShotBlocks + 1
+                e.block = true
+                noteBlock(ref, snd, path, rec)
+                return
             end
-            return
-        end
-        if now - rec.last < config.oneShotMinGap and enginePlaying(snd, ref) then
-            stats.oneShotBlocks = stats.oneShotBlocks + 1
-            e.block = true
-            noteBlock(ref, snd, path, rec)
-            return
+        else
+            if now - rec.w0 >= 1.0 then
+                if rec.n > config.oneShotPerSecond then rec.over = rec.over + 1 else rec.over = 0 end
+                rec.w0, rec.n = now, 0
+            end
+            rec.n = rec.n + 1
+            if rec.n > config.oneShotPerSecond then
+                stats.oneShotBlocks = stats.oneShotBlocks + 1
+                e.block = true
+                noteBlock(ref, snd, path, rec)
+                if rec.over >= 2 and not rec.reported then
+                    rec.reported = true
+                    reportRunaway(ref, snd, path, rec, string.format("over %d starts per second for 3 s", config.oneShotPerSecond))
+                end
+                return
+            end
+            if now - rec.last < config.oneShotMinGap and enginePlaying(snd, ref) then
+                stats.oneShotBlocks = stats.oneShotBlocks + 1
+                e.block = true
+                noteBlock(ref, snd, path, rec)
+                return
+            end
         end
     end
 
@@ -298,6 +333,7 @@ local function guard(e)
     end
 
     rec.last = now
+    rec.oneShotUntil = duration and now + duration or nil
     if loop and config.trace and traceLines < config.traceLimit then
         traceLines = traceLines + 1
         local d = describe(ref, snd, path)

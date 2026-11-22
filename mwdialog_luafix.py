@@ -2077,6 +2077,25 @@ function this.onInvisibilityEffectActivated(e)
 ]
 
 
+KB9 = ("the interior sunray pass calls the engine's updateSun through FFI every frame without checking for a current "
+       "weather; right after a new game is started from the game there is none yet, and the engine crashes "
+       "(WeatherController::updateSun access violation, MWSE.log 2026-11-22)")
+KNOWN_BUGS += [
+    ("KB9", "Directional Sunrays", "directionalsunrays/main.lua",
+     '''local function updateSun()
+    local this = ffi.cast("void*", mwse.memory.addressOf(tes3.worldController.weatherController))
+    TES3_WeatherController_updateSun(this, tes3.worldController.hour.value)''',
+     '''local function updateSun()
+    local weatherController = tes3.worldController.weatherController
+    if not (weatherController and weatherController.currentWeather) then return false end\t-- local fix: no weather yet
+    local this = ffi.cast("void*", mwse.memory.addressOf(weatherController))
+    TES3_WeatherController_updateSun(this, tes3.worldController.hour.value); return true''', KB9),
+    ("KB9", "Directional Sunrays", "directionalsunrays/main.lua",
+     "\t\t\tupdateSun()\n\t\t\tlocal sunPosition",
+     "\t\t\tif not updateSun() then return end\n\t\t\tlocal sunPosition", KB9),
+]
+
+
 def known_core_context(path):
     """Return an explicitly authorized core file identity; every other MWSE core file remains excluded."""
     norm = os.path.abspath(path).replace("\\", "/")
