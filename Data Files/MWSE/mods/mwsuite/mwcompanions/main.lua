@@ -49,8 +49,12 @@ local function sweep()
     local list = followers()
     local far = {}
     local canWarp = config.warp and not core.attendMeHandlesWarping()
+    local me = tes3.mobilePlayer
+    local atEase = config.sheatheAfterCombat and not (me.inCombat or me.weaponReady or me.castReady)
     for _, f in ipairs(list) do
         local mob = f.mobile
+        -- the engine can end a follower's fight with the weapon still out, and it then stays out
+        if atEase and f.kind == 2 and mob.weaponReady and not mob.inCombat then mob.weaponReady = false end
         if config.followerTraits then setTraits(mob) end
         if config.levitateWater then
             matchPlayer(mob, "levitate", "mwcompanionsLevitate")
@@ -72,7 +76,8 @@ end
 local function restartTick()
     if tick then tick:cancel() end
     tick = nil
-    if config.enabled and (config.warp or config.levitateWater or config.followerTraits) then
+    if config.enabled and (config.warp or config.levitateWater or config.followerTraits
+            or config.sheatheAfterCombat) then
         tick = timer.start({ type = timer.simulate, duration = 1, iterations = -1, callback = sweep })
     end
 end

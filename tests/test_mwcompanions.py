@@ -388,3 +388,30 @@ local alive = 0
 for _, t in ipairs(timers) do if not t.cancelled and t.p.iterations == -1 and t.p.duration == 0.5 then alive = alive + 1 end end
 check(alive == 0, "nothing left to hold down: the timer stops")
 ''')
+
+
+def test_companions_put_their_weapon_away_after_the_fight():
+    run(r'''
+local function armed(id, opts)
+  local mob = actor(id, opts)
+  mob.weaponReady = true
+  return mob
+end
+local jiub = armed("jiub", { package = "follow", companion = 1 })
+local fighter = armed("fighter", { package = "follow", companion = 1 }); fighter.inCombat = true
+local hired = armed("hired", { package = "follow" })
+party(jiub, fighter, hired)
+local me = tes3.mobilePlayer
+on("sheatheAfterCombat")
+check(#timers == 1, "the 1 s timer runs for this switch")
+me.weaponReady = true; tick()
+check(jiub.weaponReady, "left alone while the player's weapon is out")
+me.weaponReady, me.castReady = false, true; tick()
+check(jiub.weaponReady, "left alone while the player's spell is readied")
+me.castReady, me.inCombat = false, true; tick()
+check(jiub.weaponReady, "left alone while the player fights")
+me.inCombat = false; tick()
+check(not jiub.weaponReady, "put away once nobody fights")
+check(fighter.weaponReady, "a companion still fighting keeps it out")
+check(hired.weaponReady, "only companions")
+''')

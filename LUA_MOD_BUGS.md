@@ -576,3 +576,33 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
   instance data exists. The 2026-11-21 session produced 12,321 timer errors when it was nil.
 * **Fix**: Use the weapon's maximum condition for an undamaged instance without item data;
   preserve the instance condition when present. Luafix repairs the exact vulnerable fingerprint.
+
+## 42. Friends & Frens Companion Birthsign (`KB7`)
+
+* **Author**: Friends and Frens 2.2.2 (Nexus 52763)
+* **File**: `MWSE\mods\Danae\frens\main.lua`; the faulty line is in `Friends & Frens - base.esm`,
+  topic *Abilities*, INFO `2876022601681025611`.
+* **Bug**: The response says "born under the sign of the %Sign". The engine has no such dialogue variable, and
+  the value is the companion's script local `birthsign` (1-13, rolled per save from `aa_ff_comp_birthsign`),
+  which response text cannot show.
+* **Fix**: The mod's own Lua fills in the sign of the companion being spoken to as the text is read. The master
+  is not edited, so its size, the plugins built on it and existing saves are untouched. A companion with no
+  birthsign (the mod gives many of them neither a sign item nor the list) says "a sign I never learned".
+* **For the author**: Either the same handler, or 13 responses filtered on the local `birthsign`; and give the
+  companions without a sign the levelled list.
+
+## 43. Tamriel Data Detect Invisibility During Loading (`KB8`)
+
+* **Author**: Tamriel Data (the same `magic.lua` also ships in Cyr_Main, Sky_Main and Tamriel Rebuilt)
+* **File**: `MWSE\mods\TamrielData\magic.lua`, `detectInvisibilityValid` / `onInvisibilityEffectActivated`
+* **Bug**: `magicEffectActivated` fires while a save is loading, and the handler iterates the actor's spell list.
+  For an actor whose record is in the save, that list can still hold the saved ids instead of spells.
+  `CS_Casimir1` (Casimir's Legacy) is such an actor: "ghost ability" is first in its list and gives it chameleon.
+  MWSE reports `unknown object type ... 0x736f6867` (the bytes "ghos"), then
+  `magic\tes3.lua:23: attempt to index local 'spell' (a nil value)`.
+* **Fix**: During a load the actor is queued by safe handle, and judged on `loaded` (or on the first `simulate`,
+  should the load be cancelled). The detection tick waits the same way. MWSE's core is not edited.
+* **Earlier fix, lost**: `patch_mwse_magic_nil.py` (2026-11-05) nil-checked MWSE's core and wrapped the call in
+  `pcall`. The core edit went with the MWSE update of 2026-11-10, the other with a later copy of `magic.lua`. It
+  also hid the symptom only: the warning stayed, and the ghost's ability went unrecognized.
+* **For the author**: Don't read `object.spells` from `magicEffectActivated` before `loaded`.

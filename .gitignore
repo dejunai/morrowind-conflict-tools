@@ -63,3 +63,6 @@ Data Files/dejespreplacements-metadata.toml
 
 # Run lock held by mwdialog_check.py / vortex_tidy.py
 mwdialog.lock
+
+# Tamriel Data's rename map: kept locally, not redistributed
+tools/Translation.txt

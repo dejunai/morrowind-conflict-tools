@@ -11,9 +11,9 @@ local swampSound = require("mwpluginpatches.patches.swampSound")
 local expandedSounds = require("mwpluginpatches.patches.expandedSounds")
 local talesHandwritingFix = require("mwpluginpatches.patches.talesHandwritingFix")
 local trainerLogUnlock = require("mwpluginpatches.patches.trainerLogUnlock")
-local arrilleInnDoors = require("mwpluginpatches.patches.arrilleInnDoors")
 local coastGuardContraband = require("mwpluginpatches.patches.coastGuardContraband")
 local graphicHerbalismRespawn = require("mwpluginpatches.patches.graphicHerbalismRespawn")
+local bardicInstruments = require("mwpluginpatches.patches.bardicInstruments")
 
 local function onInitialized()
     if not config.enabled then
@@ -77,15 +77,14 @@ local function onInitialized()
         trainerLogUnlock.init()
     end
 
-    -- Arrille's Tradehouse duplicate doors
-    if config.arrilleInnCompatibilityEnabled then
-        arrilleInnDoors.init()
-    end
     if config.coastGuardContrabandEnabled then
         coastGuardContraband.init()
     end
     if config.graphicHerbalismRespawnEnabled and config.isGraphicHerbalismActive() then
         graphicHerbalismRespawn.init()
+    end
+    if config.musicalInstrumentsEnabled and config.isBardicInspirationActive() then
+        bardicInstruments.init()
     end
 
     mwse.log("[mwpluginpatches] Unified plugin compatibility patches initialized.")

@@ -30,7 +30,7 @@ class OkChecker:
 
     def check(self, text):
         self.calls.append(text)
-        if self.reject_new and "mwdialog_luafix" in text:
+        if self.reject_new and "localpatch" in text:
             return False, "line 1: rejected"
         return self.ok, "" if self.ok else "line 1: bad"
 
@@ -153,9 +153,9 @@ event.register(tes3.event.simulate, onSimulate)
 
 def test_G2_puddle_poll_is_throttled_without_moving_lines():
     new = patch(PUDDLE)
-    assert "local function onSimulate(e) if mwluafix_gate(1, 0.35) then return end\n" in new
+    assert "local function onSimulate(e) if localpatch_gate(1, 0.35) then return end\n" in new
     assert new.count("\n") == PUDDLE.count("\n")            # every line number stays
-    assert new.startswith(f"--[[mwdialog_luafix {lf.VERSION}: G2]] local mwluafix_gate do")
+    assert new.startswith(f"--[[localpatch {lf.VERSION}: G2]] local localpatch_gate do")
 
 
 @pytest.mark.parametrize("body", [
@@ -169,7 +169,7 @@ def test_G2_frame_critical_per_frame_left_alone(body):
     src = f"local t, frames = 0, 0\nlocal function doIt() end\nevent.register('simulate', function(e) {body} end)\n"
     a = analyse(src)
     assert all(f["conf"] == "info" for f in a.findings if f["rule"] == "G2")
-    assert patch(src) is None or "mwluafix_gate(" not in patch(src)
+    assert patch(src) is None or "localpatch_gate(" not in patch(src)
 
 
 def test_G2_unknown_calls_and_direct_calls_are_medium_only():
@@ -177,7 +177,7 @@ def test_G2_unknown_calls_and_direct_calls_are_medium_only():
           "event.register('enterFrame', poll)\n"
     a = analyse(src)
     assert [f["conf"] for f in a.findings if f["rule"] == "G2"] == ["medium"]
-    assert patch(src) is None and "mwluafix_gate(1" in patch(src, "medium")
+    assert patch(src) is None and "localpatch_gate(1" in patch(src, "medium")
     src2 = PUDDLE + "event.register('loaded', function() onSimulate() end)\n"
     assert [f["conf"] for f in analyse(src2).findings if f["rule"] == "G2"] == ["medium"]
 
@@ -432,7 +432,7 @@ def test_F1_log_spam_gets_the_shim_when_mwguard_does_not_cover(tmp_path):
     rep = lf.check_paths([str(data)], CFG, checker=OkChecker(), use_cache=False, data_dir=str(tmp_path / "none"))
     e = next(iter(rep.files.values()))
     assert e["patch"]["ok"] and "F1" in e["patch"]["rules"]
-    assert 'package.loaded["mwluafix_logshim:testmod"]' in e["patch"]["text"]
+    assert 'package.loaded["localpatch_logshim:testmod"]' in e["patch"]["text"]
     assert e["patch"]["text"].count("\n") == SPAM.count("\n")
 
 
@@ -462,7 +462,7 @@ def test_F1_mod_with_its_own_logger_has_generic_shim_removed(tmp_path):
     rep = lf.check_paths([str(data)], CFG, include_own=True, checker=OkChecker(), use_cache=False,
                          data_dir=str(tmp_path / "none"))
     patch_ = next(iter(rep.files.values()))["patch"]
-    assert patch_["ok"] and "mwluafix_logshim" not in patch_["text"]
+    assert patch_["ok"] and "localpatch_logshim" not in patch_["text"]
 
 
 def test_own_mods_remove_shims_even_when_logging_is_flagged(tmp_path):
@@ -471,7 +471,7 @@ def test_own_mods_remove_shims_even_when_logging_is_flagged(tmp_path):
     rep = lf.check_paths([str(data)], CFG, include_own=True, checker=OkChecker(), use_cache=False,
                          data_dir=str(tmp_path / "none"))
     patch_ = next(iter(rep.files.values()))["patch"]
-    assert patch_["ok"] and "mwluafix_logshim" not in patch_["text"]
+    assert patch_["ok"] and "localpatch_logshim" not in patch_["text"]
 
 def test_nested_suite_mods_are_excluded_and_never_receive_log_shims(tmp_path):
     data, root = mod_tree(tmp_path, {"main.lua": SPAM}, name="mwsuite")
@@ -484,7 +484,7 @@ def test_nested_suite_mods_are_excluded_and_never_receive_log_shims(tmp_path):
     assert lf.log_exempt(CFG, "mwsuite/mwcompanions")
     rep = lf.check_paths([str(data)], CFG, include_own=True, checker=OkChecker(), use_cache=False,
                          data_dir=str(tmp_path / "none"))
-    assert all(not e["patch"] or "mwluafix_logshim" not in e["patch"].get("text", "")
+    assert all(not e["patch"] or "localpatch_logshim" not in e["patch"].get("text", "")
                for e in rep.files.values())
 
 
@@ -499,7 +499,7 @@ def test_own_mod_sources_do_not_embed_generic_log_shims():
                 if name.lower().endswith(".lua"):
                     path = os.path.join(base, name)
                     with open(path, encoding="latin-1") as source:
-                        assert "mwluafix_logshim" not in source.read(), path
+                        assert "localpatch_logshim" not in source.read(), path
 
 
 def test_F1_skipped_when_mwguard_runtime_guard_clearly_covers(tmp_path):
@@ -544,7 +544,7 @@ def test_F1_shim_runs_errors_pass_and_spam_goes_to_the_mod_log(tmp_path):
         os.chdir(cwd)
     shown = list(rt.globals().lines.values())
     assert shown[:5] == [f"line {i}" for i in range(1, 6)]
-    assert any("further output goes to" in s for s in shown)
+    assert not any("further output goes to" in s or "luafix" in s for s in shown)   # no notice of ours
     assert "Error: something broke" in shown and "a" not in shown
     log = logdir / "testmod.log" if os.name == "nt" else tmp_path / "Data Files\\MWSE\\logs\\testmod.log"
     text = log.read_text()
@@ -623,7 +623,7 @@ def test_known_bugs_patch_exact_third_party_and_core_fingerprints(tmp_path):
     report = "\n".join(lines)
     assert "(Known Bugs) KB2: line 1: UI Expansion:" in report
     assert "(Known Bugs) KB3: line 1: MWSE Core:" in report
-    assert "mwluafix_logshim" not in by_rel["core/mcm/components/pages/exclusionspage.lua"]["patch"]["text"]
+    assert "localpatch_logshim" not in by_rel["core/mcm/components/pages/exclusionspage.lua"]["patch"]["text"]
     bug_lines = lf.known_bug_report_lines(rep)
     assert any("DETECTED: (Known Bugs) KB2: UI Expansion:" in line for line in bug_lines)
     assert any("DETECTED: (Known Bugs) KB3: MWSE Core:" in line for line in bug_lines)
@@ -679,8 +679,9 @@ def test_KB6_repairs_enchanted_weapon_condition_only_at_matching_path():
     assert applied == ["KB6"]
     assert not [f for f in analyse(source, "another/mod.lua").findings if f["rule"] == "KB6"]
     assert not [f for f in analyse(repaired, "spammer/openui - mwse/mod.lua").findings if f["rule"] == "KB6"]
-    luajit = os.environ.get("MWMANAGER_LUAJIT")
-    if not luajit or not os.path.isfile(luajit):
+    luajit = os.environ.get("MWMANAGER_LUAJIT",
+                            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools", "luajit", "luajit.exe"))
+    if not os.path.isfile(luajit):
         pytest.skip("LuaJIT executable not available for behavioral verification")
     script = ("local chunk = assert(loadstring([==[" + repaired + "]==]))\n"
               "local function check(data, expected)\n"
@@ -689,6 +690,146 @@ def test_KB6_repairs_enchanted_weapon_condition_only_at_matching_path():
               "  assert(gauge.widget.current == expected and gauge.widget.max == 100)\n"
               "end\ncheck(nil, 100)\ncheck({condition = 37}, 37)\ncheck({condition = 0}, 0)\n")
     result = subprocess.run([luajit, "-"], input=script, text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
+FRENS_LUA = """local icon = include("SSQN.interop")
+
+---@param e loadedEventData
+local function loaded(e)
+\tif icon then
+\t\ticon.registerQIcon("aa_ff", "ffrens.dds")
+\tend
+    if e.newGame then
+        randomiseCompanions()
+    end
+end
+
+event.register("loaded", loaded)"""
+
+
+@pytest.mark.parametrize("eol", ["\n", "\r\n"])
+def test_KB7_names_a_friends_and_frens_companions_own_birthsign(eol):
+    source = FRENS_LUA.replace("\n", eol)
+    findings = [f for f in analyse(source, "danae/frens/main.lua").findings if f["rule"] == "KB7"]
+    assert len(findings) == 1
+    assert not [f for f in analyse(source, "another/main.lua").findings if f["rule"] == "KB7"]
+    repaired, applied = lf.build_patch(source, findings, "danae", CFG, "high", False)
+    assert applied == ["KB7"] and repaired.count("\n") == repaired.count(eol)
+    assert not [f for f in analyse(repaired, "danae/frens/main.lua").findings if f["rule"] == "KB7"]
+    assert lf.verify_patch(source, repaired, applied, None, "danae", "danae/frens/main.lua", CFG, "high")["ok"]
+    luajit = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools", "luajit", "luajit.exe")
+    if not os.path.isfile(luajit):
+        pytest.skip("LuaJIT executable not available for behavioral verification")
+    script = r"""
+local handlers, speaker, reads = {}, nil, 0
+include = function() end
+event = { register = function(name, fn) handlers[name] = fn end }
+tes3ui = { getServiceActor = function() return speaker end }
+local LINE = "I am %Name, born under the sign of the %Sign, walking the path of the %Class"
+assert(loadstring([==[SOURCE]==]))()
+assert(handlers.loaded, "the mod's own handler is kept")
+local function shown(context, original, already)
+  speaker = context and { reference = { context = context ~= "none" and context or nil } } or nil
+  reads = 0
+  local e = { text = already, loadOriginalText = function() reads = reads + 1; return original or LINE end }
+  handlers.infoGetText(e)
+  return e.text
+end
+local names = { "Tower", "Ritual", "Steed", "Apprentice", "Mage", "Thief", "Lady", "Lover", "Shadow", "Serpent",
+                "Lord", "Warrior", "Atronach" }
+for n, name in ipairs(names) do
+  assert(shown({ birthsign = n }) == "I am %Name, born under the sign of the " .. name .. ", walking the path of the %Class", name)
+end
+assert(shown({ birthsign = 0 }) == "I am %Name, born under a sign I never learned, walking the path of the %Class", "no sign")
+assert(shown({ birthsign = 13 }, "Very well.") == nil, "other lines are left alone")
+assert(shown({ birthsign = 13 }, LINE, "A %Sign") == "A Atronach" and reads == 0, "another mod's text is kept")
+assert(shown(nil) == nil and reads == 0, "no speaker: nothing read")
+assert(shown("none") == nil and reads == 0, "no script: nothing read")
+assert(shown({}) == nil and reads == 0, "not a companion: nothing read")
+"""
+    result = subprocess.run([luajit, "-"], input=script.replace("SOURCE", repaired.replace("\r", "")),
+                            text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
+TD_INVISIBILITY_LUA = """local this = {}
+local invisibleReferences = {}
+
+local function detectInvisibilityValid(ref)
+\tif ref == tes3.player or not ref.mobile then return false end
+
+\tfor _, spell in pairs(tes3.getSpells({ target = ref })) do
+\t\tif spell == "ghost ability" then return false end
+\tend
+
+\treturn true
+end
+
+---@param e magicEffectActivatedEventData
+function this.onInvisibilityEffectActivated(e)
+\tif e.target and e.target ~= tes3.player and not invisibleReferences[e.target] then
+\t\tif detectInvisibilityValid(e.target) then
+\t\t\tinvisibleReferences[e.target] = true
+\t\tend
+\tend
+end
+
+this.valid, this.invisible = detectInvisibilityValid, invisibleReferences
+return this
+"""
+
+
+@pytest.mark.parametrize("eol", ["\n", "\r\n"])
+def test_KB8_tamriel_data_waits_for_the_save_to_load_before_reading_spells(eol):
+    source = TD_INVISIBILITY_LUA.replace("\n", eol)
+    path = "tamrieldata/magic.lua"
+    findings = [f for f in analyse(source, path).findings if f["rule"] == "KB8"]
+    assert len(findings) == 2
+    assert not [f for f in analyse(source, "another/magic.lua").findings if f["rule"] == "KB8"]
+    repaired, applied = lf.build_patch(source, findings, "tamrieldata", CFG, "high", False)
+    assert set(applied) == {"KB8"} and repaired.count("\n") == repaired.count(eol)
+    assert not [f for f in analyse(repaired, path).findings if f["rule"] == "KB8"]
+    assert lf.verify_patch(source, repaired, applied, None, "tamrieldata", path, CFG, "high")["ok"]
+    luajit = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools", "luajit", "luajit.exe")
+    if not os.path.isfile(luajit):
+        pytest.skip("LuaJIT executable not available for behavioral verification")
+    script = r"""
+local handlers, resolved = {}, true
+event = { register = function(name, fn) handlers[name] = handlers[name] or {}; table.insert(handlers[name], fn) end }
+local function fire(name, e) for _, fn in ipairs(handlers[name] or {}) do fn(e or {}) end end
+tes3 = { event = { load = "load", loaded = "loaded", simulate = "simulate" }, player = {},
+         makeSafeObjectHandle = function(r)
+           return { valid = function() return not r.gone end, getObject = function() return r end }
+         end,
+         getSpells = function(p)
+           assert(resolved, "spell list read while the save is loading")
+           return p.target.spells
+         end }
+local mod = assert(loadstring([==[SOURCE]==]))()
+local function actor(spell) return { mobile = {}, spells = { spell } } end
+local ghost, sneak, gone = actor("ghost ability"), actor("chameleon"), actor("chameleon")
+
+fire("load"); resolved = false
+for _, r in ipairs({ ghost, sneak, gone }) do mod.onInvisibilityEffectActivated({ target = r }) end
+assert(mod.valid(sneak) == false, "the detection tick waits too")
+resolved, gone.gone = true, true
+fire("loaded")
+assert(mod.invisible[sneak] and not mod.invisible[ghost] and not mod.invisible[gone], "judged once loaded")
+
+local later = actor("chameleon")
+mod.onInvisibilityEffectActivated({ target = later })
+assert(mod.invisible[later], "at once outside a load")
+
+fire("load"); resolved = false                      -- a load the player cancels at the missing-files prompt
+local waiting = actor("chameleon")
+mod.onInvisibilityEffectActivated({ target = waiting })
+resolved = true
+fire("simulate")
+assert(mod.invisible[waiting] and mod.valid(waiting), "never left waiting")
+"""
+    result = subprocess.run([luajit, "-"], input=script.replace("SOURCE", repaired.replace("\r", "")),
+                            text=True, capture_output=True)
     assert result.returncode == 0, result.stderr
 
 
@@ -831,9 +972,9 @@ def test_cache_invalidates_when_known_bug_rules_change(tmp_path, monkeypatch):
 
 def test_shebang_and_bom_keep_their_place():
     src = "\xef\xbb\xbf" + PUDDLE
-    assert patch(src).startswith("\xef\xbb\xbf--[[mwdialog_luafix")
+    assert patch(src).startswith("\xef\xbb\xbf--[[localpatch")
     src = "#!/usr/bin/lua\n" + PUDDLE
-    assert patch(src).startswith("#!/usr/bin/lua\n--[[mwdialog_luafix")
+    assert patch(src).startswith("#!/usr/bin/lua\n--[[localpatch")
 
 
 def test_config_from_mwguard_json(tmp_path):
@@ -865,7 +1006,7 @@ def test_tidy_plan_lists_lua_and_apply_undo_round_trip(tmp_path, monkeypatch, ca
     assert (mod / "MWSE" / "mods" / "puddle" / "main.lua").read_text() == PUDDLE
     monkeypatch.setattr(sys, "argv", ["vortex_tidy.py", "--staging", str(staging), "--lua-only", "--apply", "--yes"])
     assert vt.main() == 0
-    assert "mwluafix_gate(1" in (mod / "MWSE" / "mods" / "puddle" / "main.lua").read_text()
+    assert "localpatch_gate(1" in (mod / "MWSE" / "mods" / "puddle" / "main.lua").read_text()
     assert vt.undo() == 0
     assert (mod / "MWSE" / "mods" / "puddle" / "main.lua").read_text() == PUDDLE
 
@@ -1034,8 +1175,8 @@ def test_A3_checked_or_reassigned_lookup_is_left_alone():
 def test_A3_direct_lookup_statement_is_held_in_a_local():
     src = "local function f()\n tes3.getObject('x').value = 5\n tes3ui.findMenu('M'):updateLayout()\nend\n"
     new = patch(src)
-    assert " do local mwluafix_v = tes3.getObject('x') if mwluafix_v then mwluafix_v.value = 5 end end\n" in new
-    assert " do local mwluafix_v = tes3ui.findMenu('M') if mwluafix_v then mwluafix_v:updateLayout() end end\n" in new
+    assert " do local localpatch_v = tes3.getObject('x') if localpatch_v then localpatch_v.value = 5 end end\n" in new
+    assert " do local localpatch_v = tes3ui.findMenu('M') if localpatch_v then localpatch_v:updateLayout() end end\n" in new
     assert patch(new) is None
 
 
@@ -1172,8 +1313,8 @@ def test_a_ui_slideshow_timer_skips_while_saving_and_config_waits_for_the_save()
     assert rules == ["I2", "I3"]
     new, applied = lf.build_patch(SAVE_SRC, a.findings, "x", lf.load_config())
     assert {"I2", "I3"} <= set(applied)
-    assert "if mwluafix_save.saving then return end" in new and "mwluafix_savestate" in new
-    assert 'event.register("menuExit", function() mwluafix_save.saving = false end)' in new
+    assert "if localpatch_save.saving then return end" in new and "localpatch_savestate" in new
+    assert 'event.register("menuExit", function() localpatch_save.saving = false end)' in new
     assert 'timer.delayOneFrame(function() mwse.saveConfig("x", config) end, timer.real)' in new
     b = lf.FileAnalysis(new, "x", "x/main.lua")                     # a second pass changes nothing more
     assert not [f for f in b.run() if f["rule"] in ("I2", "I3")]
@@ -1201,7 +1342,7 @@ def test_l1_caps_linked_walk_and_countdown():
     a = analyse(src)
     assert [f["rule"] for f in a.findings if f["rule"] == "L1"] == ["L1", "L1", "L1"]   # i - 1 always ends
     new = patch(src)
-    assert new.count("mwluafix_n1") == 4 and new.count("mwluafix_n2") == 4
+    assert new.count("localpatch_n1") == 4 and new.count("localpatch_n2") == 4
     assert new.count("\n") == src.count("\n")                                    # line numbers kept
     assert not [f for f in analyse(new).findings if f["rule"] == "L1"]           # idempotent
 
@@ -1229,3 +1370,35 @@ def test_l1_patched_cycle_terminates():
            "  end\n  return n\nend\nreturn f(a)\n")
     rt = _lj.LuaRuntime()
     assert rt.execute(patch(src)) == 10000
+
+
+def test_branding_from_older_patches_is_taken_off(tmp_path):
+    mods = tmp_path / "MWSE" / "mods"
+    old = {
+        "gated": "--[[mwdialog_luafix 3: G2]] local mwluafix_gate = function() return false end "
+                 "local function f() if mwluafix_gate(1, 0.35) then return end end\nreturn f\n",
+        "marked": "--[[mwdialog_luafix 4: A1]] local a = 1\nreturn a\n",
+    }
+    for name, text in old.items():
+        (mods / name).mkdir(parents=True)
+        (mods / name / "main.lua").write_text(text)
+
+    def check():
+        return lf.check_paths([str(mods)], CFG, use_cache=False, data_dir=str(tmp_path / "none")).files
+
+    files = check()
+    assert len(files) == 2
+    for path, ent in files.items():
+        text = ent["patch"]["text"]
+        assert ent["patch"]["ok"] and "luafix" not in text and "mwdialog" not in text
+        assert text.startswith("--[[localpatch ") and text.count("\n") == 2
+        with open(path, "w") as f:
+            f.write(text)
+    assert all(not ent["patch"] for ent in check().values())    # and only once
+
+
+def test_nothing_luafix_injects_carries_its_name():
+    injected = [lf.GATE_HELPER, lf.SAVE_HELPER, lf.NIL_TMP, lf.MARK, lf.log_shim("testmod", CFG)]
+    injected += [new for _rule, _plugin, _rel, _old, new, _what in lf.KNOWN_BUGS]
+    for text in injected:
+        assert "luafix" not in text.lower() and "mwdialog" not in text.lower(), text[:80]

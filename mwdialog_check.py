@@ -134,11 +134,15 @@ from mwdialog_generated import (  # noqa: E402,F401
 from mwdialog_restore import (  # noqa: E402,F401
     BAK_RE, CLEANUP_BAK_RE, DATES_UNDO_FILE, restore_all, restore_backups, restore_dates, run_clean_up)
 from mwdialog_ownership import door_owner_verdicts, item_owner_verdicts  # noqa: E402,F401
+from mwdialog_footing import (  # noqa: E402,F401
+    find_footing, ModelShapes, Placements, RESCUE_DATA, SUNK as ACTOR_SUNK, write_rescue_data)
 
 ENC = "cp1252"
 OFFICIAL_MASTERS = ("morrowind.esm", "tribunal.esm", "bloodmoon.esm")
 
 
+# master -> (wrong, right) in the text of its responses and journal entries. Whole phrases: "fried" is also a word
+TEXT_TYPOS = {"affresh.esm": (("his fried,", "his friend,"), ("He is true friend of", "He is a true friend of"))}
 REMAP_RADIUS = 64       # a renumbered master reference is the same object within this many units
 
 ORDER_TAIL_EXTRA = ()
@@ -376,6 +380,8 @@ class World:
         self.obj_events = {}               # object id lower -> [(load index, plugin, tag, deleted?)]
         self.item_fixes = []               # dangling SCRI/ENAM/NPCO in the winning record (see _check_item_refs)
         self._td_renames = None            # Tamriel Data's Translation.txt: {old id: new id}
+        self._script_targets = None        # ids some script or dialogue result acts on ("X->")
+        self.ref_dropped = set()           # (plugin, cell offset, FRMR) of edits _check_refs removes
         self.cell_regions = {}             # exterior cell key -> [(plugin, region or None)] in load order
         self.cell_name_hist = {}           # cell key -> [(plugin, name)] in load order
         self.cell_final = {}               # cell key -> the name it ends up with
@@ -1428,15 +1434,36 @@ class World:
         hist.append((name, region))
 
     def td_rename(self, oid, tag=None):
-        """The current ID of an object Tamriel Data renamed (its Docs\\Translation.txt maps old IDs to new ones),
-        when that ID exists in this load order (as a `tag` record, if given); else None."""
+        """The current ID of an object Tamriel Data renamed (its Translation.txt maps old IDs to new ones): the
+        first along its renames that exists in this load order (as a `tag` record, if given); else None."""
         if self._td_renames is None:
-            self._td_renames = read_td_renames(getattr(self, "args_data_dir", None) or "")
-        new = self._td_renames.get((oid or "").lower())
-        if not new:
-            return None
+            self._td_renames = read_td_renames()
         known = self.ids[tag] if tag else self.all_ids
-        return new if new.lower() in known else None
+        key, seen = (oid or "").strip().lower(), set()
+        while key in self._td_renames and key not in seen:
+            seen.add(key)
+            new = self._td_renames[key]
+            key = new.lower()
+            if key in known:
+                return new
+        return None
+
+    def same_object(self, master_obj, obj):
+        """Is a master's reference (its id, lower) to what a plugin calls obj, by that or by its current name?"""
+        o = obj.lower()
+        if master_obj == o:
+            return True
+        new = self.td_rename(obj) if o not in self.all_ids else None
+        return bool(new) and master_obj == new.lower()
+
+    def script_acts_on(self, oid):
+        """Does a script or dialogue result act on this id ("X->")? Compiled, it finds only a copy placed under it."""
+        if self._script_targets is None:
+            texts = [text for _p, _s, text in self.script_src.values()]
+            texts += [i.result for t in self.topics.values() for i in t.infos.values() if i.result]
+            code = (line.split(";", 1)[0] for text in texts for line in text.splitlines() if "->" in line)
+            self._script_targets = {(q or w).strip().lower() for line in code for q, w in self.RE_ARROW.findall(line)}
+        return oid.lower() in self._script_targets
 
     def _check_item_refs(self):
         """The winning version of each object: does its script, enchantment and inventory exist?
@@ -1703,6 +1730,24 @@ class World:
                     r.add("ERROR", plugin, f"cell {label}", obj,
                           msg + f" (this is a master: '{q}' must load before it)")
                 continue
+            new = self.td_rename(obj)
+            if new:
+                msg = f"places '{obj}', which Tamriel Data renamed to '{new}'"
+                if not esp:
+                    r.add("ERROR", plugin, f"cell {label}", obj, msg + " (in a master; not changed)")
+                elif (plugin, off, v) in self.ref_dropped:
+                    continue                       # an edit of a reference that is gone: removed, whatever its name
+                elif self.script_acts_on(o):       # renamed, the script would no longer find it
+                    r.add("ERROR", plugin, f"cell {label}", obj,
+                          msg + f"; scripts act on '{obj}', so the ESM patch defines it under that name")
+                    src, tag = self.last_def_obj[new.lower()]
+                    self.early_needed.setdefault(o, (src, tag, []))[2].append(plugin)
+                else:
+                    r.add("ERROR", plugin, f"cell {label}", obj, msg,
+                          fix=(off, ("rename_ref", v, o, new), f"renamed it to '{new}', its current name"))
+                    if not v >> 24:
+                        self.placed[new.lower()] += 1
+                continue
             gone = self.deleted_by_obj.get(o)
             why = f"'{gone}' deletes it" if gone else "no loaded mod defines it"
             msg = f"places '{obj}', which doesn't exist ({why}); the game logs 'Missing object ... during cell load'"
@@ -1913,10 +1958,10 @@ class World:
             if key[0] == "i" and (m, key) not in present and m in self.paths:
                 gone_cells[(plugin, off, m)].append(row)
         for (plugin, off, m), rows in gone_cells.items():
-            places = {homes[m].get(row[4] & 0xFFFFFF, (None, None))[0] for row in rows
-                      if homes[m].get(row[4] & 0xFFFFFF, (None, ""))[1] == row[5].lower()}
-            if len(places) == 1 and None not in places and all(
-                    homes[m].get(row[4] & 0xFFFFFF, (None, ""))[1] == row[5].lower() for row in rows):
+            found = [homes[m].get(row[4] & 0xFFFFFF, (None, "")) for row in rows]
+            same = [self.same_object(home[1], row[5]) for home, row in zip(found, rows)]
+            places = {home[0] for home in found}
+            if all(same) and len(places) == 1 and None not in places:
                 new_name = places.pop()
                 renamed[(plugin, off)] = new_name
                 master_name = self.masters[plugin.lower()][(rows[0][4] >> 24) - 1]
@@ -1945,13 +1990,14 @@ class World:
                       f"but the master has it as {want} (left as the mod made it)")
                 continue
             if there is None:
-                # the master renumbered it: the same object, alone within REMAP_RADIUS of where the edit puts it,
-                # not edited by anything else - the edit is pointed there; else it is removed
+                # the master renumbered it: the same object (by its current name too, if Tamriel Data renamed it),
+                # alone within REMAP_RADIUS of where the edit puts it, not edited by anything else - the edit is
+                # pointed there; else it is removed
                 new = None
                 if not deleted and pos is not None:
                     pos = struct.unpack_from("<3f", pos)
                     near = [i for i, (o, _t, p) in present.get((m, key), {}).items()
-                            if o == obj.lower() and p is not None and i not in claimed[(m, key)]
+                            if p is not None and i not in claimed[(m, key)] and self.same_object(o, obj)
                             and sum((a - b) ** 2 for a, b in zip(struct.unpack_from("<3f", p), pos))
                             <= REMAP_RADIUS ** 2]
                     new = near[0] if len(near) == 1 else None
@@ -1963,11 +2009,12 @@ class World:
                           fix=(off, ("remap_ref", v, (v & 0xFF000000) | new),
                                f"pointed the edit at the master's current reference #{new} to the same object"))
                 else:
+                    self.ref_dropped.add((plugin, off, v))
                     r.add("ERROR", plugin, f"cell {label}", obj,
                           f"changes reference #{v & 0xFFFFFF} in master '{master_name}', which no longer exists in that "
                           f"cell", fix=(off, ("drop_ref", v), "removed the edit to a reference the master no longer "
                                                              "has (the game already ignores it)"))
-            elif there != obj.lower():
+            elif not self.same_object(there, obj):
                 # replacer mods swap the object at an existing reference on purpose; the game accepts it
                 r.add("INFO", plugin, f"cell {label}", obj,
                       f"replaces '{there}' at reference #{v & 0xFFFFFF} in master '{master_name}'")
@@ -2241,6 +2288,12 @@ class World:
 
         DELETE = ("delete",)
         never = "deleted response: its filter names something that doesn't exist, so it can never play"
+
+        for master in t.defined_by.get((info.id or "").lower(), []):
+            for wrong, right in TEXT_TYPOS.get(master, ()):
+                if wrong in info.text:
+                    add("ERROR", f"typo: '{wrong}' should read '{right}'",
+                        ("set_text", info.text.replace(wrong, right)), f"corrected it to '{right}'")
 
         # speaker filters
         if info.actor and not self._exists(ACTOR_TAGS, info.actor):
@@ -3038,7 +3091,8 @@ def apply_plan(path, plugin, plan, world, log, collect=None, backup=True):
             moves = {op[1]: op[2] for op, _d, _m in plan[off] if op[0] == "move_ref"}
             remaps = {op[1]: op[2] for op, _d, _m in plan[off] if op[0] == "remap_ref"}
             rename = next((op[1] for op, _d, _m in plan[off] if op[0] == "rename_cell"), None)
-            nb, removed = rewrite_cell_refs(body, off, drops, moves, remaps, rename)
+            renames = {(op[1], op[2]): pack_str(op[3]) for op, _d, _m in plan[off] if op[0] == "rename_ref"}
+            nb, removed = rewrite_cell_refs(body, off, drops, moves, remaps, rename, renames)
             if removed:
                 out.append(tag.encode("ascii") + struct.pack("<I", len(nb)) + header_rest + nb)
                 for op, desc, msg in plan[off]:
@@ -3291,6 +3345,8 @@ def run_fix(args, plugins, bsas, data_dirs, report, world, only, hidden=frozense
     placeholders, placements = {}, {}
     if not args.no_placeholders:
         for o, v in sorted(world.missing_objects.items()):
+            if o in world.early_needed:            # a renamed object: the ESM patch defines it under the old name
+                continue
             if only is not None and not any(pl.lower() in only for pl, _s in v["used_by"]):
                 continue
             if world.gold_template is not None and len(v["id"]) <= 31:
@@ -3588,10 +3644,13 @@ def run_fix(args, plugins, bsas, data_dirs, report, world, only, hidden=frozense
             apply_item_fixes(paths_l[name.lower()], name, fixes, patch_log, collect=extra)
         for o, (src, tag, users) in early.items():
             raw = extract_record(paths_l[src.lower()], tag, o) if src.lower() in paths_l else None
+            why = f"'{o}' is placed by {', '.join(sorted(set(users)))} before {src} defines it"
+            if not raw:
+                raw = renamed_copy(world, o)
+                why = f"scripts act on '{o}', an old name Tamriel Data renamed, placed by {', '.join(sorted(set(users)))}"
             if raw:
                 extra.append(raw)
-                patch_log.append((PATCH_NAME, f"'{o}' is placed by {', '.join(sorted(set(users)))} before "
-                                              f"{src} defines it", "copied its definition into the patch"))
+                patch_log.append((PATCH_NAME, why, "copied its definition into the patch"))
         if early_placed:
             extra.append(placeholder_cell([v["id"] for v in early_placed.values()], EARLY_CELL))
             for v in early_placed.values():
@@ -5683,6 +5742,15 @@ def fix_performers(args, plugins):
     return 0
 
 
+def active_archives(args):
+    """The BSAs the game loads: Morrowind.bsa, then Morrowind.ini's [Archives]."""
+    ini = default_ini(args)
+    listed = read_ini_sections(ini).get("archives", []) if os.path.isfile(ini) else []
+    lookup = index_dir(os.path.abspath(args.data_dir))
+    names = ["Morrowind.bsa"] + [v for k, v in listed if k.lower().startswith("archive")]
+    return [lookup[n.lower()] for n in names if n.lower() in lookup]
+
+
 def fix_cell_winners(args, plugins):
     """--fix: for each interior in CELL_WINNERS_FILE, the winning plugin's version of the place is used as if
     the losing plugin had never touched it, through CELL_WINNER_PATCH (rebuilt each time; no plugin changed):
@@ -5729,6 +5797,7 @@ def fix_cell_winners(args, plugins):
     print("  Reading every plugin's cells, doors and pathgrids...", file=sys.stderr)
     actor_ids, cont_ids, loser_text = set(), set(), defaultdict(list)
     npc_class, npc_name, npc_refs = {}, {}, {}  # NPC id -> class / name; ref key -> (cell key, NPC id) placed
+    npc_dead = set()                             # NPC ids placed as bodies
     heads = {}                                   # cell key -> latest head
     xheads = defaultdict(list)                   # chosen interior -> [(plugin, head)] in load order
     xver = defaultdict(list)                     # (interior, ref key) -> [(plugin, group, block)]
@@ -5764,6 +5833,11 @@ def fix_cell_winners(args, plugins):
                 if nm and tag == "NPC_":
                     npc_class[cstr(nm).lower()] = cstr(first_sub(body, b"CNAM") or b"").lower()
                     npc_name[cstr(nm).lower()] = cstr(first_sub(body, b"FNAM") or b"").lower()
+                    npdt = first_sub(body, b"NPDT")
+                    if npdt and len(npdt) == 52 and not struct.unpack_from("<H", npdt, 38)[0]:
+                        npc_dead.add(cstr(nm).lower())
+                    else:
+                        npc_dead.discard(cstr(nm).lower())
             if tag == "DOOR" and first_sub(body, b"NAME"):
                 door_ids.add(cstr(first_sub(body, b"NAME")).lower())
             elif tag == "SCPT" and low in losers:
@@ -6125,6 +6199,9 @@ def fix_cell_winners(args, plugins):
     # ---- reshaped land: where two plugins change the same land's heights, the last one's land is used, and
     # objects put down on the land another plugin saw float or sink. They move up or down with the land.
     contested = {g for g, v in land_vers.items() if len({d for _i, d, _o in v}) >= 2}
+    tag_of, model_of, _scripted = object_info(order) if contested or npc_refs else ({}, {}, set())
+    shapes = ModelShapes(data_dir, active_archives(args))
+    kept_dry = set()                             # references the sea stopped from following the land down
     if contested:
         print(f"  Reading the {len(contested)} exterior cell(s) whose land two or more plugins reshape...",
               file=sys.stderr)
@@ -6164,6 +6241,9 @@ def fix_cell_winners(args, plugins):
                 head, pers, _n0, temp = split_cell(body, off)
                 for grp, blks in (("p", pers), ("t", temp)):
                     for blk in blks:
+                        if blk[0][0] == "MVRF":      # moved to another cell: its old cell must not move it back
+                            refs.pop(block_key([["FRMR", blk[0][1]]], ms, names[pi]), None)
+                            continue
                         bk = block_key(blk, ms, names[pi])
                         if bk is not None:
                             refs[bk] = (names[pi], grp, blk, ("e", g[0], g[1]))
@@ -6175,7 +6255,9 @@ def fix_cell_winners(args, plugins):
             vs = land_vers[g]
             return next((pi for pi, _d, _o in reversed(vs) if names[pi] in dep), vs[0][0])
 
-        def shift(pl, x, y, z):
+        left_above_sea = Counter()
+
+        def shift(pl, x, y, z, actor, top=None):
             g = (int(math.floor(x / 8192)), int(math.floor(y / 8192)))
             if g not in contested:
                 return None
@@ -6190,6 +6272,13 @@ def fix_cell_winners(args, plugins):
             dz = h_new - h_old
             if abs(dz) < 16 or abs(z - h_old) > 400:
                 return None                      # the land barely moved, or it isn't standing on the land
+            sinks = z >= 0 > z + dz or (actor and z >= ACTOR_SUNK > z + dz)
+            if not sinks and dz < 0 and not actor and top and z < 0:
+                t = top()                        # a platform's origin is in the water, its deck above it
+                sinks = t is not None and t >= 0 > t + dz
+            if sinks:
+                left_above_sea[name_of.get(names[last], names[last])] += 1
+                return False                     # never from above the sea to below it
             return dz
         moved_by = Counter()
         for bk, (pl, grp, blk, ck) in refs.items():
@@ -6200,8 +6289,15 @@ def fix_cell_winners(args, plugins):
             if dd is None:
                 continue
             x, y, z, r1, r2, r3 = struct.unpack_from("<6f", dd)
-            dz = shift(pl, x, y, z)
-            if dz is None:
+            oid = name_in(base).lower()
+
+            def top():
+                scale = next((struct.unpack_from("<f", d)[0] for s_, d in base if s_ == "XSCL" and len(d) >= 4), 1.0)
+                return shapes.top((x, y, z, r1, r2, r3), scale, model_of.get(oid))
+            dz = shift(pl, x, y, z, oid in actor_ids, top)
+            if dz is False:
+                kept_dry.add(bk)
+            if not dz:
                 continue
             nd = struct.pack("<6f", x, y, z + dz, r1, r2, r3) + dd[24:]
             put(ck, grp, bk, [[s_, nd if s_ == "DATA" else d] for s_, d in base])
@@ -6219,8 +6315,8 @@ def fix_cell_winners(args, plugins):
             if dodt is None:
                 continue
             x, y, z, r1, r2, r3 = struct.unpack_from("<6f", dodt)
-            dz = shift(pl, x, y, z)
-            if dz is None:
+            dz = shift(pl, x, y, z, True)        # an arrival is where the player stands
+            if not dz:
                 continue
             nd = struct.pack("<6f", x, y, z + dz, r1, r2, r3)
             put(ck, grp, bk, [[s_, nd if s_ == "DODT" else d] for s_, d in base])
@@ -6234,6 +6330,11 @@ def fix_cell_winners(args, plugins):
             print(f"      {n:6} of {who}'s, onto {land}'s land")
         if len(moved_by) > 12:
             print(f"      ... and {len(moved_by) - 12} more")
+        if left_above_sea:
+            print(f"  Reshaped land: {sum(left_above_sea.values())} left where placed, as that land would take them "
+                  f"under the sea; check the mod that lowers it still belongs in this load order:")
+            for land, n in left_above_sea.most_common(12):
+                print(f"      {n:6} over {land}'s land")
 
     # people, creatures, containers (and what the loser left in) standing where the winner built nothing - in
     # the void of a layout that isn't there any more - are moved to the place's arrival spot, a little apart
@@ -6339,6 +6440,33 @@ def fix_cell_winners(args, plugins):
                     f"cell, object, mod whose copy is deleted, mod whose copy stays, its object. Rebuilt when "
                     f"either mod leaves the load order.\n")
             f.writelines(x + "\n" for x in doubled_rows)
+
+    # people left over water: what they stood on was taken away. Runs after all that moves or deletes objects.
+    people = {bk: (key[1], key[2]) for bk, (key, oid) in npc_refs.items() if key[0] == "e" and oid not in npc_dead}
+    moves, rescue, left = find_footing(Placements(order, ext_recs, land_vers, masters_of), people, out, kept_dry,
+                                       tag_of, model_of, shapes)
+    for bk, ck, grp, blk in moves:
+        put(ck, grp, bk, blk)
+        out_heads.setdefault(ck, heads.get(ck))
+    if moves:
+        print(f"  Footing: {len(moves)} people whose footing was taken away moved to footing beside it:")
+        for bk, ck, _grp, blk in moves[:20]:
+            x, y, z = struct.unpack_from("<3f", next(d for s_, d in blk if s_ == "DATA"))
+            print(f"      {name_in(blk)} in #{ck[1]},{ck[2]}: to {x:.0f}, {y:.0f}, {z:.0f}")
+    if left:
+        print(f"  Footing: {len(left)} people over water left as they are, to check (all in MWSE\\config\\{RESCUE_DATA}):")
+        for line in left[:20]:
+            print(f"      {line}")
+        if len(left) > 20:
+            print(f"      ... and {len(left) - 20} more")
+    if rescue:
+        print(f"  Footing: {len(rescue)} people may be under water in saves made before this; mwfloatfix, when "
+              f"switched on, puts each back once per save")
+    if not args.dry_run:
+        try:
+            write_rescue_data(data_dir, rescue, left)
+        except OSError as e:
+            print(f"  (could not write {RESCUE_DATA}: {e})", file=sys.stderr)
 
     # door owners copied with a cloned door (door_owner_verdicts): only the two clear rules are applied
     doors, finals = [], {}

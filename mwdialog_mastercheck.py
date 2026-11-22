@@ -811,7 +811,12 @@ def check(world, mw, args=None):
             # references seen missing on earlier runs (a --fix since may have removed them from the file)
             seen = evidence.get(f"{plugin_l}|{ml}", [])
             rm = list(rm) + [x for x in seen if x not in rm]
-            conf, kind, info = assess(f2, prof, defined, rm, logs["refgone"].get(plugin_l, {}).get(ml, 0),
+            def current(name):                   # an old Tamriel Data id is its object, not a missing one
+                new = world.td_rename(name) if name not in defined else None
+                return new.lower() if new else name
+
+            conf, kind, info = assess(dict(f2, refs={current(x) for x in f2["refs"]}), prof, defined,
+                                      [current(x) for x in rm], logs["refgone"].get(plugin_l, {}).get(ml, 0),
                                       (plugin_l, ml) in world.ref_error_masters, orig, inst_size)
             saved_against = orig if orig is not None else hdr.get(ml)   # the header may be synced already
             if saved_against is not None and inst_size is not None and saved_against != inst_size and mpath:

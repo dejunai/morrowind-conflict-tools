@@ -16,6 +16,7 @@ def test_no_mw_mod_defaults_to_enabled():
             for file in files:
                 if file.endswith(".lua"):
                     text = open(os.path.join(base, file), encoding="utf-8").read()
+                    text = re.sub(r"setVanityMode\(\{[^}]*\}\)", "", text)      # the camera's switch, not a default
                     if re.search(r"\benabled\s*=\s*true\b|\benabled\s*=\s*saved\.enabled\s*~=\s*false", text):
                         found.append(f"{name}/{file}")
     assert not found, found

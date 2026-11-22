@@ -77,9 +77,8 @@ function config.isCoastGuardContrabandActive()
         or tes3.findDialogue("contraband") ~= nil
 end
 
-function config.isArrilleInnConflictActive()
-    return tes3.isModActive("Improved Inns Expanded.esp")
-        and tes3.isModActive("Seyda Neen - Damp Little Squat - unshabby.ESP")
+function config.isBardicInspirationActive()
+    return tes3.isModActive("BardicInspiration.esp") == true
 end
 
 
@@ -103,8 +102,8 @@ local function getDynamicDefaults()
     local expandedSounds = config.isExpandedSoundsActive()
     local tales = config.isTalesOfSeydaNeenActive()
     local trainerLog = config.isTrainerLogActive()
-    local arrilleInn = config.isArrilleInnConflictActive()
     local coastGuard = config.isCoastGuardContrabandActive()
+    local bardic = config.isBardicInspirationActive()
 
     return {
         enabled = false,          -- the whole mod
@@ -167,8 +166,19 @@ local function getDynamicDefaults()
         swampSoundEnabled = swamp,
         expandedSoundsEnabled = expandedSounds,
 
-        -- Duplicate rental doors from Improved Inns and Damp Little Squat.
-        arrilleInnCompatibilityEnabled = arrilleInn,
+        -- Bardic Inspiration: items that count as instruments besides its lutes (lower-case ids)
+        musicalInstrumentsEnabled = bardic,
+        musicalInstruments = {
+            misc_de_drum_01 = true, misc_de_drum_02 = true,
+            t_imp_drum_01 = true, t_imp_drum_02 = true, t_imp_drum_03 = true, t_imp_drum_04 = true,
+            t_nor_deerskindrum_01 = true, t_nor_music_drum_01 = true, t_nor_music_drum_02 = true,
+            t_nor_music_drum_03 = true, t_nor_music_drum_04 = true, t_orc_drum_01 = true, t_rga_drum_01 = true,
+            t_de_music_lyre_01 = true, t_de_music_panflute_01 = true, t_nor_music_flute_01 = true,
+            t_nor_music_lyre_01 = true, t_nor_music_lyre_02 = true, t_nor_music_warhorn_01 = true,
+            t_rga_flute_01 = true,
+            ab_misc_6thflute = true, ab_misc_ashlflute = true, ab_mus_6thflute = true, ab_mus_ashlflute = true,
+            ab_mus_ashllyre = true, ab_mus_deharp = true, ab_mus_delyre = true,
+        },
 
         -- Graphic Herbalism Respawn Delay (days)
         graphicHerbalismRespawnEnabled = config.isGraphicHerbalismActive(),
@@ -199,9 +209,8 @@ end
 
 local needsSave = loadedConfig.doorLockCompatibilityEnabled ~= nil
     or loadedConfig.doorLockedNotification ~= nil
-if loadedConfig.arrilleInnCompatibilityEnabled == nil and loadedConfig.doorLockCompatibilityEnabled ~= nil then
-    loadedConfig.arrilleInnCompatibilityEnabled = loadedConfig.doorLockCompatibilityEnabled
-end
+    or loadedConfig.arrilleInnCompatibilityEnabled ~= nil
+loadedConfig.arrilleInnCompatibilityEnabled = nil
 loadedConfig.doorLockCompatibilityEnabled = nil
 loadedConfig.doorLockedNotification = nil
 

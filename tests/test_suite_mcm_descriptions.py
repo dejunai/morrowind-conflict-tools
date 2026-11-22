@@ -46,3 +46,15 @@ def test_suite_mcm_controls_have_descriptions():
                 if "description" not in fields:
                     missing.append(f"{path.relative_to(MODS)}:{token.line}")
     assert not missing, missing
+
+
+def test_every_suite_settings_page_is_registered():
+    missing = []
+    for mod in sorted(MODS.iterdir()):
+        if not (mod / "main.lua").is_file() or mod.name == "mwmanagermenu":
+            continue
+        code = "\n".join(p.read_text(encoding="utf-8") for p in mod.rglob("*.lua"))
+        if "createTemplate" in code and not any(call in code for call in (
+                ":register()", "mcm.register(", "registerModConfig(", "mcm.registerMCM(")):
+            missing.append(mod.name)
+    assert not missing, missing

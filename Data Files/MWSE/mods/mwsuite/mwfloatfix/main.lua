@@ -16,6 +16,10 @@
     lists are checked: those resting on something a later mod moved, rescaled or deleted, or on land a
     later mod lowered. Without it, every loose item is checked as above.
 
+    With MWSE\config\mwfloatfix_rescue.json (written by mwdialog_check --fix) each person it lists who is
+    under water near that spot in this save is put back on their footing, once per save: a save keeps where
+    people are, so the patch's fix alone only helps a new game.
+
     Blacklist: look at an object (or click it with the console open) and press the blacklist key
     (Shift+Delete by default). After you confirm, that one object, in that spot, is hidden now and in
     every game from then on: for lanterns and ropes left hanging in the air where another mod took away
@@ -426,9 +430,11 @@ end
 local function addToBlacklist(ref)
     local baseId = resolveBaseId(ref) or ref.object.id
     local key = refKey(ref)
-    if blackKeys[key] then
-        tes3.messageBox("%s is already on the blacklist.", describe(ref))
-        return
+    -- listed already, yet showing (something switched it back on): the new entry replaces the old
+    for i = #blacklist.entries, 1, -1 do
+        if blacklist.entries[i].key == key then
+            table.remove(blacklist.entries, i)
+        end
     end
     local srcObj = tes3.getObject(baseId) or ref.object
     local srcMod = ref.sourceMod or (srcObj and srcObj.sourceMod) or "?"
@@ -521,6 +527,72 @@ local function isListed(ref)
     return false
 end
 
+-- MWSE\config\mwfloatfix_rescue.json (mwdialog_check --fix): people saves keep under water, and where they
+-- stand. startingPosition can't be used to know them (it is invalid for actors), so: object id and near the spot.
+local RESCUE_KEY, RESCUE_NEAR, RESCUE_BELOW = "mwfloatfixRescued", 512, -32
+local rescues = {}                       -- base object id -> { { from, to, key }, ... }
+local drowning = {}
+do
+    local data = mwse.loadConfig("mwfloatfix_rescue")
+    if data and type(data.npcs) == "table" then
+        for _, e in ipairs(data.npcs) do
+            if type(e.id) == "string" and type(e.from) == "table" and #e.from >= 3
+                    and type(e.to) == "table" and #e.to >= 3 then
+                local id = e.id:lower()
+                rescues[id] = rescues[id] or {}
+                table.insert(rescues[id], { from = e.from, to = e.to, key = string.format("%s|%d|%d|%d|%d|%d|%d", id,
+                    e.from[1], e.from[2], e.from[3], e.to[1], e.to[2], e.to[3]) })
+            end
+        end
+    end
+end
+
+local function noteRescue(ref)
+    if not config.enabled or next(rescues) == nil then return end
+    local obj = ref.object
+    if not obj or obj.objectType ~= tes3.objectType.npc then return end
+    local base = ref.baseObject
+    if not base or not rescues[base.id:lower()] then return end
+    drowning[#drowning + 1] = tes3.makeSafeObjectHandle(ref)
+    settleAt = os.clock() + 1.0                     -- wait until the cell around them has loaded
+end
+
+local function rescue(ref)
+    local cell = ref.cell
+    if not cell or cell.isInterior or ref.isDead == true then return end
+    local p = ref.position
+    if p.z >= RESCUE_BELOW then return end
+    local saved = tes3.player.data
+    local done = saved[RESCUE_KEY] or {}
+    local best, nearest = nil, RESCUE_NEAR
+    for _, e in ipairs(rescues[ref.baseObject.id:lower()]) do
+        if not done[e.key] then
+            local d = math.min(math.sqrt((p.x - e.from[1]) ^ 2 + (p.y - e.from[2]) ^ 2),
+                               math.sqrt((p.x - e.to[1]) ^ 2 + (p.y - e.to[2]) ^ 2))
+            if d <= nearest then best, nearest = e, d end
+        end
+    end
+    if not best then return end
+    local was, o = p.z, ref.orientation
+    if not tes3.positionCell({ reference = ref, position = { best.to[1], best.to[2], best.to[3] },
+                               orientation = { o.x, o.y, o.z } }) then return end
+    done[best.key] = true
+    saved[RESCUE_KEY] = done
+    log("rescued %s from under water (%.0f) to %.0f, %.0f, %.0f", ref.baseObject.id, was,
+        best.to[1], best.to[2], best.to[3])
+end
+
+local function runRescues()
+    local list = drowning
+    drowning = {}
+    for _, handle in ipairs(list) do
+        if handle:valid() then
+            local ok, err = pcall(rescue, handle:getObject())
+            if not ok then log("error rescuing: %s", tostring(err)) end
+        end
+    end
+end
+
 local function enqueue(ref)
     if not config.enabled or queued[ref] then return end
     if floatList then
@@ -536,6 +608,7 @@ end
 
 event.register(tes3.event.referenceActivated, function(e)
     if applyBlacklist(e.reference) then return end
+    noteRescue(e.reference)
     enqueue(e.reference)
 end)
 
@@ -546,17 +619,21 @@ event.register(tes3.event.cellChanged, function()
 end)
 
 event.register(tes3.event.loaded, function()
-    queue, queued, qHead = {}, {}, 1
+    queue, queued, qHead, drowning = {}, {}, 1, {}
     checkedThisSession = setmetatable({}, { __mode = "k" })
     settleAt = os.clock() + 2.0
     for _, cell in ipairs(tes3.getActiveCells()) do
         for ref in cell:iterateReferences() do
-            if not applyBlacklist(ref) then enqueue(ref) end
+            if not applyBlacklist(ref) then
+                noteRescue(ref)
+                enqueue(ref)
+            end
         end
     end
 end)
 
 event.register(tes3.event.simulate, function()
+    if drowning[1] and tes3.player and os.clock() >= settleAt then runRescues() end
     if qHead > #queue or os.clock() < settleAt then return end
     -- lowest items first, so a book resting on a fallen book lands on it, not through it
     if not sorted then
@@ -615,7 +692,10 @@ local function recheckActiveCells()
     checkedThisSession = setmetatable({}, { __mode = "k" })
     for _, cell in ipairs(tes3.getActiveCells()) do
         for ref in cell:iterateReferences() do
-            if not applyBlacklist(ref) then enqueue(ref) end
+            if not applyBlacklist(ref) then
+                noteRescue(ref)
+                enqueue(ref)
+            end
         end
     end
 end
@@ -659,7 +739,9 @@ event.register(tes3.event.modConfigReady, function()
             .. "their cell loads. Items against a wall, under water, or with no floor within reach are left "
             .. "alone. Each move is written to MWSE\\logs\\mwfloatfix.log."
             .. (floatList and "\n\nOnly the items in MWSE\\config\\mwfloatfix_data.json are checked (written by "
-                .. "mwdialog_check --cell-conflicts)." or ""),
+                .. "mwdialog_check --cell-conflicts)." or "")
+            .. "\n\nPeople listed in MWSE\\config\\mwfloatfix_rescue.json (written by mwdialog_check --fix) who are "
+            .. "under water in this save are put back on their dock or footing, once per save.",
     })
     page:createOnOffButton({ label = "Enabled", description = "Lower eligible floating objects when their cells load.",
         variable = mwse.mcm.createTableVariable({ id = "enabled", table = config }) })

@@ -54,8 +54,7 @@ local function knock(door)
         who.facing = facing > math.pi and facing - 2 * math.pi or facing
     end
     if knockSound then tes3.playSound({ sound = knockSound }) end
-    tes3.unlock({ reference = door })
-    if door.data then door.data.mwcriminalLocked = nil end
+    core.unlock(door)
     tes3ui.showNotifyMenu(who.object.name .. " opens the door.")
     return true
 end
@@ -63,8 +62,7 @@ end
 local function onDoor(door)
     if core.isExit(door) then
         if config.interiorExit and tes3.getLocked({ reference = door }) then
-            tes3.unlock({ reference = door })
-            if door.data then door.data.mwcriminalLocked = nil end
+            core.unlock(door)
         end
         return
     end
@@ -151,6 +149,21 @@ local function onBookMenu(e)
     e.element:updateLayout()
 end
 
+local LOG_DIR = "Data Files\\MWSE\\logs"
+local logFile
+
+-- what debugMode asks for; warnings still go to MWSE.log
+local function debugLog(fmt, ...)
+    if not logFile then
+        pcall(function() lfs.mkdir(LOG_DIR) end)
+        logFile = io.open(LOG_DIR .. "\\mwcriminal.log", "w")
+        if not logFile then return end
+        logFile:write(os.date("mwcriminal log, started %Y-%m-%d %H:%M:%S"), "\n")
+    end
+    logFile:write(os.date("[%H:%M:%S] "), string.format(fmt, ...), "\n")
+    logFile:flush()
+end
+
 local function onDetectSneak(e)
     if not (config.enabled and config.companionDetection) or e.target ~= tes3.mobilePlayer then return end
     local d = e.detector
@@ -160,7 +173,7 @@ local function onDetectSneak(e)
     d.isPlayerHidden = true
     interop.clearSuspicion(d.reference)
     if config.debugMode then
-        mwse.log("[mwcriminal] Suppressed sneak detection from %s: %s",
+        debugLog("Suppressed sneak detection from %s: %s",
             core.isCompanion(d) and "companion" or "blacklisted entity",
             d.reference and d.reference.id or "unknown")
     end

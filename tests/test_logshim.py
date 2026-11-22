@@ -1,7 +1,8 @@
 """The F1 log shim: the static replacement for the old mwguard's log-spam guard. Python patch tests, then the
-shim itself run in LuaJIT (lupa) with mwse, io, lfs, os.time, event and timer mocked."""
+shim itself run in tools\\luajit with mwse, io, lfs, os.time, event and timer mocked."""
 import json
 import os
+import subprocess
 
 import pytest
 
@@ -9,12 +10,9 @@ from conftest import _load
 
 lf = _load("mwdialog_luafix")
 
-try:
-    from lupa import luajit21 as _lj
-    HAVE_LUA = True
-except Exception:
-    HAVE_LUA = False
-need_lua = pytest.mark.skipif(not HAVE_LUA, reason="lupa (LuaJIT) not installed")
+LUAJIT = os.environ.get("MWMANAGER_LUAJIT", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                                          "tools", "luajit", "luajit.exe"))
+need_lua = pytest.mark.skipif(not os.path.isfile(LUAJIT), reason="LuaJIT not available")
 
 CFG = dict(lf.DEFAULTS)
 LOG = "Data Files\\MWSE\\logs\\testmod.log"
@@ -74,15 +72,15 @@ def test_one_shim_state_per_mod_every_logging_file_patched(tmp_path):
                            "data.lua": "return { a = 1 }\n"})
     for fn in ("main.lua", "util.lua"):
         t = e[fn]["patch"]["text"]
-        assert t.count('package.loaded["mwluafix_logshim:testmod"]') == 2 and lf.SHIM_END in t
+        assert t.count('package.loaded["localpatch_logshim:testmod"]') == 2 and lf.SHIM_END in t
     assert e["data.lua"]["patch"] is None                       # no logging: untouched
 
 
 def test_logger_creations_are_wrapped_only_with_the_shim(tmp_path):
     e, _ = plan(tmp_path / "a", {"main.lua": LOGGER})
     t = e["main.lua"]["patch"]["text"]
-    assert "local log = mwluafix_log.wrap(mwse.Logger.new())" in t
-    assert "local old = mwluafix_log.wrap(L2.new{ name = 'x' })" in t
+    assert "local log = localpatch_log.wrap(mwse.Logger.new())" in t
+    assert "local old = localpatch_log.wrap(L2.new{ name = 'x' })" in t
     assert t.count("\n") == LOGGER.count("\n")
     e, _ = plan(tmp_path / "b", {"main.lua": LOGGER}, scope="off")
     assert e["main.lua"]["patch"] is None
@@ -124,8 +122,7 @@ def test_config_luafix_log_section_and_legacy_keys(tmp_path):
 def test_shim_compiles_in_luajit_and_keeps_one_line():
     s = lf.log_shim("abot/Some Mod", CFG)
     assert "\n" not in s and s.rstrip().endswith(lf.SHIM_END)
-    rt = _lj.LuaRuntime()
-    assert rt.eval("loadstring(...) ~= nil", s + "return 1") is True
+    assert Rt().eval(f"loadstring({quote(s + 'return 1')}) ~= nil")
 
 
 # ------------------------------------------------------------------------------------------------ runtime
@@ -162,29 +159,54 @@ function lines(path) local t = {} for l in (FILES[path] or ""):gmatch("[^\n]+") 
 """
 
 
+def quote(text):
+    return '"' + "".join(chr(b) if 32 <= b < 127 and chr(b) not in '"\\' else f"\\{b:03d}"
+                          for b in text.encode("utf-8")) + '"'
+
+
 class Rt:
+    """One Lua session: what was run so far is replayed in LuaJIT for each look at it (the mocks have no clock)."""
+
     def __init__(self, **log):
         self.cfg = cfg(**dict(dict(perSecond=0), **log))
-        self.rt = _lj.LuaRuntime(unpack_returned_tuples=True)
-        self.rt.execute(ENV)
-        self.g = self.rt.globals()
+        self.steps = []
+
+    def look(self, step="", value="nil"):
+        program = ["local write = io.write", "do " + ENV + "\nend"]
+        program += [f"assert(loadstring({quote(x)}))()" for x in self.steps + [step]]
+        program.append(f"write('\\1', tostring({value}))")
+        done = subprocess.run([LUAJIT, "-"], input="\n".join(program).encode("utf-8"), capture_output=True)
+        if done.returncode:
+            raise RuntimeError(done.stderr.decode("utf-8", "replace"))
+        return done.stdout.decode("utf-8").replace("\r\n", "\n").rsplit("\1", 1)[1]
 
     def load(self, body, name="testmod", path="testmod\\main.lua", shim=True):
         code = (lf.log_shim(name, self.cfg) if shim else "") + body
-        return self.rt.globals().loadMod(path, code)
+        self.run(f"loadMod({quote(path)}, {quote(code)})")
 
     def run(self, lua):
-        return self.rt.execute(lua)
+        self.look(lua)                                          # raises at the step that is wrong
+        self.steps.append(lua)
+
+    def eval(self, expr):
+        return self.look(value=f"(select(1, {expr}))") == "true"
+
+    def num(self, expr):
+        return float(self.look(value=expr))
+
+    def listed(self, expr):
+        got = self.look(value=f"table.concat({expr}, '\\31')")
+        return got.split("\x1f") if got else []
 
     def out(self):
-        return list(self.g.OUT.values())
+        return self.listed("OUT")
 
     def file(self, path=LOG):
         return [l.split("] ", 1)[1] if l.startswith("[") and "] " in l else l
-                for l in self.g.lines(path).values()]
+                for l in self.listed(f"lines({quote(path)})")]
 
     def has(self, path):
-        return self.g.FILES[path] is not None
+        return self.eval(f"FILES[{quote(path)}] ~= nil")
 
 
 @need_lua
@@ -193,9 +215,9 @@ def test_first_lines_pass_then_the_rest_goes_to_the_mod_log():
     r.load("for i = 1, 20 do print('line ' .. i) end mwse.log('fmt %d', 21) print('a', 'b')")
     out = r.out()
     assert out[:5] == [f"line {i}" for i in range(1, 6)]
-    assert len(out) == 6 and "testmod has written 5 line(s)" in out[5] and LOG in out[5]
+    assert len(out) == 5                                        # no notice of ours in MWSE.log
     f = r.file()
-    assert "lines past its MWSE.log allowance" in f[0]
+    assert f[0].endswith("testmod log")
     assert f[1:] == [f"line {i}" for i in range(6, 21)] + ["fmt 21", "a\tb"]
 
 
@@ -207,7 +229,7 @@ def test_budget_after_initialized_and_shared_by_the_mods_files():
     r.run("fire('initialized')")
     r.load("print('late1') print('late2') print('late3')", path="testmod\\late.lua")
     out = r.out()
-    assert out[:6] == ["m1", "m2", "u1", "u2", "late1", "late2"] and "has written 6 line(s)" in out[6]
+    assert out == ["m1", "m2", "u1", "u2", "late1", "late2"]
     assert r.file()[-1] == "late3"
 
 
@@ -226,7 +248,7 @@ def test_errors_and_warnings_always_reach_mwse_log_and_are_flushed():
 def test_identical_lines_collapse_in_the_mod_log():
     r = Rt(budgetInit=0)
     r.load("for i = 1, 10 do print('same') end print('other') for i = 1, 3 do print('again') end")
-    r.run("package.loaded['mwluafix_logshim:testmod'].flush()")
+    r.run("package.loaded['localpatch_logshim:testmod'].flush()")
     assert r.file()[1:] == ["same", "[previous line repeated 9 more time(s)]", "other", "again",
                             "[previous line repeated 2 more time(s)]"]
 
@@ -238,7 +260,7 @@ def test_per_second_cap_on_the_mod_log():
     f = r.file()[1:]
     assert f[:5] == [f"l{i}" for i in range(1, 6)]
     assert f[5] == "[15 line(s) dropped: more than 5 in one second]" and f[6] == "next second"
-    assert len(r.out()) == 1                                    # only the redirect notice
+    assert r.out() == []                                        # no redirect notice
 
 
 @need_lua
@@ -264,7 +286,7 @@ def test_previous_session_log_kept_and_a_file_written_this_session_not_clobbered
     r.run("FILES[ [[" + LOG + "]] ] = 'the mod logger file\\n' ATTR[ [[" + LOG + "]] ] = 2000")
     r.load("print('new')")
     assert r.file() == ["the mod logger file"]
-    assert r.file("Data Files\\MWSE\\logs\\testmod.luafix.log")[-1] == "new"
+    assert r.file("Data Files\\MWSE\\logs\\testmod.routine.log")[-1] == "new"
 
 
 @need_lua
@@ -279,7 +301,7 @@ def test_io_failures_never_reach_the_mod():
     r.run("FAILW = true")
     r.load("for i = 1, 15 do print('w' .. i) end", path="testmod\\b.lua")   # writes now throw: no error
     out = r.out()
-    assert sum("log shim error" in o for o in out) == 1 and "w15" in out
+    assert sum("log write failed" in o for o in out) == 1 and "w15" in out
     r.run("FAILW = false")
     r.load("print('after')", path="testmod\\c.lua")
     assert r.out()[-1] == "after"                               # ten failures: passes through from then on
@@ -289,7 +311,7 @@ def test_io_failures_never_reach_the_mod():
 def test_other_mods_and_the_global_print_are_untouched():
     r = Rt(budgetInit=0)
     r.load("print('spam')")
-    assert r.rt.eval("print == ORIG_PRINT and mwse.log ~= nil and getmetatable(mwse) == nil")
+    assert r.eval("print == ORIG_PRINT and mwse.log ~= nil and getmetatable(mwse) == nil")
     r.load("for i = 1, 60 do print('other ' .. i) end", name="other", path="other\\main.lua", shim=False)
     assert r.out()[-60:] == [f"other {i}" for i in range(1, 61)]
 
@@ -298,17 +320,17 @@ def test_other_mods_and_the_global_print_are_untouched():
 def test_flushing_buffered_after_initialized():
     r = Rt(budgetInit=0, flushSeconds=3)
     r.load("print('a')")
-    before = r.g.FLUSHES
+    before = r.num("FLUSHES")
     assert before >= 1                                          # startup lines are flushed at once
     r.run("fire('initialized')")
-    assert r.g.TIMERS[1].duration == 3 and r.g.TIMERS[1].iterations == -1
-    n = r.g.FLUSHES
+    assert r.num("TIMERS[1].duration") == 3 and r.num("TIMERS[1].iterations") == -1
+    n = r.num("FLUSHES")
     r.load("print('b') print('c')", path="testmod\\x.lua")
-    assert r.g.FLUSHES == n                                     # buffered now
+    assert r.num("FLUSHES") == n                                     # buffered now
     r.run("fire('save')")
-    assert r.g.FLUSHES == n + 1
+    assert r.num("FLUSHES") == n + 1
     r.run("TIMERS[1].callback()")                               # nothing new: no flush
-    assert r.g.FLUSHES == n + 1
+    assert r.num("FLUSHES") == n + 1
 
 
 @need_lua
@@ -318,17 +340,20 @@ def test_generic_logger_methods_wrapped():
           "function lg:info(m) if self.lv >= 3 then print('[INFO] ' .. m) end end "
           "function lg:debug(m) if self.lv >= 4 then print('[DEBUG] ' .. m) end end "
           "function lg:warn(m) print('[WARN] ' .. m) end LOGGERS[#LOGGERS + 1] = lg return lg end }")
-    r.load("local log = mwluafix_log.wrap(mwse.Logger.new()) "
+    r.load("local log = localpatch_log.wrap(mwse.Logger.new()) "
            "for i = 1, 5 do log:info('i' .. i) end log:debug('hidden') log:warn('careful') "
            "LOG_IS = log return log")
     out = r.out()
     assert out[:2] == ["[INFO] i1", "[INFO] i2"] and "[WARN] careful" in out
     assert "[INFO] i3" not in out and r.file()[-3:] == ["[INFO] i3", "[INFO] i4", "[INFO] i5"]
     assert "hidden" not in " ".join(out + r.file())             # the logger's own level still decides
-    assert r.rt.eval("print == ORIG_PRINT and LOG_IS == LOGGERS[1]")
+    assert r.eval("print == ORIG_PRINT and LOG_IS == LOGGERS[1]")
 
 
-MWSE_CORE = "/workspace/mwse_src/misc/package/Data Files/MWSE/core"
+MWSE_CORE = next((p for p in ("/workspace/mwse_src/misc/package/Data Files/MWSE/core",
+                              os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                           "Data Files", "MWSE", "core").replace(os.sep, "/"))
+                  if os.path.isdir(os.path.join(p, "lib"))), "")
 
 
 @need_lua
@@ -346,11 +371,16 @@ def test_real_mwse_logger_lines_redirected_with_correct_line_numbers():
           "table.new = table.new or function() return {} end table.unpack = table.unpack or unpack "
           "table.find = function(t, v) for k, x in pairs(t) do if x == v then return k end end end "
           "tes3.getLuaModMetadata = function() return nil end")
-    ok = r.rt.eval("pcall(function() mwse.Logger = require('logger') end)")
-    if not (ok if isinstance(ok, bool) else ok[0]):
-        pytest.skip("MWSE's logger doesn't load with these stubs")
     try:
-        r.load("local log = mwluafix_log.wrap(mwse.Logger.new{ modName = 'testmod', level = 'DEBUG' })\n"
+        r.run("mwse.Logger = require('logger')")
+    except RuntimeError:
+        pytest.skip("MWSE's logger doesn't load with these stubs")
+    # the logger takes the mod from the last frame below MWSE's loader, so that loader has to be on the stack
+    r.run("loadMod = assert(loadstring([[return function(path, code) "
+          "return (assert(loadstring(code, '@Data Files\\\\MWSE\\\\mods\\\\' .. path))()) end]], "
+          "'@Data Files\\\\MWSE\\\\core\\\\startLuaMods.lua'))()")
+    try:
+        r.load("local log = localpatch_log.wrap(mwse.Logger.new{ modName = 'testmod', level = 'DEBUG' })\n"
                "log:info('first')\n"
                "log:info('second')\n"
                "log:trace('not shown')\n"
@@ -363,7 +393,7 @@ def test_real_mwse_logger_lines_redirected_with_correct_line_numbers():
     second = next(l for l in f if "second" in l)
     assert ":3" in second, second                               # the mod's line, not the shim's
     assert not any("not shown" in l for l in out + f)
-    assert r.rt.eval("print == ORIG_PRINT")
+    assert r.eval("print == ORIG_PRINT")
 
 
 def _v1_shim():
@@ -389,7 +419,7 @@ def test_v1_shim_is_upgraded_in_place(tmp_path):
     t = e["main.lua"]["patch"]["text"]
     assert e["main.lua"]["patch"]["ok"] and "F1" in e["main.lua"]["patch"]["rules"]
     assert not lf.SHIM_V1_RE.search(t) and t.count(lf.SHIM_END) == 1 and t.count("\n") == old.count("\n")
-    assert t.startswith(f"--[[mwdialog_luafix {lf.VERSION}: F1]] local print, mwse, mwluafix_log")
+    assert t.startswith(f"--[[localpatch {lf.VERSION}: F1]] local print, mwse, localpatch_log")
     e2, _ = plan(tmp_path / "again", {"main.lua": t})
     assert e2["main.lua"]["patch"] is None                       # stable after the upgrade
 
@@ -399,18 +429,47 @@ def test_flush_timer_is_started_again_after_a_load():
     r = Rt(budgetInit=0)
     r.load("print('x')")
     r.run("fire('initialized')")
-    assert len(r.g.TIMERS) == 1
+    assert r.num("#TIMERS") == 1
     r.run("TIMERS = {} fire('loaded')")              # MWSE cancels every timer right before loaded
-    assert len(r.g.TIMERS) == 1 and r.g.TIMERS[1].iterations == -1
+    assert r.num("#TIMERS") == 1 and r.num("TIMERS[1].iterations") == -1
 
 
 @need_lua
-def test_lifecycle_words_are_capped_and_only_count_before_initialized():
+def test_lifecycle_words_are_capped_word_by_word():
     r = Rt(budgetInit=0)
-    r.load("for i = 1, 500 do print('Registered recipe ' .. i) end print('Error: broke')")
-    shown = [o for o in r.out() if o.startswith("Registered recipe")]
-    assert len(shown) == 20 and "Error: broke" in r.out()
+    r.load("for i = 1, 500 do print('Registered recipe ' .. i) end print('Error: broke') print('[Mod] Initialized')")
+    out = r.out()
+    assert len([o for o in out if o.startswith("Registered recipe")]) == 5
+    assert "Error: broke" in out and "[Mod] Initialized" in out     # a flood of one word doesn't crowd out another
+    assert len([o for o in r.file() if o.startswith("Registered recipe")]) == 500
+
+
+@need_lua
+def test_lines_printed_by_initialized_handlers_reach_mwse_log():
+    r = Rt(budgetInit=0)
+    r.load("print('setting up') event.register('initialized', function() "
+           "print('[Mod] Initialized') print('[Aura] 6.0 initialised') mwse.log('[Mod] MCM registered') "
+           "print('[Mod] started') print('routine') end)")
     r.run("fire('initialized')")
-    r.load("print('Mod started') print('reloaded the inactive thing')", path="testmod\\late.lua")
-    assert "Mod started" not in r.out() and "reloaded the inactive thing" not in r.out()
-    assert "Mod started" in r.file()
+    assert r.out() == ["[Mod] Initialized", "[Aura] 6.0 initialised", "[Mod] MCM registered", "[Mod] started"]
+    assert "routine" in r.file()
+
+
+@need_lua
+def test_configured_keep_patterns_still_match_british_spelling():
+    r = Rt(budgetInit=0, keepPatterns=["error", "initializ"])
+    r.load("print('[Mod] initialised')")
+    assert r.out() == ["[Mod] initialised"]
+
+
+@need_lua
+def test_nothing_of_ours_is_written_into_the_mods_output():
+    for broken in ("", "NOOPEN = true", "FAILW = true"):
+        r = Rt(budgetInit=0)
+        r.run(broken)
+        r.load("print('routine') print('more') print('Error: broke')")
+        text = " ".join(r.out() + r.file()).lower()
+        assert "luafix" not in text and "mwdialog" not in text and "localpatch" not in text
+        assert "error: broke" in text
+    shim = lf.log_shim("testmod", CFG).lower()
+    assert "luafix" not in shim and "mwdialog" not in shim

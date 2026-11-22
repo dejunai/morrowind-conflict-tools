@@ -1,5 +1,106 @@
 # Resume: Morrowind tools, MWManager and the mw* Lua suite (2026-11-22)
 
+## 2026-11-22: Tamriel Data renames in --fix
+
+- The map never loaded on a tidied install (the reader searched Data Files\Docs for a name Tidy changes). It is
+  now `tools\Translation.txt` here and in MWManager, gitignored in both, and the only place read: the user doesn't
+  want the plugin's own paths searched. After a Tamriel Data update, copy its new map there. Copy, never move:
+  the plugin's own file stays in Data Files\Docs and in staging.
+  The map is optional: without one --fix carries on without error.
+- Placed objects are renamed before the 64-unit match and the removals (`rename_ref`). An id still defined is never
+  renamed, and a chain stops at the first name that exists. If a script acts on the old id, the object keeps it and
+  the ESM patch defines a copy under it.
+- Proven on the original Undercity.esp (scratch copy): the Old Mournhold gate is renamed, not removed. Not tested
+  in game. Not done: references placed by masters (reported only), and old ids as a reference's owner, key, trap
+  or soul.
+
+## 2026-11-22: AFFresh typo
+
+- `TEXT_TYPOS` in mwdialog_check.py: master -> exact wrong/right phrases in responses and journal text, written to
+  the ESM fixes patch. "fried" is also a word, so never replace it alone. AFFresh 1.3b has two: that, and Fine-Mouth's "He is true friend of mine".
+
+## 2026-11-22: start-up crash, stealth companion cloak withdrawn
+
+- `tes3script:recompile` crashed the game during initialized (ScriptCompiler::MatchFunctionName). Never use it.
+  stealthCompanionCloak is removed (copies in `mwdialog_backup\retired-stealth-cloak\`), so Jiub's translucency
+  in combat stance is open again. A possible fix without compiling: in the compiled script each of the four tests is
+  the text ` == 1`, so a generated patch plugin could change that one byte to 2. Not built.
+
+## 2026-11-22: MWSE.log, luafix v5, Casimir's ghost (KB8)
+
+- What luafix writes into a mod never names this tool: marker `--[[localpatch N: RULES]]`, identifiers
+  `localpatch_*`. `unbrand()` upgrades what version 4 wrote. Don't put a tool or suite name in a patched mod.
+- The shim adds no line of its own to MWSE.log. Start-up words pass whenever they are printed (5 per word and mod);
+  v4 stopped at `initialized`, which is when most mods print them. The installed copies were upgraded alone
+  (`mwdialog_backup\sync\shim_upgrade.py`, journaled).
+- mwcriminal's debug lines go to `MWSE\logs\mwcriminal.log`. mwexitguard never registered its settings page: fixed.
+  It is still off by default.
+- KB8: Tamriel Data read CS_Casimir1's spell list (Casimir's Legacy) during loadGame. A one-off fix of 2026-11-05 was
+  lost with the 11-10 MWSE update. Fix such things as a Known Bug, never as a one-off edit.
+- lupa has no wheel for Python 3.15 and there is no C compiler. test_logshim runs on tools\luajit. The lupa tests
+  of test_luafix need the side-by-side Python 3.14 (lupa, pytest; 3.15 stays the default): run the suite with
+  `py -3.14 -X utf8 -m pytest tests -q -p no:cacheprovider` too, or they skip unseen.
+- Not tested in game, committed or pushed.
+
+## 2026-11-22: loading/saving popup
+
+- The variegated rectangle was Regional Splash (the user's local add-on, not in the repos), not Kezyma's textures.
+  `menuExit` filtered on MenuLoading never fires, so the splash never disarmed; and it was drawn inside the small
+  window, over `MenuLoading_label` and `MenuLoading_fill` (the names it looked for don't exist).
+- The user's rule: a splash only for an interior-to-exterior door expected to load for over 1 s. Expected = that
+  region's last door load, so the first one is only timed. The picture now has its own menu behind the bar.
+- `tests/test_regional_splash.py` exists in the Steam tree only. The .7z in the downloads has the fixed Lua too
+  (original beside the .before files in session-fixes-20261122); the luafix backups still have the old Lua.
+  Not tested in game: whether that menu renders full screen during a load.
+
+## 2026-11-22: shack relock, Jiub, illegible handwriting
+
+- mwcriminal relocked picked doors at its own level. A lock opened by anyone but mwcriminal now stays open, and
+  a relock keeps the door's own level (`mwcriminalUnlocked` marks the mod's own unlocks).
+- talesHandwritingFix must not test for the note: the topic is learned while the line that gives it is read.
+- mwcompanions `sheatheAfterCombat` is on in the user's config. stealthCompanionCloak recompiles F&F's five
+  stealth scripts in memory (first use of `tes3script:recompile` here: check MWSE.log after the first start).
+
+## 2026-11-22: trapdoor, bards, birthsign, instruments
+
+- mwpluginpatches' hardcoded Arrille trapdoor fix is removed at the user's request: don't add it back. It
+  re-enabled what mwfloatfix's blacklist hid. The hide key now replaces an entry that is already listed.
+- mwperformers: bard scripts are skipped during dialogue through their own `state` guard, and lute shields go
+  on Weapon Sheathing's exclusion list. Both earlier attempts (addSound, hiding a node under Spine2) are gone.
+- Luafix KB7 (Friends & Frens %Sign) is applied to the install. mwpluginpatches has the Bardic Inspiration
+  instrument whitelist. None of these is tested in game, committed or pushed.
+
+## 2026-11-21 game session log review
+
+- Both the deferred autosave and the manual save completed. The game peaked at 1,738 MB process memory
+  and 349,147 KB Lua memory in hangwatch samples. Saves were not modified.
+- OpenUI generated 12,321 timer errors when an enchanted weapon had no instance data. Known Bug KB6 now
+  repairs that exact source fingerprint, and the repair was applied to the live/staged hardlink with a
+  journal and original under `mwdialog_backup\session-review-20261121`. The game has not been retested.
+- Fixed false overlap warnings in mwcriminal and mwcompanions from orphaned legacy configs; synced the
+  code, tests and KB6 documentation to the project and MWManager. Repository changes remain uncommitted.
+- mwsoundguard blocked 25,280 runaway Boat Hull restarts from the vanilla `Sound_Boat_Hull` script on
+  the prison ship. The guard remains enabled; no speculative source rewrite was applied.
+- The cell-transition and save loading windows were reported as solid textured colors: Regional Splash's bug,
+  found and fixed 2026-11-22 (see the top of this file).
+
+## Guard and lock-patch deployment (2026-11-21)
+
+- Deployed the mwguard, mwinfoloop and mwhangwatch memory reductions and retired mwpluginpatches' obsolete
+  door-lock workaround. The separate Arrille rental-door fix remains; its old switch is migrated.
+- Synced code, tests and docs to the project clone and MWManager reference/upstream copies. These repository
+  changes are not committed or pushed. Backups are in `mwdialog_backup\suite-deploy-20261121-211537`.
+- The mwpluginpatches staging and live files remain hardlinked. Vortex's deployment manifest still lists the
+  removed patch and does not yet list the new Arrille file; redeploy in Vortex to refresh it. Test in game.
+
+## Steam root cleanup
+
+- Project documentation is in `mwdialog_backup\docs\`; `AGENTS.md` and this handoff remain in the game root.
+  The sync helper accepts the original root-relative document names and finds them in the docs folder.
+- Historical backups, agent scripts and diagnostic audits are in `mwdialog_backup\root-cleanup-20261122\`.
+  Archived one-off scripts may require their original paths to run; do not run them during deployment.
+- The live backup registry, deployment backups, caches, game/tool backups, journals and reports remain in place.
+
 ## Suite MCM and MCA follow-up
 
 - Deployed `mwmanagermenu` in Steam and updated MWManager's copy to put suite settings under **MW Conflict Tools**.
@@ -93,7 +194,7 @@ synced to the clone or MWManager, not committed. G:\projects was not writable fr
 
 - H1 mwguard: no hooks at all when off at start-up (switching on needs a restart); unregistered per-frame
   handlers are released (the wrapper table was never collected under LuaJIT). `tests\test_mwguard.py`.
-- H2 + M1 log shim (`SHIM_V = 4`): the flush timer restarts on `loaded`; the lifecycle keep words
+- (Superseded by v5, 2026-11-22) H2 + M1 log shim (`SHIM_V = 4`): the flush timer restarts on `loaded`; the lifecycle keep words
   (`LIFECYCLE_PATTERNS`) count only before initialized, near the line start, at most `lifecycleMax` (20) per mod;
   patterns validated once, plain ones matched plain. Two tests in `test_logshim.py`. Installed third-party copies
   still carry v3 until luafix is run again.

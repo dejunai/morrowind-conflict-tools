@@ -125,20 +125,40 @@ function core.lockVerdict(door, hour)
     return core.isEvening(hour) and "lock" or "unlock"
 end
 
+-- mwcriminal's own unlocks are marked: only those doors may lock again
+function core.unlock(door)
+    tes3.unlock({ reference = door })
+    if door.data then
+        door.data.mwcriminalLocked = nil
+        door.data.mwcriminalUnlocked = true
+    end
+end
+
 -- applies the verdict; returns true when the door is locked afterwards
 function core.applyVerdict(door, verdict)
     local ours = (door.data and door.data.mwcriminalLocked)
     local locked = tes3.getLocked({ reference = door })
     if locked and (verdict == "open" or (verdict == "unlock" and ours)) then
-        tes3.unlock({ reference = door })
-        if door.data then door.data.mwcriminalLocked = nil end
+        core.unlock(door)
         return false
     end
     if verdict == "lock" and not locked then
-        local level = core.matchesAny(door.destination.cell.id, config.highSecurityNames) and config.highLockLevel
-            or config.lockLevel
+        -- a lock keeps its level when opened: one that is open without our mark was picked, or opened by a key,
+        -- spell or script, and locking it again would undo that (the shack quest: 15 picked, relocked at 38)
+        local level = math.abs(door.lockNode and door.lockNode.level or 0)
+        if level > 0 and not (door.data and door.data.mwcriminalUnlocked) then
+            if door.data then door.data.mwcriminalLocked = nil end
+            return false
+        end
+        if level == 0 then
+            level = core.matchesAny(door.destination.cell.id, config.highSecurityNames) and config.highLockLevel
+                or config.lockLevel
+        end
         tes3.lock({ reference = door, level = level })
-        if door.data then door.data.mwcriminalLocked = true end
+        if door.data then
+            door.data.mwcriminalLocked = true
+            door.data.mwcriminalUnlocked = nil
+        end
         return true
     end
     if not locked then if door.data then door.data.mwcriminalLocked = nil end end

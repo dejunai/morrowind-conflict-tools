@@ -17,6 +17,13 @@ A ready-made copy can be taken from an existing MWSE or MWManager `tools/luajit`
 
 If LuaJIT is not found, the tools say so clearly and do not patch (`--luajit PATH` to point at a binary, or `--no-syntax-check` to rely on the parser alone). This directory is gitignored; do not commit the binaries.
 
+## Tamriel Data's rename map (`tools/Translation.txt`, optional)
+
+`mwdialog_check.py --fix` uses it to give objects in older plugins their current Tamriel Data IDs instead of removing
+them. It ships with Tamriel Data in its `Docs` folder: copy it here as `Translation.txt`, and again when Tamriel Data
+updates. This is the only place `--fix` looks; without it `--fix` carries on as usual. The file is Tamriel Data's:
+it is gitignored, do not commit it.
+
 ## 7-Zip (`tools/7z/`)
 
 Used to read `.7z` and `.rar` Vortex download archives for the master-mismatch check. Looked up in this order:

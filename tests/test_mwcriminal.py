@@ -55,7 +55,12 @@ tes3 = {
   worldController = { hour = { value = 12 }, inputController = { isShiftDown = function() return shift end } },
   refs = {},
   getLocked = function(p) return p.reference.locked == true end,
-  lock = function(p) p.reference.locked, p.reference.level = true, p.level end,
+  lock = function(p)
+    local r = p.reference
+    r.locked, r.level = true, p.level
+    r.lockNode = r.lockNode or {}
+    r.lockNode.level = p.level
+  end,
   unlock = function(p) p.reference.locked = false end,
   getOwner = function(p) return p.reference.owner end,
   hasOwnershipAccess = function(p) return not p.target.owner or p.target.access == true end,
@@ -586,3 +591,55 @@ print("ok")
     script = script.replace("MODS", MODS)
     out = subprocess.run([LUAJIT, "-"], input=script, capture_output=True, text=True, cwd=ROOT)
     assert out.returncode == 0 and out.stdout.strip().endswith("ok"), out.stdout + out.stderr
+
+
+def test_a_lock_the_player_opened_stays_open():
+    run(r'''
+local owner = npc("indrele rathryon", { disposition = 10 })
+local shack = cell("Balmora, Indrele Rathryon's Shack", true, {})      -- the owner is out
+local picked = door(shack, { owner = owner.object, locked = true })
+picked.lockNode = { level = 15 }
+sneak(true); activate(picked)
+check(picked.locked and picked.lockNode.level == 15, "its own lock is left as it is")
+picked.locked = false                                                  -- the minigame opens it
+activate(picked)
+check(not picked.locked, "a picked door stays unlocked")
+check(picked.lockNode.level == 15, "and never takes mwcriminal's level")
+
+local ours = door(shack, { owner = owner.object })
+activate(ours)
+check(ours.locked and ours.level == config.lockLevel, "an empty home with no lock gets mwcriminal's")
+ours.locked = false                                                    -- picked
+activate(ours)
+check(not ours.locked, "mwcriminal's own lock stays picked too")
+
+local host = npc("host", { disposition = 80 })
+local home = cell("Balmora, Host's House", true, { host })
+local theirs = door(home, { owner = host.object })
+hour(20); sneak(false); activate(theirs)                               -- locked for the evening, knocked open
+check(not theirs.locked, "knocked open")
+sneak(true); activate(theirs)
+check(theirs.locked, "what mwcriminal opened itself may lock again")
+
+local low = door(home, { owner = host.object })
+low.lockNode, low.data.mwcriminalUnlocked = { level = 10 }, true
+activate(low)
+check(low.locked and low.lockNode.level == 10, "relocking keeps the door's own level")
+''')
+
+
+def test_suppressions_go_to_its_own_log():
+    run(r'''
+local written = {}
+lfs.mkdir = function() end
+io.open = function(path)
+  check(path == "Data Files\\MWSE\\logs\\mwcriminal.log", "the log's path: " .. path)
+  return { write = function(_, ...) written[#written + 1] = table.concat({ ... }) end, flush = function() end }
+end
+config.debugMode = true
+handlers.detectSneak({ target = tes3.mobilePlayer, isDetected = true, detector = {
+  reference = { id = "chicken00", object = { id = "chicken", objectType = tes3.objectType.creature }, data = {} },
+  actorType = tes3.actorType.creature, hostileActors = {} } })
+check(#logs == 0, "suppressions must stay out of MWSE.log")
+check(table.concat(written):find("chicken00", 1, true), "the suppression is not in mwcriminal.log")
+''')

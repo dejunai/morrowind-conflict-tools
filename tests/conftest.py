@@ -112,6 +112,12 @@ def _fresh_caches():
 
 
 @pytest.fixture(autouse=True)
+def _no_local_rename_map(tmp_path, monkeypatch):
+    """tools\\Translation.txt is this machine's: a test sees only the map it writes at tmp_path."""
+    monkeypatch.setattr(sys.modules["mwdialog_patchfile"], "TD_MAP", str(tmp_path / "Translation.txt"), raising=False)
+
+
+@pytest.fixture(autouse=True)
 def _plan_audit_in_tmp(tmp_path, monkeypatch):
     """Plan-file audit copies of --apply runs never land in the source tree."""
     monkeypatch.setattr(vt, "AUDIT_ROOT", str(tmp_path / "audit"))

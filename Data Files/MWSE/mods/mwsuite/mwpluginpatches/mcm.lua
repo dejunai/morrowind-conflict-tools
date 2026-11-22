@@ -274,16 +274,6 @@ trainerCategory:createYesNoButton({
     variable = mwse.mcm.createTableVariable({ id = "trainerLogAutoUnlockOnLoad", table = config }),
 })
 
-local arrilleCategory = page:createCategory(string.format("Arrille's Tradehouse: Duplicate Doors%s",
-    getStatusText(config.isArrilleInnConflictActive())))
-
-arrilleCategory:createYesNoButton({
-    label = "Resolve Duplicate Rental Doors",
-    description = "When Improved Inns and Damp Little Squat add overlapping trapdoors in Arrille's Tradehouse, "
-        .. "uses the rental door while the room is rented. Takes effect after a restart.",
-    variable = mwse.mcm.createTableVariable({ id = "arrilleInnCompatibilityEnabled", table = config }),
-})
-
 -- SECTION 14: SEYDA NEEN COAST GUARD: CONTRABAND
 local cgCategory = page:createCategory(string.format("Seyda Neen Coast Guard: Contraband%s",
     getStatusText(config.isCoastGuardContrabandActive())))
@@ -337,5 +327,27 @@ cgCategory:createYesNoButton({
     variable = mwse.mcm.createTableVariable({ id = "coastGuardTurnInVampireDust", table = config }),
 })
 
+
+local instrumentCategory = page:createCategory(string.format("Bardic Inspiration: Musical Instruments%s",
+    getStatusText(config.isBardicInspirationActive())))
+
+instrumentCategory:createYesNoButton({
+    label = "Enable Musical Instrument Whitelist",
+    description = "Items on the Musical Instruments page count as instruments for Bardic Inspiration, which otherwise "
+        .. "knows only lutes. Use one from the inventory or a quick key to perform; outdoors, use it again to stop. "
+        .. "The songs are Bardic Inspiration's own. Takes effect after a restart.",
+    variable = mwse.mcm.createTableVariable({ id = "musicalInstrumentsEnabled", table = config }),
+})
+
+template:createExclusionsPage({
+    label = "Musical Instruments",
+    description = "Items on the left count as instruments for Bardic Inspiration. Click an item to move it. "
+        .. "Lutes the mod already knows need not be listed.",
+    leftListLabel = "Instruments",
+    rightListLabel = "Other items",
+    showAllBlocked = true,
+    variable = mwse.mcm.createTableVariable({ id = "musicalInstruments", table = config }),
+    filters = { { label = "Miscellaneous items", type = "Object", objectType = tes3.objectType.miscItem } },
+})
 
 template:register()

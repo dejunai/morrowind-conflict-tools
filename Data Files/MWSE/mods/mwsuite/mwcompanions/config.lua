@@ -14,6 +14,7 @@ local defaults = {
     assist = false,            -- companions attack whoever fights the player (Smart Companions autoAttack, companions only)
     escortSelfDefense = false, -- escorted NPCs fight only who attacks them, never in the player's defense
     escortProtection = false,  -- escorted NPCs can't die: fatigue drains to zero instead, they get up after the fight
+    sheatheAfterCombat = false, -- companions put their weapon away once neither they nor the player fight
     muteOnCellChange = false,  -- followers' Attack/Hello lines are muted right after a cell change (Smart Companions muteCC)
     noSneakActivate = false,   -- activating a follower while sneaking does nothing (Smart Companions)
     blacklist = {},            -- lower-case base id -> true: never a follower

@@ -1,3 +1,41 @@
+# Tamriel Data renames (2026-11-22)
+
+- `--fix` reads Tamriel Data's rename map from `tools\Translation.txt` only. It is optional.
+- `--fix` renames placed objects Tamriel Data renamed, instead of removing them.
+- The 64-unit match, the renamed-interior match and the master guard accept an object's current name.
+- Rename chains are followed to the first name that exists.
+
+# AFFresh typo, withdrawn cloak patch (2026-11-22)
+
+- `--fix`: AFFresh.esm's "his fried," and "He is true friend of" read "his friend," and "He is a true friend of" through the ESM fixes patch (`TEXT_TYPOS`, exact phrases only).
+- mwpluginpatches: the stealth companion cloak patch is withdrawn, as `tes3script:recompile` crashed the game at start.
+
+# Logs and Known Bug 8 (2026-11-22)
+
+- luafix v5: the log shim lets start-up lines through during and after `initialized`, and prints no notice of its own.
+- luafix v5: patched mods no longer carry the tool's name; older patches are upgraded on the next run.
+- luafix KB8: Tamriel Data waits for a save to finish loading before reading actors' spell lists.
+- mwcriminal: detection suppressions are logged to `MWSE\logs\mwcriminal.log`.
+- mwexitguard: the settings page is registered, so it appears under MW Conflict Tools.
+
+# Locks, companions, topic (2026-11-22)
+
+- mwcriminal: a picked door stays unlocked, and relocking keeps the door's own level.
+- mwcompanions: companions can put their weapon away after a fight.
+- mwpluginpatches: Friends & Frens stealth companions don't cloak for a drawn weapon or readied spell.
+- mwpluginpatches: `illegible handwriting` is learned again, and goes away when the quest is finished.
+
+# Bards (2026-11-22)
+
+- mwperformers: a bard's script is paused for the length of a dialogue, so no new song starts.
+- mwperformers: lute shields are excluded from Weapon Sheathing, so the lute stays in the bard's hands.
+
+# Arrille trapdoor (2026-11-22)
+
+- Removed mwpluginpatches' hardcoded Arrille trapdoor fix: on every cell change it switched back on the
+  duplicate that mwfloatfix's blacklist had hidden.
+- mwfloatfix's hide key replaces an entry that is already listed instead of refusing it.
+
 # Door-lock compatibility retirement (2026-11-21)
 
 - Removed the mwpluginpatches door-lock workaround and its MCM controls; configure locks and standing key access

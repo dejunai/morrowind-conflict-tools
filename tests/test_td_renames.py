@@ -1,4 +1,4 @@
-"""Tamriel Data renames IDs between versions and ships the map (Docs\\Translation.txt, old:new). --fix rewrites
+"""Tamriel Data renames IDs between versions and ships a map (kept as tools\\Translation.txt, old:new). --fix rewrites
 a mod's inventory and leveled-list entries to the current ID instead of dropping them, and a script's object gets
 a copy of the current object under the old ID instead of a placeholder coin (compiled scripts keep the old name)."""
 import struct
@@ -10,10 +10,9 @@ OLD, NEW = "tr_a_chitin_helm_open", "T_De_Chitin_HelmOpen"
 
 def install(tmp_path):
     df = tmp_path / "Morrowind" / "Data Files"
-    docs = df / "Docs" / "tamriel_data"
-    docs.mkdir(parents=True)
+    df.mkdir(parents=True)
     lines = [f"tr_filler_{i}:T_Filler_{i}" for i in range(1200)] + [f"{OLD}:{NEW}"]
-    (docs / "Translation.txt").write_text("\n".join(lines) + "\n", encoding="cp1252")
+    (tmp_path / "Translation.txt").write_text("\n".join(lines) + "\n", encoding="cp1252")
     td = df / "Tamriel_Data.esm"
     plugin(td, [], [misc(NEW, value=40, name="Chitin Helm"), misc("gold_001", name="Gold")])
     npco = lambda item: sub("NPCO", struct.pack("<i", 1) + item.encode().ljust(32, b"\0"))   # noqa: E731
@@ -61,6 +60,6 @@ def test_a_script_object_gets_a_copy_of_its_renamed_object_not_a_coin(tmp_path):
 
 def test_no_map_is_no_renames(tmp_path):
     w = install(tmp_path)
-    (tmp_path / "Morrowind" / "Data Files" / "Docs" / "tamriel_data" / "Translation.txt").write_text("hello\n")
+    (tmp_path / "Translation.txt").write_text("hello\n")
     w._td_renames = None
     assert w.td_rename(OLD) is None

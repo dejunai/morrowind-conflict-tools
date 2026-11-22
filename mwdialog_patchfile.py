@@ -20,7 +20,7 @@ from mwdialog_tes3 import (  # noqa: E402
 
 def patch_supports(op):
     """Can this fix be expressed as an override in a separate patch plugin?"""
-    return op[0] not in ("drop_ref", "move_ref", "remap_ref", "rename_cell") and op != ("delete", "local")
+    return op[0] not in ("drop_ref", "move_ref", "remap_ref", "rename_cell", "rename_ref") and op != ("delete", "local")
 
 
 PATCH_NAME = "mwdialog_check - ESM fixes.esp"
@@ -149,26 +149,23 @@ def apply_item_fixes(path, plugin, fixes, log, backup=True, collect=None):
     return changes
 
 
-def read_td_renames(data_dir):
-    """{old id: new id} from Tamriel Data's Translation.txt ("old:new" per line), wherever its docs went under
-    Data Files\\Docs; {} when it isn't installed. A file of that name that isn't such a map is ignored."""
-    docs = os.path.join(data_dir, "Docs") if data_dir else ""
-    for base, _dirs, files in os.walk(docs) if docs and os.path.isdir(docs) else ():
-        for name in files:
-            if name.lower() != "translation.txt":
-                continue
-            renames = {}
-            try:
-                with open(os.path.join(base, name), encoding="cp1252", errors="replace") as f:
-                    for line in f:
-                        old, sep, new = line.strip().partition(":")
-                        if sep and old and new and len(new) <= 31:
-                            renames[old.strip().lower()] = new.strip()
-            except OSError:
-                continue
-            if len(renames) > 1000 and sum(1 for n in renames.values() if n.lower().startswith("t_")) > 500:
-                return renames
-    return {}
+TD_MAP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tools", "Translation.txt")
+
+
+def read_td_renames():
+    """{old id: new id} from tools\\Translation.txt, Tamriel Data's map ("old:new" per line). It is optional:
+    {} when it isn't there, can't be read or isn't such a map."""
+    renames = {}
+    try:
+        with open(TD_MAP, encoding="cp1252", errors="replace") as f:
+            for line in f:
+                old, sep, new = line.strip().partition(":")
+                if sep and old and new and len(new.strip()) <= 31:
+                    renames[old.strip().lower()] = new.strip()
+    except OSError:
+        return {}
+    is_map = len(renames) > 1000 and sum(1 for n in renames.values() if n.lower().startswith("t_")) > 500
+    return renames if is_map else {}
 
 
 def renamed_copy(world, oid):

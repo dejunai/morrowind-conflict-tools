@@ -39,7 +39,7 @@ yesNo(sneak, "includeEscorts", "Include escort quest targets",
 yesNo(sneak, "blacklistAllCreatures", "Blacklist all creatures",
     "Automatically ignore creatures in sneak detection, even when they are not followers.")
 yesNo(sneak, "debugMode", "Log detection suppressions",
-    "Write one MWSE.log line each time a companion or blacklisted actor is prevented from detecting the player.")
+    "Write a line to MWSE\\logs\\mwcriminal.log each time a companion or blacklisted actor is prevented from detecting the player.")
 sneak:createKeyBinder({
     label = "Detection inspector hotkey",
     description = "Open the companion detector inspector. Default: K.",

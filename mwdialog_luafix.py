@@ -95,8 +95,8 @@ JOURNAL = os.path.join(HERE, "mwdialog_luafix_journal.jsonl")
 BACKUP_ROOT = os.path.join(HERE, "mwdialog_backup", "luafix")
 PLAN_FILE = os.path.join(HERE, "mwdialog_luafix_plan.txt")
 KNOWN_BUG_REPORT = os.path.join(HERE, "mwdialog_luafix_known_bugs.txt")
-VERSION = 4
-MARK = "mwdialog_luafix"
+VERSION = 5
+MARK = "localpatch"            # what is written into a mod never carries this tool's name
 
 OWN_MODS = {"mwcollide", "mwcompanions", "mwcriminal", "mwcustomclasspersistence",
             "mweffectinspector", "mwexitguard", "mwfloatfix", "mwguard", "mwhangwatch", "mwinfoloop",
@@ -124,8 +124,8 @@ DEFAULTS = {
         "maxMB": 2,                  # the mod's own log is rotated at this size ...
         "keepOld": 1,                # ... keeping the previous one as <mod>.old.log (0: none)
         "flushSeconds": 2,           # buffered lines reach the disk at least this often
-        "lifecycleMax": 20,          # lifecycle lines (LIFECYCLE_PATTERNS) reach MWSE.log only before initialized,
-                                     # near the start of the line, at most this many per mod
+        "lifecycleMax": 5,           # lifecycle lines (LIFECYCLE_PATTERNS) reach MWSE.log when the word is near
+                                     # the start of the line, at most this many per word and mod
         "errorRepeat": 0,            # errors always reach MWSE.log, including repeats
         "exemptMods": sorted(OWN_MODS),    # our mods use native logging; never inject the generic shim
     },
@@ -156,7 +156,7 @@ NULLABLE_EVENT_FIELDS = {
     "equip": {"itemData"}, "equipped": {"itemData"}, "unequipped": {"itemData"},
     "spellCast": _CAST, "spellCasted": _CAST, "spellCastedFailure": _CAST, "magicCasted": _CAST,
     "leveledItemPicked": {"pick", "spawner"}, "leveledCreaturePicked": {"pick", "spawner"}}
-NIL_TMP = "mwluafix_v"
+NIL_TMP = "localpatch_v"
 FRAME_EXEMPT_EVENTS = {"cameraControl", "calcMoveSpeed", "mouseAxis", "preventRest"}
 ONCE_EVENTS = {"initialized", "modConfigReady", "initialize"}
 FREQUENT_EVENTS = PER_FRAME | FRAME_EXEMPT_EVENTS | {
@@ -610,7 +610,7 @@ class FileAnalysis:
         self._lines = None
         self.registrations = []          # (call, event, handler Function or None, handler arg, options)
         self.handler_events = {}         # id(Function) -> events it is registered for
-        self._gate_next = 1 + max([int(x) for x in re.findall(r"mwluafix_gate\((\d+)", src)] or [0])
+        self._gate_next = 1 + max([int(x) for x in re.findall(r"localpatch_gate\((\d+)", src)] or [0])
         for c in self.calls:
             if L.dotted(c.func) == "event.register" and len(c.args) >= 2:
                 ev = event_name(c.args[0])
@@ -744,7 +744,7 @@ class FileAnalysis:
         return "high", "only checks state and reacts to a change"
 
     def gated(self, f):
-        return bool(f.body.stats) and "mwluafix_gate(" in self.text(f.body.stats[0])
+        return bool(f.body.stats) and "localpatch_gate(" in self.text(f.body.stats[0])
 
     # --- rules
     def run(self):
@@ -801,9 +801,9 @@ class FileAnalysis:
     def r_while_caps(self):
         """L1: a while loop that walks a linked structure (x = x.next) or counts a field down by a computed step
         (t = t - d while t >= ...) hangs the game when the links cycle or the step is 0 -> capped at 10000 turns."""
-        k = 1 + max([int(x) for x in re.findall(r"mwluafix_n(\d+)", self.src)] or [0])
+        k = 1 + max([int(x) for x in re.findall(r"localpatch_n(\d+)", self.src)] or [0])
         for n in self.nodes:
-            if n.kind != "While" or "mwluafix_n" in self.text(n.cond):
+            if n.kind != "While" or "localpatch_n" in self.text(n.cond):
                 continue
             cond_names = {L.dotted(x) for x in L.walk(n.cond) if x.kind in ("Name", "Index")} - {None}
             why = None
@@ -825,7 +825,7 @@ class FileAnalysis:
                     break
             if not why:
                 continue
-            v = f"mwluafix_n{k}"
+            v = f"localpatch_n{k}"
             k += 1
             self.add("L1", n, f"while loop {why}", "stop it after 10000 turns", "high",
                      [(n.s, n.s, f"local {v} = 0 "), (n.cond.s, n.cond.s, "("),
@@ -901,7 +901,7 @@ class FileAnalysis:
     def _gate_edit(self, f):
         k = self._gate_next
         self._gate_next += 1
-        return (f.params_end, f.params_end, f" if mwluafix_gate({k}, {self.cfg['minInterval']}) then return end")
+        return (f.params_end, f.params_end, f" if localpatch_gate({k}, {self.cfg['minInterval']}) then return end")
 
     def r_per_frame(self):
         seen = set()
@@ -992,11 +992,11 @@ class FileAnalysis:
                 if not any(n.kind == "Method" and n.name == "updateLayout" for g in self.closure(fn)
                            for n in L.walk(g.body)):
                     continue
-                if "mwluafix_save" in self.text(fn.body.stats[0]):
+                if "localpatch_save" in self.text(fn.body.stats[0]):
                     continue
                 at = fn.body.stats[0].s
                 self.add("I2", c, "a repeating real-time timer redraws UI and keeps running through a save",
-                         "skips while a save is running", "high", [(at, at, "if mwluafix_save.saving then return end ")],
+                         "skips while a save is running", "high", [(at, at, "if localpatch_save.saving then return end ")],
                          {"savestate"})
             elif d in ("mwse.saveConfig", "json.savefile"):
                 fn = L.enclosing_function(c)
@@ -1705,7 +1705,7 @@ class FileAnalysis:
             if not ok:
                 continue
             par = getattr(c, "parent", None)
-            if par is not None and par.kind == "Call" and L.dotted(par.func) == "mwluafix_log.wrap":
+            if par is not None and par.kind == "Call" and L.dotted(par.func) == "localpatch_log.wrap":
                 continue
             out.append(c)
         return out
@@ -1713,7 +1713,7 @@ class FileAnalysis:
     def r_loggers(self):
         for c in self.logger_creations():
             self.add("F1", c, "logger created here", "its trace/debug/info lines go through the log shim", "logger",
-                     [(c.s, c.s, "mwluafix_log.wrap("), (c.e, c.e, ")")], ["shim"])
+                     [(c.s, c.s, "localpatch_log.wrap("), (c.e, c.e, ")")], ["shim"])
 
     def requires(self):
         out = []
@@ -1785,13 +1785,13 @@ class FileAnalysis:
 
 
 # ---------------------------------------------------------------------------------------------- what we add
-SAVE_HELPER = ('local mwluafix_save do mwluafix_save = package.loaded["mwluafix_savestate"] '
-               'if type(mwluafix_save) ~= "table" then mwluafix_save = { saving = false } '
-               'package.loaded["mwluafix_savestate"] = mwluafix_save '
-               'event.register("save", function() mwluafix_save.saving = true end, { priority = 9999 }) '
-               'event.register("saved", function() mwluafix_save.saving = false end) '
-               'event.register("loaded", function() mwluafix_save.saving = false end) '
-               'event.register("menuExit", function() mwluafix_save.saving = false end) end end ')
+SAVE_HELPER = ('local localpatch_save do localpatch_save = package.loaded["localpatch_savestate"] '
+               'if type(localpatch_save) ~= "table" then localpatch_save = { saving = false } '
+               'package.loaded["localpatch_savestate"] = localpatch_save '
+               'event.register("save", function() localpatch_save.saving = true end, { priority = 9999 }) '
+               'event.register("saved", function() localpatch_save.saving = false end) '
+               'event.register("loaded", function() localpatch_save.saving = false end) '
+               'event.register("menuExit", function() localpatch_save.saving = false end) end end ')
 
 IMAGE_LIT_RE = re.compile(r'(["\'])([^"\'\r\n]{1,260}?)\.(tga|bmp)\1', re.I)
 
@@ -1831,8 +1831,8 @@ def image_findings(src, roots):
 KNOWN_BUGS = [
     ("KB1", "AttendMeMWSE", "attendmemwse/followers.lua",
      "if ref and ref.mobile and not ref.mobile.isDead then",
-     "local mwluafix_ok, mwluafix_alive = pcall(function() return ref.mobile and not ref.mobile.isDead end) "
-     "if ref and mwluafix_ok and mwluafix_alive then",
+     "local localpatch_ok, localpatch_alive = pcall(function() return ref.mobile and not ref.mobile.isDead end) "
+     "if ref and localpatch_ok and localpatch_alive then",
      "refresh() reads .mobile on the references it kept from the last pass; one that was deleted since raises "
      "'sol: received nil for self' every timer tick, and the list is never rebuilt (MWSE.log 2026-11-18)"),
     ("KB2", "UI Expansion", "ui expansion/menudialog.lua",
@@ -1999,6 +1999,84 @@ KNOWN_BUGS += [
 ]
 
 
+KNOWN_BUGS += [
+    ("KB7", "Friends & Frens", "danae/frens/main.lua",
+     '''    if e.newGame then
+        randomiseCompanions()
+    end
+end
+
+event.register("loaded", loaded)''',
+     '''    if e.newGame then
+        randomiseCompanions()
+    end
+end
+
+-- local fix: %Sign is no dialogue variable; the sign is the companion's script local "birthsign" (1-13)
+local birthsigns = { "Tower", "Ritual", "Steed", "Apprentice", "Mage", "Thief", "Lady", "Lover", "Shadow",
+                     "Serpent", "Lord", "Warrior", "Atronach" }
+
+local function nameBirthsign(e)
+    local speaker = tes3ui.getServiceActor()
+    local reference = speaker and speaker.reference
+    local context = reference and reference.context
+    local sign = context and context.birthsign
+    if not sign then return end
+    local text = e.text or e:loadOriginalText()
+    if not text or not text:find("%Sign", 1, true) then return end
+    local name = birthsigns[sign]
+    if name then
+        e.text = text:gsub("%%Sign", name)
+    else
+        e.text = text:gsub("the sign of the %%Sign", "a sign I never learned")
+    end
+end
+event.register("infoGetText", nameBirthsign)
+
+event.register("loaded", loaded)''',
+     "the Abilities response prints '%Sign', which is no dialogue variable: each companion's sign is in the script "
+     "local 'birthsign', which dialogue text cannot show, so it is filled in as the text is read"),
+]
+
+
+KB8 = ("detect invisibility reads actors' spell lists while a save is loading, when they can still hold the saved "
+       "ids instead of spells (CS_Casimir1: 'unknown object type 0x736f6867', the text 'ghos'); it waits for loaded")
+KNOWN_BUGS += [
+    ("KB8", "Tamriel Data", "tamrieldata/magic.lua",
+     '''local function detectInvisibilityValid(ref)
+\tif ref == tes3.player or not ref.mobile then return false end
+''',
+     '''local function detectInvisibilityValid(ref)
+\tif this.loadingInvisible then return false end\t-- local fix: spell lists are not resolved until a save has loaded
+\tif ref == tes3.player or not ref.mobile then return false end
+''', KB8),
+    ("KB8", "Tamriel Data", "tamrieldata/magic.lua",
+     '''function this.onInvisibilityEffectActivated(e)
+\tif e.target and e.target ~= tes3.player and not invisibleReferences[e.target] then
+\t\tif detectInvisibilityValid(e.target) then
+''',
+     '''function this.judgeLoadedInvisible()\t-- simulate too: a load can be cancelled
+\tlocal waiting = this.loadingInvisible
+\tif not waiting then return end
+\tthis.loadingInvisible = nil
+\tfor _, handle in ipairs(waiting) do
+\t\tlocal ref = handle:valid() and handle:getObject()
+\t\tif ref and detectInvisibilityValid(ref) then invisibleReferences[ref] = true end
+\tend
+end
+event.register(tes3.event.load, function() this.loadingInvisible = {} end)
+event.register(tes3.event.loaded, this.judgeLoadedInvisible)
+event.register(tes3.event.simulate, this.judgeLoadedInvisible)
+
+function this.onInvisibilityEffectActivated(e)
+\tif e.target and e.target ~= tes3.player and not invisibleReferences[e.target] then
+\t\tif this.loadingInvisible then
+\t\t\ttable.insert(this.loadingInvisible, tes3.makeSafeObjectHandle(e.target))
+\t\telseif detectInvisibilityValid(e.target) then
+''', KB8),
+]
+
+
 def known_core_context(path):
     """Return an explicitly authorized core file identity; every other MWSE core file remains excluded."""
     norm = os.path.abspath(path).replace("\\", "/")
@@ -2008,7 +2086,7 @@ def known_core_context(path):
             return norm[:-(len(rel) + 1)], rel, plugin
     return None
 
-GATE_HELPER = ("local mwluafix_gate do local last, clock = {}, os.clock mwluafix_gate = function(k, s) "
+GATE_HELPER = ("local localpatch_gate do local last, clock = {}, os.clock localpatch_gate = function(k, s) "
                "local t = clock() local l = last[k] if l and t >= l and t - l < s then return true end "
                "last[k] = t return false end end ")
 
@@ -2021,23 +2099,23 @@ def lua_str(s):
     return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-SHIM_END = "--[[/mwluafix_logshim]]"
+SHIM_END = "--[[/localpatch_logshim]]"
 # keepPatterns that mark a start-up line, not an error: "Registered recipe N" x500 must not flood MWSE.log
 LIFECYCLE_PATTERNS = frozenset({"initializ", "register", "start", "loaded", "ready", "version", "active"})
 # the version-1 shim (print / mwse.log only, no cap, no logger wrap): replaced by the current one on sight
 SHIM_V1_RE = re.compile(r"local print, mwse = \(function\(_p, _m\) local fmt, find, lower, sub = string\.format, "
                         r"[^\n]*?\{ __index = _m, __newindex = _m \}\) end\)\(print, mwse\) ")
-SHIM_V = 4
-SHIM_RE = re.compile(r"local print, mwse, mwluafix_log = \(function\(_p, _m\).*?" +
+SHIM_V = 5
+SHIM_RE = re.compile(r"local print, mwse, localpatch_log = \(function\(_p, _m\).*?" +
                      re.escape(SHIM_END) + r" ")
 LOG_SHIM_LUA = r"""
-local print, mwse, mwluafix_log = (function(_p, _m)
+local print, mwse, localpatch_log = (function(_p, _m)
 local S = package.loaded[@KEY@]
 if type(S) == "table" and S.v == @V@ then return S.print, S.mwse, S end
 S = { v = @V@, redirected = 0, dropped = 0, collapsed = 0 }
 package.loaded[@KEY@] = S
 local C = @CFG@
-local G, MARK = _G, @MARK@
+local G = _G
 local find, lower, sub, gsub, concat, fmt, date, select, tostring, pcall = string.find, string.lower, string.sub, string.gsub, table.concat, string.format, os.date, select, tostring, pcall
 local dir = "Data Files\\MWSE\\logs"
 local path, oldPath = dir .. "\\" .. C.name .. ".log", dir .. "\\" .. C.name .. ".old.log"
@@ -2052,18 +2130,19 @@ if type(p) == "string" and pcall(find, "", p) then out[#out + 1] = { p, not find
 end
 return out
 end
-local KEEP, LIFE, lifeN = compile(C.keep), compile(C.life), 0
+local KEEP, LIFE, lifeN = compile(C.keep), compile(C.life), {}
 local function matches(l, list)
 for i = 1, #list do
-if find(l, list[i][1], 1, list[i][2]) then return true end
+if find(l, list[i][1], 1, list[i][2]) then return i end
 end
-return false
+return nil
 end
 local function isErr(t)
 local l = lower(#t > 4096 and sub(t, 1, 4096) or t)
 if matches(l, KEEP) then return true end
-if started or lifeN >= C.lifeMax or not matches(sub(l, 1, 160), LIFE) then return false end
-lifeN = lifeN + 1
+local word = matches(sub(l, 1, 160), LIFE)
+if not word or (lifeN[word] or 0) >= C.lifeMax then return false end
+lifeN[word] = (lifeN[word] or 0) + 1
 return "life"
 end
 local function out(s)
@@ -2085,7 +2164,7 @@ f = io.open(path, "w")
 bytes, last = 0, nil
 if f then
 pcall(f.setvbuf, f, "full", 16384)
-f:write(date("[%Y-%m-%d %H:%M:%S] "), C.name, ": lines past its MWSE.log allowance (", MARK, ")\n")
+f:write(date("[%Y-%m-%d %H:%M:%S] "), C.name, " log\n")
 end
 return f
 end
@@ -2093,7 +2172,7 @@ local function open()
 pcall(function() lfs.mkdir(dir) end)
 local ok, m = pcall(function() return lfs.attributes(path, "modification") end)
 if ok and type(m) == "number" and m >= t0 then
-path, oldPath = dir .. "\\" .. C.name .. ".luafix.log", dir .. "\\" .. C.name .. ".luafix.old.log"
+path, oldPath = dir .. "\\" .. C.name .. ".routine.log", dir .. "\\" .. C.name .. ".routine.old.log"
 end
 return rotate()
 end
@@ -2156,10 +2235,9 @@ end
 redirected = true
 if not f and not open() then
 dead = true
-_p(fmt("[%s] %s writes a lot to MWSE.log, but %s can't be opened: leaving it here", MARK, C.name, path))
+_p(fmt("[log redirect] %s: %s can't be opened, logging here", C.name, path))
 return true
 end
-_p(fmt("[%s] %s has written %d line(s) to MWSE.log; its further output goes to %s (errors still show here)", MARK, C.name, init + run, path))
 end
 if dead or not f then return true end
 toFile(t)
@@ -2168,7 +2246,7 @@ end
 local function fail(e)
 fails = fails + 1
 if fails >= 10 then dead = true end
-if fails == 1 then pcall(_p, fmt("[%s] %s: log shim error (the line went to MWSE.log): %s", MARK, C.name, tostring(e))) end
+if fails == 1 then pcall(_p, fmt("[log redirect] %s: log write failed, logging here: %s", C.name, tostring(e))) end
 end
 local function decidePrint(n, ...)
 local t
@@ -2250,29 +2328,39 @@ getmetatable(p).__gc = function() pcall(flushAll) end
 S.gc = p
 end)
 return S.print, S.mwse, S
-end)(print, mwse) --[[/mwluafix_logshim]]
+end)(print, mwse) --[[/localpatch_logshim]]
 """
 
 
 def log_shim(mod_key, cfg):
-    """The log shim, on one line (so no line number moves): local print, mwse and mwluafix_log for this file
+    """The log shim, on one line (so no line number moves): local print, mwse and localpatch_log for this file
     only (nothing global changes). The state lives in package.loaded, one per mod, built by whichever of the
     mod's files loads first. Like the old mwguard's log-spam guard: the first budgetInit lines (budget more after
-    the initialized event) and anything that looks like an error reach MWSE.log; the rest go to
-    Data Files\\MWSE\\logs\\<mod>.log (<mod>.luafix.log when something else wrote that file this session),
+    the initialized event), errors and the first few start-up lines of each kind reach MWSE.log, with no
+    line of this tool's own; the rest go to
+    Data Files\\MWSE\\logs\\<mod>.log (<mod>.routine.log when something else wrote that file this session),
     with identical lines collapsed, a per-second cap and rotation at maxMB. trace/debug/info of the mod's own
     loggers (wrapped where it creates them) are sent through the same route; warn/error are left alone. Every
     file operation is pcall'd or returns nil; ten internal errors and it passes everything through."""
     lc = cfg["log"]
     keep = ", ".join(lua_str(p) for p in lc["keepPatterns"] if p not in LIFECYCLE_PATTERNS)
-    life = ", ".join(lua_str(p) for p in lc["keepPatterns"] if p in LIFECYCLE_PATTERNS)
+    life = ", ".join(lua_str("initiali" if p == "initializ" else p)          # also "initialised"
+                     for p in lc["keepPatterns"] if p in LIFECYCLE_PATTERNS)
     conf = (f'{{ name = {lua_str(log_name(mod_key))}, init = {int(lc["budgetInit"])}, after = {int(lc["budget"])}, '
-            f'keep = {{ {keep} }}, life = {{ {life} }}, lifeMax = {int(lc.get("lifecycleMax", 20))}, perSecond = {int(lc["perSecond"])}, maxBytes = {int(float(lc["maxMB"]) * 1048576)}, '
+            f'keep = {{ {keep} }}, life = {{ {life} }}, lifeMax = {int(lc.get("lifecycleMax", 5))}, perSecond = {int(lc["perSecond"])}, maxBytes = {int(float(lc["maxMB"]) * 1048576)}, '
             f'keepOld = {int(lc["keepOld"])}, flushSeconds = {float(lc["flushSeconds"])}, '
             f'errorRepeat = {int(lc["errorRepeat"])} }}')
     body = " ".join(l for l in LOG_SHIM_LUA.split("\n") if l)
-    return (body.replace("@KEY@", lua_str("mwluafix_logshim:" + log_name(mod_key))).replace("@V@", str(SHIM_V))
-            .replace("@CFG@", conf).replace("@MARK@", lua_str(MARK)) + " ")
+    return (body.replace("@KEY@", lua_str("localpatch_logshim:" + log_name(mod_key))).replace("@V@", str(SHIM_V))
+            .replace("@CFG@", conf) + " ")
+
+
+def unbrand(src):
+    """A file patched by version 4 or older, with this tool's name taken out of what was injected."""
+    if "mwluafix" not in src and "mwdialog_luafix" not in src:
+        return src
+    return (src.replace("mwdialog_luafix", MARK).replace("-- mwluafix KB7:", "-- local fix:")
+            .replace("mwluafix_", "localpatch_"))
 
 
 MARK_RE = re.compile(r"--\[\[" + MARK + r" (\d+): ([^\]]*)\]\] ")
@@ -2326,9 +2414,9 @@ def build_patch(src, findings, mod_key, cfg, level="high", want_shim=False):
     head = f"--[[{MARK} {VERSION}: {' '.join(allr)}]] "
     if "shim" in needs and old is None:
         head += replacement
-    if "gate" in needs and "mwluafix_gate = function" not in src:
+    if "gate" in needs and "localpatch_gate = function" not in src:
         head += GATE_HELPER
-    if "savestate" in needs and "mwluafix_savestate" not in src:
+    if "savestate" in needs and "localpatch_savestate" not in src:
         head += SAVE_HELPER
     out = out[:ip] + head + out[m.end() if m else ip:]
     return out, sorted(set(rules))
@@ -2491,14 +2579,17 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
                     ent.update(error=hit.get("err"), logs=hit.get("logs", 0), requires=hit.get("req", []),
                                mcalls=[tuple(x) for x in hit["mc"]],
                                mfields=set(hit["mf"]) if hit.get("mf") is not None else None,
-                               sha=hit.get("sha"), cached=True, old_shim=hit.get("v1", False),
+                               sha=hit.get("sha"), cached=True, old_shim=hit.get("v1", False), branded=hit.get("br", False),
                                findings=[Finding(f, edits=[], needs=set(f.get("needs", []))) for f in hit["f"]])
                     continue
             with open(p, "rb") as f:
                 b = f.read()
             ent["sha"] = sha(b)
             try:
-                a = analyses[p] = _analyse(b.decode("latin-1"), key, rel, cfg)
+                raw = b.decode("latin-1")
+                src = unbrand(raw)
+                ent["branded"] = src != raw
+                a = analyses[p] = _analyse(src, key, rel, cfg)
                 ent.update(findings=a.findings, logs=a.log_calls(), requires=a.requires(), old_shim=a.old_shim,
                            mcalls=a.module_calls(), mfields=a.module_fields())
             except L.LuaSyntaxError as e:
@@ -2508,7 +2599,7 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
             if cache is not None:
                 cache.put(ckey, ah.stamp_of(st), {
                     "cfg": ch, "err": ent["error"], "logs": ent["logs"], "req": ent["requires"], "sha": ent["sha"],
-                    "v1": ent.get("old_shim", False), "mc": ent["mcalls"],
+                    "v1": ent.get("old_shim", False), "br": ent.get("branded", False), "mc": ent["mcalls"],
                     "mf": sorted(ent["mfields"]) if ent["mfields"] is not None else None,
                     "f": [dict({k: v for k, v in f.items() if k not in ("edits", "needs")}, needs=sorted(f["needs"]),
                                fixable=bool(f["edits"])) for f in ent["findings"]]})
@@ -2568,7 +2659,7 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
                 key.split("/", 1)[0].lower() in OWN_MODS else None
             if log_exempt(cfg, key):
                 with open(p, encoding="latin-1") as fh:
-                    old_text = fh.read()
+                    old_text = unbrand(fh.read())
                 new_text = remove_log_shim(old_text)
                 if new_text is not None:
                     ent["patch"] = verify_patch(old_text, new_text, ["F1"], checker, key, rel, cfg, level, own_rules)
@@ -2577,7 +2668,7 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
                 bool(ent.get("old_shim"))
             fixable = any((f["edits"] or f.get("fixable")) and f["conf"] in fix_conf and
                           (own_rules is None or f["rule"] in own_rules) for f in ent["findings"])
-            if not (fixable or want_shim):
+            if not (fixable or want_shim or ent.get("branded")):
                 continue
             a = analyses.get(p)
             if a is None:                              # from the cache: read it again to build the patch
@@ -2585,7 +2676,7 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
                     b = fh.read()
                 ent["sha"] = sha(b)
                 try:
-                    a = _analyse(b.decode("latin-1"), key, rel, cfg)
+                    a = _analyse(unbrand(b.decode("latin-1")), key, rel, cfg)
                 except (L.LuaSyntaxError, RecursionError) as e:
                     ent["error"] = f"can't be parsed ({e}); left alone"
                     continue
@@ -2600,6 +2691,8 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
             if own_rules is not None:
                 findings = [f for f in findings if f["rule"] in own_rules]
             new, rules = build_patch(a.src, findings, key, cfg, level, want_shim)
+            if new is None and ent.get("branded"):
+                new, rules = a.src, ["N1"]                # only the names left by an older version
             if new is not None:
                 ent["patch"] = verify_patch(a.src, new, rules, checker, key, rel, cfg, level, own_rules)
     return rep

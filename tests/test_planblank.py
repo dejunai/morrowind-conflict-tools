@@ -191,7 +191,7 @@ def test_tidy_lua_only_apply_blanks_lua_but_keeps_pending_moves(tidy_lua):
     plan = open(vt.PLAN).read()
     assert plan.count("\nLUA CHECK\n") == 1 and "readme.txt  ->" in plan
     assert tidy_lua("--lua-only", "--apply", "--yes") == 1                    # moves still pending: exit 1
-    assert "mwluafix_gate(" in tidy_lua.lua.read_text()
+    assert "localpatch_gate(" in tidy_lua.lua.read_text()
     plan = open(vt.PLAN).read()
     assert "readme.txt  ->" in plan and "puddle/main.lua" not in plan and "LUA CHECK" not in plan
     assert tidy_lua("--apply", "--yes") == 0                                  # moves applied: now blank
@@ -229,7 +229,7 @@ def luafix(tmp_path, monkeypatch):
 def test_luafix_apply_blanks_the_plan_with_an_audit_copy_and_second_apply_is_a_no_op(luafix, capsys):
     assert luafix() == 0 and PF.state(lf.PLAN_FILE) == "pending"
     assert luafix("--apply", "--yes") == 0
-    assert all("mwluafix_gate(" in f.read_text() for f in luafix.files)
+    assert all("localpatch_gate(" in f.read_text() for f in luafix.files)
     assert PF.state(lf.PLAN_FILE) == "applied"
     assert "mwdialog_luafix.py --apply; nothing pending" in open(lf.PLAN_FILE).read()
     (run,) = [json.loads(x) for x in open(lf.JOURNAL) if '"run"' in x]
@@ -328,7 +328,7 @@ def test_tidy_lua_only_compares_only_the_lua_section(tidy_lua, capsys):
     tidy_lua()                                                               # full plan: moves + Lua
     (tidy_lua.mod / "changelog.txt").write_text("a move the plan doesn't have")
     assert tidy_lua("--lua-only", "--apply", "--yes") == 1                   # moves differ: not compared
-    assert "mwluafix_gate(" in tidy_lua.lua.read_text()
+    assert "localpatch_gate(" in tidy_lua.lua.read_text()
     assert (tidy_lua.mod / "changelog.txt").exists()                         # --lua-only moves nothing
 
 
@@ -337,7 +337,7 @@ def test_tidy_lua_only_mismatch_refuses(tidy_lua, capsys):
     tidy_lua.lua.write_text(PUDDLE.replace("0.35", "x").replace("bigger", "much bigger"))   # patch text changes
     capsys.readouterr()
     assert tidy_lua("--lua-only", "--apply", "--yes") == 2
-    assert "REFUSED" in capsys.readouterr().out and "mwluafix_gate(" not in tidy_lua.lua.read_text()
+    assert "REFUSED" in capsys.readouterr().out and "localpatch_gate(" not in tidy_lua.lua.read_text()
     assert os.path.exists(os.path.splitext(vt.PLAN)[0] + ".prev.txt")
 
 
@@ -384,10 +384,10 @@ def test_luafix_mismatch_refuses_and_keeps_prev(luafix, capsys):
     assert luafix("--apply", "--yes") == 2
     out = capsys.readouterr().out
     assert "REFUSED" in out and "0 action(s) added" in out
-    assert "mwluafix_gate(" not in luafix.files[0].read_text()
+    assert "localpatch_gate(" not in luafix.files[0].read_text()
     prev = os.path.splitext(lf.PLAN_FILE)[0] + ".prev.txt"
     assert "b/main.lua" in open(prev).read() and "b/main.lua" not in open(lf.PLAN_FILE).read()
-    assert luafix("--apply", "--yes") == 0 and "mwluafix_gate(" in luafix.files[0].read_text()
+    assert luafix("--apply", "--yes") == 0 and "localpatch_gate(" in luafix.files[0].read_text()
 
 
 def test_luafix_missing_plan_refuses(luafix, capsys):

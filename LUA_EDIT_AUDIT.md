@@ -25,7 +25,7 @@ Docs: **BUGS #n** = `LUA_MOD_BUGS.md` section n. **Guide X** = category X of `# 
 
 ## 2. MWSE core (owner: MWSE, installed 2026-11-10 by MWSE-Update; original from GitHub)
 
-The next MWSE-Update will overwrite all of these. Antigravity also patched `core\mcm\components\settings\Binder.lua` (`update_binder.py`, 11-05) and `core\mwse\magic\tes3.lua` (`patch_mwse_magic_nil.py`, 11-05). The 11-10 MWSE-Update already reverted both (they now match GitHub).
+The next MWSE-Update will overwrite all of these. Antigravity also patched `core\mcm\components\settings\Binder.lua` (`update_binder.py`, 11-05) and `core\mwse\magic\tes3.lua` (`patch_mwse_magic_nil.py`, 11-05). The 11-10 MWSE-Update already reverted both (they now match GitHub). The magic fix is replaced by luafix KB8 (2026-11-22, LUA_MOD_BUGS 43).
 
 | path | owning mod | archive | has .bak | timestamp | change summary | verdict | documented |
 |---|---|---|---|---|---|---|---|
@@ -97,7 +97,7 @@ These folders have no external original, so there is nothing to diff against exc
 
 ## 6. Third-party files changed only by our own `mwdialog_luafix.py`
 
-These edits are mechanical. Every patch is marked `--[[mwdialog_luafix N: RULE]]` (nil guards and priority numbers are unmarked by design). Each one was backed up first under `mwdialog_backup\luafix\<run>\`. Luafix runs: 11-11 15:15, 16:19, 16:32 and 17:47; 11-14 11:30 and 13:52; 11-16 22:55. Luafix is our tool, but it still writes into third-party files, so any Vortex reinstall of these mods discards the patches.
+These edits are mechanical. Every patch is marked `--[[localpatch N: RULE]]` (before v5: `--[[mwdialog_luafix N: RULE]]`) (nil guards and priority numbers are unmarked by design). Each one was backed up first under `mwdialog_backup\luafix\<run>\`. Luafix runs: 11-11 15:15, 16:19, 16:32 and 17:47; 11-14 11:30 and 13:52; 11-16 22:55. Luafix is our tool, but it still writes into third-party files, so any Vortex reinstall of these mods discards the patches.
 
 | path | owning mod (Vortex folder) | archive | has .bak | timestamp | change summary | verdict | documented |
 |---|---|---|---|---|---|---|---|

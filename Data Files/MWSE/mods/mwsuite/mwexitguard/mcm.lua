@@ -52,3 +52,5 @@ page:createYesNoButton({
         table = config,
     }),
 })
+
+template:register()

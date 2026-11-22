@@ -15,6 +15,9 @@
     each NPC. Hidden performers are only disabled, never deleted;
     the Mod Config menu can show them all again, or hide the doubles again.
     Decisions are written to Data Files\MWSE\logs\mwperformers.log.
+
+    While it is on, a bard also stops singing while you talk to them, and holds their lute (Weapon
+    Sheathing showed it on the back, as it is a shield).
 ]]
 
 local CONFIG_NAME = "mwperformers"
@@ -207,8 +210,6 @@ event.register(tes3.event.loaded, function()
 end)
 
 -- bard audio & visual fixes -----------------------------------------------------------------------
-local activeDialogueBard = nil
-
 local function isBardRef(ref)
     if not ref or not ref.object then return false end
     local base = ref.object.baseObject or ref.object
@@ -218,76 +219,57 @@ local function isBardRef(ref)
     return false
 end
 
--- Fix lute placement on Animated Morrowind bards (am_bard2 has a duplicate lute on its back)
-local function fixBardVisuals(ref)
-    if not ref or not ref.sceneNode then return end
-    local base = ref.object.baseObject or ref.object
-    local mesh = base and base.mesh
-    if mesh and mesh:lower():find("am_bard2") then
-        local spine = ref.sceneNode:getObjectByName("Bip01 Spine2")
-        if spine then
-            local backLute = spine:getObjectByName("Misc_de_lute_01")
-            if backLute then
-                backLute.appCulled = true
-            end
+-- AM_Lute is a shield: with "show unreadied shields on back" Weapon Sheathing hangs it on the bard's back and hides
+-- his hand's shield bone. A lute shield goes on that mod's exclusion list, which it reads each time it draws one.
+event.register(tes3.event.initialized, function()
+    if not config.enabled then return end
+    local sheathing = include("weaponSheathing.config")
+    if not sheathing or type(sheathing.blocked) ~= "table" then return end
+    for obj in tes3.iterateObjects(tes3.objectType.armor) do
+        if obj.slot == tes3.armorSlot.shield and obj.mesh and obj.mesh:lower():find("misc_de_lute", 1, true) then
+            sheathing.blocked[obj.id:lower()] = true
         end
     end
+end)
+
+-- The singing scripts have no MenuMode check, so cutting the song only makes them Say the next. All begin
+-- "if ( state ) / set state to 0 / return": state is set again each frame of the dialogue, so each is skipped.
+-- positionOnce tells that script family from another script's own "state".
+local quietBard                          -- safe handle, only while the dialogue is open
+
+local function skipScriptFrame(ref)
+    local context = ref.context
+    if context and context.state ~= nil and context.positiononce ~= nil then context.state = 1 end
 end
 
--- Allow non-Argonians to equip AM_Lute in hand (Bards of Bardenfell restricted AM_Lute_Bp to Argonian)
-event.register(tes3.event.bodyPartAssigned, function(e)
-    if e.object and e.object.id and e.object.id:lower() == "am_lute" then
-        local bp = tes3.getObject("AM_Lute_Bp")
-        if bp then
-            e.bodyPart = bp
-        end
-    end
-end)
+local function keepQuiet()
+    if quietBard and quietBard:valid() then skipScriptFrame(quietBard:getObject()) end
+end
 
-event.register(tes3.event.mobileActivated, function(e)
-    if isBardRef(e.reference) then
-        fixBardVisuals(e.reference)
-    end
-end)
+local function endQuiet()
+    if not quietBard then return end
+    quietBard = nil
+    event.unregister(tes3.event.enterFrame, keepQuiet)
+end
 
--- Stop singing when talking to the bard
 local function onMenuDialogActivated(e)
     local target = tes3ui.getServiceActor()
     if not target then
         local menu = e.element or tes3ui.findMenu("MenuDialog")
-        local mobileActor = menu and menu:getPropertyObject("PartHyperText_actor")
-        target = mobileActor
+        target = menu and menu:getPropertyObject("PartHyperText_actor")
     end
-    if not target then
-        target = tes3.getPlayerTarget()
-    end
-
-    if target and target.reference and isBardRef(target.reference) then
-        activeDialogueBard = target.reference
-        tes3.removeSound({ reference = activeDialogueBard })
-        if target.stopDialogue then
-            target:stopDialogue()
-        end
-        log("%s: silenced singing during dialogue", describe(activeDialogueBard))
-    else
-        activeDialogueBard = nil
-    end
+    local ref = target and target.reference
+    endQuiet()
+    if not config.enabled or not ref or not isBardRef(ref) then return end
+    quietBard = tes3.makeSafeObjectHandle(ref)
+    skipScriptFrame(ref)                 -- first, or the script starts the next song
+    tes3.removeSound({ reference = ref })
+    event.register(tes3.event.enterFrame, keepQuiet)
+    log("%s: singing paused for the dialogue", describe(ref))
 end
 event.register(tes3.event.uiActivated, onMenuDialogActivated, { filter = "MenuDialog" })
-
-local function onMenuDialogDestroyed()
-    activeDialogueBard = nil
-end
-event.register(tes3.event.menuExit, onMenuDialogDestroyed)
-
--- Block voiceover songs on the bard while in dialogue
-event.register(tes3.event.addSound, function(e)
-    if activeDialogueBard and e.reference == activeDialogueBard then
-        if e.isVoiceover or (e.sound and e.sound.id:lower():find("bard")) then
-            return false
-        end
-    end
-end)
+event.register(tes3.event.menuExit, endQuiet)
+event.register(tes3.event.loaded, endQuiet)
 
 -- Mod Config menu ---------------------------------------------------------------------------------
 event.register(tes3.event.modConfigReady, function()
@@ -297,7 +279,9 @@ event.register(tes3.event.modConfigReady, function()
         label = "Settings",
         description = "Where two or more mods put performers in the same interior, the mod that loads last "
             .. "keeps its performers and the others' are hidden (disabled, never deleted). Decided on each "
-            .. "visit, so it follows your load order. Decisions go to MWSE\\logs\\mwperformers.log.",
+            .. "visit, so it follows your load order. Decisions go to MWSE\\logs\\mwperformers.log."
+            .. "\n\nAlso, while it is on, bards stop singing while you talk to them, and hold their lute instead "
+            .. "of Weapon Sheathing showing it on their back (the lute part takes effect after a restart).",
     })
     page:createOnOffButton({
         label = "Hide doubled performers",

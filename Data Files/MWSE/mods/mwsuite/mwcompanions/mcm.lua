@@ -48,6 +48,9 @@ slider(fight, "collapseSeconds", "Collapse time: %s s",
     "How long a protected follower stays unconscious before recovering.", 10, 300, 5)
 slider(fight, "collapseHealth", "Health after a collapse: %s%%",
     "Percentage of base health restored when a protected follower collapses.", 10, 100, 5)
+yesNo(fight, "sheatheAfterCombat", "Companions put their weapon away after a fight",
+    "The game can leave a companion standing combat-ready after the enemy is gone. Within a second of neither of you "
+        .. "fighting, while your own weapon and spell are away, the companion's weapon is put away too.")
 yesNo(fight, "assist", "Companions defend the player",
     "Companions attack whoever starts a fight with the player. Escorted NPCs never do.")
 yesNo(fight, "escortSelfDefense", "Escorted NPCs only defend themselves",

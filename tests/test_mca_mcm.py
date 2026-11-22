@@ -38,6 +38,7 @@ local config = setmetatable({ save = function() end }, { __index = function(_, k
     if key:match("^is") then return function() return false end end
 end })
 package.preload["mwpluginpatches.config"] = function() return config end
+tes3 = { objectType = { miscItem = 1 } }
 mwse = { mcm = {
     createTemplate = function() return newNode() end,
     createTableVariable = function(data) return data end,
@@ -49,7 +50,7 @@ for i, option in ipairs({ "2-5", "2-10", "2-20" }) do
     assert(party.data.options[i].label == option and party.data.options[i].value == i - 1)
 end
 assert(#party.data.options == 3)
-assert(settings.arrilleInnCompatibilityEnabled and not settings.doorLockCompatibilityEnabled)
+assert(not settings.arrilleInnCompatibilityEnabled and not settings.doorLockCompatibilityEnabled)
 assert(not settings.doorLockedNotification)
 local courtesans = settings.mcaCourtesans.data.options
 for i, pair in ipairs({ {"Enable", "all"}, {"Disable", "none"}, {"Disable male only", "female"},
@@ -72,6 +73,27 @@ tes3 = setmetatable({}, { __index = function() return function() return nil end 
 lfs = { fileexists = function() return false end }
 local config = require("mwpluginpatches.config")
 assert(config.mcaPartySize == 2 and saved == 2 and logged:find("invalid", 1, true))
+''')
+
+
+def test_retired_door_switches_are_cleared_from_saved_settings():
+    run(r'''
+package.path = [[MODS\?.lua;]] .. package.path
+local saved
+mwse = {
+    loadConfig = function(name)
+        if name == "mwpluginpatches" then
+            return { arrilleInnCompatibilityEnabled = true, doorLockCompatibilityEnabled = true, enabled = true }
+        end
+    end,
+    saveConfig = function(_, value) saved = value end,
+    log = function() end,
+}
+tes3 = setmetatable({}, { __index = function() return function() return nil end end })
+lfs = { fileexists = function() return false end }
+local config = require("mwpluginpatches.config")
+assert(saved and saved.enabled == true)
+assert(saved.arrilleInnCompatibilityEnabled == nil and saved.doorLockCompatibilityEnabled == nil)
 ''')
 
 
