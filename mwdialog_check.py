@@ -4858,8 +4858,17 @@ def run_cell_conflicts(args, plugins, collect=False):
     order = [(n, p) for n, p in plugins if n.lower() not in skip]
     pos = {n.lower(): i for i, (n, _p) in enumerate(order)}
     name_of = {n.lower(): n for n, _p in order}
+    # our own patches load in game too: what they move or delete counts for mwfloatfix (history only, never
+    # judged as conflicts); each sits between the plugins around it in the load order
+    ours_hist, hist_pos, seen_n = [], {}, 0
+    for n, p in plugins:
+        if n.lower() in skip:
+            ours_hist.append((n, p))
+            hist_pos[n.lower()] = seen_n - 0.5
+        else:
+            seen_n += 1
     masters = {}
-    for n, p in order:
+    for n, p in order + ours_hist:
         try:
             masters[n.lower()] = [m.lower() for m in read_header_masters(p)]
         except (OSError, FormatError):
@@ -4904,13 +4913,14 @@ def run_cell_conflicts(args, plugins, collect=False):
             return
         mast = masters.get(n.lower(), [])
         esm = n.lower().endswith(".esm")
+        ix = pos[n.lower()] if n.lower() in pos else hist_pos[n.lower()]
         for off, tag, flags, body in iter_records(data):
             if tag == "LAND" and own_digests is None:     # for mwfloatfix_data.json: whose land an item sits on
                 iv, vh = first_sub(body, b"INTV"), first_sub(body, b"VHGT")
                 if iv and len(iv) >= 8 and vh:
                     g = struct.unpack_from("<ii", iv)
                     if keys is None or ("e",) + g in hist_keys:
-                        land_v[g].append((pos[n.lower()], n.lower(), vh))
+                        land_v[g].append((ix, n.lower(), vh))
                 continue
             if tag != "CELL":
                 continue
@@ -4944,7 +4954,7 @@ def run_cell_conflicts(args, plugins, collect=False):
                     dd = next((d for s, d in block if s == "DATA" and len(d) >= 24), None)
                     sc = next((struct.unpack_from("<f", d)[0] for s, d in block if s == "XSCL" and len(d) >= 4), 1.0)
                     ref_hist[key].setdefault(bk, []).append(
-                        (pos[n.lower()], n.lower(), oid, struct.unpack_from("<3f", dd) if dd else None, sc, deleted))
+                        (ix, n.lower(), oid, struct.unpack_from("<3f", dd) if dd else None, sc, deleted))
                     if hist_only:
                         continue
                 # the last version of each door's destination (.esm files are read after the .esp files,
@@ -4991,6 +5001,8 @@ def run_cell_conflicts(args, plugins, collect=False):
     for n, p in order:
         if n.lower().endswith(".esm"):
             read(n, p, keys=esp_cells, hist_keys=esp_touched)
+    for n, p in ours_hist:
+        read(n, p, keys=set(), hist_keys=esp_touched)
     for (key, bk), (_pi, x, y, z) in moved.items():
         v = own_pos.get(key, {}).get(bk)
         if v is not None and pos.get(v[4], -1) < _pi:
@@ -9102,6 +9114,12 @@ def _main(argv=None):
                          f"('{AUTO_MERGE_NAME}', or --merge-name), and deactivate them (recorded in {MERGE_RECORD}; "
                          f"--add-all-esp leaves them out). Use --dry-run first")
     mg.add_argument("--merge-name", metavar="NAME.esp", help="with --auto-merge: the merged plugin's name")
+    mg.add_argument("--merge-plan", action="store_true",
+                    help="recommend merges --auto-merge doesn't make (plugins with scripts, cells, land or "
+                         "pathgrids), grouped by kind; read-only: writes mwdialog_merge_plan.txt and .json. "
+                         "Merges that place objects in cells need a new game")
+    mg.add_argument("--plan-size", type=int, default=8, metavar="N",
+                    help="with --merge-plan: at most N plugins per merge (small patches aren't capped)")
     mg.add_argument("--no-follow-up", "--no-follow-fix", dest="no_follow_fix", action="store_true",
                     help="don't run the usual follow-ups: --fix --multipatch after --auto-merge or a --sort "
                          "that changed the order, --add-all-esp --sort after --unmerge, and --fix's own re-scans "
@@ -9328,7 +9346,7 @@ def _main(argv=None):
     if args.play:
         actions = (args.sort, args.add_all_esp, args.clean, args.fix, args.multipatch, args.patch_esm,
                    args.header, args.trace, args.restore, args.restore_all, args.restore_dates, args.csv,
-                   args.clean_up, args.merge, args.auto_merge, args.unmerge is not None, args.cell_conflicts, args.reenable is not None, args.remove_generated,
+                   args.clean_up, args.merge, args.auto_merge, args.merge_plan, args.unmerge is not None, args.cell_conflicts, args.reenable is not None, args.remove_generated,
                    args.redundant, args.redundant_auto, args.redundant_undo is not None, args.restore_textures,
                    args.update_rules)
         if not any(actions):                 # --play on its own: just start the game
@@ -9375,6 +9393,17 @@ def _main(argv=None):
 
     report = Report()
     plugins, bsas, data_dirs = resolve(args, report)
+    if args.merge_plan:
+        import mwdialog_mergeplan as MPL
+        data_dir = os.path.abspath(args.data_dir)
+        print(f"Reading {len(plugins)} plugins...", file=sys.stderr)
+        plan = MPL.recommend(plugins, data_dir, os.path.dirname(data_dir), max(2, args.plan_size),
+                             log=lambda s: print(s, file=sys.stderr))
+        path = MPL.write_plan(plan, os.path.dirname(data_dir), len(plugins))
+        merged = sum(len(g["inputs"]) for g in plan["groups"])
+        print(f"Merge plan: {merged} plugin(s) in {len(plan['groups'])} merge(s) would free "
+              f"{merged - len(plan['groups'])} slot(s). Report: {path}")
+        return 0
     if args.unmerge is not None:
         rc = run_unmerge(args, plugins)
         if rc == 0 and not args.no_follow_fix:

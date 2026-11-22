@@ -35,14 +35,30 @@ AUTO_SKIP_TAGS = {"CELL", "LAND", "PGRD"}          # placing/moving objects, lan
 SCRIPT_REF_RE = re.compile(r'"([^"\n]+)"|([A-Za-z_][\w\'\-]*)')
 
 
+SUITE_DATA = {"mwcollide_data.json", "mwfloatfix_data.json", "mwstranded_data.json", "mwsoundguard_data.json"}
+MWSE_UNLOADED = {"backups", "off", "logs", ".vscode"}
+
+
 def lua_named_plugins(data_dir):
-    """Plugin names that MWSE Lua mods mention (e.g. tes3.isModActive("X.esp")): never merged away."""
+    """Plugin names that MWSE Lua mods mention (e.g. tes3.isModActive("X.esp")): never merged away.
+    Only what MWSE loads counts: not backups or switched-off mods, not this suite's generated data (rebuilt
+    after a merge), and a config\\*.json only when its mod is installed."""
     names = set()
     pat = re.compile(r'"([^"\n]{1,120}\.(?:esp|esm))"|\'([^\'\n]{1,120}\.(?:esp|esm))\'|\[\[([^\]\n]{1,120}\.(?:esp|esm))\]\]',
                      re.I)
-    files = []
-    for base, _dirs, fns in os.walk(os.path.join(data_dir, "MWSE")):
-        files += [os.path.join(base, fn) for fn in fns if fn.lower().endswith((".lua", ".toml", ".json"))]
+    mwse = os.path.join(data_dir, "MWSE")
+    files, mod_dirs, configs = [], set(), []
+    for base, dirs, fns in os.walk(mwse):
+        if base == mwse:
+            dirs[:] = [d for d in dirs if d.lower() not in MWSE_UNLOADED]
+        rel = os.path.relpath(base, mwse).lower()
+        if rel.split(os.sep)[0] in ("mods", "lua"):
+            mod_dirs.update(d.lower() for d in dirs)
+        for fn in fns:
+            if not fn.lower().endswith((".lua", ".toml", ".json")) or fn.lower() in SUITE_DATA:
+                continue
+            (configs if rel == "config" else files).append(os.path.join(base, fn))
+    files += [c for c in configs if os.path.splitext(os.path.basename(c))[0].lower() in mod_dirs]
     try:                                    # MWSE metadata files (*-metadata.toml) list required plugins
         files += [os.path.join(data_dir, fn) for fn in os.listdir(data_dir) if fn.lower().endswith(".toml")]
     except OSError:

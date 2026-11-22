@@ -66,6 +66,28 @@ def test_a_blacklisted_plugin_still_counts_for_what_it_takes_away(tmp_path):
                                "why": "dock deleted by ports.esp"}]
 
 
+def test_a_dock_our_own_patch_deletes_again_still_lists_the_bucket_on_it(tmp_path):
+    """Ports deletes the dock, Sounds puts it back, our Cell Fixes deletes it again: the game loads our patch too,
+    so the bucket on that dock is listed (the chargen dock bucket)."""
+    data = tmp_path / "Data Files"
+    data.mkdir()
+    size = len(plugin(data / "Master.esm", [], [
+        rec("STAT", sub("NAME", z("dock")) + sub("MODL", z("dock.nif"))),
+        rec("MISC", sub("NAME", z("bucket")) + sub("MODL", z("bucket.nif"))),
+        _cell(_ref(1, "dock", 100.0, 0.0))]))
+    plugin(data / "Ports.esp", [("Master.esm", size)], [_cell(_ref((1 << 24) | 1, "dock", 0, 0, deleted=True))])
+    plugin(data / "Sounds.esp", [("Master.esm", size)], [_cell(_ref((1 << 24) | 1, "dock", 100.0, 0.0))])
+    plugin(data / "Squat.esp", [("Master.esm", size)], [_cell(_ref(1, "bucket", 110.0, 34.0))])
+    fixes = next(x for x in m.OUR_PATCHES if "cell fixes" in x.lower())
+    plugin(data / fixes, [("Master.esm", size)], [_cell(_ref((1 << 24) | 1, "dock", 0, 0, deleted=True))])
+    order = ["Master.esm", "Ports.esp", "Sounds.esp", "Squat.esp", fixes]
+    args = types.SimpleNamespace(data_dir=str(data), dry_run=False)
+    m.run_cell_conflicts(args, [(n, str(data / n)) for n in order])
+    listed = json.loads((data / "MWSE" / "config" / "mwfloatfix_data.json").read_text())["cells"]
+    assert listed["#0,0"] == [{"id": "bucket", "pos": [110, 100, 34], "from": "Squat.esp",
+                               "why": f"dock deleted by {fixes.lower()}"}]
+
+
 SCRIPT = r"""
 local handlers, clock = {}, 0
 os.clock = function() return clock end
