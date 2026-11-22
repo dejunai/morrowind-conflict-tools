@@ -26,6 +26,12 @@ def refs(*names):
         for i, n in enumerate(names, 1)))
 
 
+def test_luafix_direct_run_refuses_a_held_game_lock(monkeypatch, capsys):
+    monkeypatch.setattr(MP, "acquire_game_lock", lambda _game: False)
+    assert L.main(["--undo"]) == 1
+    assert MP.RUN_LOCKED_MESSAGE in capsys.readouterr().err
+
+
 @pytest.fixture
 def df(tmp_path):
     d = tmp_path / "Morrowind" / "Data Files"
@@ -281,6 +287,19 @@ def test_a_run_refuses_a_game_another_one_holds(df):
         holder.communicate("")
 
 
+def test_a_lock_file_without_a_token_delegates_to_nobody(df, monkeypatch):
+    code = ("import sys, mwdialog_paths as P; P.GAME_LOCK_DIR = sys.argv[1]; P.acquire_game_lock(sys.argv[2]); "
+            "h = next(iter(P._RUN_LOCKS.values())); h.write(b'{}'); h.flush(); print('held', flush=True); sys.stdin.read()")
+    holder = subprocess.Popen([sys.executable, "-B", "-c", code, MP.GAME_LOCK_DIR, str(df.parent)], cwd=SRC,
+                              stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+    try:
+        assert holder.stdout.readline().strip() == "held"
+        monkeypatch.delenv("MWMANAGER_DELEGATED_LOCKS", raising=False)
+        assert not MP.acquire_game_lock(str(df.parent))
+    finally:
+        holder.communicate("")
+
+
 # -------------------------------------------------------------------------------------------------------- Lua
 
 LUAJIT = os.environ.get("MWMANAGER_LUAJIT", os.path.join(SRC, "tools", "luajit", "luajit.exe"))
@@ -381,8 +400,9 @@ package.preload["mwpersonaleffects.config"] = function() return { enabled = true
 assert(loadfile("MODS/mwpersonaleffects/main.lua"))()
 fire("initialized")
 local chest = { baseObject = { id = "R0_pe_basecont" }, object = { inventory = {} }, enable = function() end }
+local itemData = { condition = 17 }
 local ring = { baseObject = { id = "R0_pe_cont_mage" }, position = { x = 0, y = 0, z = 0 },
-               object = { inventory = { { object = { id = "ring" }, count = 1 } } } }
+               object = { inventory = { { object = { id = "ring" }, count = 1, variables = { itemData } } } } }
 ring.disable = function() ring.disabled = true end
 local cell = { id = "Seyda Neen, Census and Excise Office", iterateReferences = function() local d = false
   return function() if not d then d = true return ring end end end }
@@ -399,7 +419,15 @@ tes3.addItem = function(p)
   got[id] = (got[id] or 0) + p.count
   if p.reference == chest then chest.object.inventory[#chest.object.inventory + 1] = { object = p.item, count = p.count } end
 end
+local movedData
+tes3.transferInventory = function(p)
+  assert(p.from == ring and p.to == chest and p.limitCapacity == false, "wrong inventory transfer")
+  local stack = ring.object.inventory[1]
+  got[stack.object.id] = (got[stack.object.id] or 0) + stack.count
+  movedData = stack.variables[1]
+end
 for _ = 1, 3 do fire("activate", { target = chest }); chest.object.inventory = {} end
 assert((got.sword or 0) == 1 - RECEIPT, "swords: " .. tostring(got.sword))
 assert(got.ring == 1, "rings: " .. tostring(got.ring))
+assert(movedData == itemData, "stray chest itemData was lost")
 """.replace("RECEIPT", str(receipt)))

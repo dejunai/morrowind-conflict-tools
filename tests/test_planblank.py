@@ -228,6 +228,7 @@ def luafix(tmp_path, monkeypatch):
 
 def test_luafix_apply_blanks_the_plan_with_an_audit_copy_and_second_apply_is_a_no_op(luafix, capsys):
     assert luafix() == 0 and PF.state(lf.PLAN_FILE) == "pending"
+    assert os.path.exists(lf.KNOWN_BUG_REPORT)
     assert luafix("--apply", "--yes") == 0
     assert all("localpatch_gate(" in f.read_text() for f in luafix.files)
     assert PF.state(lf.PLAN_FILE) == "applied"

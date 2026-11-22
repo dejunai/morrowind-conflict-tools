@@ -134,7 +134,7 @@ def test_check_folder_leaves_a_plain_wav_alone(tmp_path):
     wav = b"RIFF" + struct.pack("<I", 36) + b"WAVE" + b"fmt " + struct.pack("<I", 16) + fmt + b"data" + b"\0" * 4
     (tmp_path / "Sound" / "fx").mkdir(parents=True)
     (tmp_path / "Sound" / "fx" / "a.wav").write_bytes(wav)
-    issues, fixes = ah.check_folder(str(tmp_path), m)
+    issues, fixes = ah.check_folder(str(tmp_path), m, str(tmp_path / "Data Files"))
     assert [f for f in fixes if f[0] == "snd"] == []
 
 
@@ -166,5 +166,5 @@ def test_check_folder_survives_a_non_ascii_name_that_is_not_utf8_in_cp1252(tmp_p
     # Tamriel Rebuilt: os.path.basename on the cp1252 bytes raised UnicodeDecodeError and stopped the mod's check
     (tmp_path / "Textures" / "x").mkdir(parents=True)
     (tmp_path / "Textures" / "x" / "café.tga").write_bytes(b"\0" * 12 + struct.pack("<HH", 64, 64) + b"\x20\0px")
-    issues, _fixes = ah.check_folder(str(tmp_path), m)
+    issues, _fixes = ah.check_folder(str(tmp_path), m, str(tmp_path / "Data Files"))
     assert any("non-ASCII" in i[2] for i in issues)

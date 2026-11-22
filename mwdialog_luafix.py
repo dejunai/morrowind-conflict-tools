@@ -3019,7 +3019,8 @@ def known_bug_report_lines(rep, done=None, refused=None):
     return out
 
 
-def write_known_bug_report(rep, done=None, refused=None, path=KNOWN_BUG_REPORT):
+def write_known_bug_report(rep, done=None, refused=None, path=None):
+    path = path or KNOWN_BUG_REPORT
     lines = known_bug_report_lines(rep, done, refused)
     body = [f"luafix known-bug report, {PF.stamp()}",
             "Exact source fingerprints only; general MWSE Core scanning remains disabled.", ""]
@@ -3051,6 +3052,10 @@ def main(argv=None):
     ap.add_argument("--json", help="also write the findings as JSON to this file")
     ap.add_argument("--diff", action="store_true", help="show each patch as a diff")
     args = ap.parse_args(argv)
+    import mwdialog_paths as MP
+    if not MP.acquire_run_lock() or not MP.acquire_game_lock(HERE):
+        print(MP.RUN_LOCKED_MESSAGE, file=sys.stderr)
+        return 1
     if args.undo:
         return undo(force=args.force)             # works from the journal; the plan file plays no part
     reviewed = PF.read(PLAN_FILE) if args.apply else None
@@ -3069,7 +3074,6 @@ def main(argv=None):
           f"{compress_priority(math.inf, cfg)}), interval "
           f"{cfg['minInterval']} s" + (f"; settings from {', '.join(cfg['_sources'])}" if cfg["_sources"] else ""))
     if args.apply and checker is None and not args.no_syntax_check:
-        import mwdialog_paths as MP
         print("No LuaJIT/luac found. " + MP.describe_luajit_search(HERE)
               + " Not patching without a syntax check.", file=sys.stderr)
         return 2

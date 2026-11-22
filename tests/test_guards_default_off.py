@@ -32,3 +32,8 @@ def test_every_mw_mod_has_an_enabled_switch():
         if not re.search(r'id\s*=\s*"enabled"|configKey\s*=\s*"enabled"', text):
             missing.append(name)
     assert not missing, missing
+
+
+def test_exit_guard_enable_setting_warns_that_it_needs_a_restart():
+    text = open(os.path.join(MODS, "mwexitguard", "mcm.lua"), encoding="utf-8").read()
+    assert "Restart Morrowind after enabling" in text

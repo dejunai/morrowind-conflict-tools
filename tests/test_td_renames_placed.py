@@ -56,6 +56,14 @@ def placed(path, name="Town"):
     return out, nam0
 
 
+def placed_fields(path, name="Town"):
+    for _o, tag, _f, body in records_of(path):
+        if tag == "CELL" and m.cstr(m.first_sub(body, b"NAME")) == name:
+            return {n: m.cstr(d) for n, d in m.iter_subs(body)
+                    if n in {"ANAM", "CNAM", "KNAM", "TNAM", "XSOL"}}
+    return {}
+
+
 @pytest.fixture
 def game(tmp_path):
     df = tmp_path / "Morrowind" / "Data Files"
@@ -104,6 +112,16 @@ def test_placed_objects_are_renamed_and_only_those_that_may_be(game):
                     2: ("tr_still_made", False),              # still defined: left alone
                     3: ("T_Broken_01", True)}                 # both steps followed
     assert nam0 == 1                                          # only the two with nothing to become were removed
+    assert (df / TD).read_bytes() == master
+
+
+def test_reference_owner_key_trap_and_soul_are_renamed(game):
+    fields = b"".join(sub(name, z("tr_crate")) for name in ("ANAM", "CNAM", "KNAM", "TNAM", "XSOL"))
+    df, names = game([cell("Town", ref(1, "gold_001") + fields)])
+    master = (df / TD).read_bytes()
+    fix(df, names)
+    assert placed_fields(df / "Mod.esp") == {
+        name: "T_Crate" for name in ("ANAM", "CNAM", "KNAM", "TNAM", "XSOL")}
     assert (df / TD).read_bytes() == master
 
 

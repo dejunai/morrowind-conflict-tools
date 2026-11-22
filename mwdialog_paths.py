@@ -38,6 +38,7 @@ class ToolNotFoundError(Exception):
 
 
 _RUN_LOCKS = {}                          # lock file -> handle held by this process
+_DELEGATED_LOCKS = set()                 # locks inherited from an MWManager parent; this process owns no byte
 # MWManager's workflow_safety.mutation_lock folder and naming: the tools and the GUI shut each other out, and no
 # lock file lands in the game folder (its rollback check counts extra files)
 GAME_LOCK_DIR = os.path.join(tempfile.gettempdir(), "mwmanager-locks")
@@ -47,7 +48,7 @@ def _tool_lock_file():
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), "mwdialog.lock")
 
 
-def _hold(path):
+def _hold(path, key=None):
     if path in _RUN_LOCKS:
         return True
     handle = open(path, "a+b")
@@ -64,8 +65,17 @@ def _hold(path):
             import fcntl
             fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
-        handle.close()
-        return False
+        try:
+            inherited = json.loads(os.environ.get("MWMANAGER_DELEGATED_LOCKS", "{}"))
+            handle.seek(1)               # byte zero is locked; MWManager writes its delegation token after it
+            owner = json.loads(handle.read())
+            delegated = bool(key and owner.get("token") and inherited.get(key) == owner["token"])
+        except (OSError, ValueError, AttributeError):
+            delegated = False
+        if not delegated:
+            handle.close()
+            return False
+        _DELEGATED_LOCKS.add(path)
     _RUN_LOCKS[path] = handle
     return True
 
@@ -83,9 +93,10 @@ def acquire_game_lock(game_dir):
     key = os.path.normcase(str(Path(game_dir).resolve()))
     os.makedirs(GAME_LOCK_DIR, exist_ok=True)
     path = os.path.join(GAME_LOCK_DIR, hashlib.sha256(key.encode()).hexdigest() + ".lock")
-    if not _hold(path):
+    if not _hold(path, key):
         return False
-    _RUN_LOCKS[path].truncate(1)             # no MWManager job token left to read: this holder delegates to nobody
+    if path not in _DELEGATED_LOCKS:
+        _RUN_LOCKS[path].truncate(1)         # no MWManager job token left to read: this holder delegates to nobody
     return True
 
 
@@ -94,9 +105,10 @@ def release_game_locks():
     own = _tool_lock_file()
     for path in [p for p in _RUN_LOCKS if p != own]:
         _RUN_LOCKS.pop(path).close()
+        _DELEGATED_LOCKS.discard(path)
 
 
-RUN_LOCKED_MESSAGE = ("Another mwdialog_check.py or vortex_tidy.py run (or MWManager) is still working on this "
+RUN_LOCKED_MESSAGE = ("Another Morrowind tool or MWManager is still working on this "
                       "game. Let it finish, then run this again.")
 
 

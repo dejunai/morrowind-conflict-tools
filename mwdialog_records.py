@@ -15,12 +15,13 @@ from mwdialog_tes3 import (  # noqa: E402
 print = MT.printer()  # noqa: A001
 
 
-def rewrite_cell_refs(body, off, drops, moves, remaps=None, rename=None, renames=None):
+def rewrite_cell_refs(body, off, drops, moves, remaps=None, rename=None, renames=None, field_renames=None):
     """Rebuild a CELL body: remove reference blocks whose FRMR is in `drops`, move blocks whose FRMR
     is in `moves` (FRMR -> True for temporary, False for persistent), point blocks whose FRMR is in `remaps`
     at another reference (old FRMR -> new FRMR), with `rename` (NAME bytes) rename the cell, and with `renames`
-    ((FRMR, old id lower) -> NAME bytes) the objects of references. A block runs from its MVRF or FRMR
-    to the next one. NAM0 (count of temporary references) is kept in step. Returns (new body, changes)."""
+    ((FRMR, old id lower) -> NAME bytes) the objects of references, and with `field_renames`
+    ((FRMR, subrecord, old id lower) -> new bytes) their owner/key/trap/soul fields. A block runs from its MVRF
+    or FRMR to the next one. NAM0 (count of temporary references) is kept in step. Returns (new body, changes)."""
     head, persistent, temporary, nam0 = [], [], [], None
     block, in_temp = None, False
 
@@ -69,6 +70,12 @@ def rewrite_cell_refs(body, off, drops, moves, remaps=None, rename=None, renames
                 if new:
                     b = b[:at] + [["NAME", new]] + b[at + 1:]
                     changes += 1
+            if field_renames:
+                for i, (n, d) in enumerate(b):
+                    new = field_renames.get((v, n, cstr(d).lower()))
+                    if new:
+                        b[i] = [n, new]
+                        changes += 1
             if v in remaps:
                 b = [["FRMR", struct.pack("<I", remaps[v])] if n == "FRMR" else [n, d] for n, d in b]
                 changes += 1

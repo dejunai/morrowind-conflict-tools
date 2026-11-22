@@ -137,3 +137,4 @@ def _plan_audit_in_tmp(tmp_path, monkeypatch):
     lfm = sys.modules.get("mwdialog_luafix")
     if lfm is not None:
         monkeypatch.setattr(lfm, "PLAN_FILE", str(tmp_path / "luafix_plan.txt"))
+        monkeypatch.setattr(lfm, "KNOWN_BUG_REPORT", str(tmp_path / "luafix_known_bugs.txt"))

@@ -187,16 +187,7 @@ local function handlePersonalEffectsUnlock()
     -- 5. Delete any stray spawned duplicate chests from previous runs
     for ref in cell:iterateReferences(tes3.objectType.container) do
         if ref ~= baseCont and not ref.disabled and ref.baseObject and ref.baseObject.id:lower():find("^r0_pe_cont_") then
-            if ref.object and ref.object.inventory then
-                for _, stack in pairs(ref.object.inventory) do
-                    tes3.addItem({
-                        reference = baseCont,
-                        item = stack.object,
-                        count = stack.count,
-                        playSound = false,
-                    })
-                end
-            end
+            tes3.transferInventory({ from = ref, to = baseCont, playSound = false, limitCapacity = false })
             ref:disable()
             ref.position = tes3vector3.new(ref.position.x, ref.position.y, ref.position.z - 10000)
             ref.modified = true

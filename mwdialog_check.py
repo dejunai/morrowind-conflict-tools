@@ -353,6 +353,7 @@ class World:
         self.last_def_obj = {}             # object id -> (last plugin that defined it, record type)
         self.pending_placed = []           # this plugin's references to objects not defined (yet)
         self.missing_placed = []           # (plugin, cell offset, cell label, FRMR, object) missing at load
+        self.ref_id_fields = []            # (plugin, cell offset, label, FRMR, subrecord, id) on placed references
         self.early_needed = {}             # object id lower -> (plugin defining it, type, [who needs it])
         self.first_def_at = {}             # object id lower -> (load index, plugin) of its first definition
         self.first_placed_at = {}          # object id lower -> (load index, plugin) of its first placed copy
@@ -588,7 +589,7 @@ class World:
             if sname == "FRMR":
                 nrefs += 1
                 if len(sdata) >= 4:
-                    cur = [struct.unpack_from("<I", sdata)[0], "", False, temporary, None, "", "", ""]
+                    cur = [struct.unpack_from("<I", sdata)[0], "", False, temporary, None, "", "", "", []]
                     blocks.append(cur)
                     continue
             elif sname == "DNAM" and nrefs:
@@ -606,13 +607,17 @@ class World:
                     cur[4] = sdata                    # decoded only if the reference needs re-matching
                 elif sname == "ANAM":
                     cur[5] = cstr(sdata).lower()      # owner (an NPC)
+                    cur[8].append((sname, cstr(sdata)))
                 elif sname == "CNAM":
                     cur[6] = cstr(sdata).lower()      # owner (a faction)
+                    cur[8].append((sname, cstr(sdata)))
+                elif sname in ("KNAM", "TNAM", "XSOL"):
+                    cur[8].append((sname, cstr(sdata)))
                 elif sname == "DNAM":
                     cur[7] = cstr(sdata).strip()      # a door's destination (an interior)
         self.cell_loads.append((len(self.loaded), name, key, cstr(nm or b"").strip(), nrefs))
         masters = self.masters.get(name.lower(), [])
-        for v, obj, deleted, temp, pos, owner, faction, dest in blocks:
+        for v, obj, deleted, temp, pos, owner, faction, dest, fields in blocks:
             k = v >> 24
             o = obj.lower()
             ref = (name.lower() if k == 0 else (masters[k - 1].lower() if k <= len(masters) else None), v & 0xFFFFFF)
@@ -631,6 +636,9 @@ class World:
                         self.npc_at[(key, ref)] = o
             if not deleted and o and o not in self.all_ids:
                 self.pending_placed.append((name, off, label, v, obj))
+            if not deleted:
+                self.ref_id_fields += [(name, off, label, v, field, value)
+                                       for field, value in fields if value]
             if not deleted and o:
                 self.obj_used_at[o].add(len(self.loaded))
                 self.first_placed_at.setdefault(o, (len(self.loaded), name))
@@ -1768,6 +1776,26 @@ class World:
                                     "drop_record": True,
                                     "msgs": [(dmsg, "remove the deletion, so the object exists for them")]})
 
+    def _check_reference_id_fields(self):
+        """Use current Tamriel Data IDs in placed references' owner, key, trap and soul fields."""
+        labels = {"ANAM": "owner", "CNAM": "owner faction", "KNAM": "key",
+                  "TNAM": "trap", "XSOL": "soul"}
+        for plugin, off, cell, v, field, value in self.ref_id_fields:
+            low = value.lower()
+            if is_our_patch(plugin) or low in self.all_ids:
+                continue
+            new = self.td_rename(value)
+            if not new:
+                continue
+            what = labels[field]
+            msg = f"reference #{v:#x}: {what} '{value}' was renamed by Tamriel Data to '{new}'"
+            if plugin.lower().endswith(FIXABLE_EXT):
+                self.r.add("ERROR", plugin, f"cell {cell}", "", msg,
+                           fix=(off, ("rename_ref_field", v, field, low, new),
+                                f"renamed the {what} to '{new}'"))
+            else:
+                self.r.add("ERROR", plugin, f"cell {cell}", "", msg + " (in a master; not changed)")
+
     def _master_guard(self):
         """Patches made for a different master than the installed one (mwdialog_mastercheck): their header size
         is not synced and references are not remapped or moved (that would hide the mismatch, or guess wrong).
@@ -1789,7 +1817,8 @@ class World:
             self.item_fixes = [f for f in self.item_fixes if str(f.get("plugin", "")).lower() not in bad]
             self.r.fixes = [f for f in self.r.fixes if not (str(f[0]).lower() in bad
                                                              and f[2][0] in ("move_ref", "sync_master",
-                                                                             "remap_ref", "rename_cell"))]
+                                                                             "remap_ref", "rename_cell",
+                                                                             "rename_ref_field"))]
 
     def _check_headers(self):
         """tes3cmd header --synchronize: record counts and master sizes."""
@@ -2166,6 +2195,7 @@ class World:
             self._check_models()
         self._check_refs()
         self._check_ownership()
+        self._check_reference_id_fields()
         self._check_missing_placed()
         self._master_guard()
         self._check_headers()
@@ -3099,7 +3129,9 @@ def apply_plan(path, plugin, plan, world, log, collect=None, backup=True):
             remaps = {op[1]: op[2] for op, _d, _m in plan[off] if op[0] == "remap_ref"}
             rename = next((op[1] for op, _d, _m in plan[off] if op[0] == "rename_cell"), None)
             renames = {(op[1], op[2]): pack_str(op[3]) for op, _d, _m in plan[off] if op[0] == "rename_ref"}
-            nb, removed = rewrite_cell_refs(body, off, drops, moves, remaps, rename, renames)
+            field_renames = {(op[1], op[2], op[3]): pack_str(op[4]) for op, _d, _m in plan[off]
+                             if op[0] == "rename_ref_field"}
+            nb, removed = rewrite_cell_refs(body, off, drops, moves, remaps, rename, renames, field_renames)
             if removed:
                 out.append(tag.encode("ascii") + struct.pack("<I", len(nb)) + header_rest + nb)
                 for op, desc, msg in plan[off]:
