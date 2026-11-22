@@ -311,8 +311,10 @@ class Report:
         self.fixes = []    # (plugin, offset, op, description, issue message)
 
     def add(self, sev, plugin, topic, info, msg, fix=None):
+        if fix is not None and sev != "ERROR":
+            raise ValueError("only ERROR issues can carry fixes")
         self.issues.append((sev, plugin or "", topic or "", info or "", msg))
-        if fix is not None and sev == "ERROR":
+        if fix is not None:
             off, op, desc = fix
             self.fixes.append((plugin, off, op, desc, issue_label(topic, info, msg), topic, info))
 

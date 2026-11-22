@@ -32,6 +32,14 @@ def test_parse_and_truncation():
         list(m.iter_records(d[:-3]))
 
 
+def test_report_rejects_fixes_for_non_errors():
+    report = m.Report()
+    with pytest.raises(ValueError, match="only ERROR issues can carry fixes"):
+        report.add("WARN", "x.esp", "", "", "warning", fix=(0, ("delete",), "remove it"))
+    assert not report.issues
+    assert not report.fixes
+
+
 # ---------------------------------------------------------------- C1: clean compares with the winning master
 def _clean_setup(tmp_path, mod_value):
     df = game(tmp_path)
