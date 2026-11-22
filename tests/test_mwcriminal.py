@@ -7,7 +7,7 @@ import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LUAJIT = os.environ.get("MWMANAGER_LUAJIT", os.path.join(ROOT, "tools", "luajit", "luajit.exe"))
-MODS = os.path.join(ROOT, "Data Files", "MWSE", "mods")
+MODS = os.path.join(ROOT, "Data Files", "MWSE", "mods", "mwsuite")
 pytestmark = pytest.mark.skipif(not os.path.isfile(LUAJIT), reason="LuaJIT not available")
 
 HARNESS = r'''
@@ -138,9 +138,11 @@ def run(body):
     assert out.returncode == 0 and out.stdout.strip().endswith("ok"), out.stdout + out.stderr
 
 
-def run_config(body, stored_config):
+def run_config(body, stored_config, paper_config="nil", patches_config="nil"):
     prelude = r'''
 local storedConfig = STORED_CONFIG
+local paperConfig = PAPER_CONFIG
+local patchesConfig = PATCHES_CONFIG
 local saved
 local legacy = {
   enabled = true,
@@ -162,6 +164,8 @@ mwse = {
       return config
     end
     if name == "mwcompanionsneak" then return legacy end
+    if name == "mwplainpaperfix" then return paperConfig end
+    if name == "mwpluginpatches" then return patchesConfig end
     return nil
   end,
   saveConfig = function(name, config) saved = config end,
@@ -170,7 +174,9 @@ lfs = { fileexists = function() return storedConfig ~= nil end }
 package.path = [[MODS\?.lua;]] .. package.path
 function check(ok, message) if not ok then error(message, 2) end end
 '''
-    script = prelude.replace("STORED_CONFIG", stored_config).replace("MODS", MODS) + body + '\nprint("ok")\n'
+    script = (prelude.replace("STORED_CONFIG", stored_config).replace("PAPER_CONFIG", paper_config)
+              .replace("PATCHES_CONFIG", patches_config)
+              .replace("MODS", MODS) + body + '\nprint("ok")\n')
     out = subprocess.run([LUAJIT, "-"], input=script, capture_output=True, text=True, cwd=ROOT)
     assert out.returncode == 0 and out.stdout.strip().endswith("ok"), out.stdout + out.stderr
 
@@ -298,6 +304,15 @@ check(activate(owned) == false and #added == 1 and crimes[1], "sneaking takes it
 sneak(false)
 local map = item(tes3.objectType.book, { bookType = 1, text = '<IMG SRC="map.tga">' })
 check(activate(map) == nil, "a picture-only scroll still opens")
+config.plainPaperRequireSneak = false
+config.sneakToSteal = false
+reset()
+local freelyTaken = item(tes3.objectType.book, { bookType = 1, text = "", owner = who.object })
+check(activate(freelyTaken) == false and #added == 1 and crimes[1], "the legacy opt-out allows owned paper theft")
+config.sneakToSteal = true
+reset()
+local protected = item(tes3.objectType.book, { bookType = 1, text = "", owner = who.object })
+check(activate(protected) == false and #added == 0, "the theft protection still takes precedence")
 ''')
 
 
@@ -384,6 +399,42 @@ check(follower.isPlayerHidden and not follower.isPlayerDetected, "sweep keeps fo
 ''')
 
 
+def test_plain_paper_settings_migrate_without_overriding_existing_choices():
+    run_config(r'''
+local config = require("mwcriminal.config")
+check(config.enabled and config.plainPaper and not config.plainPaperRequireSneak,
+    "enabled legacy paper and its owned-paper preference migrate")
+check(config.plainPaperSettingsImported and saved, "migration is saved once")
+''', "nil", "{ enabled = true, requireSneakForOwned = false }")
+    run_config(r'''
+local config = require("mwcriminal.config")
+check(not config.enabled and not config.plainPaper and config.plainPaperRequireSneak,
+    "existing choices take precedence over legacy settings")
+''', "{ enabled = false, plainPaper = false, plainPaperRequireSneak = true }",
+        "{ enabled = true, requireSneakForOwned = false }")
+    run_config(r'''
+local config = require("mwcriminal.config")
+check(not config.plainPaper and config.plainPaperRequireSneak, "completed migration is not repeated")
+''', "{ enabled = false, plainPaper = false, plainPaperRequireSneak = true, plainPaperSettingsImported = true }",
+        "{ enabled = true, requireSneakForOwned = false }")
+
+
+def test_book_fix_migration_respects_existing_choices():
+    legacy = "{ enabled = true, noAccidentalTheftBookFixEnabled = true }"
+    run_config(r'''
+local config = require("mwcriminal.config")
+check(config.enabled and config.readStanding and config.bookFixSettingsImported, "enabled book fix migrates")
+''', "nil", patches_config=legacy)
+    run_config(r'''
+local config = require("mwcriminal.config")
+check(not config.enabled and not config.readStanding, "existing off settings are preserved")
+''', "{ enabled = false, readStanding = false }", patches_config=legacy)
+    run_config(r'''
+local config = require("mwcriminal.config")
+check(not config.readStanding, "disabled patch does not migrate")
+''', "nil", patches_config="{ enabled = false, noAccidentalTheftBookFixEnabled = true }")
+
+
 def test_companionsneak_settings_migrate_without_cross_enabling_objects():
     run_config(r'''
 local config = require("mwcriminal.config")
@@ -426,3 +477,70 @@ locked.locked = true
 handlers.activationTargetChanged({ current = locked })
 check(eiColor == nil, "switch off: no tint")
 ''')
+
+
+def test_blacklist_window_has_visible_close_button():
+    script = r'''
+local order, buttons = {}, {}
+local activeMenu
+local function element()
+  local e = { handlers = {} }
+  function e:createBlock() return element() end
+  function e:createLabel() return element() end
+  function e:createThinBorder() return element() end
+  function e:createTextInput() return element() end
+  function e:createVerticalScrollPane()
+    order[#order + 1] = "scroll"
+    return element()
+  end
+  function e:createButton(args)
+    order[#order + 1] = "button:" .. args.text
+    local button = element()
+    button.text = args.text
+    buttons[args.text] = button
+    return button
+  end
+  function e:getContentElement() return self end
+  function e:register(name, callback) self.handlers[name] = callback end
+  function e:destroy() self.destroyed = true end
+  return e
+end
+package.preload["mwcriminal.config"] = function()
+  return { companionBlacklist = {}, blacklistAllCreatures = false }
+end
+package.preload["mwcriminal.interop"] = function() return {} end
+tes3 = { getObject = function() return nil end }
+local inMenuMode, leaveCount = false, 0
+tes3ui = {
+  registerID = function(id) return id end,
+  createMenu = function(args)
+    activeMenu = element()
+    activeMenu.id = args.id
+    return activeMenu
+  end,
+  findMenu = function(id)
+    if activeMenu and activeMenu.id == id and not activeMenu.destroyed then return activeMenu end
+  end,
+  getPalette = function() return "palette" end,
+  menuMode = function() return inMenuMode end,
+  enterMenuMode = function() inMenuMode = true end,
+  leaveMenuMode = function() leaveCount = leaveCount + 1; inMenuMode = false end,
+}
+package.path = [[MODS\?.lua;]] .. package.path
+function check(ok, message) if not ok then error(message, 2) end end
+local inspectorUI = require("mwcriminal.inspectorUI")
+inspectorUI.openBlacklist()
+local closeIndex, scrollIndex
+for index, action in ipairs(order) do
+  if action == "button:Close" then closeIndex = index end
+  if action == "scroll" then scrollIndex = index end
+end
+check(closeIndex and scrollIndex and closeIndex < scrollIndex,
+  "the close button is built before scrollable blacklist content")
+buttons.Close.handlers.mouseClick()
+check(leaveCount == 1 and activeMenu.destroyed, "the visible close button exits the blacklist menu")
+print("ok")
+'''
+    script = script.replace("MODS", MODS)
+    out = subprocess.run([LUAJIT, "-"], input=script, capture_output=True, text=True, cwd=ROOT)
+    assert out.returncode == 0 and out.stdout.strip().endswith("ok"), out.stdout + out.stderr

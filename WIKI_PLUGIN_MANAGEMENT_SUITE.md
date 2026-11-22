@@ -10,7 +10,7 @@ What started as a focused dialogue conflict and cyclic loop scanner (`mwdialog_c
 
 To solve conflicts that pure record patching could not address, the toolchain split into two complementary halves:
 1. **Offline Static Analysis & Patching Engine (Python 3):** Analyzes plugins (`.esp`/`.esm`), BSA archives, loose disk assets, load order manifests, and Vortex staging folders. Cleans dirty edits, generates dynamic resolution patches (`Multipatch.esp`, `AutoMerge.esp`, `Cell Fixes.esp`, `Performers Patch.esp`), fixes voice/sound links, downscales oversized textures, shortens long paths, and exports spatial collision/stranded databases.
-2. **Runtime Engine Hardening Suite (`mwsuite` MWSE Lua):** A suite of 18 specialized Lua plugins living in `Data Files/MWSE/mods/mw*`. These consume offline spatial manifests (e.g. `mwcollide_data.json`, `mwstranded_data.json`) to dynamically hide overlapping duplicate meshes or rescue void-stranded items at runtime, while actively guarding against engine lockups, infinite dialogue loops, audio-buffer crashes, exit deadlocks, and script-induced teleportation glitches.
+2. **Runtime Engine Hardening Suite (`mwsuite` MWSE Lua):** A suite of 20 specialized Lua plugins living in `Data Files/MWSE/mods/mwsuite/`. These consume offline spatial manifests (e.g. `mwcollide_data.json`, `mwstranded_data.json`) to dynamically hide overlapping duplicate meshes or rescue void-stranded items at runtime, while actively guarding against engine lockups, infinite dialogue loops, audio-buffer crashes, exit deadlocks, and script-induced teleportation glitches.
 
 ---
 
@@ -219,7 +219,7 @@ Located in `Data Files/MWSE/mods/`, these 19 Lua plugins provide real-time runti
 | `mwmouseguard` | Multi-Monitor | Multi-monitor protection. Traps and locks the cursor inside the Morrowind window in borderless mode, preventing cursor bleed onto secondary monitors and accidental inactive scroll events. |
 | `mwsaveguard` | Data Integrity | Save state validator. Inspects save game records before and after writing to prevent corrupted save game states. |
 | `mwcustomclasspersistence`| UI / Mechanics | Custom class memory. Saves custom character classes created during Character Generation to `savedCustomClasses.json`, allowing them to be chosen directly in future playthroughs. |
-| `mwplainpaperfix` | UI Quality-of-Life| Activating blank scroll paper places it directly into the player inventory instead of opening an empty, interactive scroll UI window. |
+| `mwcriminal` (Plain Paper) | UI Quality-of-Life | Activating blank scroll paper places it directly into the player inventory instead of opening an empty scroll window. |
 | `mwpersonaleffects` | Quest Fix | Standalone, opt-in Lua replacement for Personal Effects' Census and Excise scripts; retains the required ESP records. |
 | `mweffectinspector` | Developer Tools | Console debugger (`inspecteffects`, `showeffects`) allowing real-time inspection of active magic effects, modifiers, and sources on any actor. |
 | `mwpluginpatches` | Bug Fixes | Bundles micro-patches for common mod script bugs (Jiub delay, Ysmir shield fix, guard response scripts) directly in Lua. |

@@ -5,5 +5,5 @@ description = "In-depth actor magic effect, ability, enchantment, and attached V
 authors = ["MWSE Team"]
 
 [tools.mwse]
-lua-mod = "mweffectinspector"
+lua-mod = "mwsuite.mweffectinspector"
 load-priority = 4400

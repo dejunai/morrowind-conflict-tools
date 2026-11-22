@@ -77,8 +77,8 @@ Each step: turn the mwcriminal switch on, turn the original's own MCM switch off
 only then uninstall the original. mwcriminal logs one warning at `initialized` if a switch overlaps an original that
 is still enabled.
 
-1. `plainPaper` → retire **mwplainpaperfix**
-2. `sneakToSteal` + `readStanding` → retire **Accidental Theft Protection** + **noAccidentalTheftBookFix**
+1. `plainPaper` absorbs **mwplainpaperfix** and migrates its enabled and owned-paper settings.
+2. `readStanding` replaces the retired **noAccidentalTheftBookFix**; `sneakToSteal` replaces **Accidental Theft Protection**.
 3. `companionDetection` absorbs and retires **mwcompanionsneak**; its inspector, blacklist management, options,
    Attend Me/Stealth Overhaul interop, and sweep now live in mwcriminal.
 4. `interiorExit` + `sneakToPick` + locked feedback → retire **doorLockCompatibility** (Arrille resolver stays)

@@ -4,5 +4,5 @@ description = "Consolidated theft, lock, companion, and creature sneak-detection
 category = "Gameplay"
 
 [tools.mwse]
-lua-mod = "mwcriminal"
+lua-mod = "mwsuite.mwcriminal"
 load-priority = 4000

@@ -472,9 +472,23 @@ def test_own_mods_remove_shims_even_when_logging_is_flagged(tmp_path):
     patch_ = next(iter(rep.files.values()))["patch"]
     assert patch_["ok"] and "mwluafix_logshim" not in patch_["text"]
 
+def test_nested_suite_mods_are_excluded_and_never_receive_log_shims(tmp_path):
+    data, root = mod_tree(tmp_path, {"main.lua": SPAM}, name="mwsuite")
+    nested = root / "mwcompanions"
+    nested.mkdir()
+    path = nested / "main.lua"
+    path.write_text(SPAM, encoding="utf-8")
+    assert lf.excluded(str(path), cfg=CFG)
+    assert lf.mod_key_of(str(root.parent), "mwsuite/mwcompanions/main.lua") == "mwsuite/mwcompanions"
+    assert lf.log_exempt(CFG, "mwsuite/mwcompanions")
+    rep = lf.check_paths([str(data)], CFG, include_own=True, checker=OkChecker(), use_cache=False,
+                         data_dir=str(tmp_path / "none"))
+    assert all(not e["patch"] or "mwluafix_logshim" not in e["patch"].get("text", "")
+               for e in rep.files.values())
+
 
 def test_own_mod_sources_do_not_embed_generic_log_shims():
-    mods = os.path.join(lf.HERE, "Data Files", "MWSE", "mods")
+    mods = os.path.join(lf.HERE, "Data Files", "MWSE", "mods", "mwsuite")
     for mod in lf.OWN_MODS:
         root = os.path.join(mods, mod)
         if not os.path.isdir(root):
@@ -679,7 +693,7 @@ def test_own_mods_do_not_get_shims_when_included(tmp_path):
 
 
 def test_mwhangwatch_log_is_under_mwse_logs():
-    path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Data Files", "MWSE", "mods", "mwhangwatch",
+    path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Data Files", "MWSE", "mods", "mwsuite", "mwhangwatch",
                         "main.lua")
     text = open(path, encoding="utf-8").read()
     assert 'local LOG_DIR      = "Data Files\\\\MWSE\\\\logs"' in text

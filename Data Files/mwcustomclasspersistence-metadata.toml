@@ -5,5 +5,5 @@ description = "Saves custom player-created classes from character generation and
 authors = ["MWSE Team"]
 
 [tools.mwse]
-lua-mod = "mwcustomclasspersistence"
+lua-mod = "mwsuite.mwcustomclasspersistence"
 load-priority = 4100

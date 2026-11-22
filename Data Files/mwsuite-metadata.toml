@@ -1,0 +1,7 @@
+[package]
+name = "mwsuite"
+description = "Module search path for MW Conflict Tools."
+
+[tools.mwse]
+lua-mod = "mwsuite"
+load-priority = 1000001

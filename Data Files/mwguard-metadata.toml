@@ -5,5 +5,5 @@ name = "mwguard"
 description = "Finds Lua mods with bad habits: extreme priorities, costly per-frame handlers, MWSE.log spam"
 
 [tools.mwse]
-lua-mod = "mwguard"
+lua-mod = "mwsuite.mwguard"
 load-priority = 1000000

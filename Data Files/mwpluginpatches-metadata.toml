@@ -5,5 +5,5 @@ category = "Bug Fixes"
 author = "Antigravity"
 
 [tools.mwse]
-lua-mod = "mwpluginpatches"
+lua-mod = "mwsuite.mwpluginpatches"
 load-priority = 4500

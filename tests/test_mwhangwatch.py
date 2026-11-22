@@ -3,7 +3,7 @@ import os
 import re
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SRC = open(os.path.join(ROOT, "Data Files", "MWSE", "mods", "mwhangwatch", "main.lua"), encoding="utf-8").read()
+SRC = open(os.path.join(ROOT, "Data Files", "MWSE", "mods", "mwsuite", "mwhangwatch", "main.lua"), encoding="utf-8").read()
 
 
 def test_memory_level_is_the_same_in_the_header_default_and_fallback():

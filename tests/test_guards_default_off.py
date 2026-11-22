@@ -4,7 +4,7 @@ import os
 import re
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MODS = os.path.join(ROOT, "Data Files", "MWSE", "mods")
+MODS = os.path.join(ROOT, "Data Files", "MWSE", "mods", "mwsuite")
 
 
 def test_no_mw_mod_defaults_to_enabled():
@@ -24,7 +24,7 @@ def test_no_mw_mod_defaults_to_enabled():
 def test_every_mw_mod_has_an_enabled_switch():
     missing = []
     for name in sorted(os.listdir(MODS)):
-        if not name.startswith("mw"):
+        if not name.startswith("mw") or name == "mwmanagermenu":
             continue
         text = "".join(open(os.path.join(base, f), encoding="utf-8").read()
                        for base, _d, files in os.walk(os.path.join(MODS, name)) for f in files if f.endswith(".lua"))

@@ -125,7 +125,7 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 ## 11. Companion Sneak (Inspector UI)
 
 * **Author**: Companion Sneak Team
-* **File**: [inspectorUI.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwcriminal/inspectorUI.lua#L292-L340)
+* **File**: [inspectorUI.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwsuite/mwcriminal/inspectorUI.lua#L292-L340)
 * **Bug**: Invoked `inputBorder.marginRight = 8` and `clearBtn.marginRight = 8` during search-bar UI construction. `tes3uiElement` does not define `marginRight` (only `borderRight`), throwing `sol: cannot set (new_index) into this object: no defined new_index operation on usertype`, which corrupted the UI element tree and caused engine hangs on game exit.
 * **Fix**: Replaced invalid `marginRight` calls with `borderRight = 8`.
 
@@ -177,7 +177,7 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 
 * **Author**: `abot` / MWSE Guard Mods / Engine Bug
 * **Files**:
-  - [mwsaveguard/main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwsaveguard/main.lua)
+  - [mwsaveguard/main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwsuite/mwsaveguard/main.lua)
   - [personalEffectsFix.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwpluginpatches/patches/personalEffectsFix.lua)
   - [Plain Paper Fix/main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/abot/Plain%20Paper%20Fix/main.lua)
 * **Bug**:
@@ -195,7 +195,7 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 
 * **Author**: `mwcustomclasspersistence`
 * **Files**:
-  - [mwcustomclasspersistence/main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwcustomclasspersistence/main.lua)
+  - [mwcustomclasspersistence/main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwsuite/mwcustomclasspersistence/main.lua)
   - [savedCustomClasses.json](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/config/savedCustomClasses.json)
 * **Bug**:
   1. Custom classes created in character generation (`MenuCreateClass`) were not persisting to `savedCustomClasses.json` because the mod attempted to read `tes3.player.object.class` with a 1-frame delay upon clicking OK in `MenuCreateClass`. In Morrowind, clicking OK in `MenuCreateClass` transitions to `MenuStatReview`, and the class is not finalized on `tes3.player.object.class` until `MenuStatReview` is accepted or chargen concludes. The single-frame check failed, leaving `savedCustomClasses.json` uncreated and empty.
@@ -235,9 +235,9 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 * **Author**: `mer` / Unified Patch in `mwpluginpatches`
 * **Files**:
   - [noAccidentalTheftBookFix.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwpluginpatches/patches/noAccidentalTheftBookFix.lua)
-  - [mwpluginpatches/config.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwpluginpatches/config.lua)
-  - [mwpluginpatches/main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwpluginpatches/main.lua)
-  - [mwpluginpatches/mcm.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwpluginpatches/mcm.lua)
+  - [mwpluginpatches/config.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwsuite/mwpluginpatches/config.lua)
+  - [mwpluginpatches/main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwsuite/mwpluginpatches/main.lua)
+  - [mwpluginpatches/mcm.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwsuite/mwpluginpatches/mcm.lua)
   - [noAccidentalTheft.json](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/config/noAccidentalTheft.json)
 * **Bug / Limitation**:
   `accidentalTheftProtection` blocks activating ANY owned world object unless the player is actively sneaking. This prevented players from opening and reading owned books, letters, notes, and documents in the world without sneaking first, even if they had no intention of stealing them.
@@ -271,7 +271,7 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 ## 20. MWSE ExtraDataList Node Corruption CTD on Bread Pickup (`ScriptRecord::execute+0x24`)
 
 * **Author**: `mwsaveguard`
-* **File**: [mwsaveguard/main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwsaveguard/main.lua)
+* **File**: [mwsaveguard/main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwsuite/mwsaveguard/main.lua)
 * **Bug**:
   In `mwsaveguard/main.lua`, `sanitizeCellReferences()` called `ref.attachments.variables = nil` on cell references lacking scripts. In MWSE / Morrowind's C++ data structures, assigning `nil` to `ref.attachments.variables` does not cleanly unlink the `ExtraScriptVariables` node in the engine's `ExtraDataList`. Instead, it leaves an unlinked dangling pointer (`0x00000074`). When the player subsequently picked up an item (such as `ingred_bread_01`), the engine invoked `DataHandler::executeReferenceScripts` to traverse cell references and execute scripts, encountering `0x74` as a script pointer and immediately crashing with `EXCEPTION_ACCESS_VIOLATION` in `ScriptRecord::execute+0x24`.
 * **Fix**:
@@ -282,7 +282,7 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 ## 21. Custom Class Persistence UI IDs & `getStatistic` Nil Exception
 
 * **Author**: `mwcustomclasspersistence`
-* **File**: [mwcustomclasspersistence/main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwcustomclasspersistence/main.lua)
+* **File**: [mwcustomclasspersistence/main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwsuite/mwcustomclasspersistence/main.lua)
 * **Bug**:
   1. `applyCustomClassToPlayer()` called `tes3.getStatistic({ reference = tes3.player, ... })`. `tes3.getStatistic` does not exist in MWSE (statistics are read directly from `tes3.mobilePlayer.attributes[id+1].base` and `tes3.mobilePlayer.skills[id+1].base`), throwing `attempt to call field 'getStatistic' (a nil value)` at line 137 and aborting stat calculations.
   2. In `displayCustomClassInChooseMenu()`, element lookups passed raw string identifiers (e.g. `menu:findChild("MenuChooseClass_SelectedText")`) instead of registered integer IDs via `tes3ui.registerID()`. As a result, all lookups returned `nil`, leaving the right-hand details pane in the Choose Class menu blank or showing previous class details instead of the selected custom class ("Outlander").
@@ -327,7 +327,7 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 ## 26. More Console Commands (MCC) Duplicate Command Registration in `mweffectinspector`
 
 * **Author**: `mweffectinspector` / `JosephMcKean.commands`
-* **File**: [mweffectinspector/main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mweffectinspector/main.lua#L49-L78)
+* **File**: [mweffectinspector/main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwsuite/mweffectinspector/main.lua#L49-L78)
 * **Bug**:
   `tryRegisterWithMCC()` was invoked both during `onInitialized` and registered as a listener on the `command:register` event. Because `mweffectinspector` initializes before MCC (priority 0 vs priority -999), the first call registered `showeffects` and `cleareffects`. When MCC subsequently initialized and triggered `command:register`, `tryRegisterWithMCC()` executed a second time, triggering MCC's error log in `data.lua`:
   `[More Console Commands | data.lua:908 | ERROR] Attempt to create existing command ... Use modify() instead.`
@@ -378,7 +378,7 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
   - [companionLeveler/functions/common.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/companionLeveler/functions/common.lua#L522-L548)
   - [Pirate/HUD Companion Health Bar/main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/Pirate/HUD%20Companion%20Health%20Bar/main.lua#L85-L108)
   - [AttendMeMWSE/followers.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/AttendMeMWSE/followers.lua#L17-L38)
-  - [mwcriminal/core.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwcriminal/core.lua#L203-L206)
+  - [mwcriminal/core.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwsuite/mwcriminal/core.lua#L203-L206)
 * **Bug**:
   When sneaking near a guard, `MoreAttentiveGuards` (`celediel/MoreAttentiveGuards/sneak.lua`) assigns the guard a temporary `tes3.aiPackage.follow` targeting the player while inspecting them. Because `companionLeveler`, `HUD Companion Health Bar`, and `AttendMeMWSE` only checked for a follow package targeting the player without verifying `obj.isGuard` or guard class/script:
   1. `companionLeveler` added the guard to `npcTable()`, initialized blank companion mod data on the guard reference, and logged `Companion Mod Data not found, setting to base Mod Data values` / `NPC Mod Data not found, setting to base Mod Data values`.
@@ -391,7 +391,7 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 ## 31. Multi-Monitor Secondary Screen Scroll Bleed in `mwmouseguard` (`main.lua`)
 
 * **Author**: `mwmouseguard`
-* **File**: [mwmouseguard/main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwmouseguard/main.lua#L37-L145)
+* **File**: [mwmouseguard/main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwsuite/mwmouseguard/main.lua#L37-L145)
 * **Bug**:
   `mwmouseguard` set the Win32 `ClipCursor` rectangle to `[0, 0, width, height]`. Because Win32 `ClipCursor` bounds are inclusive (`left <= x <= right`), the cursor was allowed to sit at `x = width`. In dual-monitor setups, `x = width` is the very first pixel column of the adjacent monitor, causing Windows 10/11 "Scroll inactive windows when hovering" to route `WM_MOUSEWHEEL` to the second screen. Furthermore, Windows automatically clears `ClipCursor` on window activation shifts, notifications, or modal dialogs; `mwmouseguard` used a one-shot latch (`if not isClipped or fg ~= cachedHwnd`) and never reclipped once Windows reset the clip.
 * **Fix**:

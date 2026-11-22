@@ -7,8 +7,8 @@ import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LUAJIT = os.environ.get("MWMANAGER_LUAJIT", os.path.join(ROOT, "tools", "luajit", "luajit.exe"))
-MODS = os.path.join(ROOT, "Data Files", "MWSE", "mods")
-ATTEND_ME = os.path.join(MODS, "AttendMeMWSE")
+MODS = os.path.join(ROOT, "Data Files", "MWSE", "mods", "mwsuite")
+ATTEND_ME = os.path.dirname(MODS)
 pytestmark = pytest.mark.skipif(not os.path.isfile(LUAJIT), reason="LuaJIT not available")
 
 HARNESS = r'''

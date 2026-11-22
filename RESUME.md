@@ -1,5 +1,29 @@
 # Resume: Morrowind tools, MWManager and the mw* Lua suite (2026-11-22)
 
+## Suite MCM and MCA follow-up
+
+- Deployed `mwmanagermenu` in Steam and updated MWManager's copy to put suite settings under **MW Conflict Tools**.
+  Existing per-mod pages remain nested below the suite tabs. The menu exposes collected templates to MWSE's
+  keybind menu, and Effect Inspector, Mouse Guard, Teleport Guard, and Plugin Patches use template registration.
+- Absorbed the remaining Plain Paper Fix preference into `mwcriminal` with one-time config migration; archived
+  the old standalone source outside `MWSE\mods`. Removed the owned No Accidental Theft book patch and its MCM
+  controls; the third-party theft mod remains installed. MWManager archives old Plain Paper Fix installs.
+- Audited suite MCM controls for descriptions. MCA 8.2's actual `MCA_setup` script specifies hostile party
+  sizes 2-5, 2-10, and 2-20, represented by 0, 1, and 2. Replaced the misleading slider with these options,
+  migrated the former invalid value 3, and repaired that value in already initialized saves when MCA AutoStartup
+  is enabled. MCA options only apply when MCA initializes; the MCM now states this.
+- Changes are synced to the clone and MWManager, including the previous blacklist-window fix.
+  Vortex's generated deployment metadata still mentions the removed book-patch file
+  until Vortex refreshes it; the deployed and staged patch sources were both removed. No in-game testing.
+- The suite and its menu now live under `MWSE\mods\mwsuite`. A highest-priority bootstrap adds that directory
+  to Lua's search path, preserving existing imports; metadata keys, mwguard attribution/exemptions, and tidy's
+  own-mod handling recognize the nested layout. Other locally maintained mods remain standalone. MWManager archives old flat copies,
+  journals the migration, and refuses an upgrade while Vortex still stages old flat suite paths.
+- `mwpluginpatches` was moved in both Vortex staging and the live install, preserving hardlinks. The generated
+  Vortex deployment manifest still records the old paths until the next deployment; do not edit it manually.
+  Redeploy in Vortex and verify the suite and keybinds in game. Originals are in
+  `Data Files\MWSE\backups\suite-relocation-20261121`.
+
 Read this first, then `.claude\CLAUDE.md` and the memory index. The user stopped this session near the usage
 limit. The own-mod logging continuation below is committed locally and not pushed: clone `565eaa9`, MWManager
 `b76b856`. The subsequent Attend Me, KB5, and mod-refactor changes are committed and pushed to both repositories.
@@ -22,6 +46,15 @@ limit. The own-mod logging continuation below is committed locally and not pushe
   Vortex refreshes deployment metadata; do not edit that generated file manually. The game was not run.
 - Synced, committed, and pushed to `G:\projects\morrowind-conflict-tools` and `G:\projects\MWManager` on
   2026-11-22.
+
+## 2026-11-22 follow-up: visible exit for mwcriminal inspector
+
+- The custom blacklist window put its only Close button in the footer after a proportional-height scroll pane.
+  Moved Close into the fixed header in both the blacklist and detector inspector, before scrollable content.
+- Added a LuaJIT UI regression test that checks the button is created before the list and that clicking it leaves
+  menu mode and destroys the window. The focused `test_mwcriminal.py` passed in Steam, clone, and MWManager
+  (**10 passed** each); the edited Lua file passes LuaJIT syntax validation.
+- The change is synced to both repositories. It has not yet been tested in-game.
 
 ## 2026-11-21 continuation: Attend Me interoperability and MUSE KB5
 

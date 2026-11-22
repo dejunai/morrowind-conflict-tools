@@ -102,7 +102,7 @@ OWN_MODS = {"mwcollide", "mwcompanions", "mwcriminal", "mwcustomclasspersistence
             "mweffectinspector", "mwexitguard", "mwfloatfix", "mwguard", "mwhangwatch", "mwinfoloop",
             "mwmouseguard", "mwperformers", "mwpersonaleffects", "mwplainpaperfix", "mwpluginpatches",
             "mwquicktoggle", "mwsaveguard", "mwsoundguard", "mwstranded", "mwteleportguard",
-            "mwwarnsuppression", "mwmanager"}
+            "mwwarnsuppression", "mwmanager", "mwmanagermenu", "mwsuite"}
 
 # defaults; mwguard.json (shared with the runtime guard) and mwdialog_luafix.json override them
 DEFAULTS = {
@@ -271,7 +271,9 @@ def cfg_hash(cfg):
 
 def mwguard_log_cover(data_dir, cfg, mod_key):
     """(covered, why): is mwguard's runtime log-spam guard clearly going to catch this mod's lines?"""
-    main = os.path.join(data_dir or "", "MWSE", "mods", "mwguard", "main.lua")
+    main = os.path.join(data_dir or "", "MWSE", "mods", "mwsuite", "mwguard", "main.lua")
+    if not os.path.isfile(main):
+        main = os.path.join(data_dir or "", "MWSE", "mods", "mwguard", "main.lua")
     if not data_dir or not os.path.isfile(main):
         return False, "mwguard is not installed in Data Files"
     try:
@@ -2433,6 +2435,8 @@ def _analyse(src, key, rel, cfg):
 
 def log_exempt(cfg, key):
     low = key.lower()
+    if low == "mwsuite" or low.startswith("mwsuite/"):
+        return True
     for m in list(cfg["log"].get("exemptMods") or []) + list(cfg.get("logExemptMods") or []):
         m = str(m).lower().replace("\\", "/")
         if m == low or m == low.split("/")[0]:

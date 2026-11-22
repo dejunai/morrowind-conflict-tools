@@ -1,0 +1,7 @@
+[package]
+name = "mwmanagermenu"
+description = "One Mod Config Menu entry (MW Conflict Tools) with a tab for each mw* suite mod."
+
+[tools.mwse]
+lua-mod = "mwsuite.mwmanagermenu"
+load-priority = 900000

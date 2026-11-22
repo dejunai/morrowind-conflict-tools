@@ -5,6 +5,6 @@ category = "Bug Fixes"
 author = "Antigravity"
 
 [tools.mwse]
-lua-mod = "mwwarnsuppression"
+lua-mod = "mwsuite.mwwarnsuppression"
 load-priority = 5000
 

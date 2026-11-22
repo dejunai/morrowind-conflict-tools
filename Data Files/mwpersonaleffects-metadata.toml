@@ -4,5 +4,5 @@ description = "Standalone Lua fixes for Personal Effects' Census and Excise scri
 category = "Bug Fixes"
 
 [tools.mwse]
-lua-mod = "mwpersonaleffects"
+lua-mod = "mwsuite.mwpersonaleffects"
 load-priority = 4500

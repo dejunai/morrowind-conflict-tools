@@ -5,5 +5,5 @@ description = "Multi-monitor cursor containment preventing mouse drift and mouse
 authors = ["MWSE Team"]
 
 [tools.mwse]
-lua-mod = "mwmouseguard"
+lua-mod = "mwsuite.mwmouseguard"
 load-priority = 4300

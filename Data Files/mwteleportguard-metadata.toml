@@ -5,5 +5,5 @@ description = "Mod-agnostic protection deferring scripted dialogue teleports unt
 authors = ["MWSE Team"]
 
 [tools.mwse]
-lua-mod = "mwteleportguard"
+lua-mod = "mwsuite.mwteleportguard"
 load-priority = 4200

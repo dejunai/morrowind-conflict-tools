@@ -8,7 +8,7 @@ import pytest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LUAJIT = os.path.join(ROOT, "tools", "luajit", "luajit.exe")
 EXE = os.path.join(ROOT, "Morrowind.exe")
-MODS = os.path.join(ROOT, "Data Files", "MWSE", "mods")
+MODS = os.path.join(ROOT, "Data Files", "MWSE", "mods", "mwsuite")
 DRIVER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "warnlocate_driver.lua")
 
 pytestmark = pytest.mark.skipif(not (os.path.isfile(LUAJIT) and os.path.isfile(EXE)),

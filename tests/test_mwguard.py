@@ -8,7 +8,7 @@ import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LUAJIT = os.environ.get("MWMANAGER_LUAJIT", os.path.join(ROOT, "tools", "luajit", "luajit.exe"))
-MODS = os.path.join(ROOT, "Data Files", "MWSE", "mods").replace("\\", "/")
+MODS = os.path.join(ROOT, "Data Files", "MWSE", "mods", "mwsuite").replace("\\", "/")
 pytestmark = pytest.mark.skipif(not os.path.isfile(LUAJIT), reason="LuaJIT not available")
 
 HARNESS = r'''
@@ -48,6 +48,11 @@ print("OK")
 
 ON = HARNESS + r'''
 assert(event.register ~= realRegister, "mwguard should wrap while on")
+local owned = load("return function() end",
+  "@C:\\Game\\Data Files\\MWSE\\mods\\mwsuite\\mwcriminal\\main.lua")()
+event.register("simulate", owned)
+assert(registry.simulate[1] == owned, "nested suite exemption was lost")
+event.unregister("simulate", owned)
 local probe = setmetatable({}, { __mode = "k" })
 for _ = 1, 1000 do
   local cb = make()
@@ -84,3 +89,17 @@ def test_off_at_start_up_wraps_nothing(tmp_path):
 
 def test_unregistered_handlers_are_released(tmp_path):
     run(tmp_path, ON, enabled=True)
+
+
+def test_nested_suite_interop_preserves_short_exemptions(tmp_path):
+    run(tmp_path, r'''
+package.path = MODS .. "/?.lua;" .. package.path
+local guard = require("mwguard.interop")
+guard.exempt("mwcriminal")
+guard.exemptLog("mwcriminal")
+assert(guard.isExempt("mwsuite/mwcriminal"))
+assert(guard.isLogExempt("mwsuite/mwcriminal"))
+assert(not guard.isExempt("mwsuite/mwcompanions"))
+assert(not guard.isLogExempt("mwsuite/mwcompanions"))
+print("OK")
+''', enabled=False)
