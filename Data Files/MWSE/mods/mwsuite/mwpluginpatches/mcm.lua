@@ -363,6 +363,17 @@ cgCategory:createYesNoButton({
 })
 
 
+local topicsCategory = page:createCategory(string.format("UI Expansion: Dialogue Topic Colours%s",
+    getStatusText(config.isUIExpansionActive())))
+
+topicsCategory:createYesNoButton({
+    label = "Wait for the Topic List Before Colouring",
+    description = "UI Expansion colours dialogue topics once, as the menu is first laid out. When another mod lays the "
+        .. "menu out early (ImmersiveTravel, with travel NPCs), that is too soon and every topic stays amber. This makes "
+        .. "the colouring wait for the list. Neither mod is edited. Takes effect after a restart.",
+    variable = mwse.mcm.createTableVariable({ id = "uiExpansionTopicsEnabled", table = config }),
+})
+
 local voicesCategory = page:createCategory(string.format("Voices of Vvardenfell: Console%s",
     getStatusText(config.isAiVoicesActive())))
 

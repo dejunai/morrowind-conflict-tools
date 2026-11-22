@@ -37,6 +37,8 @@
 - mwcriminal: a picked door stays unlocked, and relocking keeps the door's own level.
 - mwcompanions: companions can put their weapon away after a fight.
 - mwpluginpatches: Friends & Frens stealth companions don't cloak for a drawn weapon or readied spell.
+- `--fix` flips an .esm's reference to the temporary group only if nothing can need it persistent; the Clean_Piran exception list is gone.
+- mwpluginpatches: UI Expansion's topic colours wait for the topic list, so travel NPCs' topics don't stay amber.
 - mwpluginpatches: vanilla NPCs that Friends & Frens converts keep their generic dialogue.
 - mwpluginpatches: `illegible handwriting` is learned again, and goes away when the quest is finished.
 - mwpluginpatches: Voices of Vvardenfell's routine console lines can be hidden; that mod's file is not edited.

@@ -1,5 +1,19 @@
 # Resume: Morrowind tools, MWManager and the mw* Lua suite (2026-11-22)
 
+## Start here (2026-11-22, cooldown until Thursday)
+
+- `mwdialog_backup\yet-another-handoff.md` in the Steam install (not in the repos): what is done, what waits for a
+  check in game, and every open issue with the evidence gathered so far.
+
+## 2026-11-22: persistence flips by rule, topic colours (not tested in game)
+
+- `fix_ref_groups` has no plugin list. An .esm's reference is flipped only when no plugin flags the object
+  "References Persist" (0x400) and no script, result or compiled script names it. On the 158 flips of 2026-11-20
+  (two stopped the game) that is Clean_Piran's door alone. Don't loosen it without measuring those 158 again.
+- Amber topics: MenuDialog's uiActivated comes before its topic rows, so an early updateLayout spends UI
+  Expansion's one-shot painter. patches\uiExpansionTopics.lua holds it. MWSE's handler sort is unstable for equal
+  priorities, so a fix must set a priority and never rely on registration order.
+
 ## 2026-11-22: Friends & Frens and generic dialogue (synced and pushed; confirmed in game for Fargoth)
 
 - Its partner scripts declare `nolore`, so converted vanilla NPCs lose every "Not Local nolore = 0" response.

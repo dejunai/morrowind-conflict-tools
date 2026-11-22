@@ -16,6 +16,7 @@ local coastGuardContraband = require("mwpluginpatches.patches.coastGuardContraba
 local graphicHerbalismRespawn = require("mwpluginpatches.patches.graphicHerbalismRespawn")
 local bardicInstruments = require("mwpluginpatches.patches.bardicInstruments")
 local aiVoicesConsole = require("mwpluginpatches.patches.aiVoicesConsole")
+local uiExpansionTopics = require("mwpluginpatches.patches.uiExpansionTopics")
 
 local function onInitialized()
     if not config.enabled then
@@ -93,6 +94,9 @@ local function onInitialized()
     end
     if config.aiVoicesConsoleEnabled and config.isAiVoicesActive() then
         aiVoicesConsole.init()
+    end
+    if config.uiExpansionTopicsEnabled and config.isUIExpansionActive() then
+        uiExpansionTopics.init()
     end
 
     mwse.log("[mwpluginpatches] Unified plugin compatibility patches initialized.")

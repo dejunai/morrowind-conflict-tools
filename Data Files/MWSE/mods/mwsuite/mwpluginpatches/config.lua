@@ -49,6 +49,10 @@ function config.isFriendsAndFrensActive()
         or tes3.getObject("aa_comp_jiub") ~= nil
 end
 
+function config.isUIExpansionActive()
+    return (lfs and lfs.fileexists and lfs.fileexists("Data Files/MWSE/mods/UI Expansion/MenuDialog.lua")) or false
+end
+
 function config.isLostHeirActive()
     return tes3.isModActive("t_lostheir.esp")
         or tes3.isModActive("LostHeir.esp")
@@ -161,6 +165,9 @@ local function getDynamicDefaults()
 
         -- Friends & Frens: converted vanilla NPCs keep their generic dialogue
         friendsAndFrensLoreEnabled = fnf,
+
+        -- UI Expansion: topic colours wait until the topic list exists
+        uiExpansionTopicsEnabled = config.isUIExpansionActive(),
 
         -- The Lost Heir Delayer
         lostHeirDelayEnabled = lostHeir,

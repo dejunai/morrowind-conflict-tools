@@ -6957,18 +6957,14 @@ def fix_long_names(args, plugins, bsas):
     return fixed
 
 
-# shortcut: plugins whose .esm-owned references --fix moves to the temporary group anyway (the game reports their
-# "missing in master file" and the flip clears it, checked in the editor); a rule that tells a safe flip from one a
-# script needs persistent should replace this list
-FLIP_ESM_REFS = {"clean_piran.esp"}
-
-
 def fix_ref_groups(args, plugins):
     """--fix: a reference the master keeps in its temporary group, but a plugin changes as a persistent one:
     the game looks for it among the master's persistent references, can't find it ("Object reference ...
     missing in master file" at startup, once per plugin) and the change is lost. Such references are moved
-    to the temporary group. Only references owned by an .esp master are affected: the game finds an .esm's
-    references in either group. (A master's persistent reference listed as temporary is found; left alone.)
+    to the temporary group. An .esp master's always are. An .esm's only where nothing can need them persistent:
+    no plugin flags the object "References Persist" and no script, dialogue result or compiled script names it
+    (flipped, those stop the game at start: huleenBookshelfScript, Uvirith_Verena, 2026-11-20).
+    (A master's persistent reference listed as temporary is found; left alone.)
     .esp files only (.bak first, dates kept)."""
     data_dir = os.path.abspath(args.data_dir)
     game_dir = os.path.dirname(data_dir)
@@ -7002,13 +6998,17 @@ def fix_ref_groups(args, plugins):
             found.append((name, path, data, ms, recs))
     # a script or dialogue result that names the object needs it persistent: those are reported, not moved
     texts = []
+    persists = set()                       # objects some plugin flags "References Persist"
     for name, path in plugins:
         try:
             with open(path, "rb") as f:
                 d = f.read()
             for off, tag, flags, body in iter_records(d):
+                if flags & HDR_PERSISTENT and tag not in ("CELL", "INFO", "DIAL", "LAND", "PGRD", "TES3"):
+                    persists.add(cstr(first_sub(body, b"NAME") or b"").lower())
                 if tag == "SCPT":
                     texts.append((first_sub(body, b"SCTX") or b"").lower())
+                    texts.append((first_sub(body, b"SCDT") or b"").lower())      # some ship without their source
                 elif tag == "INFO":
                     texts.append((first_sub(body, b"BNAM") or b"").lower())
         except (OSError, FormatError):
@@ -7052,15 +7052,17 @@ def fix_ref_groups(args, plugins):
                         for blk in blks:
                             bk = block_key(blk, ms, name.lower())
                             want = groups.get((bk[0], key, bk[1])) if bk and bk[0] != name.lower() else None
-                            # Only an .esp master trips the game ("missing in master file"); references of an .esm
-                            # are found in either group, and scripts may rely on the plugin making them persistent.
-                            if bk and bk[0].endswith(".esm") and name.lower() not in FLIP_ESM_REFS:
-                                want = None
                             # only this direction loses the reference: kept temporary by the master but listed
                             # as persistent here ("missing in master file"). The other way round the game copes.
                             oid = cstr(next((d for s_, d in blk if s_ == "NAME"), b""))
-                            # The game only ever looks in the master's group, so a reference a script names is
-                            # moved too (persistent here can't help the script: the lookup fails either way).
+                            # An .esm's reference stays persistent where something can need it so: a script finds
+                            # only a persistent one.
+                            if want == "t" and grp == "p" and bk[0].endswith(".esm") and (
+                                    not oid or oid.lower() in persists
+                                    or oid.lower().encode(ENC, MW_ERRORS) in script_text):
+                                want = None
+                            # In an .esp master the game only ever looks in the master's group, so a reference a
+                            # script names is moved too (persistent here can't help: the lookup fails either way).
                             if want == "t" and grp == "p" and oid and oid.lower().encode(ENC, MW_ERRORS) in script_text:
                                 scripted.append((label, oid))
                             if want == "t" and grp == "p":
