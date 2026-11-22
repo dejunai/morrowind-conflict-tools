@@ -274,21 +274,14 @@ trainerCategory:createYesNoButton({
     variable = mwse.mcm.createTableVariable({ id = "trainerLogAutoUnlockOnLoad", table = config }),
 })
 
--- SECTION 13: DOOR LOCK COMPATIBILITY
-local doorCategory = page:createCategory(string.format("Door Locks: Compatibility%s",
-    getStatusText(config.isDoorLockSuiteInstalled())))
+local arrilleCategory = page:createCategory(string.format("Arrille's Tradehouse: Duplicate Doors%s",
+    getStatusText(config.isArrilleInnConflictActive())))
 
-doorCategory:createYesNoButton({
-    label = "Coordinate Door Locking and Lockpicking",
-    description = "Locks an NPC-owned interior door when its owner is absent. Standing at a locked door plays "
-        .. "the locked-door sound; sneak to pass it to Modern Lockpicking. Owned unlocked doors also require sneaking.",
-    variable = mwse.mcm.createTableVariable({ id = "doorLockCompatibilityEnabled", table = config }),
-})
-
-doorCategory:createYesNoButton({
-    label = "Show 'The Door is Locked' Notification",
-    description = "Also shows a visual notification when a locked door is tried while standing.",
-    variable = mwse.mcm.createTableVariable({ id = "doorLockedNotification", table = config }),
+arrilleCategory:createYesNoButton({
+    label = "Resolve Duplicate Rental Doors",
+    description = "When Improved Inns and Damp Little Squat add overlapping trapdoors in Arrille's Tradehouse, "
+        .. "uses the rental door while the room is rented. Takes effect after a restart.",
+    variable = mwse.mcm.createTableVariable({ id = "arrilleInnCompatibilityEnabled", table = config }),
 })
 
 -- SECTION 14: SEYDA NEEN COAST GUARD: CONTRABAND

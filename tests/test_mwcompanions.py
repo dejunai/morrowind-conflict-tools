@@ -13,6 +13,8 @@ pytestmark = pytest.mark.skipif(not os.path.isfile(LUAJIT), reason="LuaJIT not a
 
 HARNESS = r'''
 handlers, timers, positioned, logs, delayed = {}, {}, {}, {}, {}
+installed = false
+lfs = { fileexists = function() return installed end }
 userConfigs = { ["Easy Escort"] = { ignoreList = { ["ab01bluegill"] = true, ["imperial guard"] = true } } }
 mwse = {
   loadConfig = function(name, defaults)
@@ -327,10 +329,16 @@ def test_overlap_warning():
 userConfigs.abotSmart_Companions = { autoWarp = 2, followersResiliency = 0 }
 config.enabled = true; config.warp = true; config.resilient = true
 handlers.initialized()
+check(#logs == 0, "orphaned configuration must not produce a warning")
+installed = true
+handlers.initialized()
 local text = table.concat(logs, "\n")
 check(text:find("Smart Companions warp", 1, true), "warns about the overlapping warp")
 check(not text:find("Attend Me teleport", 1, true), "Attend Me teleport is coordinated, not treated as a conflict")
 check(not text:find("resilient", 1, true), "no warning for an option that is off")
+logs = {}; userConfigs.abotSmart_Companions.autoWarp = 0
+handlers.initialized()
+check(#logs == 0, "disabled installed options must not warn")
 ''')
 
 

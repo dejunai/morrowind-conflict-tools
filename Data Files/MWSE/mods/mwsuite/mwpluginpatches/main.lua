@@ -11,7 +11,7 @@ local swampSound = require("mwpluginpatches.patches.swampSound")
 local expandedSounds = require("mwpluginpatches.patches.expandedSounds")
 local talesHandwritingFix = require("mwpluginpatches.patches.talesHandwritingFix")
 local trainerLogUnlock = require("mwpluginpatches.patches.trainerLogUnlock")
-local doorLockCompatibility = require("mwpluginpatches.patches.doorLockCompatibility")
+local arrilleInnDoors = require("mwpluginpatches.patches.arrilleInnDoors")
 local coastGuardContraband = require("mwpluginpatches.patches.coastGuardContraband")
 local graphicHerbalismRespawn = require("mwpluginpatches.patches.graphicHerbalismRespawn")
 
@@ -77,9 +77,9 @@ local function onInitialized()
         trainerLogUnlock.init()
     end
 
-    -- 12. abot Door Locks + Accidental Theft Prevention + Modern Lockpicking ordering
-    if config.doorLockCompatibilityEnabled then
-        doorLockCompatibility.init()
+    -- Arrille's Tradehouse duplicate doors
+    if config.arrilleInnCompatibilityEnabled then
+        arrilleInnDoors.init()
     end
     if config.coastGuardContrabandEnabled then
         coastGuardContraband.init()

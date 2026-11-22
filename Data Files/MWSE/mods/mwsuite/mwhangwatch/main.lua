@@ -178,8 +178,7 @@ local function soundId(e)
         or "?"
 end
 
-local function describeSound(kind, e)
-    local id = soundId(e)
+local function describeSound(kind, e, id)
     local ref = field(function() return e.reference.object.id end)
         or field(function() return e.reference.id end) or "-"
     local parts = { kind, id, "on " .. tostring(ref) }
@@ -193,7 +192,7 @@ local function describeSound(kind, e)
     if field(function() return e.isVoiceover end) then parts[#parts + 1] = "voice" end
     local flags = field(function() return e.flags end)
     if flags then parts[#parts + 1] = "flags " .. tostring(flags) end
-    return id, table.concat(parts, "  ")
+    return table.concat(parts, "  ")
 end
 
 local function flagsLoop(e)
@@ -204,12 +203,13 @@ end
 local function onSound(kind)
     return function(e)
         if not audioOn() then return end
-        local id, line = describeSound(kind, e)
+        local id = soundId(e)
         soundTally[id] = (soundTally[id] or 0) + 1
         lastSound = id
         counters.sounds = (counters.sounds or 0) + 1
         lines.sounds = (lines.sounds or 0) + 1
         if lines.sounds <= (config.soundLines or 40) then
+            local line = describeSound(kind, e, id)
             -- for a looping sound on a reference: was it already playing when it was re-added?
             if kind ~= "buffer" and (field(function() return e.loop end) or flagsLoop(e)) then
                 local playing = field(function()

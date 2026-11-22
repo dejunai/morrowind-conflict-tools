@@ -1,3 +1,18 @@
+# Door-lock compatibility retirement (2026-11-21)
+
+- Removed the mwpluginpatches door-lock workaround and its MCM controls; configure locks and standing key access
+  in mwcriminal instead.
+- Kept the unrelated Arrille's Tradehouse duplicate-rental-door repair as its own patch, migrating the old
+  compatibility switch to its new switch without overriding an existing setting.
+
+# Lua guard memory use (2026-11-21)
+
+- `mwguard` reads only the handler's source lines for profiling hints instead of retaining whole source files.
+- `mwinfoloop` releases INFO tracking after each startup topic and between dialogue walks, without changing its
+  cycle detection or cache.
+- `mwhangwatch` continues tallying all sounds but builds detailed sound log lines only within its configured limit.
+  These diagnostics remain optional; actual memory savings depend on the load order and settings.
+
 # [NearStart] / [NearEnd] are [Order] rules too (2026-11-14)
 
 - In your rules file (`mwdialog_check.rules.txt`), a `[NearStart]` or `[NearEnd]` block now also orders its own

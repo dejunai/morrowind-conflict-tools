@@ -190,8 +190,7 @@ end
 ---------------------------------------------------------------------------------------------------------------
 -- startup check
 ---------------------------------------------------------------------------------------------------------------
--- Walks one topic. seen/pos are shared tables keyed by the info userdata (MWSE keeps one userdata per object,
--- so identity works); stamp = topic number, so nothing has to be cleared between topics.
+-- Walks one topic. seen/pos are reused tables keyed by info userdata; stamp = topic number.
 local order = {}
 local function walkTopic(dial, stamp, seen, pos)
     local okC, count = pcall(function() return #dial.info end)
@@ -316,6 +315,9 @@ local function scanChunk()
         s.index = s.index + 1
         local dial = s.dials[s.index]
         local okW, r, walked = pcall(walkTopic, dial, s.index, s.seen, s.pos)
+        for i, info in ipairs(order) do
+            s.seen[info], s.pos[info], order[i] = nil, nil, nil
+        end
         if not okW then r, walked = { kind = "error", error = r }, 0 end
         s.infos = s.infos + (walked or 0)
         if r then
@@ -469,9 +471,10 @@ local answer = { info = nil, repeats = 0 }
 local blocked = nil      -- info -> true, only with breakChoiceLoops
 
 local function resetConversation()
-    cur.dial, cur.ref, cur.ended, cur.lastInfo = nil, nil, true, nil
+    cur.dial, cur.ref, cur.ended, cur.lastInfo, cur.m = nil, nil, true, nil, nil
     answer.info, answer.repeats = nil, 0
     blocked = nil
+    if next(visited) then visited = {} end
 end
 M.resetConversation = resetConversation
 
@@ -498,6 +501,7 @@ local function onInfoFilter(e)
     if cur.ended or cur.lastPassed or dial ~= cur.dial or ref ~= cur.ref or now - cur.lastTime > 0.05
         or (cur.m and cur.lastInfo == cur.m.tail and cur.m.tail ~= nil) then
         -- a new walk
+        if next(visited) then visited = {} end
         cur.dial, cur.ref, cur.steps, cur.ended = dial, ref, 0, false
         cur.m = getMeta(dial)
         cur.pass = cur.pass + 1

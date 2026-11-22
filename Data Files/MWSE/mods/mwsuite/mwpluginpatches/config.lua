@@ -77,13 +77,9 @@ function config.isCoastGuardContrabandActive()
         or tes3.findDialogue("contraband") ~= nil
 end
 
-function config.isDoorLockSuiteInstalled()
-    local function installed(path)
-        return tes3.getFileExists("MWSE/mods/" .. path) or tes3.getFileExists("Data Files/MWSE/mods/" .. path)
-    end
-    return installed("abot/Door Locks/main.lua")
-        and installed("mer/accidentalTheftProtection/main.lua")
-        and installed("tauer/modern-lockpicking/main.lua")
+function config.isArrilleInnConflictActive()
+    return tes3.isModActive("Improved Inns Expanded.esp")
+        and tes3.isModActive("Seyda Neen - Damp Little Squat - unshabby.ESP")
 end
 
 
@@ -107,7 +103,7 @@ local function getDynamicDefaults()
     local expandedSounds = config.isExpandedSoundsActive()
     local tales = config.isTalesOfSeydaNeenActive()
     local trainerLog = config.isTrainerLogActive()
-    local doorLocks = config.isDoorLockSuiteInstalled()
+    local arrilleInn = config.isArrilleInnConflictActive()
     local coastGuard = config.isCoastGuardContrabandActive()
 
     return {
@@ -171,9 +167,8 @@ local function getDynamicDefaults()
         swampSoundEnabled = swamp,
         expandedSoundsEnabled = expandedSounds,
 
-        -- Coordinate owned doors, sneak-to-steal, and Modern Lockpicking activation.
-        doorLockCompatibilityEnabled = doorLocks,
-        doorLockedNotification = false,
+        -- Duplicate rental doors from Improved Inns and Damp Little Squat.
+        arrilleInnCompatibilityEnabled = arrilleInn,
 
         -- Graphic Herbalism Respawn Delay (days)
         graphicHerbalismRespawnEnabled = config.isGraphicHerbalismActive(),
@@ -202,6 +197,14 @@ if loadedConfig == nil then
     end
 end
 
+local needsSave = loadedConfig.doorLockCompatibilityEnabled ~= nil
+    or loadedConfig.doorLockedNotification ~= nil
+if loadedConfig.arrilleInnCompatibilityEnabled == nil and loadedConfig.doorLockCompatibilityEnabled ~= nil then
+    loadedConfig.arrilleInnCompatibilityEnabled = loadedConfig.doorLockCompatibilityEnabled
+end
+loadedConfig.doorLockCompatibilityEnabled = nil
+loadedConfig.doorLockedNotification = nil
+
 -- Merge with dynamic defaults so newly active plugins default on
 for k, v in pairs(dynamicDefaults) do
     if loadedConfig[k] == nil then
@@ -227,6 +230,9 @@ end
 if config.mcaPartySize == 3 then
     config.mcaPartySize = 2
     mwse.log("[mwpluginpatches] MCA party size 3 was invalid; changed it to MCA's largest option (2-20).")
+    needsSave = true
+end
+if needsSave then
     config.save()
 end
 

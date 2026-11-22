@@ -1991,6 +1991,13 @@ KNOWN_BUGS += [
      "'ambiguous syntax (function call x new statement)', preventing MUSE from loading"),
 ]
 
+KNOWN_BUGS += [
+    ("KB6", "OpenUI - MWSE", "spammer/openui - mwse/mod.lua",
+     "        weacon.widget.current = weapon.itemData.condition\n        weacon.widget.max = weapon.object.maxCondition\n        if weapon.itemData then",
+     "        weacon.widget.current = weapon.itemData and weapon.itemData.condition or weapon.object.maxCondition\n        weacon.widget.max = weapon.object.maxCondition\n        if weapon.itemData then",
+     "the enchanted weapon HUD dereferences absent item data each frame; a weapon without instance data is at full condition"),
+]
+
 
 def known_core_context(path):
     """Return an explicitly authorized core file identity; every other MWSE core file remains excluded."""

@@ -49,6 +49,8 @@ for i, option in ipairs({ "2-5", "2-10", "2-20" }) do
     assert(party.data.options[i].label == option and party.data.options[i].value == i - 1)
 end
 assert(#party.data.options == 3)
+assert(settings.arrilleInnCompatibilityEnabled and not settings.doorLockCompatibilityEnabled)
+assert(not settings.doorLockedNotification)
 local courtesans = settings.mcaCourtesans.data.options
 for i, pair in ipairs({ {"Enable", "all"}, {"Disable", "none"}, {"Disable male only", "female"},
                          {"Disable female only", "male"} }) do

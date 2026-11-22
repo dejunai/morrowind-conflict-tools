@@ -71,9 +71,10 @@ sneak:createButton({
 
 local locks = page:createCategory("Locks and doors")
 yesNo(locks, "interiorExit", "Never locked inside",
-    "A door from an interior out to an exterior is unlocked when used. Replaces part of mwpluginpatches door lock compatibility.")
+    "A door from an interior out to an exterior is unlocked when used.")
 yesNo(locks, "sneakToPick", "Must sneak to pick locks",
-    "A locked door or container without its key plays the locked sound unless you sneak; sneaking opens the lockpicking (Modern Lockpicking).")
+    "A locked door or container without its key plays the locked sound unless you sneak; sneaking opens the lockpicking (Modern Lockpicking). "
+        .. "A matching key, including one in a supported keyring, lets you use the door while standing, even if it is owned.")
 yesNo(locks, "lockedNotification", "Show a notice for locked things", "For players who play without sound.")
 yesNo(locks, "lockedCrosshair", "Tint the crosshair on locked things",
     "With Essential Indicators installed, the crosshair turns orange on a locked door or container you have no key for.")

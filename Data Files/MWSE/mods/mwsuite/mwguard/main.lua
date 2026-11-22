@@ -156,20 +156,21 @@ local function exempt(w, fn)
 end
 
 -- per-frame hints (informative annotation only) --------------------------------------------------
-local fileLines = {}
 local function perFrameHint(w)
-    local lines = fileLines[w.path]
-    if lines == nil then
-        lines = {}
-        local f = io.open(w.path, "r")
-        if f then
-            for l in f:lines() do lines[#lines + 1] = l end
-            f:close()
+    local f = io.open(w.path, "r")
+    if not f then return "source not readable" end
+    local lines, n = {}, 0
+    local first, last = math.max(1, w.first), math.max(w.first, w.last)
+    for line in f:lines() do
+        n = n + 1
+        if n >= first and n <= last then
+            lines[#lines + 1] = line
         end
-        fileLines[w.path] = lines
+        if n >= first and n >= last then break end
     end
-    if #lines == 0 then return "source not readable" end
-    local body = table.concat(lines, "\n", math.max(1, w.first), math.min(#lines, math.max(w.first, w.last))):lower()
+    f:close()
+    if n == 0 then return "source not readable" end
+    local body = table.concat(lines, "\n"):lower()
     for _, pat in ipairs(config.perFrameHints or {}) do
         local ok, found = pcall(string.find, body, pat)
         if ok and found then return pat end

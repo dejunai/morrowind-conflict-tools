@@ -567,3 +567,12 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
   2. Luafix identifies only this exact MUSE fingerprint, then verifies that the repaired source compiles before
      allowing a Known Bugs patch to replace a source that did not compile.
 * **Luafix grade**: `(Known Bugs) KB5: MUSE 2.02: two MCM calls split a parenthesized argument after the method name`.
+
+## 41. OpenUI Enchanted Weapon Condition (`KB6`)
+
+* **Author**: OpenUI - MWSE
+* **File**: `MWSE\mods\Spammer\OpenUI - MWSE\mod.lua`
+* **Bug**: The enchanted-weapon HUD reads `weapon.itemData.condition` before checking whether
+  instance data exists. The 2026-11-21 session produced 12,321 timer errors when it was nil.
+* **Fix**: Use the weapon's maximum condition for an undamaged instance without item data;
+  preserve the instance condition when present. Luafix repairs the exact vulnerable fingerprint.

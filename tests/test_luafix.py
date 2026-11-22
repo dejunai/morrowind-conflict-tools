@@ -1,6 +1,7 @@
 """mwdialog_luafix / mwdialog_lua: tokenizer, parser, rules, patching in place, undo, tidy wiring."""
 import json
 import os
+import subprocess
 import sys
 
 import pytest
@@ -664,6 +665,31 @@ category:createOnOffButton
     assert entry["patch"]["text"].count("category:createOnOffButton(") == 2
     bug_lines = lf.known_bug_report_lines(rep)
     assert any("DETECTED: (Known Bugs) KB5: MUSE 2.02:" in line for line in bug_lines)
+
+
+def test_KB6_repairs_enchanted_weapon_condition_only_at_matching_path():
+    source = ("local weapon, weacon = ...\n"
+              "        weacon.widget.current = weapon.itemData.condition\n"
+              "        weacon.widget.max = weapon.object.maxCondition\n"
+              "        if weapon.itemData then\n        end\n")
+    analysis = analyse(source, "spammer/openui - mwse/mod.lua")
+    findings = [f for f in analysis.findings if f["rule"] == "KB6"]
+    assert len(findings) == 1
+    repaired, applied = lf.build_patch(source, findings, "openui", CFG, "high", False)
+    assert applied == ["KB6"]
+    assert not [f for f in analyse(source, "another/mod.lua").findings if f["rule"] == "KB6"]
+    assert not [f for f in analyse(repaired, "spammer/openui - mwse/mod.lua").findings if f["rule"] == "KB6"]
+    luajit = os.environ.get("MWMANAGER_LUAJIT")
+    if not luajit or not os.path.isfile(luajit):
+        pytest.skip("LuaJIT executable not available for behavioral verification")
+    script = ("local chunk = assert(loadstring([==[" + repaired + "]==]))\n"
+              "local function check(data, expected)\n"
+              "  local gauge = {widget = {}}\n"
+              "  chunk({object = {maxCondition = 100}, itemData = data}, gauge)\n"
+              "  assert(gauge.widget.current == expected and gauge.widget.max == 100)\n"
+              "end\ncheck(nil, 100)\ncheck({condition = 37}, 37)\ncheck({condition = 0}, 0)\n")
+    result = subprocess.run([luajit, "-"], input=script, text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
 
 
 def test_KB4_restores_strict_exclusions_pages():

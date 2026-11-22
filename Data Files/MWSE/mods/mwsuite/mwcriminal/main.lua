@@ -227,15 +227,14 @@ end
 
 -- one MWSE.log line per switch that duplicates an original mod still switched on
 local function warnOverlaps()
-    local function on(name, key, default)
+    local function on(name, key, installed)
+        if not installed then return false end
         local c = mwse.loadConfig(name)
-        if c == nil then return default end
+        if c == nil then return true end
         return c[key] == true
     end
-    local pp = mwse.loadConfig("mwpluginpatches") or {}
     local checks = {
         { config.sneakToSteal, on("noAccidentalTheft", "enabled", lfs.fileexists("Data Files\\MWSE\\mods\\mer\\accidentalTheftProtection\\main.lua")), "Accidental Theft Protection" },
-        { config.interiorExit or config.sneakToPick, pp.enabled == true and pp.doorLockCompatibilityEnabled == true, "mwpluginpatches door lock compatibility" },
         { config.eveningLocks or config.knocking, on("abotDoor_Locks", "modEnabled", lfs.fileexists("Data Files\\MWSE\\mods\\abot\\Door Locks\\main.lua")), "abot Door Locks" },
     }
     local conflicts = {}

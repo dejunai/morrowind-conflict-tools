@@ -103,3 +103,30 @@ assert(not guard.isExempt("mwsuite/mwcompanions"))
 assert(not guard.isLogExempt("mwsuite/mwcompanions"))
 print("OK")
 ''', enabled=False)
+
+
+def test_source_hints_do_not_retain_whole_files(tmp_path):
+    source = tmp_path / "Data Files" / "MWSE" / "mods" / "othermod" / "main.lua"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "".join(f"-- {i:06d} " + "x" * 150 + "\n" for i in range(12000))
+        + "return function(e) local mouse = e; return mouse end\n",
+        encoding="utf-8",
+    )
+    run(tmp_path, HARNESS + r'''
+local cb = assert(loadfile(SOURCE))()
+collectgarbage("collect") collectgarbage("collect")
+local before = collectgarbage("count")
+event.register("simulate", cb)
+local st
+for i = 1, 20 do
+  local name, value = debug.getupvalue(registry.simulate[1], i)
+  if not name then break end
+  if name == "st" then st = value end
+end
+assert(st and st.hint == "mouse", "handler hint missing")
+collectgarbage("collect") collectgarbage("collect")
+local retained = collectgarbage("count") - before
+assert(retained < 512, string.format("source hints retained %.0f KiB", retained))
+print("OK")
+'''.replace("SOURCE", "[[" + str(source).replace("\\", "/") + "]]"), enabled=True)

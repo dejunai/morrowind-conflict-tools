@@ -19,8 +19,8 @@ local defaults = {
         isControlDown = false,
     },
     debugMode = false,
-    interiorExit = false,       -- doors out to an exterior are never locked (doorLockCompatibility)
-    sneakToPick = false,        -- locked doors/containers need sneaking to pick (doorLockCompatibility)
+    interiorExit = false,       -- doors out to an exterior are never locked
+    sneakToPick = false,        -- locked doors/containers need sneaking to pick
     lockedNotification = false, -- "Locked" notice next to the locked sound
     lockedCrosshair = false,    -- Essential Indicators crosshair tinted on locked targets without a key
     eveningLocks = false,       -- owned/occupied homes lock in the evening (abot Door Locks)

@@ -11,12 +11,13 @@ MODS = os.path.join(ROOT, "Data Files", "MWSE", "mods", "mwsuite")
 pytestmark = pytest.mark.skipif(not os.path.isfile(LUAJIT), reason="LuaJIT not available")
 
 HARNESS = r'''
-handlers, sounds, notices, boxes, added, crimes, timers = {}, {}, {}, {}, {}, {}, {}
+handlers, sounds, notices, boxes, added, crimes, timers, logs = {}, {}, {}, {}, {}, {}, {}, {}
+legacyConfigs, installed = {}, {}
 local shift = false
 local saved
 mwse = {
   loadConfig = function(name, defaults)
-    if name ~= "mwcriminal" then return nil end
+    if name ~= "mwcriminal" then return legacyConfigs[name] end
     if not defaults then return nil end
     local c = {}
     for k, v in pairs(defaults) do c[k] = v end
@@ -24,9 +25,9 @@ mwse = {
     return c
   end,
   saveConfig = function(name, c) saved = c end,
-  log = function() end,
+  log = function(fmt, ...) logs[#logs + 1] = string.format(fmt, ...) end,
 }
-lfs = { fileexists = function() return false end }
+lfs = { fileexists = function(path) return installed[path] == true end }
 local V = {}
 V.__index = V
 function vec(x, y, z) return setmetatable({ x = x, y = y, z = z }, V) end
@@ -181,6 +182,26 @@ function check(ok, message) if not ok then error(message, 2) end end
     assert out.returncode == 0 and out.stdout.strip().endswith("ok"), out.stdout + out.stderr
 
 
+def test_overlap_warnings_require_installed_mods():
+    run(r'''
+legacyConfigs.noAccidentalTheft = { enabled = true }
+legacyConfigs.abotDoor_Locks = { modEnabled = true }
+handlers.initialized()
+check(#logs == 0, "orphaned configs must not produce warnings")
+installed["Data Files\\MWSE\\mods\\mer\\accidentalTheftProtection\\main.lua"] = true
+installed["Data Files\\MWSE\\mods\\abot\\Door Locks\\main.lua"] = true
+handlers.initialized()
+local text = table.concat(logs, "\n")
+check(text:find("Accidental Theft Protection", 1, true), "installed theft mod must warn")
+check(text:find("abot Door Locks", 1, true), "installed door mod must warn")
+logs = {}
+legacyConfigs.noAccidentalTheft.enabled = false
+legacyConfigs.abotDoor_Locks.modEnabled = false
+handlers.initialized()
+check(#logs == 0, "disabled installed mods must not warn")
+''')
+
+
 def test_exits_keys_and_sneak_to_pick():
     run(r'''
 local home = cell("Balmora, Home", true)
@@ -200,6 +221,27 @@ check(activate(locked) == nil, "sneaking passes to the lockpicking")
 sneak(false); reset()
 local chest = item(tes3.objectType.container); chest.locked = true
 check(activate(chest) == false and sounds[1] == "LockedChest", "locked containers need sneaking too")
+''')
+
+
+def test_owned_doors_allow_keys_without_sneaking():
+    run(r'''
+local owner = npc("house_owner")
+local home = cell("Balmora, House", true)
+config.knocking = false
+inventory.house_key = true
+local locked = door(home, { owner = owner.object, locked = true, key = "house_key" })
+check(activate(locked) == nil and #sounds == 0, "standing key holder passes an owned locked door")
+local unlocked = door(home, { owner = owner.object, key = "house_key" })
+config.eveningLocks = false
+check(activate(unlocked) == nil and not unlocked.locked, "standing key holder passes an owned unlocked door")
+inventory.house_key = nil
+local missing = door(home, { owner = owner.object, locked = true, key = "house_key" })
+check(activate(missing) == false, "an owned locked door still requires sneaking without its key")
+reset()
+inventory.g7_inventory_keys = true
+tes3.refs.g7_container_KEYS = { object = { inventory = { contains = function(_, id) return id == "house_key" end } } }
+check(activate(missing) == nil and #sounds == 0, "a key in the keyring also permits standing")
 ''')
 
 

@@ -1,5 +1,8 @@
 # mwcriminal: inventory and implementation (updated 2026-11-22)
 
+The inventory below describes the pre-consolidation setup. The old door-lock compatibility patch has been
+retired; `mwcriminal` supplies its lock features, while `mwpluginpatches` retains the separate Arrille rental-door fix.
+
 ## 1. Inventory: who does each behavior today
 
 Activation order today (higher runs first): mwpluginpatches doorLockCompatibility 9200 → abot Door Locks 9100 →
@@ -22,7 +25,7 @@ NAT book fix 100 → mwplainpaperfix 10 → Accidental Theft Protection 0 and Mo
 | Plain paper skips the blank scroll window; owned needs sneak | **mwplainpaperfix** (ATP refuses blank scrolls standing) | blank = scroll type, no text after stripping tags, no `<img`; ids cached in config; moves itemData off the world ref before delete (save crash); marks stolen + triggers theft |
 | Locked door plays the locked sound, optional notification | **doorLockCompatibility** (`LockedDoor`, "The Door is Locked") | doors only; containers get nothing extra |
 | Keyrings | **abot** | key inside `g7_inventory_KEYS` / `invhlp_keyring` containers opens the door |
-| Arrille's Tradehouse duplicate trapdoor | **doorLockCompatibility** | plugin conflict fix, not crime: **stays in mwpluginpatches** |
+| Arrille's Tradehouse duplicate trapdoor | **mwpluginpatches** `arrilleInnDoors` | plugin conflict fix, not crime; retained independently |
 
 Out of scope (not on the list, stay as they are): Stealth Overhaul (detection model, stealth bar, sneak strikes,
 guards spotting stolen goods, XP), Skillful Sneaking and M1PE sneak addon (movement), MoreAttentiveGuards,
@@ -81,7 +84,7 @@ is still enabled.
 2. `readStanding` replaces the retired **noAccidentalTheftBookFix**; `sneakToSteal` replaces **Accidental Theft Protection**.
 3. `companionDetection` absorbs and retires **mwcompanionsneak**; its inspector, blacklist management, options,
    Attend Me/Stealth Overhaul interop, and sweep now live in mwcriminal.
-4. `interiorExit` + `sneakToPick` + locked feedback → retire **doorLockCompatibility** (Arrille resolver stays)
+4. `interiorExit` + `sneakToPick` + locked feedback replace **doorLockCompatibility** (retired; Arrille resolver stays).
 5. `eveningLocks` + `knocking` → retire **abot Door Locks**
 
 ## 4. Dropped from the originals (say if any is wanted)

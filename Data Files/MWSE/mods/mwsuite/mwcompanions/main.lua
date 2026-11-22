@@ -254,6 +254,7 @@ end
 
 -- one MWSE.log line per switch that duplicates an original option still switched on
 local function warnOverlaps()
+    if not lfs.fileexists("Data Files\\MWSE\\mods\\abot\\Smart Companions\\main.lua") then return end
     local sc = mwse.loadConfig("abotSmart_Companions")
     local checks = {}
     if sc then
