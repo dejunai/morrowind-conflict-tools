@@ -115,7 +115,7 @@ Following major refactoring passes, the core monolith `mwdialog_check.py` delega
 
 ### 3.8. Plugin Merging Subsystem
 * `--merge OUT.esp [INPUT ...]`: Merges specified input plugins into `OUT.esp`. Verifies master dependencies and skips plugins missing required masters. Later inputs win record conflicts.
-* `--auto-merge`: Automatically identifies clean, non-conflicting ESPs (no scripts, no cell/land/pathgrid modifications) that can be merged without altering override hierarchy, combines them into `mwdialog_check AutoMerge.esp` (or `--merge-name`), and deactivates the originals (logged to `mwdialog_merged.txt`).
+* `--auto-merge`: Automatically identifies clean, non-conflicting ESPs (scripts allowed; no cell/land/pathgrid modifications) that can be merged without altering override hierarchy, combines them into `mwdialog_check AutoMerge.esp` (or `--merge-name`), and deactivates the originals (logged to `mwdialog_merged.txt`).
 * `--merge-name NAME.esp`: Custom filename for `--auto-merge`.
 * `--unmerge [NAME.esp ...]`: Rolls back an auto-merge, deactivating the merged plugin and restoring individual source plugins.
 * `--merge-all`: Forces inclusion of all specified plugins into the merge, bypassing master dependency checks.

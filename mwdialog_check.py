@@ -4288,7 +4288,7 @@ def run_merge(args, plugins, bsas, data_dirs):
 
 
 # --------------------------------------------------------------------------
-# --auto-merge: fold small, script-free, cell-free plugins into one
+# --auto-merge: fold cell-free plugins (scripts allowed) into one
 # --------------------------------------------------------------------------
 
 AUTO_MERGE_NAME = "mwdialog_check AutoMerge.esp"
@@ -4371,8 +4371,6 @@ def run_auto_merge(args, plugins, bsas, data_dirs):
             why = "master file"
         elif is_our_patch(n) or low in other_merges or low in NOT_A_MOD:
             why = "made by mwdialog_check"
-        elif pr["scripts"]:
-            why = "has scripts"
         elif pr["cells"]:
             why = "edits cells, land or pathgrids"
         elif low in is_master_of_other:
@@ -9109,13 +9107,13 @@ def _main(argv=None):
                          "masters aren't active, or whose dialogue refers to things no installed mod defines, "
                          "are left out (their target mod isn't installed). Later inputs win conflicts")
     mg.add_argument("--auto-merge", action="store_true",
-                    help=f"find active .esp plugins with no scripts and no cell/land/pathgrid edits that can move "
+                    help=f"find active .esp plugins with no cell/land/pathgrid edits that can move "
                          f"together without changing what wins against any other plugin, merge them into one "
                          f"('{AUTO_MERGE_NAME}', or --merge-name), and deactivate them (recorded in {MERGE_RECORD}; "
                          f"--add-all-esp leaves them out). Use --dry-run first")
     mg.add_argument("--merge-name", metavar="NAME.esp", help="with --auto-merge: the merged plugin's name")
     mg.add_argument("--merge-plan", action="store_true",
-                    help="recommend merges --auto-merge doesn't make (plugins with scripts, cells, land or "
+                    help="recommend merges --auto-merge doesn't make (plugins with cells, land or "
                          "pathgrids), grouped by kind; read-only: writes mwdialog_merge_plan.txt and .json. "
                          "Merges that place objects in cells need a new game")
     mg.add_argument("--plan-size", type=int, default=8, metavar="N",

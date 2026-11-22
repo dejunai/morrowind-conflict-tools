@@ -105,7 +105,8 @@
   window, over `MenuLoading_label` and `MenuLoading_fill` (the names it looked for don't exist).
 - The user's rule: a splash only for an interior-to-exterior door expected to load for over 1 s. Expected = that
   region's last door load, so the first one is only timed. The picture now has its own menu behind the bar.
-- `tests/test_regional_splash.py` exists in the Steam tree only. The .7z in the downloads has the fixed Lua too
+- Regional Splash is a private, non-distributable local archive mod (it uses others' art): no tests, KB entries or
+  repo/MWManager copies. The .7z in the downloads has the fixed Lua too
   (original beside the .before files in session-fixes-20261122); the luafix backups still have the old Lua.
   Not tested in game: whether that menu renders full screen during a load.
 

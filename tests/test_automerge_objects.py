@@ -166,3 +166,20 @@ def test_merged_inputs_of_reads_the_merge_record(tmp_path):
     (tmp_path / m.MERGE_RECORD).write_text("[mwdialog_check AutoMerge.esp]\nA.esp\nGone.esp\n", encoding="utf-8")
     got = m.merged_inputs_of(str(tmp_path), str(df))
     assert got == {"mwdialog_check automerge.esp": [("A.esp", str(df / "A.esp")), ("Gone.esp", None)]}
+
+
+def test_automerge_keeps_scripts_and_start_scripts(tmp_path):
+    """Scripted plugins can be merged: SCPT and SSCR records survive, later input wins a shared script."""
+    def sscr(name):
+        return rec("SSCR", sub("DATA", b"1234") + sub("NAME", z(name)))
+    def scpt_text(name, text):
+        return rec("SCPT", sub("SCHD", name.encode().ljust(32, b"\0") + b"\0" * 20) + sub("SCTX", text.encode()))
+    a = tmp_path / "A.esp"
+    b = tmp_path / "B.esp"
+    plugin(str(a), [("Morrowind.esm", 0)], [scpt_text("qScript", "begin qScript\nend"), sscr("qScript")])
+    plugin(str(b), [("Morrowind.esm", 0)], [scpt_text("qScript", "begin qScript\n;v2\nend"), scpt("other")])
+    ins = [(n, open(p, "rb").read()) for n, p in (("A.esp", a), ("B.esp", b))]
+    out, _s = m.build_merge(ins, "M.esp", ["Morrowind.esm", "A.esp", "B.esp"], {"morrowind.esm": 1}, [])
+    recs = {m.record_id(t, r): r for _o, t, _f, r in m.iter_records(out) if t != "TES3"}
+    assert set(recs) == {("SCPT", "qscript"), ("SCPT", "other"), ("SSCR", "qscript")}
+    assert b";v2" in m.first_sub(recs[("SCPT", "qscript")], b"SCTX")

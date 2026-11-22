@@ -1,5 +1,5 @@
-"""mwdialog_mergeplan.py - recommend merges --auto-merge doesn't make: plugins with scripts, cells, land or
-pathgrids (dungeons, quests, landscape) grouped into several merged plugins.
+"""mwdialog_mergeplan.py - recommend merges --auto-merge doesn't make: plugins with cells, land or pathgrids
+(dungeons, quests, landscape) grouped into several merged plugins.
 
 Read-only: it writes a report (mwdialog_merge_plan.txt) and the plan for the GUI (mwdialog_merge_plan.json),
 both rewritten from scratch each run. Rules:
