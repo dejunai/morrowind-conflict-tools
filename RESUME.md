@@ -1,9 +1,8 @@
-# Resume: Morrowind tools, MWManager and the mw* Lua suite (2026-11-21)
+# Resume: Morrowind tools, MWManager and the mw* Lua suite (2026-11-22)
 
 Read this first, then `.claude\CLAUDE.md` and the memory index. The user stopped this session near the usage
 limit. The own-mod logging continuation below is committed locally and not pushed: clone `565eaa9`, MWManager
-`b76b856`. The latest Attend Me and KB5 changes are synced to both repositories but remain uncommitted and
-unpushed.
+`b76b856`. The subsequent Attend Me, KB5, and mod-refactor changes are committed and pushed to both repositories.
 
 ## 2026-11-22 continuation: absorb Companion Sneak and extract Personal Effects
 
@@ -21,8 +20,8 @@ unpushed.
   **495 passed, 25 skipped**. Bundled LuaJIT syntax checks passed for 34 changed Lua files.
 - The generated `Data Files\vortex.deployment.json` still records the removed `personalEffectsFix.lua` until
   Vortex refreshes deployment metadata; do not edit that generated file manually. The game was not run.
-- Synced to `G:\projects\morrowind-conflict-tools` and `G:\projects\MWManager`. The changes are not yet
-  committed or pushed.
+- Synced, committed, and pushed to `G:\projects\morrowind-conflict-tools` and `G:\projects\MWManager` on
+  2026-11-22.
 
 ## 2026-11-21 continuation: Attend Me interoperability and MUSE KB5
 
