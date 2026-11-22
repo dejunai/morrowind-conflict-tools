@@ -208,6 +208,16 @@ def safe_write_bytes(path, data, validate=None, keep_times=None):
     forget_cached(path)
 
 
+def check_unchanged(seen, key, data):
+    """Raise if a plugin's bytes aren't the ones that were scanned (seen: key -> sha1): the plan doesn't fit them."""
+    if seen is not None and key in seen and seen[key] != content_id(data):
+        raise OSError("it changed since it was scanned (redeployed or edited): run again")
+
+
+def content_id(data):
+    return hashlib.sha1(data, usedforsecurity=False).hexdigest()
+
+
 def write_plugin_bytes(path, data, keep_times=None):
     """safe_write_bytes for a plugin: refuses to write anything that isn't a whole TES3 file."""
     safe_write_bytes(path, data, validate=validate_plugin_bytes, keep_times=keep_times)

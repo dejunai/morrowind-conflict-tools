@@ -2573,7 +2573,7 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
                 ent["error"] = str(e)
                 continue
             ckey = "luafix1:" + os.path.normcase(os.path.abspath(p))
-            if cache is not None:
+            if cache is not None and key != "MWSE Core":     # a cached finding has no edits to patch with
                 hit = cache.get(ckey, ah.stamp_of(st))
                 if hit is not None and hit.get("cfg") == ch and "mc" in hit:
                     ent.update(error=hit.get("err"), logs=hit.get("logs", 0), requires=hit.get("req", []),

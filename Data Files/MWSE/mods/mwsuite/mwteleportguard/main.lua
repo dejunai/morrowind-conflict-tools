@@ -22,6 +22,18 @@ local function logMsg(fmt, ...)
     end
 end
 
+-- a ; starts a comment, except inside quotes ("Wait; then go")
+local function stripComments(cmd)
+    return (cmd:gsub("[^\r\n]+", function(line)
+        local quoted = false
+        for i = 1, #line do
+            local c = line:sub(i, i)
+            if c == '"' then quoted = not quoted end
+            if c == ";" and not quoted then return line:sub(1, i - 1) end
+        end
+    end))
+end
+
 --- Parses PositionCell from a legacy script command string.
 --- Returns parsed table and the remaining script command string without the teleport.
 local function extractTeleport(cmd)
@@ -30,7 +42,8 @@ local function extractTeleport(cmd)
     end
     -- a conditional teleport ("if ... PositionCell ... endif") must stay in the script: run here, it would
     -- happen every time. Comments (after ;) don't count.
-    local code = cmd:gsub(";[^\r\n]*", ""):lower()
+    local uncommented = stripComments(cmd)
+    local code = uncommented:gsub('"[^"\r\n]*"', '""'):lower()
     for _, word in ipairs({ "if", "elseif", "else", "while" }) do
         if code:find("%f[%w]" .. word .. "%f[%W]") then
             return nil, cmd
@@ -38,7 +51,7 @@ local function extractTeleport(cmd)
     end
 
     local pattern = "[Pp][Ll][Aa][Yy][Ee][Rr]%s*->%s*[Pp][Oo][Ss][Ii][Tt][Ii][Oo][Nn][Cc][Ee][Ll][Ll]%s+([%-%d%.]+)[%s,]+([%-%d%.]+)[%s,]+([%-%d%.]+)[%s,]+([%-%d%.]+)[%s,]+([^\r\n;]+)"
-    local x, y, z, rot, rawCell = string.match(cmd, pattern)
+    local x, y, z, rot, rawCell = string.match(uncommented, pattern)
 
     if not (x and y and z and rot and rawCell) then
         return nil, cmd
@@ -56,7 +69,7 @@ local function extractTeleport(cmd)
     }
 
     -- Remove the PositionCell line from the command string so the rest can run immediately
-    local remaining = cmd:gsub(pattern, ""):gsub("^%s+", ""):gsub("%s+$", "")
+    local remaining = uncommented:gsub(pattern, ""):gsub("^%s+", ""):gsub("%s+$", "")
 
     return tp, remaining
 end

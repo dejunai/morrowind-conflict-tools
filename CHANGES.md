@@ -1,3 +1,17 @@
+# Audit fixes (2026-11-22)
+
+- `--restore-all` backs up what it replaces and removes no backup.
+- `--clean-up` keeps the oldest and the newest backup, and all backups of a plugin that isn't installed.
+- Repairs and renames keep a copy of an updated original; a failed backup stops the write.
+- `--restore-unused` never overwrites a newer file; `--restore-textures` keeps the lines it couldn't restore.
+- `--fix` and `--clean` don't write over a plugin that changed since it was read.
+- The tools lock the game they work on, with the same lock as MWManager's jobs.
+- `--merge` and `--auto-merge` leave no temp file when their check fails; two typos in one response are both fixed.
+- luafix offers MWSE Core known-bug fixes on cached runs too.
+- mwsaveguard writes every deferred save, leaves look-alike NPCs alone and accepts NUL padding at a save's end.
+- mwteleportguard ignores comments and quoted words.
+- mwpersonaleffects fills the chest once and empties a stray chest once.
+
 # Tamriel Data renames (2026-11-22)
 
 - `--fix` reads Tamriel Data's rename map from `tools\Translation.txt` only. It is optional.

@@ -61,6 +61,7 @@ import time
 from collections import Counter, OrderedDict, defaultdict
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mwdialog_paths as MP  # noqa: E402
+from mwdialog_tes3 import check_unchanged, content_id  # noqa: E402
 import mwdialog_text as MT  # noqa: E402
 import mwdialog_tes3  # noqa: E402
 print = MT.printer()  # noqa: A001
@@ -87,7 +88,7 @@ from mwdialog_media import (  # noqa: E402,F401
     nif_texture_names, nif_texture_refs, placeholder_dds, placeholder_icon, silent_audio, sound_file_problem, _SOUND_PROBLEMS,
     SOUND_ROOTS, stand_in_bytes, TEXT_KEY_TAG, TEXTURE_MAX_EDGE)
 from mwdialog_backup import (  # noqa: E402,F401
-    backup_candidates, BACKUP_DIR, backup_index, backup_path, bak_home, chain_tail, game_dir_of,
+    backup_candidates, BACKUP_DIR, backup_path, bak_home, chain_tail, game_dir_of,
     index_dir)
 from mwdialog_loadorder import (  # noqa: E402,F401
     BAD_RULE_ENTRIES, default_ini, game_files_overflow, ini_game_files, INI_SECTION_LIMIT, LOAD_ORDER_FILE, LOAD_ORDER_WRITTEN,
@@ -128,7 +129,7 @@ from mwdialog_redundant import (  # noqa: E402,F401
     plugin_summary, REDUNDANT_MAX_VERSIONS, REDUNDANT_VARIANT_MIN, REDUNDANT_VARIANT_SAME, REDUNDANT_VARIANT_SHARE, relied_on, relied_on_text,
     _same_mod_name, _type_text, USE_OBJ_TAGS, vortex_mod_name)
 from mwdialog_generated import (  # noqa: E402,F401
-    _ASSET_BACKUP_OF, backup_asset_original, find_vortex_root, FOLLOWUP_RE, FULLSIZE_DIR, keep_new_original, off_dest,
+    _ASSET_BACKUP_OF, backup_asset_original, find_vortex_root, FOLLOWUP_RE, FULLSIZE_DIR, keep_new_original, record_repair, off_dest,
     original_mod_guess, reduce_textures, REDUCED_RECORD, _repaired_hashes, REPAIRED_SIDECAR, replace_asset_in_place, run_remove_generated,
     run_restore_textures, _sha256_file, write_generated)
 from mwdialog_restore import (  # noqa: E402,F401
@@ -379,6 +380,7 @@ class World:
         self.obj_refs = defaultdict(list)  # object id lower -> [(plugin, tag, id, refs or None if deleted)]
         self.obj_events = {}               # object id lower -> [(load index, plugin, tag, deleted?)]
         self.item_fixes = []               # dangling SCRI/ENAM/NPCO in the winning record (see _check_item_refs)
+        self.file_sha = {}                 # plugin lower -> content id of the bytes scanned (or written since)
         self._td_renames = None            # Tamriel Data's Translation.txt: {old id: new id}
         self._script_targets = None        # ids some script or dialogue result acts on ("X->")
         self.ref_dropped = set()           # (plugin, cell offset, FRMR) of edits _check_refs removes
@@ -413,6 +415,7 @@ class World:
         except OSError as e:
             r.add("ERROR", name, "", "", f"could not read file: {e}")
             return
+        self.file_sha[name.lower()] = content_id(data)
 
         n_records = 0
         current = None          # Topic currently receiving INFOs
@@ -2289,11 +2292,15 @@ class World:
         DELETE = ("delete",)
         never = "deleted response: its filter names something that doesn't exist, so it can never play"
 
+        found, text = [], info.text                 # one fix for all of a response's typos: set_text replaces it
         for master in t.defined_by.get((info.id or "").lower(), []):
             for wrong, right in TEXT_TYPOS.get(master, ()):
-                if wrong in info.text:
-                    add("ERROR", f"typo: '{wrong}' should read '{right}'",
-                        ("set_text", info.text.replace(wrong, right)), f"corrected it to '{right}'")
+                if wrong in text:
+                    text = text.replace(wrong, right)
+                    found.append((wrong, right))
+        if found:
+            add("ERROR", "typo: " + "; ".join(f"'{w}' should read '{r_}'" for w, r_ in found),
+                ("set_text", text), "corrected it to " + ", ".join(f"'{r_}'" for _w, r_ in found))
 
         # speaker filters
         if info.actor and not self._exists(ACTOR_TAGS, info.actor):
@@ -3198,6 +3205,7 @@ def apply_plan(path, plugin, plan, world, log, collect=None, backup=True):
 
     if not changes or collect is not None:
         return changes
+    check_unchanged(world.file_sha, plugin.lower(), data)
 
     # update the record count in the TES3 header
     out[0] = set_hedr_count(out[0], len(out) - 1)     # the true count
@@ -3209,6 +3217,7 @@ def apply_plan(path, plugin, plan, world, log, collect=None, backup=True):
     # checked temp copy first, then in place (keeps hard links, e.g. Vortex deployments) and the date,
     # so load order doesn't change
     write_plugin_bytes(path, b"".join(out), keep_times=st)
+    world.file_sha[plugin.lower()] = content_id(b"".join(out))
     if backup:
         log.append((plugin, "", f"backup saved as {os.path.basename(bak)}"))
     return changes
@@ -3531,9 +3540,12 @@ def run_fix(args, plugins, bsas, data_dirs, report, world, only, hidden=frozense
 
     paths = {n: p for n, p in plugins}
     log = []
+    backed_up = set()                  # written, with a backup of what was there
     for plugin, plan in esp_plans.items():
         try:
             n = apply_plan(paths[plugin], plugin, plan, world, log)
+            if n:
+                backed_up.add(plugin)
             print(f"  {plugin}: {n} change(s) written")
         except Exception as e:                       # one plugin's problem never stops the others halfway
             print(f"  {plugin}: NOT changed ({type(e).__name__}: {e})")
@@ -3550,7 +3562,10 @@ def run_fix(args, plugins, bsas, data_dirs, report, world, only, hidden=frozense
               + (f", {len(failed)} could not be" if failed else ""))
     for plugin, fixes in item_esp.items():
         try:
-            n = apply_item_fixes(paths[plugin], plugin, fixes, log, backup=plugin not in esp_plans)
+            n = apply_item_fixes(paths[plugin], plugin, fixes, log, backup=plugin not in backed_up,
+                                 seen=world.file_sha)
+            if n:
+                backed_up.add(plugin)
             print(f"  {plugin}: {n} record(s) corrected")
         except Exception as e:                       # one plugin's problem never stops the others halfway
             print(f"  {plugin}: NOT changed ({type(e).__name__}: {e})")
@@ -3703,7 +3718,6 @@ def run_fix(args, plugins, bsas, data_dirs, report, world, only, hidden=frozense
             order.append((PLACE_PATCH_NAME, place_path))
         return order
 
-    backed_up = set(esp_plans) | set(item_esp)
     fresh = None                       # a scan that already reflects every change made
     # The re-scans below look at what the fixes changed in the plugins; the files on disk (models,
     # textures, sounds) don't change between them, so the asset check (minutes) isn't repeated.
@@ -3748,7 +3762,8 @@ def run_fix(args, plugins, bsas, data_dirs, report, world, only, hidden=frozense
         for plugin, plan in follow.items():
             try:
                 k = apply_plan(paths[plugin], plugin, plan, world, log, backup=plugin not in backed_up)
-                backed_up.add(plugin)
+                if k:
+                    backed_up.add(plugin)
                 esp_plans.setdefault(plugin, {})
                 print(f"  {plugin}: {k} change(s) written")
             except (OSError, FormatError) as e:
@@ -4203,8 +4218,9 @@ def run_merge(args, plugins, bsas, data_dirs):
                 for (pl, topic, info, msg), _c in list(diff.items())[:12]:
                     where = (label if pl == "merge" else pl) + (f" [{topic}]" if topic else "") + (f" {info}" if info else "")
                     print(f"    - {where}: {msg}")
-    finally:
-        pass
+    except BaseException:
+        os.remove(tmp)
+        raise
 
     if args.dry_run:
         os.remove(tmp)
@@ -4499,8 +4515,12 @@ def run_auto_merge(args, plugins, bsas, data_dirs):
     r_a, r_b = Report(), Report()
     # compared without this tool's own patches: they still name the merged plugins as masters until they
     # are rebuilt (--full does that next), which isn't an error the merge makes
-    scan(args, [x for x in order if x[0].lower() not in ours], bsas, data_dirs, r_a)
-    scan(args, [x for x in new_order if x[0].lower() not in ours], bsas, data_dirs, r_b)
+    try:
+        scan(args, [x for x in order if x[0].lower() not in ours], bsas, data_dirs, r_a)
+        scan(args, [x for x in new_order if x[0].lower() not in ours], bsas, data_dirs, r_b)
+    except BaseException:
+        os.remove(tmp)
+        raise
     def norm(r):
         return Counter((("merge" if i[1].lower() in cl or i[1].lower() == tmp_l else i[1]), i[2], i[3], i[4])
                        for i in r.issues if i[0] == "ERROR")
@@ -4689,12 +4709,12 @@ def run_clean(args, plugins, only):
                         continue
             out.append(raw)
         if stats:
-            results[name] = (path, out, stats, details)
+            results[name] = (path, out, stats, details, content_id(data))
 
     if not results:
         print("  Nothing to clean.")
         return {}
-    for name, (_p, _o, stats, _d) in results.items():
+    for name, (_p, _o, stats, _d, _id) in results.items():
         print(f"  {name}: " + ", ".join(f"{n} {k}" for k, n in sorted(stats.items())))
     if args.dry_run:
         print("Dry run: no files were changed.")
@@ -4707,9 +4727,9 @@ def run_clean(args, plugins, only):
     import datetime
     with MT.open_log(args.fix_log, "a", encoding="utf-8") as f:
         f.write(f"\n==== {datetime.datetime.now():%Y-%m-%d %H:%M:%S} clean ====\n")
-        for name, (path, out, stats, details) in results.items():
+        for name, (path, out, stats, details, read_as) in results.items():
             try:
-                bak = write_inplace(path, out)
+                bak = write_inplace(path, out, read_as=read_as)
             except Exception as e:                   # one plugin's problem never stops the others halfway
                 print(f"  {name}: NOT cleaned ({type(e).__name__}: {e})")
                 continue
@@ -7028,12 +7048,12 @@ def fix_ref_groups(args, plugins):
                         raw = raw[:4] + struct.pack("<I", len(nb)) + raw[8:16] + nb
             out.append(raw)
         if moved or scripted:
-            todo.append((name, path, out, moved, scripted))
+            todo.append((name, path, out, moved, scripted, content_id(data)))
     if not todo:
         return 0
     print("\n" + "=" * 70 + "\nMASTER REFERENCES IN THE WRONG GROUP (the game can't find them)\n" + "=" * 70)
     changed = 0
-    for name, path, out, moved, scripted in todo:
+    for name, path, out, moved, scripted, read_as in todo:
         if scripted:
             print(f"  {name}: {len(scripted)} of them named by a script or dialogue (moved anyway: the master "
                   f"keeps them temporary, so the game only finds them there): "
@@ -7044,8 +7064,12 @@ def fix_ref_groups(args, plugins):
               + ", ".join(f"{o} in {c}" for c, o, g in moved[:3]))
         if args.dry_run:
             continue
+        try:
+            bak = write_inplace(path, out, read_as=read_as)
+        except OSError as e:
+            print(f"    NOT changed ({e})")
+            continue
         changed += 1
-        bak = write_inplace(path, out)
         print(f"    moved to the master's group (backup {os.path.basename(bak)})")
         note_own(name, f"{len(moved)} master reference(s) listed as persistent where the master keeps them "
                        f"temporary (\"missing in master file\"): moved to the master's group, e.g. "
@@ -9047,12 +9071,15 @@ def _main(argv=None):
     fx.add_argument("--no-placeholders", action="store_true",
                     help="with --fix: don't add stand-in gold coins for objects that scripts name but no mod defines")
     fx.add_argument("--restore-all", action="store_true",
-                    help="undo everything: put every plugin back to its oldest .bak (the original), remove all its backups, and exit")
+                    help="undo everything: put every plugin back to its oldest .bak (the original), back up what it replaces, and exit")
     fx.add_argument("--clean-up", action="store_true",
-                    help="delete .bak backups of plugins that are no longer in Data Files, and keep only the most "
-                         "recent .bak of each remaining plugin (use --dry-run to preview)")
+                    help="delete the .bak backups between each installed plugin's oldest and newest "
+                         "(use --dry-run to preview)")
     fx.add_argument("--fix-log", default="mwdialog_fixes.log", help="where to append a record of fixes (default mwdialog_fixes.log)")
     args = ap.parse_args(argv)
+    if os.path.isdir(args.data_dir) and not MP.acquire_game_lock(os.path.dirname(os.path.abspath(args.data_dir))):
+        print(MP.RUN_LOCKED_MESSAGE, file=sys.stderr)
+        return 1
     ENC = args.encoding
     mwdialog_tes3.ENC = ENC                   # dec/enc/cstr live there
     try:
@@ -9497,6 +9524,7 @@ def main(argv=None):
                 print(f"\nThe run stopped early: Morrowind.ini's [Game Files] was NOT updated from "
                       f"{LOAD_ORDER_FILE}.", file=sys.stderr)
             LOAD_ORDER_WRITTEN.clear()
+            MP.release_game_locks()
             try:
                 cap_fix_log(TOP_ARGS)
             except OSError as e:

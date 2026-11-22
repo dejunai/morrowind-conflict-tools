@@ -5,10 +5,13 @@ and download folders come from Vortex's own settings (%APPDATA%\\Vortex). CLI fl
 Recorded paths are stored relative to one of those bases, with a tag (staging:/downloads:/game:).
 Readers still accept an older absolute path and convert it the next time the record is written.
 """
+import hashlib
 import json
 import os
 import re
 import shutil
+import tempfile
+from pathlib import Path
 
 GAME_ID = "morrowind"
 TAGS = ("staging", "downloads", "game")
@@ -34,20 +37,27 @@ class ToolNotFoundError(Exception):
     """An optional external tool (7-Zip) was needed and was not found."""
 
 
-_RUN_LOCK = None
+_RUN_LOCKS = {}                          # lock file -> handle held by this process
+# MWManager's workflow_safety.mutation_lock folder and naming: the tools and the GUI shut each other out, and no
+# lock file lands in the game folder (its rollback check counts extra files)
+GAME_LOCK_DIR = os.path.join(tempfile.gettempdir(), "mwmanager-locks")
 
 
-def acquire_run_lock():
-    """Hold mwdialog.lock (beside these tools) until this process ends, so two runs of mwdialog_check.py /
-    vortex_tidy.py cannot overwrite each other's plan and record files. Free again inside the same process
-    (the tools call each other). False when another process holds it."""
-    global _RUN_LOCK
-    if _RUN_LOCK is not None:
+def _tool_lock_file():
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "mwdialog.lock")
+
+
+def _hold(path):
+    if path in _RUN_LOCKS:
         return True
-    handle = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "mwdialog.lock"), "a+")
+    handle = open(path, "a+b")
     try:
         if os.name == "nt":
             import msvcrt
+            handle.seek(0, os.SEEK_END)
+            if not handle.tell():
+                handle.write(b"\0")
+                handle.flush()
             handle.seek(0)
             msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
         else:
@@ -56,8 +66,34 @@ def acquire_run_lock():
     except OSError:
         handle.close()
         return False
-    _RUN_LOCK = handle
+    _RUN_LOCKS[path] = handle
     return True
+
+
+def acquire_run_lock():
+    """Hold mwdialog.lock (beside these tools) until this process ends, so two runs of mwdialog_check.py /
+    vortex_tidy.py cannot overwrite each other's plan and record files. Free again inside the same process
+    (the tools call each other). False when another process holds it."""
+    return _hold(_tool_lock_file())
+
+
+def acquire_game_lock(game_dir):
+    """Hold the game's lock, so another copy of these tools or a job in MWManager can't write to that game at the
+    same time. Free again inside the same process. False when another process holds it."""
+    key = os.path.normcase(str(Path(game_dir).resolve()))
+    os.makedirs(GAME_LOCK_DIR, exist_ok=True)
+    path = os.path.join(GAME_LOCK_DIR, hashlib.sha256(key.encode()).hexdigest() + ".lock")
+    if not _hold(path):
+        return False
+    _RUN_LOCKS[path].truncate(1)             # no MWManager job token left to read: this holder delegates to nobody
+    return True
+
+
+def release_game_locks():
+    """Let go of every game's lock (the tools' own is held until the process ends)."""
+    own = _tool_lock_file()
+    for path in [p for p in _RUN_LOCKS if p != own]:
+        _RUN_LOCKS.pop(path).close()
 
 
 RUN_LOCKED_MESSAGE = ("Another mwdialog_check.py or vortex_tidy.py run (or MWManager) is still working on this "

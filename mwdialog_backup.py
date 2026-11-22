@@ -73,18 +73,6 @@ def backup_path(path):
     return base + ".bak" if n == 1 else f"{base}.bak{n}"
 
 
-def backup_index(data_dir):
-    """index_dir(data_dir) plus the plugin backups in the backup folder (name lower -> path)."""
-    lookup = dict(index_dir(data_dir))
-    home = os.path.join(game_dir_of(os.path.join(os.path.abspath(data_dir), "x")), BACKUP_DIR,
-                        os.path.basename(os.path.abspath(data_dir)))
-    if os.path.isdir(home):
-        for fn in os.listdir(home):
-            if ".bak" in fn.lower():
-                lookup.setdefault(fn.lower(), os.path.join(home, fn))
-    return lookup
-
-
 def chain_tail(world, topic_key, exclude_source):
     """Last response of a topic among files other than `exclude_source`."""
     t = world.topics.get(topic_key)

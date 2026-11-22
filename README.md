@@ -102,7 +102,7 @@ The "deleted by vortex_tidy" folder is derived from the resolved staging folder 
 
 ## MWSE mods
 
-`Data Files/MWSE/mods/` holds three of the MWSE Lua mods these tools work with: `mwguard` (a passive profiler: it times per-frame handlers and logs extreme priorities to `MWSE\logs\mwguard.log`, without throttling or changing other mods), `mwsoundguard` and `mwhangwatch`.
+`Data Files/MWSE/mods/` holds the mw* Lua suite these tools work with (`mwsuite`), among them `mwguard` (a passive profiler: it times per-frame handlers and logs extreme priorities to `MWSE\logs\mwguard.log`, without throttling or changing other mods), `mwsoundguard` and `mwhangwatch`.
 
 ## Output wrapping
 

@@ -85,7 +85,7 @@ def fix_item_body(body, fx):
     return b"".join(out)
 
 
-def apply_item_fixes(path, plugin, fixes, log, backup=True, collect=None):
+def apply_item_fixes(path, plugin, fixes, log, backup=True, collect=None, seen=None):
     """Rewrite the records named in `fixes` in place (.bak first, file date kept). With `collect`,
     nothing is written: the corrected records are appended to it (for the ESM patch)."""
     want = {}
@@ -138,12 +138,15 @@ def apply_item_fixes(path, plugin, fixes, log, backup=True, collect=None):
                         msg + (f" (in {plugin})" if collect is not None else ""), action))
     if not changes or collect is not None:
         return changes
+    _T.check_unchanged(seen, plugin.lower(), data)
     out[0] = set_hedr_count(out[0], len(out) - 1)    # records may have been dropped: keep the count true
     st = os.stat(path)
     if backup:
         bak = backup_path(path)
         shutil.copy2(path, bak)
     write_plugin_bytes(path, b"".join(out), keep_times=st)   # checked copy, then in place (hard links stay)
+    if seen is not None:
+        seen[plugin.lower()] = _T.content_id(b"".join(out))
     if backup:
         log.append((plugin, "", f"backup saved as {os.path.basename(bak)}"))
     return changes

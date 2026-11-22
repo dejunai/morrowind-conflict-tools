@@ -1,5 +1,5 @@
-"""Putting things back never loses the original: --restore-all uses the oldest backup and removes backups only
-after the plugin matches it; a texture --fix could not shrink stays in place. All in temp folders."""
+"""Putting things back never loses the original: --restore-all uses the oldest backup, backs up what it
+replaces and removes nothing; a texture --fix could not shrink stays in place. All in temp folders."""
 import os
 
 from conftest import m  # noqa: F401  (loads the modules from SRC)
@@ -15,7 +15,7 @@ def _game(tmp_path):
     return game, game / "Data Files"
 
 
-def test_restore_all_puts_back_the_oldest_backup_then_removes_them(tmp_path):
+def test_restore_all_puts_back_the_oldest_backup_and_keeps_what_it_replaced(tmp_path):
     game, data = _game(tmp_path)
     (data / "X.esp").write_bytes(b"edited twice")
     home = game / "mwdialog_backup" / "Data Files"
@@ -24,7 +24,10 @@ def test_restore_all_puts_back_the_oldest_backup_then_removes_them(tmp_path):
     (home / "X.esp.bak2").write_bytes(b"edited once")
     assert R.restore_all(str(data), True, str(tmp_path / "fix.log")) == 0
     assert (data / "X.esp").read_bytes() == b"original"
-    assert sorted(os.listdir(home)) == []
+    assert sorted(os.listdir(home)) == ["X.esp.bak", "X.esp.bak2", "X.esp.bak3"]
+    assert (home / "X.esp.bak3").read_bytes() == b"edited twice"
+    assert R.restore_all(str(data), True, str(tmp_path / "fix.log")) == 0
+    assert len(os.listdir(home)) == 3                # nothing to do the second time
 
 
 def test_a_texture_that_could_not_be_shrunk_stays_in_place(tmp_path, monkeypatch):

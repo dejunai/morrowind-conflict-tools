@@ -1,16 +1,16 @@
 """mwdialog_restore.py - putting things back: a plugin's newest backup, every backup, the dates a sort
 changed, and clearing out backups nobody needs.
 """
-from collections import defaultdict
 import os
 import re
+import shutil
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mwdialog_text as MT  # noqa: E402
 import mwdialog_tes3 as _T  # noqa: E402
 from mwdialog_backup import (  # noqa: E402
-    backup_candidates, backup_index, index_dir)
+    backup_candidates, backup_path, index_dir)
 from mwdialog_console import (  # noqa: E402
     print)
 from mwdialog_patchfile import (  # noqa: E402
@@ -63,47 +63,20 @@ CLEANUP_BAK_RE = re.compile(r"^(?P<plugin>.+\.(?:esp|esm|omwaddon))\.bak(?P<n>\d
 
 
 def run_clean_up(args):
-    """Delete backups of plugins that are gone, and keep only the most recent backup of the rest."""
+    """Delete the backups between each plugin's original (the oldest) and its newest. A plugin that isn't in
+    Data Files keeps all of its backups: while Vortex is purged that is every plugin."""
     data_dir = args.data_dir
-    lookup = backup_index(data_dir)
-    groups = defaultdict(list)                       # plugin name lower -> [(n, backup path)]
-    for low, path in lookup.items():
-        m = CLEANUP_BAK_RE.match(low)
-        if m and os.path.isfile(path):
-            groups[m.group("plugin")].append((int(m.group("n") or 1), path))
-    if not groups:
-        print("No plugin backups (.bak) found.")
-        return 0
-    gone, old = [], []                               # backups to delete
-    kept = {}
-    for plugin, baks in groups.items():
-        baks.sort()                                  # .bak, .bak2, .bak3 ...: highest number = most recent
-        if plugin not in lookup:
-            gone += [p for _n, p in baks]
-        else:
-            kept[plugin] = baks[-1][1]
-            old += [p for _n, p in baks[:-1]]
-    size = lambda paths: sum(os.path.getsize(p) for p in paths)
-    print(f"{sum(len(b) for b in groups.values())} backup(s) of {len(groups)} plugin(s) in {data_dir}")
-    if gone:
-        print(f"\n  Plugin no longer in Data Files, so all its backups go ({len(gone)}, {size(gone) / 1048576:.1f} MB):")
-        for p in sorted(gone, key=str.lower):
-            print(f"    - {os.path.basename(p)}")
-    if old:
-        print(f"\n  Older backups of plugins that are still here ({len(old)}, {size(old) / 1048576:.1f} MB); "
-              f"the most recent one is kept:")
-        by_plugin = defaultdict(list)
-        for p in old:
-            by_plugin[CLEANUP_BAK_RE.match(os.path.basename(p).lower()).group("plugin")].append(p)
-        for plugin in sorted(by_plugin):
-            print(f"    - {os.path.basename(lookup[plugin])}: {len(by_plugin[plugin])} older, "
-                  f"keeping {os.path.basename(kept[plugin])}")
-    doomed = gone + old
+    doomed = []
+    for name, path in sorted(index_dir(data_dir).items()):
+        if not name.endswith((".esp", ".esm", ".omwaddon")):
+            continue
+        baks = backup_candidates(path)              # oldest first
+        if len(baks) > 2:
+            print(f"    - {os.path.basename(path)}: {len(baks) - 2} in between; keeping the oldest and the newest")
+            doomed += baks[1:-1]
     if not doomed:
-        print("  Nothing to clean up: each plugin has a single backup.")
+        print("  Nothing to clean up: no plugin has backups between its oldest and its newest.")
         return 0
-    print("\n  Note: --restore-all puts plugins back to their OLDEST backup. After this, that is the most "
-          "recent one kept here, not the original.")
     if args.dry_run:
         print("\nDry run: no files were deleted.")
         return 0
@@ -133,21 +106,22 @@ def run_clean_up(args):
 
 
 def restore_all(data_dir, assume_yes, fix_log):
-    """Put every plugin back to its OLDEST backup (the original) and remove all its backups."""
-    lookup = backup_index(data_dir)
-    groups = defaultdict(list)                     # plugin path -> [(n, backup path)]
-    for low, path in lookup.items():
-        m = BAK_RE.match(low)
-        if m and m.group("plugin") in lookup and m.group("plugin") not in [x.lower() for x in OUR_PATCHES]:
-            groups[lookup[m.group("plugin")]].append((int(m.group("n") or 1), path))
+    """Put every plugin back to its OLDEST backup (the original). What is replaced is backed up first and no
+    backup is removed: the file there may be a newer version of the mod (--restore NAME brings it back)."""
+    ours = {x.lower() for x in OUR_PATCHES}
+    groups = {}                                    # plugin path -> its backups, oldest first
+    lookup = index_dir(data_dir)
+    for name, path in lookup.items():
+        if name.endswith((".esp", ".omwaddon")) and name not in ours:
+            baks = backup_candidates(path)
+            if baks:
+                groups[path] = baks
     if not groups:
         print("No plugin backups found.")
         return 0
-    print("These plugins will be put back to their original (oldest) backup, and all their backups removed:")
+    print("These plugins will be put back to their original (oldest) backup; what is there now is backed up first:")
     for path, baks in sorted(groups.items(), key=lambda kv: kv[0].lower()):
-        baks.sort()
-        print(f"  {os.path.basename(path)}  <- {os.path.basename(baks[0][1])}"
-              + (f"  (also removing {len(baks) - 1} newer backup(s))" if len(baks) > 1 else ""))
+        print(f"  {os.path.basename(path)}  <- {os.path.basename(baks[0])}")
     patch = lookup.get(PATCH_NAME.lower())
     if patch:
         print(f"\n'{PATCH_NAME}' is left as it is; the next --fix rebuilds it from scratch.")
@@ -160,19 +134,24 @@ def restore_all(data_dir, assume_yes, fix_log):
             return 0
     done, lines = 0, []
     for path, baks in groups.items():
-        oldest = baks[0][1]
+        oldest = baks[0]
         try:
             st = os.stat(oldest)                   # copy2 kept the plugin's original date on it
             with open(oldest, "rb") as f:
                 data = f.read()
+            with open(path, "rb") as f:
+                now = f.read()
+            if now == data:
+                continue
+            bak = backup_path(path)
+            shutil.copy2(path, bak)
             safe_write_bytes(path, data, keep_times=st)     # in place, so hard links (Vortex) stay intact
             with open(path, "rb") as f:
                 if f.read() != data:
-                    raise OSError("the restored copy doesn't match the backup; backups kept")
-            for _n, b in baks:
-                os.remove(b)
+                    raise OSError("the restored copy doesn't match the backup")
             done += 1
-            lines.append(f"{os.path.basename(path)}: restored from {os.path.basename(oldest)}, {len(baks)} backup(s) removed")
+            lines.append(f"{os.path.basename(path)}: restored from {os.path.basename(oldest)} "
+                         f"(what was there: {os.path.basename(bak)})")
         except OSError as e:
             print(f"  {os.path.basename(path)}: NOT restored ({e})")
     with MT.open_log(fix_log, "a", encoding="utf-8") as f:

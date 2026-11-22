@@ -169,25 +169,6 @@ local function isPlayerClone(ref)
 		return true
 	end
 
-	-- 2. Exact identity clone: matching player name AND identical race/head/hair/class
-	local playerObj = tes3.player.object
-	local refObj = ref.object
-	if playerObj and refObj then
-		local pName = playerObj.name
-		local rName = refObj.name
-		if rName and (rName == "Player" or (pName and pName ~= "" and rName == pName)) then
-			if baseId and baseId:find("^player") then
-				return true
-			end
-			if refObj.race == playerObj.race and
-			   refObj.head == playerObj.head and
-			   refObj.hair == playerObj.hair and
-			   refObj.class == playerObj.class then
-				return true
-			end
-		end
-	end
-
 	return false
 end
 
@@ -245,7 +226,7 @@ end
 local lastCellChangeTime = os.clock()
 local lastCharGenFinishTime = os.clock()
 local isExecutingDeferredSave = false
-local pendingSave = nil
+local pendingSaves = {}          -- in the order asked for, one per file name
 local pendingSince = 0
 local deferTimer = nil
 local PENDING_MAX = 30          -- s: a deferred save older than this no longer holds the menu shut
@@ -267,7 +248,7 @@ event.register("charGenFinished", onCharGenFinished)
 
 -- Also monitor on load so newly loaded games settle before autosaving
 local function onLoaded(e)
-	pendingSave, deferTimer = nil, nil        -- MWSE cancelled the timer before this event
+	pendingSaves, deferTimer = {}, nil        -- MWSE cancelled the timer before this event
 	lastCellChangeTime = os.clock()
 	if e and e.newGame then
 		lastCharGenFinishTime = 0
@@ -284,13 +265,13 @@ local executeDeferredSave
 
 executeDeferredSave = function()
 	deferTimer = nil
-	if not pendingSave then
+	if #pendingSaves == 0 then
 		return
 	end
 
 	-- Do not save on main menu
 	if tes3.onMainMenu() then
-		pendingSave = nil
+		pendingSaves = {}
 		return
 	end
 
@@ -314,33 +295,34 @@ executeDeferredSave = function()
 	-- Check player vitality
 	local mobile = tes3.mobilePlayer
 	if not mobile or mobile.isDead or (mobile.health and mobile.health.current <= 0) then
-		pendingSave = nil
+		pendingSaves = {}
 		return
 	end
 
 	-- Purge duplicate clones right before writing deferred save
 	purgePlayerClones()
 
-	local target = pendingSave
-	pendingSave = nil
+	local waiting = pendingSaves
+	pendingSaves = {}
 
 	isExecutingDeferredSave = true
-	logMsg("[mwsaveguard] World settled. Executing deferred save: '%s'...", tostring(target.filename or "save"))
+	for _, target in ipairs(waiting) do
+		logMsg("[mwsaveguard] World settled. Executing deferred save: '%s'...", tostring(target.filename or "save"))
 
-	local saveParams = {}
-	if target.filename and target.filename ~= "" then
-		saveParams.file = target.filename
-	end
-	if target.name and target.name ~= "" then
-		saveParams.name = target.name
-	end
+		local saveParams = {}
+		if target.filename and target.filename ~= "" then
+			saveParams.file = target.filename
+		end
+		if target.name and target.name ~= "" then
+			saveParams.name = target.name
+		end
 
-	local ok, err = pcall(tes3.saveGame, saveParams)
+		local ok, err = pcall(tes3.saveGame, saveParams)
+		if not ok then
+			mwse.log("[mwsaveguard] Error executing deferred save: %s", tostring(err))
+		end
+	end
 	isExecutingDeferredSave = false
-
-	if not ok then
-		mwse.log("[mwsaveguard] Error executing deferred save: %s", tostring(err))
-	end
 end
 
 --- @param e saveEventData
@@ -388,10 +370,10 @@ local function onSave(e)
 		e.claim = true
 
 		local remaining = math.max(0.5, window - minElapsed)
-		pendingSave = {
-			filename = e.filename,
-			name = e.name,
-		}
+		for i = #pendingSaves, 1, -1 do         -- the same file asked for again: the newer request counts
+			if pendingSaves[i].filename == e.filename then table.remove(pendingSaves, i) end
+		end
+		pendingSaves[#pendingSaves + 1] = { filename = e.filename, name = e.name }
 		pendingSince = now
 
 		logMsg("[mwsaveguard] Intercepted save '%s' during world settling window (%.1fs remaining). Deferring save...", tostring(e.filename), remaining)
@@ -424,10 +406,10 @@ event.register("saved", onSaved)
 
 -- While a save is waiting, the options menu (Esc) stays shut: quitting or loading from it would lose that save.
 local function onOptionsMenu()
-	if not config.enabled or not pendingSave or tes3.onMainMenu() then return end
+	if not config.enabled or #pendingSaves == 0 or tes3.onMainMenu() then return end
 	if os.clock() - pendingSince > PENDING_MAX then return end      -- never hold the menu shut for long
 	timer.frame.delayOneFrame(function()
-		if not pendingSave then return end
+		if #pendingSaves == 0 then return end
 		local menu = tes3ui.findMenu("MenuOptions")
 		if menu then menu:destroy() end
 		tes3ui.leaveMenuMode()

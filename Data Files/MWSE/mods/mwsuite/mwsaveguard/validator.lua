@@ -129,6 +129,11 @@ function validator.validateSave(filePath)
 	local offset = 16 + hdrDataSize
 	while offset < fileSize do
 		f:seek("set", offset)
+		if fileSize - offset < 16 then
+			local tail = f:read(fileSize - offset)
+			if tail and not tail:find("%Z") then break end      -- padding, noted below; anything else is a cut-off record
+			f:seek("set", offset)
+		end
 		local chunk = f:read(8)
 		if not chunk or #chunk < 8 then
 			f:close()

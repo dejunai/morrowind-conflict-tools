@@ -186,7 +186,7 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
   3. Furthermore, `mwsaveguard` and `personalEffectsFix` contained a geographic doorway heuristic (`math.abs(pos.x - 1173) < 250 and math.abs(pos.y - (-391)) < 250`) that falsely targeted legitimate NPCs near the exit door and invoked `ref.delete()` / `setDelete`, causing instant save corruption upon exiting the office.
 * **Fix**:
   1. Completely removed all calls to `ref:delete()` and `mwscript.setDelete` across `Plain Paper Fix`, `mwsaveguard`, and `personalEffectsFix`. Placed references are now safely retired using `ref:disable()`, `ref.modified = true`, and moving position far out of bounds (`z = -10000`), preserving memory structure integrity and allowing the engine to serialize the disabled state without dangling pointers.
-  2. Removed the overly aggressive geographic doorway rule from both `mwsaveguard` and `personalEffectsFix`, strictly limiting clone identification to explicit duplicate references (`playersavegame` or matching player base object and appearance).
+  2. Removed the overly aggressive geographic doorway rule from both `mwsaveguard` and `personalEffectsFix`, strictly limiting clone identification to explicit duplicate references (`playersavegame` or the player's own base object; appearance alone is not a clone).
   3. Added `sanitizeCellReferences()` to `mwsaveguard` executing immediately prior to save operations, verifying active cell references and cleaning any invalid script variable attachments on unscripted world references.
 
 ---

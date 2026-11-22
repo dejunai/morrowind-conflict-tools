@@ -97,25 +97,22 @@ def keep_new_original(backup, current):
     (a mod update): keep a copy as <backup name>.YYYYMMDD-HHMMSS<ext> beside it. Returns the path holding
     current's original (the dated copy, or `backup`)."""
     _ASSET_BACKUP_OF[os.path.normcase(os.path.abspath(current))] = backup
-    try:
-        h = _sha256_file(current)
-        if h == _sha256_file(backup) or h in _repaired_hashes(backup):
-            return backup
-        root, ext = os.path.splitext(backup)
-        folder, stem = os.path.split(root)
-        pat = re.compile(re.escape(stem) + r"\.\d{8}-\d{6}" + re.escape(ext) + "$", re.IGNORECASE)
-        for fn in sorted(os.listdir(folder)):
-            if pat.match(fn) and _sha256_file(os.path.join(folder, fn)) == h:
-                return os.path.join(folder, fn)
-        dated = f"{root}.{time.strftime('%Y%m%d-%H%M%S')}{ext}"
-        k = 2
-        while os.path.exists(dated):
-            dated = f"{root}.{time.strftime('%Y%m%d-%H%M%S')}-{k}{ext}"
-            k += 1
-        shutil.copy2(current, dated)
-        return dated
-    except OSError:
+    h = _sha256_file(current)                      # an OSError stops the caller: no backup, no write
+    if h == _sha256_file(backup) or h in _repaired_hashes(backup):
         return backup
+    root, ext = os.path.splitext(backup)
+    folder, stem = os.path.split(root)
+    pat = re.compile(re.escape(stem) + r"\.\d{8}-\d{6}(?:-\d+)?" + re.escape(ext) + "$", re.IGNORECASE)
+    for fn in sorted(os.listdir(folder)):
+        if pat.match(fn) and _sha256_file(os.path.join(folder, fn)) == h:
+            return os.path.join(folder, fn)
+    dated = f"{root}.{time.strftime('%Y%m%d-%H%M%S')}{ext}"
+    k = 2
+    while os.path.exists(dated):
+        dated = f"{root}.{time.strftime('%Y%m%d-%H%M%S')}-{k}{ext}"
+        k += 1
+    shutil.copy2(current, dated)
+    return dated
 
 
 def replace_asset_in_place(path, data):
@@ -124,6 +121,14 @@ def replace_asset_in_place(path, data):
     recorded next to the file's kept original, so a later run can tell a repair from a new original."""
     data = bytes(data)
     safe_write_bytes(path, data)
+    record_repair(path, data)
+
+
+from mwdialog_tes3 import atomic_open  # noqa: E402
+
+
+def record_repair(path, data):
+    """Note what these tools just wrote over `path`, so it isn't taken for a new original later."""
     backup = _ASSET_BACKUP_OF.get(os.path.normcase(os.path.abspath(path)))
     if backup and os.path.exists(backup):
         try:
@@ -192,7 +197,7 @@ def run_restore_textures(args):
     except OSError:
         print("--restore-textures: no reduced textures recorded.")
         return 0
-    back, missing = 0, []
+    back, missing, kept = 0, [], []
     for row in rows:
         if len(row) < 3:
             continue
@@ -201,6 +206,7 @@ def run_restore_textures(args):
         dest = os.path.join(data_dir, rel)
         if not os.path.exists(keep):
             missing.append(rel)
+            kept.append("\t".join(row))
             continue
         if args.dry_run:
             print(f"  would restore {rel} from {keep}")
@@ -217,9 +223,13 @@ def run_restore_textures(args):
             shutil.move(keep, dest)
         back += 1
     if not args.dry_run:
-        os.remove(rec_path)
+        if kept:
+            with atomic_open(rec_path, encoding="utf-8") as f:
+                f.write("\n".join(kept) + "\n")
+        else:
+            os.remove(rec_path)
         print(f"  Restored {back} full-size texture(s)."
-              + (f" {len(missing)} original(s) no longer exist and were skipped, e.g. {missing[0]}" if missing else ""))
+              + (f" {len(missing)} original(s) can't be reached and stay recorded, e.g. {missing[0]}" if missing else ""))
     return 0
 
 

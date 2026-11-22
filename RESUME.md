@@ -1,5 +1,17 @@
 # Resume: Morrowind tools, MWManager and the mw* Lua suite (2026-11-22)
 
+## 2026-11-22: audit fixes (applied here and in MWManager; not tested in game)
+
+- Details, and what is still open: `mwdialog_backup\handoff-audit-20261122\HANDOFF.md`. The files as they were:
+  `mwdialog_backup\session-fixes-20261122\audit\`. One test per fix: `tests\test_audit_fixes.py` (both repos).
+- `keep_new_original` raises when it can't keep a copy. Never wrap it in an `except OSError: pass`: no backup, no write.
+- A plan is written only over the bytes it was made from (`World.file_sha`, `write_inplace(read_as=)`). A new step
+  that rewrites plugins between the scan and `apply_plan` must update `world.file_sha`, or the plan is refused.
+- The game lock is MWManager's (`workflow_safety.mutation_lock`: %TEMP%\mwmanager-locks), never a file in the game
+  folder, which MWManager's rollback check would count. Keep the two namings the same.
+- MWManager's CLI run by hand takes no lock. GUI children started with plain `subprocess.run` don't carry the
+  job's lock token, so they would be refused if that CLI took one: convert those launches first.
+
 ## 2026-11-22: Tamriel Data renames in --fix
 
 - The map never loaded on a tidied install (the reader searched Data Files\Docs for a name Tidy changes). It is
@@ -145,7 +157,7 @@ limit. The own-mod logging continuation below is committed locally and not pushe
   **495 passed, 25 skipped**. Bundled LuaJIT syntax checks passed for 34 changed Lua files.
 - The generated `Data Files\vortex.deployment.json` still records the removed `personalEffectsFix.lua` until
   Vortex refreshes deployment metadata; do not edit that generated file manually. The game was not run.
-- Synced, committed, and pushed to `G:\projects\morrowind-conflict-tools` and `G:\projects\MWManager` on
+- Synced, committed, and pushed to `<clone>` and `<MWManager>` on
   2026-11-22.
 
 ## 2026-11-22 follow-up: visible exit for mwcriminal inspector
@@ -166,8 +178,8 @@ limit. The own-mod logging continuation below is committed locally and not pushe
   include the Known Bugs fingerprints, so tidy rechecks unchanged files when a repair is added. Tidy applied the
   verified fix to the hard-linked staged/deployed `MWSE\mods\music\MUSE.lua`; both paths now compile with the
   bundled LuaJIT, and a fresh tidy run proposes no patch.
-- Synced the companion and KB5 code, tests, and docs to `G:\projects\morrowind-conflict-tools` and
-  `G:\projects\MWManager`. Nothing is committed or pushed yet.
+- Synced the companion and KB5 code, tests, and docs to `<clone>` and
+  `<MWManager>`. Nothing is committed or pushed yet.
 - Verification: Steam **491 passed, 25 skipped**; clone **451 passed, 64 skipped, 1 deselected** (the known
   absolute-path policy check); MWManager **583 passed, 4 skipped**. The game was not run.
 
@@ -190,7 +202,7 @@ luafix backups/journals and existing Vortex backup files.
 
 State first: the 9fd81f6 / 444c7b9 commits described below as uncommitted were committed **and pushed** at 16:37.
 Then `PERPLEXITY_AUDIT.MD` (Steam root) was written and these fixes were made **in the Steam root only**: not yet
-synced to the clone or MWManager, not committed. G:\projects was not writable from that session.
+synced to the clone or MWManager, not committed. The projects folder was not writable from that session.
 
 - H1 mwguard: no hooks at all when off at start-up (switching on needs a restart); unregistered per-frame
   handlers are released (the wrapper table was never collected under LuaJIT). `tests\test_mwguard.py`.
@@ -252,7 +264,7 @@ _lumo_*.py, 17 .vortex_backup files); rerun luafix to put shim v4 into third-par
 - Nothing was tested in game.
 
 ### Exact next steps at that checkpoint (superseded by the continuation above)
-1. Inspect `git status` in `G:\projects\morrowind-conflict-tools` and `G:\projects\MWManager`; all current changes
+1. Inspect `git status` in `<clone>` and `<MWManager>`; all current changes
    are intentional synced work, including newly tracked Lua guidance and MWSE core ExclusionsPage. Do not discard
    the earlier mw* logging/nil changes. `mwdialog_luafix_known_bugs.txt` is generated output in the clone; decide
    whether to ignore it rather than commit it.
@@ -264,13 +276,13 @@ _lumo_*.py, 17 .vortex_backup files); rerun luafix to put shim v4 into third-par
    checkpoint unless a small split is obviously cleaner.
 
 ## Where things live
-- **Steam root** (`G:\Program Files\Steam\steamapps\common\Morrowind`): the source of the Python tools
+- **Steam root** (`<Steam Morrowind>`): the source of the Python tools
   (`mwdialog_*.py`, `vortex_tidy.py`) and the MWSE Lua mods (`Data Files\MWSE\mods\mw*`, lower-case = ours). Not a
-  git repo. Some mw* Lua files are Vortex hardlinks to `G:\Vortex Mods\morrowind\<mod>`; others are independent
+  git repo. Some mw* Lua files are Vortex hardlinks to `<staging>\<mod>`; others are independent
   copies. Verify before relying on propagation. `mwcompanions` and `mwguard` are not hardlinks; hardlink a new
   staged file only when its mod uses hardlinks.
-- **Repo clone** `G:\projects\morrowind-conflict-tools` (branch master, github.com/dejunai/morrowind-conflict-tools).
-- **MWManager** `G:\projects\MWManager` (branch main): vendors the Steam files unchanged in its root,
+- **Repo clone** `<clone>` (branch master, github.com/dejunai/morrowind-conflict-tools).
+- **MWManager** `<MWManager>` (branch main): vendors the Steam files unchanged in its root,
   `tools\steam-upstream\` (COPY_MANIFEST.json) and `reference\mwse-lua-guards\` (SOURCE_MANIFEST.json, LF).
   Never edit vendored files in MWManager directly.
 - **Sync** a Steam-root change everywhere: `python -X utf8 mwdialog_backup\sync\sync_upstream.py "<note>" <relative
@@ -305,7 +317,7 @@ _lumo_*.py, 17 .vortex_backup files); rerun luafix to put shim v4 into third-par
    follow-up (not started): settle items fully offline (NIF triangle parsing) and drop mwfloatfix.
 6. **MWManager per-game state.** `mwmanager_gamestate.py`: answers, rules, cell winners, load orders, FOMOD answers
    belong to one game folder (`mwmanager_state_owner.json`); pointed at another real install (has Morrowind.exe,
-   not under %TEMP%) they move to `game_states\<game>\`. Currently owned by `G:\GOG Galaxy\Games\Morrowind`.
+   not under %TEMP%) they move to `game_states\<game>\`. Currently owned by `<GOG Morrowind>`.
    Steam's old conflict blacklist sits in `game_states\imported-from-steam\`. `mwmanager_rules.txt` and the
    conflict blacklist are untracked now (recreated with defaults). Not covered: journal, staging, deployments.
 7. **FOMOD option "Requires: <plugin>, Nexus <id>" line** with a Change… picker (`needed_mods.requirement_sources`,

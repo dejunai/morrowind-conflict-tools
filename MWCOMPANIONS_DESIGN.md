@@ -3,8 +3,8 @@
 ## 0. What is installed today
 
 The three mods are not installed as released. They sit in one Vortex mod, **Companion Suite - MWSE**
-(`G:\Vortex Mods\morrowind\Companion Suite - MWSE`, made 2026-11-02 by an earlier agent). No download archive of any
-of the three exists in `K:\Downloads\Vortex\morrowind`, so the suite is the only baseline (`LUA_EDIT_AUDIT.md` and
+(`<staging>\Companion Suite - MWSE`, made 2026-11-02 by an earlier agent). No download archive of any
+of the three exists in `<downloads>`, so the suite is the only baseline (`LUA_EDIT_AUDIT.md` and
 `LUA_MOD_CHANGES.md` list it as "no archive to compare against"). Edits found:
 
 | File | Change | Source |

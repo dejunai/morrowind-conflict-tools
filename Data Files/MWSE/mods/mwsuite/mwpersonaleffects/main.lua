@@ -139,7 +139,13 @@ local function handlePersonalEffectsUnlock()
     tes3.setOwner({ reference = baseCont, remove = true })
     baseCont:enable()
 
-    -- 2. Populate chest with class personal effects if empty
+    -- 2. Populate chest with class personal effects if empty: once per character (the receipt says so for a save
+    -- from before the mark was kept)
+    local data = tes3.player.data
+    if tes3.getItemCount({ reference = tes3.player, item = entry.inv }) > 0 then
+        data.mwpersonaleffectsFilled = true
+    end
+    local firstTime = not data.mwpersonaleffectsFilled
     local contObj = tes3.getObject(entry.cont)
     if contObj and contObj.inventory then
         local hasItems = false
@@ -150,7 +156,7 @@ local function handlePersonalEffectsUnlock()
             end
         end
 
-        if not hasItems then
+        if not hasItems and firstTime then
             for _, stack in pairs(contObj.inventory) do
                 tes3.addItem({
                     reference = baseCont,
@@ -163,7 +169,8 @@ local function handlePersonalEffectsUnlock()
     end
 
     -- 3. Add personal effects inventory receipt note to player
-    if tes3.getObject(entry.inv) then
+    data.mwpersonaleffectsFilled = true
+    if firstTime and tes3.getObject(entry.inv) then
         if tes3.getItemCount({ reference = tes3.player, item = entry.inv }) == 0 then
             tes3.addItem({
                 reference = tes3.player,
@@ -179,7 +186,7 @@ local function handlePersonalEffectsUnlock()
 
     -- 5. Delete any stray spawned duplicate chests from previous runs
     for ref in cell:iterateReferences(tes3.objectType.container) do
-        if ref ~= baseCont and ref.baseObject and ref.baseObject.id:lower():find("^r0_pe_cont_") then
+        if ref ~= baseCont and not ref.disabled and ref.baseObject and ref.baseObject.id:lower():find("^r0_pe_cont_") then
             if ref.object and ref.object.inventory then
                 for _, stack in pairs(ref.object.inventory) do
                     tes3.addItem({
@@ -260,80 +267,16 @@ function personalEffectsFix.init()
         end
     end)
 
-    local function isClone(ref)
-        if not ref or ref == tes3.player then return false end
-        if ref.objectType ~= tes3.objectType.npc then return false end
-
-        -- 0. Explicit match on PlayerSaveGame dynamic player duplicate
-        local refId = ref.id and ref.id:lower()
-        if refId and refId:find("playersavegame") then return true end
-
-        -- 1. Base object ID is 'player'
-        local baseId = ref.baseObject and ref.baseObject.id and ref.baseObject.id:lower()
-        if baseId == "player" then return true end
-
-        -- 2. Object matches player object
-        if tes3.player and tes3.player.object and ref.object == tes3.player.object then
-            return true
-        end
-
-        -- 3. Name matches player name or default engine 'Player'
-        local playerName = tes3.player and tes3.player.object and tes3.player.object.name
-        if ref.object and ref.object.name then
-            if playerName and playerName ~= "" and ref.object.name == playerName then
-                return true
-            end
-            if ref.object.name == "Player" then
-                return true
-            end
-        end
-
-        return false
-    end
-
-    local function purgeStaleClones()
-        local cell = tes3.player and tes3.player.cell
-        if cell and cell.id:lower():find("census and excise") then
-            local toPurge = {}
-            local purged = 0
-            for ref in cell:iterateReferences(tes3.objectType.npc) do
-                if isClone(ref) then
-                    table.insert(toPurge, ref)
-                end
-            end
-            for _, ref in ipairs(toPurge) do
-                local refName = (ref.object and ref.object.name) or "Unknown"
-                local refId = (ref.baseObject and ref.baseObject.id) or ref.id or "unknown"
-                local ok, err = pcall(function()
-                    ref.position = tes3vector3.new(ref.position.x, ref.position.y, ref.position.z - 10000)
-                    ref:disable()
-                    ref.modified = true
-                end)
-                if ok then
-                    purged = purged + 1
-                else
-                    mwse.log("[mwpersonaleffects] Could not purge player clone '%s' [%s]: %s",
-                        refName, refId, tostring(err))
-                end
-            end
-            if purged > 0 then
-                mwse.log("[mwpersonaleffects] Purged %d stale player clone(s) in %s.", purged, cell.id)
-            end
-        end
-    end
-
-    local function schedulePurge()
+    local function scheduleFacing()
         local cell = tes3.player and tes3.player.cell
         if not cell or not cell.id or not cell.id:lower():find("census and excise") then
             return
         end
-        purgeStaleClones()
         restoreSellusFacing()
         restoreDoorGuardFacing()
         timer.frame.delayOneFrame(function()
             local currentCell = tes3.player and tes3.player.cell
             if currentCell and currentCell.id and currentCell.id:lower():find("census and excise") then
-                purgeStaleClones()
                 restoreSellusFacing()
                 restoreDoorGuardFacing()
             end
@@ -341,21 +284,14 @@ function personalEffectsFix.init()
         timer.start({ duration = 0.5, type = timer.real, callback = function()
             local currentCell = tes3.player and tes3.player.cell
             if currentCell and currentCell.id and currentCell.id:lower():find("census and excise") then
-                purgeStaleClones()
                 restoreSellusFacing()
                 restoreDoorGuardFacing()
             end
         end })
     end
 
-    -- Clean up any stale player clone in Census and Excise (from in-game New Game restarts)
-    event.register(tes3.event.loaded, schedulePurge)
-    event.register(tes3.event.cellChanged, schedulePurge)
-
-    -- Also purge when entering dialogue in Census & Excise
-    event.register(tes3.event.uiActivated, function(e)
-        purgeStaleClones()
-    end, { filter = "MenuDialog" })
+    event.register(tes3.event.loaded, scheduleFacing)
+    event.register(tes3.event.cellChanged, scheduleFacing)
 
     -- Continuous background check while player is in Census & Excise
     -- MWSE cancels every timer just before `loaded`, so it is started again there
@@ -367,7 +303,6 @@ function personalEffectsFix.init()
             callback = function()
                 local cell = tes3.player and tes3.player.cell
                 if cell and cell.id:lower():find("census and excise") then
-                    purgeStaleClones()
                     restoreDoorGuardFacing()
                 end
             end

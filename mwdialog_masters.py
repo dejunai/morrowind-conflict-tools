@@ -84,9 +84,12 @@ def master_closure(world, plugins, patched):
     return [(n, path) for n, path in plugins if n.lower() in need]
 
 
-def write_inplace(path, out, backup=True):
+def write_inplace(path, out, backup=True, read_as=None):
     """Write records over a plugin in place: .bak first, record count set, date kept (hard links stay)."""
     out[0] = set_hedr_count(out[0], len(out) - 1)
+    if read_as is not None:                     # read_as: content_id() of what `out` was made from
+        with open(path, "rb") as f:
+            _T.check_unchanged({path: read_as}, path, f.read())
     st = os.stat(path)
     bak = None
     if backup:

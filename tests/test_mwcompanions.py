@@ -179,8 +179,7 @@ def test_attend_me_recruits_are_followers_but_wait_and_move_commands_are_respect
     run(r'''
 local recruit = actor("recruit", { package = "wander", data = { attendMeCompanion = true },
   position = vec(5000, 0, 0) })
-local attendMeFollowers = require("AttendMeMWSE.followers")
-attendMeFollowers.init({ blacklist = {} })
+package.loaded["AttendMeMWSE.followers"] = {}
 check(core.followerKind(recruit) == 2 and core.isFollower(recruit), "Attend Me recruits count as companions")
 check(not core.shouldWarp(recruit, 2, 2000), "Attend Me wait/wander commands are not overridden by warping")
 on("assist")
@@ -198,10 +197,8 @@ check(recruit.inCombat, "actively-following Attend Me companions can still assis
 def test_attend_me_auto_teleport_takes_precedence_over_mwcompanions_warp():
     run(r'''
 userConfigs.AttendMeMWSE = { teleportFollowers = true }
-local attendMeFollowers = require("AttendMeMWSE.followers")
-attendMeFollowers.init({ blacklist = {} })
-local attendMeTeleport = require("AttendMeMWSE.teleport")
-attendMeTeleport.init(userConfigs.AttendMeMWSE, attendMeFollowers)
+package.loaded["AttendMeMWSE.followers"] = {}
+package.loaded["AttendMeMWSE.teleport"] = { process = function() end }
 local far = actor("recruit", { package = "follow", data = { attendMeCompanion = true },
   position = vec(5000, 0, 0) })
 party(far)

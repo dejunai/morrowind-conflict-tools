@@ -112,6 +112,19 @@ def _fresh_caches():
 
 
 @pytest.fixture(autouse=True)
+def _no_real_locks(tmp_path, monkeypatch):
+    """The tools' own lock and the game's are the user's: tests run while Tidy does, and never hold it up."""
+    paths = sys.modules["mwdialog_paths"]
+    if not hasattr(paths, "GAME_LOCK_DIR"):
+        yield                                  # MW_SRC points at scripts from before the game lock
+        return
+    monkeypatch.setitem(paths._RUN_LOCKS, paths._tool_lock_file(), None)
+    monkeypatch.setattr(paths, "GAME_LOCK_DIR", str(tmp_path / "game-locks"))
+    yield
+    paths.release_game_locks()
+
+
+@pytest.fixture(autouse=True)
 def _no_local_rename_map(tmp_path, monkeypatch):
     """tools\\Translation.txt is this machine's: a test sees only the map it writes at tmp_path."""
     monkeypatch.setattr(sys.modules["mwdialog_patchfile"], "TD_MAP", str(tmp_path / "Translation.txt"), raising=False)

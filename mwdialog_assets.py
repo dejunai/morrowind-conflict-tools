@@ -911,15 +911,6 @@ def splash_tga(path, texconv, tmp):
     return _tga_write(w, h, 3, rows)
 
 
-def _tga_pixels(path):
-    try:
-        with open(path, "rb") as f:
-            head = f.read(18)
-    except OSError:
-        return 0
-    return int.from_bytes(head[12:14], "little") * int.from_bytes(head[14:16], "little") if len(head) == 18 else 0
-
-
 def run_tool(cmd, timeout=600):
     """texconv / ffmpeg with a time limit: a file that hangs the program counts as a failed conversion."""
     try:
@@ -1503,6 +1494,8 @@ def restore_unused(game_dir, data_dir):
             if m:                                    # from a Vortex mod: back into the mod, linked into Data Files
                 mod = dest[:m.start()]
                 staged = os.path.join(mod, rel)
+                if os.path.exists(staged):
+                    raise FileExistsError("a newer file is there")
                 os.makedirs(os.path.dirname(staged), exist_ok=True)
                 os.replace(dest, staged)
                 target = os.path.join(data_dir, rel)
@@ -1513,6 +1506,8 @@ def restore_unused(game_dir, data_dir):
                     except OSError:
                         shutil.copy2(staged, target)
             else:
+                if os.path.exists(os.path.join(data_dir, rel)):
+                    raise FileExistsError("a newer file is there")
                 os.makedirs(os.path.dirname(os.path.join(data_dir, rel)), exist_ok=True)
                 os.replace(dest, os.path.join(data_dir, rel))
             back += 1
@@ -1967,6 +1962,7 @@ def rename_ascii(root, full, rel, new_rel, log):
         keep = _m.off_dest(root, "names", None, rel)
         os.makedirs(os.path.dirname(keep), exist_ok=True)
         if os.path.exists(keep):
+            _m.keep_new_original(keep, full)       # an update's file is a new original; raises if it can't be kept
             os.remove(full)
         else:
             os.replace(full, keep)
@@ -2008,8 +2004,10 @@ def rename_ascii(root, full, rel, new_rel, log):
             if not os.path.exists(bak):
                 os.makedirs(os.path.dirname(bak), exist_ok=True)
                 shutil.copy2(pp, bak)
+            _m.keep_new_original(bak, pp)
             # checked temp copy, then in place: keeps a Vortex hard link (and the date: load order)
             _m.write_plugin_bytes(pp, new, keep_times=os.stat(pp))
+            _m.record_repair(pp, new)
             log(f"{pf}: {hits} name(s) of {rel} changed to {new_rel}")
 
 
@@ -2065,19 +2063,11 @@ def apply_folder(root, fixes, m, game_dir, plugin_name):
     # every repair of one file is done in this one run: the renames first, then the other fixes find the
     # file under its new name (each fix reads the file as the one before left it)
     renamed = {}
-    # files this tool changed before (any run): their original is already kept, so no new backup
-    cache = shared_cache(game_dir)
-    def was_fixed(r):
-        return cache.d.get("fixed:" + os.path.join(root, r).lower()) is not None
-
-    def mark_fixed(r):
-        cache.put("fixed:" + os.path.join(root, r).lower(), "", True)
     for kind, full, rel, job in fixes:
         if kind == "ascii":
             try:
                 rename_ascii(root, full, rel, job, lambda t: print("  " + t))
                 renamed[full] = (os.path.join(root, job), job)
-                mark_fixed(job)
                 done += 1
             except OSError as e:
                 skipped.append(f"{rel} ({e})")
@@ -2121,15 +2111,13 @@ def apply_folder(root, fixes, m, game_dir, plugin_name):
                 if target != full and os.path.exists(target):
                     skipped.append(f"{rel} (a TGA of that name exists already)")
                     continue
-                if not was_fixed(rel) or full in orig_rel:
-                    _backup_in_mod(root, orig_rel.get(full, rel), full, plugin_name, FEATURE_OF[kind])
+                _backup_in_mod(root, orig_rel.get(full, rel), full, plugin_name, FEATURE_OF[kind])
                 if target == full:
                     m.replace_asset_in_place(full, new)          # in place: Vortex's hard link stays
                 else:
                     with open(target, "wb") as f:
                         f.write(new)
                     os.remove(full)                              # its original is in Off
-                mark_fixed(rel)
                 done += 1
                 continue
             if kind == "keys":
@@ -2209,15 +2197,12 @@ def apply_folder(root, fixes, m, game_dir, plugin_name):
                 continue
             # only the original is kept: a backup that exists already (an earlier fix of this run, or a run
             # before) is never overwritten; a renamed file's original is kept under its original name
-            if not was_fixed(rel) or full in orig_rel:
-                _backup_in_mod(root, orig_rel.get(full, rel), full, plugin_name, FEATURE_OF.get(kind, "converted"))
+            _backup_in_mod(root, orig_rel.get(full, rel), full, plugin_name, FEATURE_OF.get(kind, "converted"))
             m.replace_asset_in_place(full, new)
-            mark_fixed(rel)
             done += 1
         except OSError as e:
             skipped.append(f"{rel} ({e})")
     shutil.rmtree(tmp, ignore_errors=True)
-    cache.save()
     return done, skipped
 
 
