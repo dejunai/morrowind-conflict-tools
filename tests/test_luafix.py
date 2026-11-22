@@ -449,7 +449,7 @@ def test_F1_old_embedded_policy_is_replaced_and_current_policy_is_idempotent():
     a = analyse(src)
     assert a.old_shim
     new, rules = lf.build_patch(src, a.findings, "testmod", CFG, want_shim=True)
-    assert rules == ["F1"] and "init = 0, after = 0" in new and "S.v == 3" in new
+    assert rules == ["F1"] and "init = 0, after = 0" in new and f"S.v == {lf.SHIM_V}" in new
     a = analyse(new)
     assert not a.old_shim
     assert lf.build_patch(new, a.findings, "testmod", CFG, want_shim=True)[0] is None
@@ -662,6 +662,26 @@ def test_apply_in_place_keeps_hard_link_and_undo_restores(tmp_path):
     assert not any(e.get("patch") for e in rep2.files.values())
     assert lf.undo(str(j), log=lambda s: 0) == 0
     assert (root / "main.lua").read_bytes() == crlf and os.path.samefile(root / "main.lua", linked)
+
+
+def test_backup_and_journal_reach_the_disk_before_the_original_changes(tmp_path, monkeypatch):
+    data, root = mod_tree(tmp_path, {"main.lua": PUDDLE})
+    j, bk = tmp_path / "j.jsonl", tmp_path / "bk"
+    rep = lf.check_paths([str(data)], CFG, checker=OkChecker(), use_cache=False)
+    synced, real_fsync, real_write = [], os.fsync, lf.write_in_place
+
+    def fsync(fd):
+        synced.append(fd)
+        real_fsync(fd)
+
+    def write(path, data):
+        assert len(synced) >= 2, f"backup and journal not synced before the write ({len(synced)} sync(s))"
+        real_write(path, data)
+
+    monkeypatch.setattr(lf.os, "fsync", fsync)
+    monkeypatch.setattr(lf, "write_in_place", write)
+    w, refused = lf.apply_report(rep, journal=str(j), backup_root=str(bk), log=lambda s: 0)
+    assert w == 1 and not refused
 
 
 def test_undo_refuses_a_file_changed_since(tmp_path):

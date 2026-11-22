@@ -43,8 +43,11 @@ local defaults = {
 }
 
 local config = mwse.loadConfig(CONFIG_NAME, defaults)
-if not config.enabled then
-    mwse.log("[mwguard] profiling is off (MWSE\\config\\mwguard.json). The Mod Config menu can turn it on.")
+-- read once: off at start-up means no hooks at all (switching it on takes effect after a restart)
+local active = config.enabled == true
+if not active then
+    mwse.log("[mwguard] profiling is off (MWSE\\config\\mwguard.json): no handlers are wrapped. The Mod Config "
+        .. "menu can turn it on (after a restart).")
 end
 
 local interop = include("mwguard.interop") or {
@@ -70,8 +73,10 @@ local function flog(fmt, ...)
     logFile:write(os.date("[%H:%M:%S] "), ok and s or tostring(fmt), "\n")
     logFile:flush()
 end
-flog("mwguard started in passive profiling mode (MWSE build %s)", tostring(mwse.buildNumber or "?"))
-mwse.log("[mwguard] Initialized first (load priority 1000000): passive profiler and event monitor active.")
+if active then
+    flog("mwguard started in passive profiling mode (MWSE build %s)", tostring(mwse.buildNumber or "?"))
+    mwse.log("[mwguard] Initialized first (load priority 1000000): passive profiler and event monitor active.")
+end
 
 -- microsecond clock ------------------------------------------------------------------------------
 local now = os.clock
@@ -194,9 +199,8 @@ local function makeWrapper(eventType, callback, w)
         event = eventType, w = w, calls = 0, sampled = 0, time = 0, peak = 0,
         hint = perFrameHint(w)
     }
-    stats[#stats + 1] = st
-
-    return function(e)
+    local wrapper
+    wrapper = function(e)
         if not config.enabled then
             return callback(e)
         end
@@ -214,54 +218,64 @@ local function makeWrapper(eventType, callback, w)
         if dt > st.peak then st.peak = dt end
         return r
     end
+    stats[wrapper] = st
+    return wrapper
 end
 
 local origRegister, origUnregister, origIsRegistered = event.register, event.unregister, event.isRegistered
 
-event.register = function(eventType, callback, options)
-    if type(callback) ~= "function" or type(eventType) ~= "string" then
-        return origRegister(eventType, callback, options)
-    end
-    local w = origin(callback)
-    if not w or exempt(w, callback) then return origRegister(eventType, callback, options) end
-    checkPriority(eventType, options, w)
-    if not PER_FRAME[eventType] or (options and (options.doOnce or options.filter ~= nil or options.unregisterOnLoad)) then
-        return origRegister(eventType, callback, options)
-    end
-    local byCb = wrappers[eventType]
-    local wrapper = byCb[callback]
-    if not wrapper then
-        wrapper = makeWrapper(eventType, callback, w)
-        byCb[callback] = wrapper
-    end
-    return origRegister(eventType, wrapper, options)
-end
-
-event.unregister = function(eventType, callback, options)
-    local byCb = wrappers[eventType]
-    local wrapper = byCb and type(callback) == "function" and byCb[callback]
-    if wrapper then
-        origUnregister(eventType, wrapper, options)
-        if origIsRegistered(eventType, callback, options) then
-            origUnregister(eventType, callback, options)
+if active then
+    event.register = function(eventType, callback, options)
+        if type(callback) ~= "function" or type(eventType) ~= "string" then
+            return origRegister(eventType, callback, options)
         end
-        return
+        local w = origin(callback)
+        if not w or exempt(w, callback) then return origRegister(eventType, callback, options) end
+        checkPriority(eventType, options, w)
+        if not PER_FRAME[eventType]
+            or (options and (options.doOnce or options.filter ~= nil or options.unregisterOnLoad)) then
+            return origRegister(eventType, callback, options)
+        end
+        local byCb = wrappers[eventType]
+        local wrapper = byCb[callback]
+        if not wrapper then
+            wrapper = makeWrapper(eventType, callback, w)
+            byCb[callback] = wrapper
+        end
+        return origRegister(eventType, wrapper, options)
     end
-    return origUnregister(eventType, callback, options)
-end
 
-event.isRegistered = function(eventType, callback, options)
-    local byCb = wrappers[eventType]
-    local wrapper = byCb and type(callback) == "function" and byCb[callback]
-    if wrapper and origIsRegistered(eventType, wrapper, options) then return true end
-    return origIsRegistered(eventType, callback, options)
+    event.unregister = function(eventType, callback, options)
+        local byCb = wrappers[eventType]
+        local wrapper = byCb and type(callback) == "function" and byCb[callback]
+        if wrapper then
+            origUnregister(eventType, wrapper, options)
+            if origIsRegistered(eventType, callback, options) then
+                origUnregister(eventType, callback, options)
+            end
+            -- release it: the wrapper holds the callback, so the weak key alone never lets either go (LuaJIT)
+            if not origIsRegistered(eventType, wrapper) then
+                byCb[callback] = nil
+                stats[wrapper] = nil
+            end
+            return
+        end
+        return origUnregister(eventType, callback, options)
+    end
+
+    event.isRegistered = function(eventType, callback, options)
+        local byCb = wrappers[eventType]
+        local wrapper = byCb and type(callback) == "function" and byCb[callback]
+        if wrapper and origIsRegistered(eventType, wrapper, options) then return true end
+        return origIsRegistered(eventType, callback, options)
+    end
 end
 
 -- 3. periodic performance reports ----------------------------------------------------------------
 local function report()
     if not config.enabled then return end
     local list = {}
-    for _, st in ipairs(stats) do
+    for _, st in pairs(stats) do
         if st.sampled > 0 then
             st.avg = (st.time / st.sampled) * 1000 -- in ms
             st.totalEstimatedMs = st.avg * st.calls
@@ -306,6 +320,7 @@ local function priorityReport()
 end
 
 local function startReportTimer()
+    if not active then return end
     timer.start({
         type = timer.real,
         duration = config.reportSeconds or 30,
@@ -320,9 +335,10 @@ origRegister(tes3.event.loaded, startReportTimer)
 origRegister(tes3.event.initialized, function()
     priorityReport()
     startReportTimer()
-    if config.enabled then
-        origLog("[mwguard] active as passive profiler (measuring %d handlers; details in MWSE\\logs\\mwguard.log)",
-            #stats)
+    if active then
+        local n = 0
+        for _ in pairs(stats) do n = n + 1 end
+        origLog("[mwguard] active as passive profiler (measuring %d handlers; details in MWSE\\logs\\mwguard.log)", n)
     end
 end, { priority = -100000 })
 
@@ -336,7 +352,8 @@ event.register(tes3.event.modConfigReady, function()
     })
     page:createOnOffButton({
         label = "Enable Passive Profiler",
-        description = "Turns performance monitoring on or off.",
+        description = "Turns performance monitoring on or off. Turning it on takes effect after restarting the game; "
+            .. "while it is off at start-up, mwguard wraps nothing.",
         variable = mwse.mcm.createTableVariable({ id = "enabled", table = config }),
     })
     page:createSlider({

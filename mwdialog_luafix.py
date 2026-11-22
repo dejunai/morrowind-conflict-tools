@@ -123,6 +123,8 @@ DEFAULTS = {
         "maxMB": 2,                  # the mod's own log is rotated at this size ...
         "keepOld": 1,                # ... keeping the previous one as <mod>.old.log (0: none)
         "flushSeconds": 2,           # buffered lines reach the disk at least this often
+        "lifecycleMax": 20,          # lifecycle lines (LIFECYCLE_PATTERNS) reach MWSE.log only before initialized,
+                                     # near the start of the line, at most this many per mod
         "errorRepeat": 0,            # errors always reach MWSE.log, including repeats
         "exemptMods": sorted(OWN_LOGGERS),  # these already write MWSE\logs\mw*.log themselves
     },
@@ -2001,10 +2003,12 @@ def lua_str(s):
 
 
 SHIM_END = "--[[/mwluafix_logshim]]"
+# keepPatterns that mark a start-up line, not an error: "Registered recipe N" x500 must not flood MWSE.log
+LIFECYCLE_PATTERNS = frozenset({"initializ", "register", "start", "loaded", "ready", "version", "active"})
 # the version-1 shim (print / mwse.log only, no cap, no logger wrap): replaced by the current one on sight
 SHIM_V1_RE = re.compile(r"local print, mwse = \(function\(_p, _m\) local fmt, find, lower, sub = string\.format, "
                         r"[^\n]*?\{ __index = _m, __newindex = _m \}\) end\)\(print, mwse\) ")
-SHIM_V = 3
+SHIM_V = 4
 SHIM_RE = re.compile(r"local print, mwse, mwluafix_log = \(function\(_p, _m\).*?" +
                      re.escape(SHIM_END) + r" ")
 LOG_SHIM_LUA = r"""
@@ -2021,13 +2025,27 @@ local path, oldPath = dir .. "\\" .. C.name .. ".log", dir .. "\\" .. C.name .. 
 local t0 = os.time() - math.floor(os.clock()) - 1
 local init, run, started, redirected, f, dead, busy, fails = 0, 0, false, false, nil, false, false, 0
 local bytes, dirty, last, lastN, sec, secN, dropped, errs, errKeys = 0, false, nil, 0, -1, 0, 0, {}, 0
-local function isErr(t)
-local l = lower(#t > 4096 and sub(t, 1, 4096) or t)
-for i = 1, #C.keep do
-local ok, h = pcall(find, l, C.keep[i])
-if ok and h then return true end
+local function compile(list)
+local out = {}
+for i = 1, #(list or {}) do
+local p = list[i]
+if type(p) == "string" and pcall(find, "", p) then out[#out + 1] = { p, not find(p, "[%^%$%(%)%%%.%[%]%*%+%-%?]") } end
+end
+return out
+end
+local KEEP, LIFE, lifeN = compile(C.keep), compile(C.life), 0
+local function matches(l, list)
+for i = 1, #list do
+if find(l, list[i][1], 1, list[i][2]) then return true end
 end
 return false
+end
+local function isErr(t)
+local l = lower(#t > 4096 and sub(t, 1, 4096) or t)
+if matches(l, KEEP) then return true end
+if started or lifeN >= C.lifeMax or not matches(sub(l, 1, 160), LIFE) then return false end
+lifeN = lifeN + 1
+return "life"
 end
 local function out(s)
 f:write(date("[%H:%M:%S] "), s, "\n")
@@ -2073,11 +2091,16 @@ out(t)
 S.redirected = S.redirected + 1
 if not started then dirty = false f:flush() end
 end
+local function startFlush()
+if S.flushTimer then pcall(function() S.flushTimer:cancel() end) end
+local ok, t = pcall(timer.start, { type = timer.real, duration = C.flushSeconds, iterations = -1, persist = false, callback = function() pcall(flushAll) end })
+S.flushTimer = ok and t or nil
+end
 S.start = function()
 if started then return end
 started = true
 pcall(flushAll)
-pcall(function() timer.start({ type = timer.real, duration = C.flushSeconds, iterations = -1, persist = false, callback = function() pcall(flushAll) end }) end)
+startFlush()
 end
 local function route(t, force)
 if not started then
@@ -2199,7 +2222,8 @@ S.flush = flushAll
 S.stats = function() return { init = init, run = run, redirected = redirected, dead = dead, path = path, fails = fails, started = started } end
 pcall(function()
 event.register("initialized", S.start)
-for _, ev in ipairs({ "loaded", "save", "menuEnter" }) do event.register(ev, function() pcall(flushAll) end) end
+for _, ev in ipairs({ "save", "menuEnter" }) do event.register(ev, function() pcall(flushAll) end) end
+event.register("loaded", function() pcall(flushAll) if started then startFlush() end end)
 end)
 pcall(function()
 local p = newproxy(true)
@@ -2221,9 +2245,10 @@ def log_shim(mod_key, cfg):
     loggers (wrapped where it creates them) are sent through the same route; warn/error are left alone. Every
     file operation is pcall'd or returns nil; ten internal errors and it passes everything through."""
     lc = cfg["log"]
-    keep = ", ".join(lua_str(p) for p in lc["keepPatterns"])
+    keep = ", ".join(lua_str(p) for p in lc["keepPatterns"] if p not in LIFECYCLE_PATTERNS)
+    life = ", ".join(lua_str(p) for p in lc["keepPatterns"] if p in LIFECYCLE_PATTERNS)
     conf = (f'{{ name = {lua_str(log_name(mod_key))}, init = {int(lc["budgetInit"])}, after = {int(lc["budget"])}, '
-            f'keep = {{ {keep} }}, perSecond = {int(lc["perSecond"])}, maxBytes = {int(float(lc["maxMB"]) * 1048576)}, '
+            f'keep = {{ {keep} }}, life = {{ {life} }}, lifeMax = {int(lc.get("lifecycleMax", 20))}, perSecond = {int(lc["perSecond"])}, maxBytes = {int(float(lc["maxMB"]) * 1048576)}, '
             f'keepOld = {int(lc["keepOld"])}, flushSeconds = {float(lc["flushSeconds"])}, '
             f'errorRepeat = {int(lc["errorRepeat"])} }}')
     body = " ".join(l for l in LOG_SHIM_LUA.split("\n") if l)
@@ -2689,10 +2714,13 @@ def apply_report(rep, journal=JOURNAL, backup_root=BACKUP_ROOT, head_extra=None,
                 os.makedirs(os.path.dirname(bpath), exist_ok=True)
                 with open(bpath, "wb") as f:
                     f.write(b)
-                new = e["patch"]["text"].encode("latin-1")
+                    f.flush()
+                    os.fsync(f.fileno())                # the backup and its journal line are on disk before
+                new = e["patch"]["text"].encode("latin-1")   # the original changes: --undo always has both
                 j.write(json.dumps({"luafix": p, "backup": bpath, "before": sha(b), "after": sha(new),
                                     "rules": e["patch"]["rules"]}) + "\n")
                 j.flush()
+                os.fsync(j.fileno())
                 write_in_place(p, new)
                 written += 1
                 if done is not None:

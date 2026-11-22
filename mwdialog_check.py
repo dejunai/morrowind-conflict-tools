@@ -6627,14 +6627,16 @@ def fix_long_names(args, plugins, bsas):
     if not models and not ids:
         return 0
     # ids scripts or dialogue mention can't be renamed safely (compiled scripts hold them too)
+    encoded = {idl: idl.encode(ENC, MW_ERRORS) for idl in ids}
     for name, (path, data, recs) in datas.items():
         low = data.lower()
-        for idl in list(ids):
-            if idl.encode(ENC, MW_ERRORS) in low:
-                for off, tag, flags, body in recs:
-                    if tag in ("SCPT", "INFO") and idl.encode(ENC, MW_ERRORS) in body.lower():
-                        users.add(idl)
-                        break
+        hits = [idl for idl, b in encoded.items() if idl not in users and b in low]
+        if not hits:
+            continue
+        bodies = [body.lower() for _off, tag, _flags, body in recs if tag in ("SCPT", "INFO")]
+        for idl in hits:
+            if any(encoded[idl] in b for b in bodies):
+                users.add(idl)
     print("\n" + "=" * 70 + "\nNAMES LONGER THAN THE GAME KEEPS (31 characters)\n" + "=" * 70)
     in_bsa = {}
     for b in bsas:

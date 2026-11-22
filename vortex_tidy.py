@@ -96,7 +96,6 @@ def is_grass_plugin(path):
     """An MGE XE groundcover plugin (read by the distant land generator from Data Files\\Grass, never loaded
     as a game plugin): only statics/activators and cells, and most of those objects are grass (model under grass\\, or an id /
     model that says grass or groundcover)."""
-    import struct
     try:
         with open(path, "rb") as f:
             data = f.read()

@@ -104,7 +104,8 @@ end
 
 -- escorts can't die: a killing blow drains fatigue to zero, they stay down while the fight lasts, then get up.
 -- Only escorts down right now are listed (bounded, cleared on recovery; a load drops it and fatigue regenerates).
-local downed = {}   -- mobile -> true
+-- Kept as safe handles: a downed escort's cell can unload mid-fight, and its old mobile must not be touched then.
+local downed = {}   -- reference id -> safe handle of the reference
 local downedTimer
 
 local function anyHostile(mob)
@@ -116,15 +117,16 @@ end
 
 local function holdDowned()
     local left = false
-    for mob in pairs(downed) do
-        local ref = mob.reference
-        if not ref or ref.disabled or mob.isDead then
-            downed[mob] = nil
+    for id, handle in pairs(downed) do
+        local ref = handle:valid() and handle:getObject()
+        local mob = ref and ref.mobile
+        if not mob or ref.disabled or mob.isDead then
+            downed[id] = nil
         elseif tes3.mobilePlayer.inCombat or anyHostile(mob) then
             mob.fatigue.currentRaw = 0
             left = true
         else
-            downed[mob] = nil
+            downed[id] = nil
             mob.fatigue.currentRaw = mob.fatigue.base
         end
     end
@@ -135,7 +137,7 @@ local function holdDowned()
 end
 
 local function knockDownEscort(mob, attacker)
-    downed[mob] = true
+    downed[mob.reference.id] = tes3.makeSafeObjectHandle(mob.reference)
     mob:stopCombat(true)
     if mob.health.current < 1 then mob.health.current = 1 end
     mob.fatigue.currentRaw = 0
@@ -157,7 +159,7 @@ local function onDamage(e)
     local mob, attacker = e.mobile, e.attacker
     local data = mob.reference.data
     if config.escortProtection and mob ~= tes3.mobilePlayer then
-        if downed[mob] then
+        if downed[mob.reference.id] then
             if e.damage > 0 then e.damage = 0 end
             return
         end

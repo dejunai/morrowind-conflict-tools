@@ -392,3 +392,25 @@ def test_v1_shim_is_upgraded_in_place(tmp_path):
     assert t.startswith(f"--[[mwdialog_luafix {lf.VERSION}: F1]] local print, mwse, mwluafix_log")
     e2, _ = plan(tmp_path / "again", {"main.lua": t})
     assert e2["main.lua"]["patch"] is None                       # stable after the upgrade
+
+
+@need_lua
+def test_flush_timer_is_started_again_after_a_load():
+    r = Rt(budgetInit=0)
+    r.load("print('x')")
+    r.run("fire('initialized')")
+    assert len(r.g.TIMERS) == 1
+    r.run("TIMERS = {} fire('loaded')")              # MWSE cancels every timer right before loaded
+    assert len(r.g.TIMERS) == 1 and r.g.TIMERS[1].iterations == -1
+
+
+@need_lua
+def test_lifecycle_words_are_capped_and_only_count_before_initialized():
+    r = Rt(budgetInit=0)
+    r.load("for i = 1, 500 do print('Registered recipe ' .. i) end print('Error: broke')")
+    shown = [o for o in r.out() if o.startswith("Registered recipe")]
+    assert len(shown) == 20 and "Error: broke" in r.out()
+    r.run("fire('initialized')")
+    r.load("print('Mod started') print('reloaded the inactive thing')", path="testmod\\late.lua")
+    assert "Mod started" not in r.out() and "reloaded the inactive thing" not in r.out()
+    assert "Mod started" in r.file()

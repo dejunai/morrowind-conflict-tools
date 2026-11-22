@@ -50,7 +50,7 @@ tes3 = {
   setAIWander = function(p) p.reference.mobile.package = { type = tes3.aiPackage.wander } end,
   setAIFollow = function(p) p.reference.mobile.package = { type = tes3.aiPackage.follow, targetActor = tes3.mobilePlayer } end,
   isAffectedBy = function(p) return p.reference.soulTrapped == true end,
-  makeSafeObjectHandle = function(r) return { valid = function() return true end, getObject = function() return r end } end,
+  makeSafeObjectHandle = function(r) return { valid = function() return not r.unloaded end, getObject = function() return r end } end,
 }
 tes3.mobilePlayer = { levitate = 0, waterWalking = 0, isSneaking = false, friendlyActors = {} }
 tes3.player = { position = vec(0, 0, 0), facing = 0, orientation = vec(0, 0, 0), cell = town, mobile = tes3.mobilePlayer }
@@ -322,4 +322,23 @@ local hired = actor("hired", { package = "follow" })
 e = { mobile = hired, attacker = bandit, damage = 150 }
 handlers.damage(e)
 check(e.damage == 150, "only escorts are protected by this switch")
+''')
+
+
+def test_a_downed_escort_whose_cell_unloads_is_dropped_without_touching_its_mobile():
+    run(r'''
+on("escortProtection")
+local pilgrim = actor("pilgrim", { package = "escort" })
+local bandit = actor("bandit"); bandit.actionData.target = pilgrim
+pilgrim.hostileActors = { bandit }
+handlers.damage({ mobile = pilgrim, attacker = bandit, damage = 150 })
+check(pilgrim.fatigue.currentRaw == 0, "knocked down")
+-- the cell unloads: the reference's handle is no longer valid and the old mobile must not be read
+pilgrim.reference.unloaded = true
+for k in pairs(pilgrim) do pilgrim[k] = nil end
+setmetatable(pilgrim, { __index = function(_, k) error("stale mobile read: " .. tostring(k)) end })
+tick()
+local alive = 0
+for _, t in ipairs(timers) do if not t.cancelled and t.p.iterations == -1 and t.p.duration == 0.5 then alive = alive + 1 end end
+check(alive == 0, "nothing left to hold down: the timer stops")
 ''')

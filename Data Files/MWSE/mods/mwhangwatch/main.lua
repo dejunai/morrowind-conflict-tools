@@ -23,7 +23,7 @@
                    started, is flagged too.
 
     Memory:        a 32-bit Morrowind has 4 GB of address space in all. When
-                   it is 95% used (the level can be set), a warning comes up
+                   it is 80% used (the level can be set), a warning comes up
                    on screen with the biggest users that can be seen from
                    inside the game: the textures of everything in the loaded
                    cells (by file size, largest first, and by texture folder,
@@ -550,7 +550,7 @@ local function memCheck()
     local mb = memMB()
     if mb < 0 then return end
     local pct = mb / ADDRESS_SPACE_MB * 100
-    local limit = config.memLimit or 95
+    local limit = config.memLimit or 80
     if pct < limit - 3 then                              -- well below again: warn afresh next time
         memArmed = true
         return
@@ -590,7 +590,7 @@ local function startNowPlaying(reason)
     end
     table.sort(refs, function(a, b) return a.position:distance(p) < b.position:distance(p) end)
     table.insert(refs, 1, tes3.player)
-    nowScan = { sounds = sounds, refs = refs, i = 1, found = 0, from = p:copy() }
+    nowScan = { sounds = sounds, refs = refs, i = 1, found = 0, from = p:copy(), query = {} }
     log("NOW PLAYING (%s): checking %d sounds on you and %d objects within %d units",
         reason, #sounds, #refs - 1, NOW_RANGE)
     event.unregister(tes3.event.enterFrame, onNowScanFrame)
@@ -601,13 +601,15 @@ local function stepNowPlaying()
     local sc = nowScan
     if not sc then return end
     local budget = NOW_PER_FRAME
+    local q = sc.query                       -- one params table for every check (no garbage per call)
     while budget > 0 and sc.i <= #sc.refs do
         local r = sc.refs[sc.i]
         sc.i = sc.i + 1
         budget = budget - #sc.sounds
         if r and r.object then
             for _, snd in ipairs(sc.sounds) do
-                local ok, on = pcall(tes3.getSoundPlaying, { sound = snd, reference = r })
+                q.sound, q.reference = snd, r
+                local ok, on = pcall(tes3.getSoundPlaying, q)
                 if ok and on then
                     sc.found = sc.found + 1
                     local pos = r.position
