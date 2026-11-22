@@ -8,6 +8,29 @@ local core = {}
 
 local function lower(s) return s and s:lower() or "" end
 
+local function attendMeFollowers()
+    local mod = package.loaded["AttendMeMWSE.followers"]
+    return type(mod) == "table" and mod or nil
+end
+
+function core.isAttendMeCompanion(ref)
+    if not ref then return false end
+    local mod = attendMeFollowers()
+    if mod and type(mod.hasForcedCompanion) == "function" then
+        local ok, forced = pcall(mod.hasForcedCompanion, ref)
+        if ok and forced then return true end
+    end
+    local ok, forced = pcall(function() return ref.data and ref.data.attendMeCompanion == true end)
+    return ok and forced == true
+end
+
+function core.attendMeHandlesWarping()
+    local mod = package.loaded["AttendMeMWSE.teleport"]
+    if type(mod) ~= "table" or type(mod.process) ~= "function" then return false end
+    local ok, cfg = pcall(mwse.loadConfig, "AttendMeMWSE")
+    return ok and type(cfg) == "table" and cfg.teleportFollowers == true
+end
+
 --- the script declares this local; the script's own context is safe for that test (abot), not for its value
 local function scriptHasLocal(script, name)
     local ok, v = pcall(function() return script.context and script.context[name] end)
@@ -64,12 +87,25 @@ local function followPackage(mobile)
     return p.type, t == tes3.mobilePlayer or (t ~= nil and t.reference == tes3.player)
 end
 
+function core.isAttendMeActivelyFollowing(mobile)
+    local ref = mobile and mobile.reference
+    if not ref or not core.isAttendMeCompanion(ref) then return false end
+    local mod = attendMeFollowers()
+    if mod and type(mod.isActivelyFollowing) == "function" then
+        local ok, following = pcall(mod.isActivelyFollowing, ref)
+        if ok then return following == true end
+    end
+    local ptype, toPlayer = followPackage(mobile)
+    return (ptype == tes3.aiPackage.follow or ptype == tes3.aiPackage.escort) and toPlayer
+end
+
 --- 0 = not a follower, 1 = follower, 2 = companion (`companion = 1`)
 function core.followerKind(mobile)
     if not mobile or mobile == tes3.mobilePlayer or mobile.isDead then return 0 end
     local ref = mobile.reference
     if not ref or ref.disabled or not ref.baseObject then return 0 end
     if core.isBlacklisted(ref) or core.isGuard(ref) then return 0 end
+    if core.isAttendMeCompanion(ref) and ref.baseObject.objectType == tes3.objectType.npc then return 2 end
     local companion = core.companionVar(ref) == 1
     local ptype, toPlayer = followPackage(mobile)
     if ptype == tes3.aiPackage.follow then
@@ -109,6 +145,7 @@ end
 function core.shouldWarp(mobile, kind, distance)
     if not mobile.canMove or mobile.fatigue.current <= 0 then return false end
     local ref = mobile.reference
+    if core.isAttendMeCompanion(ref) and not core.isAttendMeActivelyFollowing(mobile) then return false end
     if ref.data and ref.data.rfuzzo_invincible then return false end   -- Immersive Travel crew and mounts
     if (mobile.inCombat or not mobile.canAct)
         and (kind == 2 or lower(ref.baseObject.id):find("summon", 1, true)) then return false end

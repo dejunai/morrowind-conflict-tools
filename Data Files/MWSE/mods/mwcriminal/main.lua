@@ -5,9 +5,19 @@
 ]]
 local config = require("mwcriminal.config")
 local core = require("mwcriminal.core")
+local interop = require("mwcriminal.interop")
+local inspectorUI = require("mwcriminal.inspectorUI")
 
 local NAME = "mwcriminal"
 local function save() mwse.saveConfig(NAME, config) end
+
+package.loaded["companionsneak"] = interop
+package.loaded["companionsneak.config"] = config
+package.loaded["companionsneak.interop"] = interop
+package.loaded["mwcompanionsneak"] = interop
+package.loaded["mwcompanionsneak.config"] = config
+package.loaded["mwcompanionsneak.interop"] = interop
+package.loaded["mwcompanionsneak.inspectorUI"] = inspectorUI
 
 local ownedBookOpen = false   -- the book being opened is someone else's and the player is standing
 local opener                  -- { ref, position, facing, cell } of the NPC who answered the last knock
@@ -148,9 +158,53 @@ local function onDetectSneak(e)
     e.isDetected = false
     d.isPlayerDetected = false
     d.isPlayerHidden = true
-    local ok, so = pcall(require, "StormAtronach.SO.interop")
-    if ok and so and so.clearSuspicion then pcall(so.clearSuspicion, d.reference) end
+    interop.clearSuspicion(d.reference)
+    if config.debugMode then
+        mwse.log("[mwcriminal] Suppressed sneak detection from %s: %s",
+            core.isCompanion(d) and "companion" or "blacklisted entity",
+            d.reference and d.reference.id or "unknown")
+    end
     return false   -- Stealth Overhaul (priority 1000) never sees it
+end
+
+local function onCompanionSweep()
+    if not (config.enabled and config.companionDetection) or tes3.menuMode() then return end
+    local player = tes3.mobilePlayer
+    if not player or not player.isSneaking then return end
+
+    for mobile in tes3.iterate(player.friendlyActors or {}) do
+        if core.isCompanion(mobile) or interop.isBlacklisted(mobile) then
+            mobile.isPlayerDetected = false
+            mobile.isPlayerHidden = true
+            interop.clearSuspicion(mobile.reference)
+        end
+    end
+
+    local nearby = tes3.findActorsInProximity({ reference = tes3.player, range = 2000 })
+    for _, mobile in ipairs(nearby or {}) do
+        if mobile ~= player and interop.isBlacklisted(mobile) then
+            mobile.isPlayerDetected = false
+            mobile.isPlayerHidden = true
+            interop.clearSuspicion(mobile.reference)
+        end
+    end
+end
+
+local function onInspectorKeyDown(e)
+    if not config.enabled then return end
+    local bind = config.inspectorKey
+    if not bind or not bind.keyCode or e.keyCode ~= bind.keyCode then return end
+    if bind.isShiftDown and not e.isShiftDown then return end
+    if bind.isAltDown and not e.isAltDown then return end
+    if bind.isControlDown and not e.isControlDown then return end
+
+    local inspectorId = tes3ui.registerID("mwcriminal:DetectionInspector")
+    local blacklistId = tes3ui.registerID("mwcriminal:BlacklistMenu")
+    if tes3ui.findMenu(inspectorId) or tes3ui.findMenu(blacklistId) then
+        inspectorUI.close()
+    elseif not tes3ui.menuMode() then
+        inspectorUI.open()
+    end
 end
 
 -- Essential Indicators: the crosshair is tinted while it rests on something locked the player has no key for
@@ -183,7 +237,6 @@ local function warnOverlaps()
         { config.plainPaper, on("mwplainpaperfix", "enabled", false), "mwplainpaperfix" },
         { config.sneakToSteal, on("noAccidentalTheft", "enabled", lfs.fileexists("Data Files\\MWSE\\mods\\mer\\accidentalTheftProtection\\main.lua")), "Accidental Theft Protection" },
         { config.readStanding, pp.enabled == true and pp.noAccidentalTheftBookFixEnabled == true, "mwpluginpatches book fix" },
-        { config.companionDetection, on("mwcompanionsneak", "enabled", false), "mwcompanionsneak" },
         { config.interiorExit or config.sneakToPick, pp.enabled == true and pp.doorLockCompatibilityEnabled == true, "mwpluginpatches door lock compatibility" },
         { config.eveningLocks or config.knocking, on("abotDoor_Locks", "modEnabled", lfs.fileexists("Data Files\\MWSE\\mods\\abot\\Door Locks\\main.lua")), "abot Door Locks" },
     }
@@ -217,5 +270,14 @@ event.register(tes3.event.initialized, function()
     end
     if config.enabled then warnOverlaps() end
 end)
-event.register(tes3.event.loaded, function() opener = nil end)
+event.register("keyDown", onInspectorKeyDown)
+event.register(tes3.event.loaded, function()
+    opener = nil
+    timer.start({
+        type = timer.simulate,
+        duration = 0.35,
+        iterations = -1,
+        callback = onCompanionSweep,
+    })
+end)
 event.register(tes3.event.modConfigReady, function() require("mwcriminal.mcm") end)

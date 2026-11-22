@@ -32,7 +32,6 @@ Active Plugin Status:
   • Friends & Frens: %s
   • The Lost Heir: %s
   • Mabrigash Distribution: %s
-  • Personal Effects: %s
   • No Accidental Theft: %s
   • Cave Drips: %s
   • Yet Another Better Sounds Patch: %s
@@ -46,7 +45,6 @@ Active Plugin Status:
     config.isFriendsAndFrensActive() and "Active" or "Not Active",
     config.isLostHeirActive() and "Active" or "Not Active",
     config.isMabrDistActive() and "Active" or "Not Active",
-    config.isPersonalEffectsActive() and "Active" or "Not Active",
     config.isNoAccidentalTheftActive() and "Active" or "Not Active",
     config.isCaveDripsActive() and "Active" or "Not Active",
     config.isSwampSoundsActive() and "Active" or "Not Active",
@@ -210,16 +208,7 @@ mabrCategory:createYesNoButton({
     variable = mwse.mcm.createTableVariable({ id = "mabrDistSuppressionEnabled", table = config }),
 })
 
--- SECTION 8: PERSONAL EFFECTS
-local peCategory = page:createCategory(string.format("Personal Effects: Sellus Gravius Facing%s", getStatusText(config.isPersonalEffectsActive())))
-
-peCategory:createYesNoButton({
-    label = "Fix Sellus Gravius 180° Spin",
-    description = "Prevents Sellus Gravius from spinning 180° into the rear wall upon dialogue exit caused by Personal Effects' hardcoded 'Face 1605 -376' script command.",
-    variable = mwse.mcm.createTableVariable({ id = "personalEffectsFixEnabled", table = config }),
-})
-
--- SECTION 9: NO ACCIDENTAL THEFT (BOOK READING FIX)
+-- SECTION 8: NO ACCIDENTAL THEFT (BOOK READING FIX)
 local natCategory = page:createCategory(string.format("No Accidental Theft: Book Reading Fix%s", getStatusText(config.isNoAccidentalTheftActive())))
 
 natCategory:createYesNoButton({

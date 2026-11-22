@@ -1,4 +1,4 @@
-# mwcriminal: inventory and design (draft for review, no code yet)
+# mwcriminal: inventory and implementation (updated 2026-11-22)
 
 ## 1. Inventory: who does each behavior today
 
@@ -10,7 +10,7 @@ NAT book fix 100 → mwplainpaperfix 10 → Accidental Theft Protection 0 and Mo
 | Must sneak to steal | **Accidental Theft Protection** (mer, edited by us) | doors exempt when player is in an interior, door leads outside, or door unlocked; books exempt (read instead); blank scrolls not exempt; exclusion list (ids that may be taken standing); NPCs/containers/items all blocked when owned |
 | Must sneak to pick locks | **doorLockCompatibility** (doors only) | key holder passes standing; sets abot's `ab01drlkbl` so abot lets Modern Lockpicking open; **locked containers are not gated at all** (ML opens them standing) |
 | Lockpick minigame requires sneaking | same as above; minigame is **Modern Lockpicking** | ML skips when the player has the key, lock level 0, sneak+Shift/Alt (abot blacklist chord); no-pick / no-knife / impossible-lock messages |
-| Companions and creatures don't affect detection | **mwcompanionsneak** | companion = follow/escort package on player, in `friendlyActors`, AttendMe follower, `companion` script var = 1; never a guard or someone fighting the player; all creatures blacklisted; id blacklist (rooster, chicken, imported from SO); clears Stealth Overhaul suspicion; 0.35 s repeating sweep + `findActorsInProximity` to keep the crosshair hidden; 536-line inspector UI |
+| Companions and creatures don't affect detection | **mwcriminal** (absorbed from mwcompanionsneak) | follow/escort package, `friendlyActors`, Attend Me, or declared `companion` script variable; excludes guards and attackers; configurable creature/escort treatment and actor-ID blacklist; clears Stealth Overhaul suspicion; 0.35 s sweep and the detector/blacklist inspector |
 | Read books standing, Take is red | **ATP** lets owned books open + **noAccidentalTheftBookFix** tints Take (or hides it) | only when not sneaking and no ownership access; MenuBook and MenuScroll; Take still steals if clicked |
 | Can't be locked in an interior leading outside | **doorLockCompatibility** | unlocks the door on activation when source is a true interior and dest is exterior/behaves-as-exterior; abot already skips such doors |
 | Owned doors locked in the evening | **abot Door Locks** | open 7–19; locks only loading doors into interiors; skips persistent, chargen, scripted LD/LCV doors (`dl_`, `_doorlock`, `ld_*lock`), lock level 0 and 1, doors the player/scripts changed first, same-cell non-trapdoors, ab01houses, dest names cave/tomb/sewer/ship/propylon/… ; needs same location prefix or a house/service/whitelisted name; 1-hour hysteresis; lock 38, bank/vault 58; tents/yurts never |
@@ -34,15 +34,15 @@ Lockpicking itself (it remains the minigame; mwcriminal only gates it).
 ```
 mwcriminal/
   main.lua    one activate handler (priority 9300), one detectSneak handler, one uiActivated(MenuBook/MenuScroll)
-  core.lua    pure decisions: owner/access, sneaking, door kind (exit / into interior), residents, hour, feedback
-  config.lua  defaults: enabled = false, every feature false
-  mcm.lua     one page, one Yes/No per feature + hours + notification + exclusion list
+  core.lua    ownership, doors, detection, follower classification and blacklists
+  interop.lua companion detection API and Stealth Overhaul suspicion clearing
+  inspectorUI.lua detector inspector and actor-ID blacklist UI
+  config.lua  master switch defaults off; old companion settings migrate once
+  mcm.lua     feature switches, detection options, inspector and blacklist controls
 ```
 
 - **Core** answers questions on demand at activation time (no per-frame handler, no repeating timer, no cache that
-  grows): `owner(ref)`, `hasAccess(ref)`, `isMember(faction)`, `ownerAlive(npc)`, `livingResidents(cell)`,
-  `isExit(door)`, `isPublic(cell)`, `isEvening(hour)`, `hasKey(lock)` (plus the two keyrings), `locked(ref, kind)`
-  (sound + optional notify).
+  grows for criminal/lock checks): ownership, access, residents, exits, public cells, keyrings, and detection state.
 - The only state written: `ref.data.mwcriminalLocked = true` on doors **mwcriminal** locked, so it only ever unlocks
   its own locks (plugin and quest locks are left alone, except for the dead-owner and member rules). One local for the
   current knock opener (restored on `cellChanged`).
@@ -59,14 +59,16 @@ mwcriminal/
   public dest → unlocked; faction-owned and player meets the rank → unlocked; NPC owner dead → unlocked
   (also clears a plugin lock); no living NPC inside and no living NPC owner → unlocked; otherwise evening
   (outside 7–19) or NPC owner not inside → locked at 38 (58 for bank/vault names).
-- **Detection:** `detectSneak` at priority 2000: companion (same test as mwcompanionsneak, minus the inspector) or
-  creature or listed id → `isDetected = false`, clear SO suspicion via its interop if installed. No sweep timer.
+- **Detection:** `detectSneak` at priority 2000: followers, configured creature cases, and blacklisted actor IDs →
+  `isDetected = false`, clear SO suspicion via its interop if installed. The absorbed 0.35 s sweep and inspector
+  preserve their original behavior. Guards and actors fighting the player remain eligible to detect.
 
 - **Blacklist (user, 2026-11-21):** Shift+activate adds the target to the blacklist (message box confirms) and
-  mwcriminal then ignores it entirely (engine and other mods decide). Doors and containers are listed per reference
+  mwcriminal then ignores it entirely (engine and other mods decide). Companion actor IDs have a separate blacklist;
+  they do not accidentally suppress unrelated theft or door-lock features. Doors and containers are listed per reference
   (key: cell id + object id + position rounded to 64 units, since they don't move); items and actors by object id.
   The MCM has a Blacklist page listing every entry by name and cell with a Remove button each. ATP's and
-  mwcompanionsneak's existing lists are imported once. Shift is also the default Run key, so Shift+activate while
+  mwcompanionsneak's existing settings and IDs are imported once. Shift is also the default Run key, so Shift+activate while
   running adds an entry too; the message box makes that visible and the MCM undoes it.
 
 ## 3. Retiring the originals, one at a time
@@ -77,12 +79,12 @@ is still enabled.
 
 1. `plainPaper` → retire **mwplainpaperfix**
 2. `sneakToSteal` + `readStanding` → retire **Accidental Theft Protection** + **noAccidentalTheftBookFix**
-3. `companionDetection` → retire **mwcompanionsneak**
+3. `companionDetection` absorbs and retires **mwcompanionsneak**; its inspector, blacklist management, options,
+   Attend Me/Stealth Overhaul interop, and sweep now live in mwcriminal.
 4. `interiorExit` + `sneakToPick` + locked feedback → retire **doorLockCompatibility** (Arrille resolver stays)
 5. `eveningLocks` + `knocking` → retire **abot Door Locks**
 
 ## 4. Dropped from the originals (say if any is wanted)
 
-abot's scripted-door overrides (its per-door blacklist is replaced by ours, Shift+activate); abot's rotating greeting texts (one line
-kept); mwcompanionsneak's inspector UI and 0.35 s sweep; mwplainpaperfix's saved blank-id list; NAT fix "hidden"
-Take mode (red only, per the user's words).
+abot's scripted-door overrides (its per-door blacklist is replaced by ours, Shift+activate); abot's rotating greeting
+texts (one line kept); mwplainpaperfix's saved blank-id list; NAT fix "hidden" Take mode (red only, per the user's words).

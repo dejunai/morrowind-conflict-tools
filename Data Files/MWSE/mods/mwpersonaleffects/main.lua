@@ -1,4 +1,4 @@
-local config = require("mwpluginpatches.config")
+local config = require("mwpersonaleffects.config")
 
 local personalEffectsFix = {}
 local unlockLogged = false
@@ -201,12 +201,12 @@ local function handlePersonalEffectsUnlock()
 
     if not unlockLogged then
         unlockLogged = true
-        mwse.log("[mwpluginpatches] Personal effects chest unlocked and loaded for class '%s'.", classId)
+        mwse.log("[mwpersonaleffects] Personal effects chest unlocked and loaded for class '%s'.", classId)
     end
 end
 
 function personalEffectsFix.init()
-    if not config.personalEffectsFixEnabled or not config.isPersonalEffectsActive() then
+    if not config.enabled or not config.isPersonalEffectsActive() then
         return
     end
 
@@ -312,12 +312,12 @@ function personalEffectsFix.init()
                 if ok then
                     purged = purged + 1
                 else
-                    mwse.log("[mwpluginpatches] Could not purge player clone '%s' [%s]: %s",
+                    mwse.log("[mwpersonaleffects] Could not purge player clone '%s' [%s]: %s",
                         refName, refId, tostring(err))
                 end
             end
             if purged > 0 then
-                mwse.log("[mwpluginpatches] Purged %d stale player clone(s) in %s.", purged, cell.id)
+                mwse.log("[mwpersonaleffects] Purged %d stale player clone(s) in %s.", purged, cell.id)
             end
         end
     end
@@ -376,7 +376,16 @@ function personalEffectsFix.init()
     startBackgroundCheck()
     event.register(tes3.event.loaded, startBackgroundCheck)
 
-    mwse.log("[mwpluginpatches] Personal Effects Sellus Gravius & Census Door Guard script overrides and facing fixes active.")
+    mwse.log("[mwpersonaleffects] Personal Effects Sellus Gravius & Census Door Guard script overrides and facing fixes active.")
 end
+
+event.register(tes3.event.initialized, function()
+    if config.enabled and config.isPersonalEffectsActive() then
+        personalEffectsFix.init()
+    end
+end)
+event.register(tes3.event.modConfigReady, function()
+    require("mwpersonaleffects.mcm")
+end)
 
 return personalEffectsFix

@@ -48,6 +48,7 @@ local function sweep()
     if not config.enabled or not tes3.player or tes3.menuMode() then return end
     local list = followers()
     local far = {}
+    local canWarp = config.warp and not core.attendMeHandlesWarping()
     for _, f in ipairs(list) do
         local mob = f.mobile
         if config.followerTraits then setTraits(mob) end
@@ -55,7 +56,9 @@ local function sweep()
             matchPlayer(mob, "levitate", "mwcompanionsLevitate")
             matchPlayer(mob, "waterWalking", "mwcompanionsWaterWalk")
         end
-        if config.warp and core.shouldWarp(mob, f.kind, config.warpDistance) then far[#far + 1] = mob.reference end
+        if canWarp and core.shouldWarp(mob, f.kind, config.warpDistance) then
+            far[#far + 1] = mob.reference
+        end
     end
     local player = tes3.player
     for i, ref in ipairs(far) do
@@ -221,7 +224,11 @@ local function onCombatStarted(e)
     local enemy = (target == tes3.mobilePlayer and actor) or (actor == tes3.mobilePlayer and target) or nil
     if not enemy or core.isFollower(enemy) then return end
     for _, f in ipairs(followers()) do
-        if f.kind == 2 and not f.mobile.inCombat and not core.isEscort(f.mobile) then f.mobile:startCombat(enemy) end
+        local commandedElsewhere = core.isAttendMeCompanion(f.mobile.reference)
+            and not core.isAttendMeActivelyFollowing(f.mobile)
+        if f.kind == 2 and not f.mobile.inCombat and not core.isEscort(f.mobile) and not commandedElsewhere then
+            f.mobile:startCombat(enemy)
+        end
     end
 end
 
@@ -248,7 +255,6 @@ end
 -- one MWSE.log line per switch that duplicates an original option still switched on
 local function warnOverlaps()
     local sc = mwse.loadConfig("abotSmart_Companions")
-    local am = mwse.loadConfig("AttendMeMWSE")
     local checks = {}
     if sc then
         local function n(k) return (tonumber(sc[k]) or 0) > 0 or sc[k] == true end
@@ -264,7 +270,6 @@ local function warnOverlaps()
             { config.noSneakActivate, n("skipActivatingFollowerWhileSneaking"), "Smart Companions skip activation while sneaking" },
         }
     end
-    if am then checks[#checks + 1] = { config.warp, am.teleportFollowers == true, "Attend Me teleport" } end
     local conflicts = {}
     for _, c in ipairs(checks) do
         if c[1] and c[2] then conflicts[#conflicts + 1] = c[3] end

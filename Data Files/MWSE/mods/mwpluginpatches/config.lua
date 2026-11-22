@@ -60,13 +60,6 @@ function config.isMabrDistActive()
         or tes3.getScript("mabDist") ~= nil
 end
 
-function config.isPersonalEffectsActive()
-    return tes3.isModActive("Personal Effects_MWSE.ESP")
-        or tes3.isModActive("Personal Effects.ESP")
-        or tes3.getObject("R0_pe_basecont") ~= nil
-        or tes3.getScript("R0_pe_init_scr") ~= nil
-end
-
 function config.isNoAccidentalTheftActive()
     return tes3.getFileExists("MWSE/mods/mer/accidentalTheftProtection/main.lua")
         or tes3.getFileExists("Data Files/MWSE/mods/mer/accidentalTheftProtection/main.lua")
@@ -115,7 +108,6 @@ local function getDynamicDefaults()
     local fnf = config.isFriendsAndFrensActive()
     local lostHeir = config.isLostHeirActive()
     local mabr = config.isMabrDistActive()
-    local pe = config.isPersonalEffectsActive()
     local nat = config.isNoAccidentalTheftActive()
     local drips = config.isCaveDripsActive()
     local swamp = config.isSwampSoundsActive()
@@ -180,9 +172,6 @@ local function getDynamicDefaults()
 
         -- Mabrigash Distribution Popup Suppression
         mabrDistSuppressionEnabled = mabr,
-
-        -- Personal Effects Sellus Gravius Facing Fix
-        personalEffectsFixEnabled = pe,
 
         -- No Accidental Theft: Allow Reading Owned Books while Standing
         noAccidentalTheftBookFixEnabled = nat,

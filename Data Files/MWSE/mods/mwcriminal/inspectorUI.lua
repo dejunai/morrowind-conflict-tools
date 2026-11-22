@@ -1,11 +1,11 @@
-local config = require("mwcompanionsneak.config")
-local interop = require("mwcompanionsneak.interop")
+local config = require("mwcriminal.config")
+local interop = require("mwcriminal.interop")
 
 local inspectorUI = {}
 
-local GUI_ID_MENU = tes3ui.registerID("mwcompanionsneak:DetectionInspector")
-local GUI_ID_BLACKLIST_MENU = tes3ui.registerID("mwcompanionsneak:BlacklistMenu")
-local GUI_ID_INPUT = tes3ui.registerID("mwcompanionsneak:BlacklistInput")
+local GUI_ID_MENU = tes3ui.registerID("mwcriminal:DetectionInspector")
+local GUI_ID_BLACKLIST_MENU = tes3ui.registerID("mwcriminal:BlacklistMenu")
+local GUI_ID_INPUT = tes3ui.registerID("mwcriminal:BlacklistInput")
 
 local manualInputText = ""
 
@@ -48,7 +48,7 @@ function inspectorUI.open()
     end
 
     local menu = tes3ui.createMenu({ id = GUI_ID_MENU, fixedFrame = true })
-    menu.text = "Stealth Detection Inspector (mwcompanionsneak)"
+    menu.text = "Stealth Detection Inspector (mwcriminal)"
     menu.width = 680
     menu.height = 520
     menu.minWidth = 550
@@ -249,8 +249,8 @@ function inspectorUI.open()
     footer.flowDirection = "left_to_right"
 
     local blCount = 0
-    if config.blacklist then
-        for _ in pairs(config.blacklist) do blCount = blCount + 1 end
+    if config.companionBlacklist then
+        for _ in pairs(config.companionBlacklist) do blCount = blCount + 1 end
     end
 
     local blBtn = footer:createButton({ text = "Open Blacklist" })
@@ -304,7 +304,7 @@ function inspectorUI.openBlacklist()
     end
 
     local menu = tes3ui.createMenu({ id = GUI_ID_BLACKLIST_MENU, fixedFrame = true })
-    menu.text = "Stealth Detection Blacklist (mwcompanionsneak)"
+    menu.text = "Stealth Detection Blacklist (mwcriminal)"
     menu.width = 680
     menu.height = 540
     menu.minWidth = 550
@@ -347,7 +347,7 @@ function inspectorUI.openBlacklist()
     filterBtn.autoHeight = true
     filterBtn:register("mouseClick", function()
         config.blacklistAllCreatures = not config.blacklistAllCreatures
-        mwse.saveConfig("mwcompanionsneak", config)
+        mwse.saveConfig("mwcriminal", config)
         if config.blacklistAllCreatures then
             tes3.messageBox("All creatures are now blacklisted from stealth detection.")
         else
@@ -411,8 +411,8 @@ function inspectorUI.openBlacklist()
 
     -- 3. Blacklisted Entities Scroll List
     local blList = {}
-    if config.blacklist then
-        for id, active in pairs(config.blacklist) do
+    if config.companionBlacklist then
+        for id, active in pairs(config.companionBlacklist) do
             if active then
                 table.insert(blList, id)
             end
@@ -514,8 +514,8 @@ function inspectorUI.openBlacklist()
         clearBtn.autoHeight = true
         clearBtn.borderRight = 8
         clearBtn:register("mouseClick", function()
-            config.blacklist = {}
-            mwse.saveConfig("mwcompanionsneak", config)
+            config.companionBlacklist = {}
+            mwse.saveConfig("mwcriminal", config)
             tes3.messageBox("Detection blacklist cleared.")
             inspectorUI.refreshBlacklist()
         end)

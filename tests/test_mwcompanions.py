@@ -8,6 +8,7 @@ import pytest
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LUAJIT = os.environ.get("MWMANAGER_LUAJIT", os.path.join(ROOT, "tools", "luajit", "luajit.exe"))
 MODS = os.path.join(ROOT, "Data Files", "MWSE", "mods")
+ATTEND_ME = os.path.join(MODS, "AttendMeMWSE")
 pytestmark = pytest.mark.skipif(not os.path.isfile(LUAJIT), reason="LuaJIT not available")
 
 HARNESS = r'''
@@ -56,7 +57,7 @@ tes3.mobilePlayer = { levitate = 0, waterWalking = 0, isSneaking = false, friend
 tes3.player = { position = vec(0, 0, 0), facing = 0, orientation = vec(0, 0, 0), cell = town, mobile = tes3.mobilePlayer }
 tes3.mobilePlayer.reference = tes3.player
 event = { register = function(name, fn) handlers[name] = fn end, trigger = function() end }
-package.path = [[MODS\?.lua;]] .. package.path
+package.path = [[MODS\?.lua;ATTENDME_PATH\?.lua;]] .. package.path
 require("mwcompanions.main")
 handlers.initialized()
 config = require("mwcompanions.config")
@@ -101,7 +102,7 @@ function check(ok, message) if not ok then error(message, 2) end end
 
 
 def run(body):
-    script = HARNESS.replace("MODS", MODS) + body + '\nprint("ok")\n'
+    script = HARNESS.replace("MODS", MODS).replace("ATTENDME_PATH", ATTEND_ME) + body + '\nprint("ok")\n'
     out = subprocess.run([LUAJIT, "-"], input=script, capture_output=True, text=True, cwd=ROOT)
     assert out.returncode == 0 and out.stdout.strip().endswith("ok"), out.stdout + out.stderr
 
@@ -169,6 +170,42 @@ check(not moved.crew, "Immersive Travel actors stay")
 for _, p in ipairs(positioned) do
   check(p.cell == town and p.position:distance(tes3.player.position) < 100, "behind the player, in the player's cell")
 end
+''')
+
+
+def test_attend_me_recruits_are_followers_but_wait_and_move_commands_are_respected():
+    run(r'''
+local recruit = actor("recruit", { package = "wander", data = { attendMeCompanion = true },
+  position = vec(5000, 0, 0) })
+local attendMeFollowers = require("AttendMeMWSE.followers")
+attendMeFollowers.init({ blacklist = {} })
+check(core.followerKind(recruit) == 2 and core.isFollower(recruit), "Attend Me recruits count as companions")
+check(not core.shouldWarp(recruit, 2, 2000), "Attend Me wait/wander commands are not overridden by warping")
+on("assist")
+party(recruit)
+local bandit = actor("bandit")
+handlers.combatStarted({ actor = bandit, target = tes3.mobilePlayer })
+check(not recruit.inCombat, "Attend Me wait orders are not overridden by automatic assist")
+recruit.package = { type = tes3.aiPackage.follow, targetActor = tes3.mobilePlayer }
+check(core.shouldWarp(recruit, 2, 2000), "an actively-following Attend Me recruit can be warped")
+handlers.combatStarted({ actor = bandit, target = tes3.mobilePlayer })
+check(recruit.inCombat, "actively-following Attend Me companions can still assist")
+''')
+
+
+def test_attend_me_auto_teleport_takes_precedence_over_mwcompanions_warp():
+    run(r'''
+userConfigs.AttendMeMWSE = { teleportFollowers = true }
+local attendMeFollowers = require("AttendMeMWSE.followers")
+attendMeFollowers.init({ blacklist = {} })
+local attendMeTeleport = require("AttendMeMWSE.teleport")
+attendMeTeleport.init(userConfigs.AttendMeMWSE, attendMeFollowers)
+local far = actor("recruit", { package = "follow", data = { attendMeCompanion = true },
+  position = vec(5000, 0, 0) })
+party(far)
+on("warp")
+tick()
+check(#positioned == 0, "Attend Me owns automatic teleportation while it is enabled")
 ''')
 
 
@@ -292,6 +329,7 @@ config.enabled = true; config.warp = true; config.resilient = true
 handlers.initialized()
 local text = table.concat(logs, "\n")
 check(text:find("Smart Companions warp", 1, true), "warns about the overlapping warp")
+check(not text:find("Attend Me teleport", 1, true), "Attend Me teleport is coordinated, not treated as a conflict")
 check(not text:find("resilient", 1, true), "no warning for an option that is off")
 ''')
 

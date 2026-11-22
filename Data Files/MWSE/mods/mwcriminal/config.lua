@@ -6,7 +6,18 @@ local defaults = {
     sneakToSteal = false,       -- owned things need sneaking (Accidental Theft Protection)
     readStanding = false,       -- owned books open standing, Take is red (NAT book fix)
     plainPaper = false,         -- blank sheets skip the scroll window (mwplainpaperfix)
-    companionDetection = false, -- companions, creatures and blacklisted actors never detect (mwcompanionsneak)
+    companionDetection = false, -- companions, creatures and blacklisted actors never detect
+    includeCreatures = true,
+    includeEscorts = true,
+    blacklistAllCreatures = true,
+    companionBlacklist = {},
+    inspectorKey = {
+        keyCode = tes3.scanCode.k,
+        isShiftDown = false,
+        isAltDown = false,
+        isControlDown = false,
+    },
+    debugMode = false,
     interiorExit = false,       -- doors out to an exterior are never locked (doorLockCompatibility)
     sneakToPick = false,        -- locked doors/containers need sneaking to pick (doorLockCompatibility)
     lockedNotification = false, -- "Locked" notice next to the locked sound
@@ -25,18 +36,62 @@ local defaults = {
     imported = false,
 }
 
-local config = mwse.loadConfig(NAME, defaults)
+local config = mwse.loadConfig(NAME, defaults) or defaults
+local storedConfig = mwse.loadConfig(NAME)
+local hasStoredConfig = storedConfig ~= nil
+if lfs and lfs.fileexists then
+    hasStoredConfig = lfs.fileexists("Data Files\\MWSE\\config\\mwcriminal.json")
+end
+for key, value in pairs(defaults) do
+    if config[key] == nil then config[key] = value end
+end
+config.companionBlacklist = config.companionBlacklist or {}
+config.blacklist = config.blacklist or {}
+config.inspectorKey = config.inspectorKey or defaults.inspectorKey
 
--- the lists of the mods being retired are taken over once
+local shouldSave = false
 if not config.imported then
     config.imported = true
     local atp = mwse.loadConfig("noAccidentalTheft")
+    for id, on in pairs(atp and atp.blacklist or {}) do
+        if on then config.blacklist["obj:" .. tostring(id):lower()] = tostring(id) end
+    end
+    shouldSave = true
+end
+
+if not config.companionSettingsImported then
+    config.companionSettingsImported = true
     local sneak = mwse.loadConfig("mwcompanionsneak")
-    for _, list in ipairs({ atp and atp.blacklist or {}, sneak and sneak.blacklist or {} }) do
-        for id, on in pairs(list) do
-            if on then config.blacklist["obj:" .. tostring(id):lower()] = tostring(id) end
+    if sneak then
+        local importedAny = false
+        for id, on in pairs(sneak.blacklist or {}) do
+            if on then
+                config.companionBlacklist[tostring(id):lower()] = true
+                importedAny = true
+            end
+        end
+        if not importedAny then
+            config.companionBlacklist["_rooster300000000"] = true
+            config.companionBlacklist["_chicken_stationary00000000"] = true
+            local so = mwse.loadConfig("Stealth_Overhaul")
+            for id, on in pairs(so and so.blacklist or {}) do
+                if on then config.companionBlacklist[tostring(id):lower()] = true end
+            end
+        end
+        config.includeCreatures = sneak.includeCreatures ~= false
+        config.includeEscorts = sneak.includeEscorts ~= false
+        config.blacklistAllCreatures = sneak.blacklistAllCreatures ~= false
+        config.inspectorKey = sneak.inspectorKey or config.inspectorKey
+        config.debugMode = sneak.debugMode == true
+        if not hasStoredConfig and sneak.enabled == true then
+            config.enabled = sneak.enabled == true
+            config.companionDetection = true
         end
     end
+    shouldSave = true
+end
+
+if shouldSave then
     mwse.saveConfig(NAME, config)
 end
 

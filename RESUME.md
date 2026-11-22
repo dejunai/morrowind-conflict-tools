@@ -1,13 +1,141 @@
 # Resume: Morrowind tools, MWManager and the mw* Lua suite (2026-11-21)
 
-Read this first, then `.claude\CLAUDE.md` and the memory index. The user hit their usage limit mid-session;
-everything below is committed but **not pushed** (push only when the user asks).
+Read this first, then `.claude\CLAUDE.md` and the memory index. The user stopped this session near the usage
+limit. The own-mod logging continuation below is committed locally and not pushed: clone `565eaa9`, MWManager
+`b76b856`. The latest Attend Me and KB5 changes are synced to both repositories but remain uncommitted and
+unpushed.
+
+## 2026-11-22 continuation: absorb Companion Sneak and extract Personal Effects
+
+- Extracted the Personal Effects runtime from `mwpluginpatches` to standalone `mwpersonaleffects`; its opt-in
+  state migrates only when the old patch was enabled. Removed its loader/config/MCM entries and Vortex-staged
+  patch source; required ESP records remain.
+- Fully absorbed Companion Sneak's detector, inspector UI, settings, hotkey, blacklist, and Attend Me/
+  Stealth Overhaul interoperability into `mwcriminal`. Legacy settings and blacklist migrate once; the old
+  disabled setting does not enable the new mod. The retired source and metadata are removed; the old config
+  stays for migration and compatibility aliases remain.
+- Added replacement metadata for `mwcriminal` and `mwpersonaleffects`; removed the retired metadata from both
+  manifests and added the new metadata entries to MWManager's reference/source manifests. Updated the suite
+  inventory and design/bug docs.
+- Focused migration tests passed. Full tests passed in isolation: Steam, clone, and MWManager each
+  **495 passed, 25 skipped**. Bundled LuaJIT syntax checks passed for 34 changed Lua files.
+- The generated `Data Files\vortex.deployment.json` still records the removed `personalEffectsFix.lua` until
+  Vortex refreshes deployment metadata; do not edit that generated file manually. The game was not run.
+- Synced to `G:\projects\morrowind-conflict-tools` and `G:\projects\MWManager`. The changes are not yet
+  committed or pushed.
+
+## 2026-11-21 continuation: Attend Me interoperability and MUSE KB5
+
+- `mwcompanions` now recognizes Attend Me forced recruits, respects Attend Me's Wait/Move/Wander state, delegates
+  warping when Attend Me's active auto-teleport feature is enabled, and avoids automatic assist overriding its
+  commands. Standalone behavior remains covered by regression tests.
+- Added Known Bug KB5 for MUSE 2.02's two split `category:createOnOffButton` calls. Fixed luafix's cache key to
+  include the Known Bugs fingerprints, so tidy rechecks unchanged files when a repair is added. Tidy applied the
+  verified fix to the hard-linked staged/deployed `MWSE\mods\music\MUSE.lua`; both paths now compile with the
+  bundled LuaJIT, and a fresh tidy run proposes no patch.
+- Synced the companion and KB5 code, tests, and docs to `G:\projects\morrowind-conflict-tools` and
+  `G:\projects\MWManager`. Nothing is committed or pushed yet.
+- Verification: Steam **491 passed, 25 skipped**; clone **451 passed, 64 skipped, 1 deselected** (the known
+  absolute-path policy check); MWManager **583 passed, 4 skipped**. The game was not run.
+
+## 2026-11-21 continuation: own mods use native logging
+
+The user clarified that our mods must be rewritten to work without injected log shims. All 22 names in
+`mwdialog_luafix.py:OWN_MODS` are now exempt by default; the Steam `mwguard.json` nested luafix policy lists the
+same set. Removed embedded shims from 26 own-mod Lua files and added regression tests that reject both reinjection
+and any remaining shim source. Kept native low-frequency and user-triggered messages; aggregated companion/crime
+overlap warnings, removed per-popup diagnostics, and reduced Personal Effects clone/unlock logs.
+
+Synced the 26 Lua files and luafix/test changes to the clone and MWManager. Verification: Steam 487 passed / 25
+skipped; clone 449 passed / 62 skipped / one known absolute-path test deselected; MWManager 583 passed / 4 skipped.
+Luafix's bundled LuaJIT syntax check passed for all 26 edited Lua files. The game was not run.
+
+The continuation is committed locally as clone `565eaa9` and MWManager `b76b856`; neither was pushed. Keep
+luafix backups/journals and existing Vortex backup files.
+
+## 2026-11-21 evening handoff (Perplexity): audit fixes, Steam only (historical checkpoint)
+
+State first: the 9fd81f6 / 444c7b9 commits described below as uncommitted were committed **and pushed** at 16:37.
+Then `PERPLEXITY_AUDIT.MD` (Steam root) was written and these fixes were made **in the Steam root only**: not yet
+synced to the clone or MWManager, not committed. G:\projects was not writable from that session.
+
+- H1 mwguard: no hooks at all when off at start-up (switching on needs a restart); unregistered per-frame
+  handlers are released (the wrapper table was never collected under LuaJIT). `tests\test_mwguard.py`.
+- H2 + M1 log shim (`SHIM_V = 4`): the flush timer restarts on `loaded`; the lifecycle keep words
+  (`LIFECYCLE_PATTERNS`) count only before initialized, near the line start, at most `lifecycleMax` (20) per mod;
+  patterns validated once, plain ones matched plain. Two tests in `test_logshim.py`. Installed third-party copies
+  still carry v3 until luafix is run again.
+- M3 mwcompanions: `downed` keyed by reference id -> safe handle. Test in `test_mwcompanions.py`.
+- M4 luafix: backup and journal line fsynced before the in-place write. Test in `test_luafix.py`.
+- L1/L2 mwhangwatch (one params table in the now-playing scan; memory level 80 everywhere), `tests\test_mwhangwatch.py`.
+  L4 duplicate `import struct` removed from vortex_tidy. L6 `fix_long_names` encodes ids once.
+- Correction: mwguard, mwcompanions and mwhangwatch are **not** Vortex hard links (no staging folder); some mw*
+  mods are (mwpluginpatches is).
+- Verified: Linux full suite has no new failures (the 6 left fail the same on 9fd81f6); on Windows, LuaJIT compiles
+  the three changed mods and test_mwguard / test_mwcompanions / test_mwhangwatch pass. pytest isn't reachable
+  from the Perplexity sandbox (per-user site-packages), so the full Windows suite hasn't run. Nothing tested in game.
+
+Checkpoint next steps (superseded by the continuation above): run the Steam suite; sync the 11 files
+(`sync_upstream.py`); commit both repos locally; decide M2 (shim baked into 10 own mods), L7/L9 (stray
+_lumo_*.py, 17 .vortex_backup files); rerun luafix to put shim v4 into third-party mods.
+
+## 2026-11-21 handoff: aggressive Lua logs and Known Bugs (historical checkpoint)
+
+### Completed and synced
+- `mwdialog_luafix.py` v4 now applies the log shim to all third-party loggers by default: ordinary/debug spam is
+  redirected to `Data Files\MWSE\logs\<plugin>.log`; errors, warnings, tracebacks, and lifecycle lines containing
+  register/initialized/started/loaded/ready/version/active still reach `MWSE.log`. Error lines also reach the
+  private mod log. Limits: zero initial/ordinary MWSE budget, 25 private lines/s, repeated errors not suppressed.
+- Our native-log apps are exempt from the generic shim and use `Data Files\MWSE\logs`; `mwhangwatch` was moved
+  there. No own literal logger writes a `.log` in the Morrowind root. `mwguard.json` has the matching local policy.
+- Nil repairs A1-A5 are more aggressive (and/or guards, local/table values, generic-for statement guards), while
+  ambiguous direct lookup expressions remain reports. `--include-own` remains restricted to A1-A5/F1.
+- Exact non-hookable repairs are now `(Known Bugs) KB<n>: <owner>: <description>`:
+  - KB1 AttendMeMWSE stale deleted-reference `.mobile` access.
+  - KB2 UI Expansion's empty cached-info property key.
+  - KB3 MWSE Core ExclusionsPage dereference after destroying `outerContainer`.
+  - KB4 MWSE Core ExclusionsPage unbounded native object UI.
+- Core remains excluded from general scanning. Only exact named `KNOWN_BUGS` file/text fingerprints can authorize
+  a core edit. Default luafix runs explicitly include those core paths.
+- KB4 is installed in `Data Files\MWSE\core\mcm\components\pages\ExclusionsPage.lua`: strict 100-item pages per
+  column, Previous/Next buttons, page/total/item count, page clamping, and page reset on search/filter changes.
+  Bulk toggles still operate on the complete logical list. `LUA_MOD_BUGS.md` section 39 documents it and explains
+  why the core mod list/dropdown were audited but not changed without a reproduced failure.
+- Luafix produces `mwdialog_luafix_known_bugs.txt` on direct runs and `vortex_tidy` writes author-facing per-mod
+  `bugreports\*.bugreport.txt` sections for KB findings, with DETECTED/PATCHED/NOT PATCHED status.
+- The Lua guidance now uses the correct `MWSE\logs\mwhangwatch.log` path and portable Vortex staging examples.
+- Installed third-party copies were already repaired. AttendMe's old marker was normalized from `K1` to `KB1` in
+  Steam/Vortex. A clean targeted core scan reported no vulnerable KB fingerprint.
+
+### Verification checkpoint
+- Steam full suite after KB4/reporting: **478 passed, 23 skipped**.
+- Standalone clone: **443 passed, 57 skipped; one failure** in `test_no_absolute_paths_in_repo_code`. Two new
+  absolute Vortex examples in the guidance were fixed and re-synced after that run; `RESUME.md` still contains
+  intentional machine paths and was the pre-existing reason to exclude this one policy test.
+- MWManager final suite was manually stopped at 49% with no failure printed because the user requested a handoff.
+  The immediately preceding pre-KB4 MWManager run was **583 passed, 4 skipped**. Rerun it.
+- LuaJIT `loadfile` accepts the paged ExclusionsPage. KB4's test reconstructs the vulnerable source from its exact
+  fingerprints, repairs it, and confirms paging is restored.
+- Nothing was tested in game.
+
+### Exact next steps at that checkpoint (superseded by the continuation above)
+1. Inspect `git status` in `G:\projects\morrowind-conflict-tools` and `G:\projects\MWManager`; all current changes
+   are intentional synced work, including newly tracked Lua guidance and MWSE core ExclusionsPage. Do not discard
+   the earlier mw* logging/nil changes. `mwdialog_luafix_known_bugs.txt` is generated output in the clone; decide
+   whether to ignore it rather than commit it.
+2. Rerun clone tests excluding only the known RESUME absolute-path policy case, and rerun the complete MWManager
+   suite. Steam is already clean.
+3. Run default `python -X utf8 mwdialog_luafix.py --no-cache --lua-log all` once if a fresh full plan is wanted;
+   the present Steam plan file was last generated for the single core file and has zero actions.
+4. Commit both repositories locally with no push. The previous logging work and KB4/reporting belong in the same
+   checkpoint unless a small split is obviously cleaner.
 
 ## Where things live
 - **Steam root** (`G:\Program Files\Steam\steamapps\common\Morrowind`): the source of the Python tools
   (`mwdialog_*.py`, `vortex_tidy.py`) and the MWSE Lua mods (`Data Files\MWSE\mods\mw*`, lower-case = ours). Not a
-  git repo. The mw* Lua files are **Vortex hardlinks** to `G:\Vortex Mods\morrowind\<mod>`: edit in place; a new
-  file must be hardlinked into its staging folder (`os.link`).
+  git repo. Some mw* Lua files are Vortex hardlinks to `G:\Vortex Mods\morrowind\<mod>`; others are independent
+  copies. Verify before relying on propagation. `mwcompanions` and `mwguard` are not hardlinks; hardlink a new
+  staged file only when its mod uses hardlinks.
 - **Repo clone** `G:\projects\morrowind-conflict-tools` (branch master, github.com/dejunai/morrowind-conflict-tools).
 - **MWManager** `G:\projects\MWManager` (branch main): vendors the Steam files unchanged in its root,
   `tools\steam-upstream\` (COPY_MANIFEST.json) and `reference\mwse-lua-guards\` (SOURCE_MANIFEST.json, LF).
@@ -19,8 +147,8 @@ everything below is committed but **not pushed** (push only when the user asks).
   from a session: always say what wasn't tested in game.
 
 ## Unpushed commits (push both when the user says so)
-- MWManager: e8efdf4 (mwcompanions) and the "Commit everything" commit after it. 4a596b1 and earlier are pushed.
-- Clone: 8a6a22a (mwcompanions) and the commit after it. be51fec and earlier are pushed.
+- MWManager: `b76b856` (native own-mod logging), plus `e8efdf4` and earlier local checkpoint commits.
+- Clone: `565eaa9` (native own-mod logging), plus `8a6a22a` and earlier local checkpoint commits.
 - Push: `git push -q origin main` (MWManager) / `git push -q origin master` (clone).
 
 ## Workstreams and their state
@@ -33,9 +161,9 @@ everything below is committed but **not pushed** (push only when the user asks).
    `tests\test_mwcriminal.py`, design and open decisions in `MWCRIMINAL_DESIGN.md` (includes the Shift+activate
    blacklist). Check that file for decisions the user hasn't answered. Not tested in game; the originals stay
    installed until ours matches them.
-3. **mwcompanions** (replaces Easy Escort, Attend Me, abot's Smart Companions, with our adjustments). Core
-   committed; design in `MWCOMPANIONS_DESIGN.md`. Open question to the user: include Attend Me's command menu
-   and recruiting? Not tested in game.
+3. **mwcompanions** (replaces Easy Escort, Attend Me, abot's Smart Companions, with our adjustments). Optional
+   Attend Me follower recognition, command-respecting behavior, and warp delegation are implemented; see
+   `MWCOMPANIONS_DESIGN.md`. Not tested in game.
 4. **mwcollide offline.** `--fix` deletes the earlier mod's doubled objects in `Cell Fixes.esp`
    (`mwdialog_doubled_deleted.txt`); runs without --fix rebuild the patch when a listed mod leaves. mwcollide's
    runtime hiding is now only a fallback. Not tested in game.

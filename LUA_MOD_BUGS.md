@@ -125,7 +125,7 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 ## 11. Companion Sneak (Inspector UI)
 
 * **Author**: Companion Sneak Team
-* **File**: [inspectorui.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwcompanionsneak/inspectorui.lua#L292-L340)
+* **File**: [inspectorUI.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwcriminal/inspectorUI.lua#L292-L340)
 * **Bug**: Invoked `inputBorder.marginRight = 8` and `clearBtn.marginRight = 8` during search-bar UI construction. `tes3uiElement` does not define `marginRight` (only `borderRight`), throwing `sol: cannot set (new_index) into this object: no defined new_index operation on usertype`, which corrupted the UI element tree and caused engine hangs on game exit.
 * **Fix**: Replaced invalid `marginRight` calls with `borderRight = 8`.
 
@@ -371,20 +371,20 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 
 ---
 
-## 30. Guards Treated as Companions During Sneaking in `companionLeveler`, `HUD Companion Health Bar`, `AttendMeMWSE`, and `mwcompanionsneak`
+## 30. Guards Treated as Companions During Sneaking in Companion Mods and Stealth Detection
 
-* **Author**: `companionLeveler`, `Pirate`, `AttendMeMWSE`, `mwcompanionsneak`
+* **Author**: `companionLeveler`, `Pirate`, `AttendMeMWSE`, former `mwcompanionsneak` (now absorbed into `mwcriminal`)
 * **Files**:
   - [companionLeveler/functions/common.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/companionLeveler/functions/common.lua#L522-L548)
   - [Pirate/HUD Companion Health Bar/main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/Pirate/HUD%20Companion%20Health%20Bar/main.lua#L85-L108)
   - [AttendMeMWSE/followers.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/AttendMeMWSE/followers.lua#L17-L38)
-  - [mwcompanionsneak/interop.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwcompanionsneak/interop.lua#L43-L53)
+  - [mwcriminal/core.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwcriminal/core.lua#L203-L206)
 * **Bug**:
   When sneaking near a guard, `MoreAttentiveGuards` (`celediel/MoreAttentiveGuards/sneak.lua`) assigns the guard a temporary `tes3.aiPackage.follow` targeting the player while inspecting them. Because `companionLeveler`, `HUD Companion Health Bar`, and `AttendMeMWSE` only checked for a follow package targeting the player without verifying `obj.isGuard` or guard class/script:
   1. `companionLeveler` added the guard to `npcTable()`, initialized blank companion mod data on the guard reference, and logged `Companion Mod Data not found, setting to base Mod Data values` / `NPC Mod Data not found, setting to base Mod Data values`.
   2. `HUD Companion Health Bar` and `AttendMeMWSE` immediately instantiated health/magicka/fatigue UI elements for the guard, forcing the player to manually blacklist them.
 * **Fix**:
-  Added comprehensive guard exclusion (`obj.isGuard`, guard class name/id, and `MoreAttentiveGuards.interop.getGuardFollower()`) across `companionLeveler.validCompanionCheck`, `HUD Companion Health Bar.validCompanionCheck`, `AttendMeMWSE.isFollower` / `isActivelyFollowing`, and `mwcompanionsneak.isCompanion`.
+  The retired `mwcompanionsneak` detector is now part of `mwcriminal`; it excludes explicit `isGuard` records and no longer uses broad class-name matching, which could reject legitimate companions. The separate third-party companion fixes still need their own upstream review.
 
 ---
 
@@ -553,3 +553,17 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
   Core MCM `main.lua` also builds one entry per registered mod and `Dropdown.lua` builds one entry per supplied option.
   They are not classified as this confirmed bug: registered-mod and ordinary dropdown counts are much smaller, and
   changing their search/selection semantics without a reproduced memory failure would be speculative.
+
+## 40. MUSE MCM Calls Do Not Parse in LuaJIT (`KB5`)
+
+* **Author**: MUSE 2.02
+* **File**: `MWSE\mods\music\MUSE.lua`
+* **Bug**:
+  The MCM builder contains two `category:createOnOffButton` calls with the method name on one line and the
+  parenthesized argument on the next. LuaJIT treats the following `(` as an ambiguous new statement and rejects
+  the entire file at the first call (line 311), so MUSE cannot load.
+* **Fix**:
+  1. Join the method name and opening parenthesis for both calls.
+  2. Luafix identifies only this exact MUSE fingerprint, then verifies that the repaired source compiles before
+     allowing a Known Bugs patch to replace a source that did not compile.
+* **Luafix grade**: `(Known Bugs) KB5: MUSE 2.02: two MCM calls split a parenthesized argument after the method name`.

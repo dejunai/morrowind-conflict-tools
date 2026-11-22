@@ -32,7 +32,7 @@ local defaults = {
     exemptMods = {
         "mwguard", "mwcriminal", "mwcompanions", "mwhangwatch", "mwfloatfix", "mwstranded", "mwcollide",
         "mwperformers", "mwinfoloop", "mwsoundguard", "mwsaveguard", "mwwarnsuppression",
-        "mwcompanionsneak", "mwpluginpatches", "mweffectinspector", "mwmouseguard",
+        "mwpersonaleffects", "mwpluginpatches", "mweffectinspector", "mwmouseguard",
         "mwteleportguard", "mwexitguard", "mwcustomclasspersistence", "mwplainpaperfix", "mwquicktoggle"
     },
     perFrameHints = {

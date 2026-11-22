@@ -11,12 +11,13 @@ MODS = os.path.join(ROOT, "Data Files", "MWSE", "mods")
 pytestmark = pytest.mark.skipif(not os.path.isfile(LUAJIT), reason="LuaJIT not available")
 
 HARNESS = r'''
-handlers, sounds, notices, boxes, added, crimes = {}, {}, {}, {}, {}, {}
+handlers, sounds, notices, boxes, added, crimes, timers = {}, {}, {}, {}, {}, {}, {}
 local shift = false
 local saved
 mwse = {
   loadConfig = function(name, defaults)
     if name ~= "mwcriminal" then return nil end
+    if not defaults then return nil end
     local c = {}
     for k, v in pairs(defaults) do c[k] = v end
     c.blacklist = {}
@@ -35,6 +36,7 @@ V.__add = function(a, b) return vec(a.x + b.x, a.y + b.y, a.z + b.z) end
 V.__mul = function(a, s) return vec(a.x * s, a.y * s, a.z * s) end
 local inventory = {}
 tes3 = {
+  scanCode = { k = 37 },
   objectType = { door = 1, npc = 2, container = 3, book = 4, faction = 5, creature = 6, sound = 7, miscItem = 8 },
   bookType = { book = 0, scroll = 1 },
   actorType = { creature = 1, npc = 2 },
@@ -43,6 +45,12 @@ tes3 = {
   event = setmetatable({}, { __index = function(_, k) return k end }),
   player = { object = { inventory = { contains = function(_, id) return inventory[id] end } } },
   mobilePlayer = { isSneaking = false, friendlyActors = {} },
+  iterate = function(list)
+    local index = 0
+    return function() index = index + 1; return list[index] end
+  end,
+  menuMode = function() return false end,
+  findActorsInProximity = function() return {} end,
   worldController = { hour = { value = 12 }, inputController = { isShiftDown = function() return shift end } },
   refs = {},
   getLocked = function(p) return p.reference.locked == true end,
@@ -60,12 +68,22 @@ tes3 = {
   getFileExists = function() return false end,
   messageBox = function(fmt, ...) boxes[#boxes + 1] = string.format(fmt, ...) end,
 }
-tes3ui = { showNotifyMenu = function(s) notices[#notices + 1] = s end, getPalette = function() return "red" end }
+timer = { simulate = "simulate", start = function(value) timers[#timers + 1] = value end }
+tes3ui = {
+  showNotifyMenu = function(s) notices[#notices + 1] = s end,
+  getPalette = function() return "red" end,
+  registerID = function(id) return id end,
+  findMenu = function() return nil end,
+  menuMode = function() return false end,
+}
 event = { register = function(name, fn, opts) handlers[name .. (opts and opts.filter or "")] = fn end }
 eiColor = nil
 package.preload["Essential Indicators.interop"] = function()
   return { registerColorOverride = function(r, g, b, a, id) eiColor = id end,
            deregisterColorOverride = function(id) if eiColor == id then eiColor = nil end end }
+end
+package.preload["AttendMeMWSE.followers"] = function()
+  return { isFollower = function(ref) return ref.data and ref.data.attendMe == true end }
 end
 package.path = [[MODS\?.lua;]] .. package.path
 require("mwcriminal.main")
@@ -116,6 +134,43 @@ function reset() sounds, notices, boxes, added, crimes = {}, {}, {}, {}, {} end
 
 def run(body):
     script = HARNESS.replace("MODS", MODS) + body + '\nprint("ok")\n'
+    out = subprocess.run([LUAJIT, "-"], input=script, capture_output=True, text=True, cwd=ROOT)
+    assert out.returncode == 0 and out.stdout.strip().endswith("ok"), out.stdout + out.stderr
+
+
+def run_config(body, stored_config):
+    prelude = r'''
+local storedConfig = STORED_CONFIG
+local saved
+local legacy = {
+  enabled = true,
+  includeCreatures = false,
+  includeEscorts = false,
+  blacklistAllCreatures = false,
+  blacklist = { ["Custom_NPC"] = true },
+  inspectorKey = { keyCode = 12, isShiftDown = true, isAltDown = false, isControlDown = true },
+  debugMode = true,
+}
+tes3 = { scanCode = { k = 37 } }
+mwse = {
+  loadConfig = function(name, defaults)
+    if name == "mwcriminal" then
+      if not defaults then return storedConfig end
+      local config = {}
+      for key, value in pairs(defaults) do config[key] = value end
+      for key, value in pairs(storedConfig or {}) do config[key] = value end
+      return config
+    end
+    if name == "mwcompanionsneak" then return legacy end
+    return nil
+  end,
+  saveConfig = function(name, config) saved = config end,
+}
+lfs = { fileexists = function() return storedConfig ~= nil end }
+package.path = [[MODS\?.lua;]] .. package.path
+function check(ok, message) if not ok then error(message, 2) end end
+'''
+    script = prelude.replace("STORED_CONFIG", stored_config).replace("MODS", MODS) + body + '\nprint("ok")\n'
     out = subprocess.run([LUAJIT, "-"], input=script, capture_output=True, text=True, cwd=ROOT)
     assert out.returncode == 0 and out.stdout.strip().endswith("ok"), out.stdout + out.stderr
 
@@ -274,6 +329,7 @@ local function mobile(opts)
   ref.object.objectType = tes3.objectType.npc
   return { reference = ref, actorType = opts.creature and tes3.actorType.creature or tes3.actorType.npc,
     hostileActors = opts.hostile and { { reference = tes3.player } } or {},
+    inCombat = opts.hostile,
     aiPlanner = opts.follow and { getActivePackage = function() return { type = tes3.aiPackage.follow, targetActor = tes3.mobilePlayer } end } or nil }
 end
 local function detect(m)
@@ -290,7 +346,62 @@ r, e = detect(mobile({ guard = true, follow = true }))
 check(r == nil and e.isDetected, "guards still detect")
 r, e = detect(mobile({}))
 check(r == nil and e.isDetected, "ordinary NPCs still detect")
+
+config.blacklistAllCreatures = false
+config.includeCreatures = false
+r, e = detect(mobile({ creature = true, follow = true }))
+check(r == nil and e.isDetected, "creature followers can be excluded from companion handling")
+config.includeCreatures = true
+r, e = detect(mobile({ creature = true, follow = true }))
+check(r == false and not e.isDetected, "creature followers can be included")
+
+config.includeEscorts = false
+local escortRef = { object = { id = "escort" }, data = {} }
+local escort = { reference = escortRef, actorType = tes3.actorType.npc, hostileActors = {},
+  aiPlanner = { getActivePackage = function() return { type = tes3.aiPackage.escort, targetActor = tes3.mobilePlayer } end } }
+r, e = detect(escort)
+check(r == nil and e.isDetected, "escort quest targets can be excluded")
+config.includeEscorts = true
+r, e = detect(escort)
+check(r == false and not e.isDetected, "escort quest targets can be included")
+
+local attendMe = mobile({})
+attendMe.reference.data.attendMe = true
+r, e = detect(attendMe)
+check(r == false and not e.isDetected, "Attend Me interop recognizes recruited actors")
+
+config.companionBlacklist["custom_npc"] = true
+r, e = detect(mobile({ id = "CUSTOM_NPC" }))
+check(r == false and not e.isDetected, "custom blacklist IDs are case-insensitive")
+
+local follower = mobile({ follow = true })
+tes3.mobilePlayer.isSneaking = true
+tes3.mobilePlayer.friendlyActors = { follower }
+handlers.loaded()
+check(timers[1] and timers[1].duration == 0.35 and timers[1].iterations == -1, "sweep repeats every 0.35 seconds")
+timers[1].callback()
+check(follower.isPlayerHidden and not follower.isPlayerDetected, "sweep keeps followers hidden while sneaking")
 ''')
+
+
+def test_companionsneak_settings_migrate_without_cross_enabling_objects():
+    run_config(r'''
+local config = require("mwcriminal.config")
+check(config.enabled and config.companionDetection, "an enabled legacy detector enables the absorbed feature")
+check(not config.includeCreatures and not config.includeEscorts and not config.blacklistAllCreatures,
+  "legacy detector options are preserved")
+check(config.companionBlacklist.custom_npc, "legacy IDs are imported into the companion blacklist")
+check(config.blacklist["obj:custom_npc"] == nil, "sneak exclusions don't blacklist objects for other features")
+check(config.inspectorKey.keyCode == 12 and config.debugMode, "legacy inspector and debug settings are preserved")
+''', "nil")
+
+
+def test_saved_mwcriminal_master_off_is_not_overridden_by_legacy_enable():
+    run_config(r'''
+local config = require("mwcriminal.config")
+check(not config.enabled and not config.companionDetection, "an existing master-off choice takes precedence")
+check(config.companionSettingsImported, "legacy options still migrate into an existing config")
+''', '{ enabled = false, companionDetection = false, imported = true }')
 
 
 def test_locked_crosshair_tint():

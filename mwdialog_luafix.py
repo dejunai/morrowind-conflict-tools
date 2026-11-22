@@ -56,7 +56,9 @@ mwstranded, MWManager) unless --include-own.
 Edits are made in place (the file is rewritten through the same handle, so Vortex's hard links between
 staging and Data Files keep sharing it). The file as it was is copied first to
 mwdialog_backup\\luafix\\<run>\\..., every write is journaled, and --undo puts the last run back. A file is
-only written when LuaJIT (or luac) compiles the patched text; if the original doesn't compile it is left alone.
+only written when LuaJIT (or luac) compiles the patched text; an original that does not compile is left alone
+unless an exact Known Bugs repair makes it compile. Known Bugs fingerprints are part of the analysis cache key,
+so adding a repair causes existing files to be rechecked.
 
     python mwdialog_luafix.py                        (plan for Data Files\\MWSE\\mods; nothing is changed)
     python mwdialog_luafix.py "<staging>\\Some Mod"   (one folder)
@@ -96,10 +98,11 @@ KNOWN_BUG_REPORT = os.path.join(HERE, "mwdialog_luafix_known_bugs.txt")
 VERSION = 4
 MARK = "mwdialog_luafix"
 
-OWN_MODS = {"mwcollide", "mwcompanions", "mwcompanionsneak", "mwcriminal", "mwcustomclasspersistence",
+OWN_MODS = {"mwcollide", "mwcompanions", "mwcriminal", "mwcustomclasspersistence",
             "mweffectinspector", "mwexitguard", "mwfloatfix", "mwguard", "mwhangwatch", "mwinfoloop",
-            "mwmouseguard", "mwperformers", "mwplainpaperfix", "mwpluginpatches", "mwquicktoggle", "mwsaveguard",
-            "mwsoundguard", "mwstranded", "mwteleportguard", "mwwarnsuppression", "mwmanager"}
+            "mwmouseguard", "mwperformers", "mwpersonaleffects", "mwplainpaperfix", "mwpluginpatches",
+            "mwquicktoggle", "mwsaveguard", "mwsoundguard", "mwstranded", "mwteleportguard",
+            "mwwarnsuppression", "mwmanager"}
 
 # defaults; mwguard.json (shared with the runtime guard) and mwdialog_luafix.json override them
 DEFAULTS = {
@@ -262,6 +265,7 @@ def load_config(game_dir=HERE, data_dir=None):
 
 def cfg_hash(cfg):
     keep = {k: v for k, v in cfg.items() if not k.startswith("_")}
+    keep["_known_bugs"] = globals().get("KNOWN_BUGS", [])
     return hashlib.sha1(json.dumps(keep, sort_keys=True).encode(), usedforsecurity=False).hexdigest()[:12] + f"v{VERSION}"
 
 
@@ -1977,6 +1981,14 @@ end''', KB4),
      "\t\t\tself:clickFilter(button)\n\t\t\tself.pages = {}\n\t\t\tself:distributeLeft(items)", KB4),
 ]
 
+KNOWN_BUGS += [
+    ("KB5", "MUSE 2.02", "music/muse.lua",
+     "category:createOnOffButton\n    (",
+     "category:createOnOffButton(",
+     "two MCM calls split a parenthesized argument after the method name; LuaJIT rejects the file with "
+     "'ambiguous syntax (function call x new statement)', preventing MUSE from loading"),
+]
+
 
 def known_core_context(path):
     """Return an explicitly authorized core file identity; every other MWSE core file remains excluded."""
@@ -2584,11 +2596,13 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
 
 def verify_patch(old, new, rules, checker, key, rel, cfg, level, only_rules=None):
     """{"text", "rules", "ok", "why"}: the patched text parses, a second pass changes nothing more, and the
-    syntax checker compiles it (the original first: one that doesn't compile is left alone)."""
+    syntax checker compiles it. Only exact Known Bugs fixes may repair a non-compiling original."""
     res = {"text": new, "rules": rules, "ok": False, "why": ""}
     if checker is not None:
         ok, msg = checker.check(old)
-        if not ok:
+        known_rules = {rule for rule, *_ in KNOWN_BUGS}
+        known_only = bool(rules) and all(rule in known_rules for rule in rules)
+        if not ok and not known_only:
             res["why"] = f"the original doesn't compile ({msg[:200]}); left alone"
             res["orig_bad"] = True
             return res

@@ -27,7 +27,7 @@ page:createYesNoButton({ label = "Enable mwcompanions", description = "Master sw
 
 local move = page:createCategory("Following")
 yesNo(move, "warp", "Warp followers to the player",
-    "Followers farther away than the distance below, or left in another loaded cell, appear behind the player. Companions and summons in a fight stay in it. Replaces Smart Companions' warp and Attend Me's teleport.")
+    "Followers farther away than the distance below, or left in another loaded cell, appear behind the player. Companions and summons in a fight stay in it. Replaces Smart Companions' warp. When Attend Me's auto-teleport is enabled, Attend Me handles warping instead.")
 slider(move, "warpDistance", "Warp distance: %s", 500, 8000, 100)
 yesNo(move, "levitateWater", "Followers levitate and water walk with the player",
     "While the player levitates or walks on water, followers do too; it ends when the player's does.")

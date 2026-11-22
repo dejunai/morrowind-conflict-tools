@@ -1,4 +1,5 @@
 local config = require("mwcriminal.config")
+local inspectorUI = require("mwcriminal.inspectorUI")
 
 local function save() mwse.saveConfig("mwcriminal", config) end
 
@@ -28,7 +29,43 @@ yesNo(theft, "plainPaper", "Plain paper skips the scroll window",
 
 local sneak = page:createCategory("Detection")
 yesNo(sneak, "companionDetection", "Companions and creatures don't detect you",
-    "Followers, escorts, creatures and blacklisted actors never detect the sneaking player. Guards and anyone fighting you still do. Replaces mwcompanionsneak.")
+    "Followers, escorts, creatures and blacklisted actors never detect the sneaking player. Guards and anyone fighting you still do.")
+yesNo(sneak, "includeCreatures", "Include creature followers",
+    "Treat creature companions such as pack guars and pets as followers.")
+yesNo(sneak, "includeEscorts", "Include escort quest targets",
+    "Treat actors with an active escort package targeting the player as followers.")
+yesNo(sneak, "blacklistAllCreatures", "Blacklist all creatures",
+    "Automatically ignore creatures in sneak detection, even when they are not followers.")
+yesNo(sneak, "debugMode", "Log detection suppressions",
+    "Write one MWSE.log line each time a companion or blacklisted actor is prevented from detecting the player.")
+sneak:createKeyBinder({
+    label = "Detection inspector hotkey",
+    description = "Open the companion detector inspector. Default: K.",
+    allowCombinations = true,
+    variable = mwse.mcm.createTableVariable({ id = "inspectorKey", table = config }),
+})
+sneak:createButton({
+    label = "Detection inspector",
+    description = "View actors currently detecting or suspecting the player and their distances.",
+    buttonText = "Open inspector",
+    callback = function() inspectorUI.open() end,
+})
+sneak:createButton({
+    label = "Companion blacklist",
+    description = "View and manage actor IDs excluded from sneak detection.",
+    buttonText = "Manage blacklist",
+    callback = function() inspectorUI.openBlacklist() end,
+})
+sneak:createButton({
+    label = "Clear companion blacklist",
+    description = "Remove all custom actor IDs from the sneak detection blacklist.",
+    buttonText = "Clear blacklist",
+    callback = function()
+        config.companionBlacklist = {}
+        save()
+        tes3.messageBox("Companion detection blacklist cleared.")
+    end,
+})
 
 local locks = page:createCategory("Locks and doors")
 yesNo(locks, "interiorExit", "Never locked inside",

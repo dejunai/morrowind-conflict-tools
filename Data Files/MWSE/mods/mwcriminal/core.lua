@@ -187,31 +187,112 @@ function core.isBlacklisted(ref)
     return config.blacklist[core.blacklistKey(ref)] ~= nil or config.blacklist["obj:" .. ref.object.id:lower()] ~= nil
 end
 
+local function actorFightsPlayer(mobile)
+    if not mobile.inCombat then return false end
+    for _, actor in ipairs(mobile.hostileActors or {}) do
+        if actor and actor.reference == tes3.player then return true end
+    end
+    return false
+end
+
+local function isCreature(actor, ref)
+    return actor.actorType == tes3.actorType.creature
+        or (ref.object and ref.object.objectType == tes3.objectType.creature)
+end
+
+local function isGuard(ref)
+    local obj = ref.baseObject or ref.object
+    return obj and obj.isGuard == true
+end
+
 local function followsPlayer(mobile)
     local planner = mobile.aiPlanner
     local ok, package = pcall(function() return planner and planner:getActivePackage() end)
     if not ok or not package then return false end
-    if package.type ~= tes3.aiPackage.follow and package.type ~= tes3.aiPackage.escort then return false end
-    local target = package.targetActor
-    return target == tes3.mobilePlayer or (target ~= nil and target.reference == tes3.player)
+    local isFollow = package.type == tes3.aiPackage.follow
+    local isEscort = config.includeEscorts and package.type == tes3.aiPackage.escort
+    if not isFollow and not isEscort then return false end
+    local targetActor = package.targetActor
+    if targetActor == tes3.mobilePlayer or (targetActor and targetActor.reference == tes3.player) then return true end
+    return package.target == tes3.player or package.target == tes3.mobilePlayer
 end
 
--- a detector whose sight never counts: creatures, companions, blacklisted actors; never guards or attackers
-function core.ignoredDetector(mobile)
+function core.isStealthBlacklisted(actor)
+    if not actor then return false end
+    local ref = actor.reference or actor
+    if not ref or not ref.object then return false end
+    if core.isExplicitlyStealthBlacklisted(ref) then return true end
+    return config.blacklistAllCreatures and isCreature(actor, ref) or false
+end
+
+function core.isExplicitlyStealthBlacklisted(ref)
+    if not ref or not ref.object then return false end
+    local id = ref.object.id and ref.object.id:lower()
+    local instanceId = ref.id and ref.id:lower()
+    local blacklist = config.companionBlacklist or {}
+    if (id and blacklist[id]) or (instanceId and blacklist[instanceId]) then return true end
+    return false
+end
+
+function core.isCompanion(mobile)
+    if not mobile or mobile == tes3.mobilePlayer then return false end
     local ref = mobile.reference
+    if not ref or mobile.isDead or ref.disabled or ref.deleted then return false end
+    if type(ref.isValid) == "function" then
+        local ok, valid = pcall(ref.isValid, ref)
+        if not ok or not valid then return false end
+    end
+    if actorFightsPlayer(mobile) or isGuard(ref) then return false end
+    if not config.includeCreatures and isCreature(mobile, ref) then return false end
+    if followsPlayer(mobile) then return true end
+    local friendlies = tes3.mobilePlayer.friendlyActors or {}
+    if tes3.iterate then
+        for friendly in tes3.iterate(friendlies) do
+            if friendly == mobile then return true end
+        end
+    else
+        for _, friendly in ipairs(friendlies) do
+            if friendly == mobile then return true end
+        end
+    end
+    if ref.data and ref.data.attendMeCompanion == true then return true end
+    local hasAttendMe, attendMe = pcall(require, "AttendMeMWSE.followers")
+    if hasAttendMe and attendMe and type(attendMe.isFollower) == "function" then
+        local ok, isFollower = pcall(attendMe.isFollower, ref)
+        if ok and isFollower then return true end
+    end
+    if mobile.actorType == tes3.actorType.npc then
+        local base = ref.baseObject
+        local script = base and base.script
+        if script then
+            local hasCompanionVar = false
+            for _, list in pairs({ script.shortVariableNames, script.longVariableNames, script.shortVarNames,
+                script.longVarNames }) do
+                if type(list) == "table" then
+                    for _, name in pairs(list) do
+                        if type(name) == "string" and name:lower() == "companion" then
+                            hasCompanionVar = true
+                            break
+                        end
+                    end
+                end
+                if hasCompanionVar then break end
+            end
+            if hasCompanionVar and ref.context then
+                local ok, value = pcall(function() return ref.context.companion end)
+                if ok and value == 1 then return true end
+            end
+        end
+    end
+    return false
+end
+
+function core.ignoredDetector(mobile)
+    local ref = mobile and mobile.reference
     if not ref or mobile.isDead then return false end
-    if core.isBlacklisted(ref) then return true end
-    for _, actor in ipairs(mobile.hostileActors or {}) do
-        if actor.reference == tes3.player then return false end
-    end
-    if ref.object.isGuard then return false end
-    if mobile.actorType == tes3.actorType.creature then return true end
-    if followsPlayer(mobile) or (ref.data and ref.data.attendMeCompanion == true) then return true end
-    for _, friend in ipairs(tes3.mobilePlayer.friendlyActors or {}) do
-        if friend == mobile then return true end
-    end
-    local ok, companion = pcall(function() return ref.context and ref.context.companion end)
-    return ok and companion == 1
+    if core.isExplicitlyStealthBlacklisted(ref) then return true end
+    if actorFightsPlayer(mobile) or isGuard(ref) then return false end
+    return core.isStealthBlacklisted(mobile) or core.isCompanion(mobile)
 end
 
 return core

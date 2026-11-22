@@ -5,7 +5,8 @@
   "reportTop":10,
   "costMs":0.75,
   "logNoticeToMWSE":true,
-  "exemptMods":["mwcollide","mwcriminal","mwcompanions","mwcompanionsneak","mweffectinspector","mwexitguard","mwfloatfix","mwguard","mwhangwatch","mwinfoloop","mwmouseguard","mwperformers","mwpluginpatches","mwsaveguard","mwsoundguard","mwstranded","mwteleportguard","mwwarnsuppression","mwcustomclasspersistence","mwplainpaperfix","mwquicktoggle"],
+  "exemptMods":[],
   "enabled":false,
+  "luafix":{"log":{"scope":"all","budgetInit":0,"budget":0,"keepPatterns":["error","traceback","exception","fail","warn","stack","attempt to","assert","invalid","%.lua:%d+:","^lua:","initializ","register","start","loaded","ready","version","active"],"perSecond":25,"errorRepeat":0,"exemptMods":["mwcollide","mwcompanions","mwcriminal","mwcustomclasspersistence","mweffectinspector","mwexitguard","mwfloatfix","mwguard","mwhangwatch","mwinfoloop","mwmanager","mwmouseguard","mwperformers","mwpersonaleffects","mwplainpaperfix","mwpluginpatches","mwquicktoggle","mwsaveguard","mwsoundguard","mwstranded","mwteleportguard","mwwarnsuppression"]}},
   "perFrameHints":["e%.delta","camera","velocity","orientation","position%s*=","rotation","animat","drag","mouse","lerp","smooth","interpolat","fade","tes3ui","menu","controls","keybind","inputcontroller","positioncell"]
 }

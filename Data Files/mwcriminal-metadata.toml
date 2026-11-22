@@ -1,0 +1,8 @@
+[package]
+name = "mwcriminal"
+description = "Consolidated theft, lock, companion, and creature sneak-detection features."
+category = "Gameplay"
+
+[tools.mwse]
+lua-mod = "mwcriminal"
+load-priority = 4000

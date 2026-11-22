@@ -6,7 +6,6 @@ local ysmirShield = require("mwpluginpatches.patches.ysmirShield")
 local jiubDelay = require("mwpluginpatches.patches.jiubDelay")
 local lostHeirDelay = require("mwpluginpatches.patches.lostHeirDelay")
 local mabrDist = require("mwpluginpatches.patches.mabrDist")
-local personalEffectsFix = require("mwpluginpatches.patches.personalEffectsFix")
 local noAccidentalTheftBookFix = require("mwpluginpatches.patches.noAccidentalTheftBookFix")
 local caveDripSound = require("mwpluginpatches.patches.caveDripSound")
 local swampSound = require("mwpluginpatches.patches.swampSound")
@@ -54,22 +53,17 @@ local function onInitialized()
         mabrDist.init()
     end
 
-    -- 7. Personal Effects Sellus Gravius Facing Fix
-    if config.personalEffectsFixEnabled and config.isPersonalEffectsActive() then
-        personalEffectsFix.init()
-    end
-
-    -- 8. No Accidental Theft - Book Reading Fix
+    -- 7. No Accidental Theft - Book Reading Fix
     if config.noAccidentalTheftBookFixEnabled and config.isNoAccidentalTheftActive() then
         noAccidentalTheftBookFix.init()
     end
 
-    -- 9. Cave Drips: one drip loop per activator instead of a restart every frame
+    -- 8. Cave Drips: one drip loop per activator instead of a restart every frame
     if config.caveDripSoundEnabled and config.isCaveDripsActive() then
         caveDripSound.init()
     end
 
-    -- 10. Yet Another Better Sounds Patch: one swamp loop per activator instead of a restart every frame
+    -- 9. Yet Another Better Sounds Patch: one swamp loop per activator instead of a restart every frame
     if config.swampSoundEnabled and config.isSwampSoundsActive() then
         swampSound.init()
     end
@@ -79,17 +73,17 @@ local function onInitialized()
         expandedSounds.init()
     end
 
-    -- 11. Clean Tales of Seyda Neen: Illegible Handwriting Dialogue Filter
+    -- 10. Clean Tales of Seyda Neen: Illegible Handwriting Dialogue Filter
     if config.talesHandwritingFixEnabled and config.isTalesOfSeydaNeenActive() then
         talesHandwritingFix.init()
     end
 
-    -- 12. Trainer Log: Auto-Unlock Training Topics
+    -- 11. Trainer Log: Auto-Unlock Training Topics
     if config.trainerLogUnlockEnabled and config.isTrainerLogActive() then
         trainerLogUnlock.init()
     end
 
-    -- 13. abot Door Locks + Accidental Theft Prevention + Modern Lockpicking ordering
+    -- 12. abot Door Locks + Accidental Theft Prevention + Modern Lockpicking ordering
     if config.doorLockCompatibilityEnabled then
         doorLockCompatibility.init()
     end

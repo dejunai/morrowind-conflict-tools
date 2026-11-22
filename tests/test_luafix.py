@@ -614,6 +614,44 @@ def test_known_bugs_patch_exact_third_party_and_core_fingerprints(tmp_path):
     assert any("DETECTED: (Known Bugs) KB3: MWSE Core:" in line for line in bug_lines)
 
 
+def test_KB5_repairs_muse_mcm_calls_even_when_original_does_not_compile(tmp_path):
+    source = '''local category = {}
+category:createInfo
+{
+    text = "Music control"
+}
+category:createOnOffButton
+    ({
+        label = "Region music queuing",
+    })
+category:createOnOffButton
+    ({
+        label = "Other setting",
+    })
+'''
+    path = tmp_path / "Data Files" / "MWSE" / "mods" / "music" / "MUSE.lua"
+    path.parent.mkdir(parents=True)
+    path.write_bytes(source.encode("latin-1"))
+
+    class MUSEChecker:
+        name = "MUSE syntax regression"
+
+        def check(self, text):
+            if "category:createOnOffButton\n    (" in text:
+                return False, "ambiguous syntax (function call x new statement)"
+            return True, ""
+
+    rep = lf.check_paths([str(tmp_path)], CFG, checker=MUSEChecker(), use_cache=False,
+                         data_dir=str(tmp_path / "Data Files"))
+    entry = next(iter(rep.files.values()))
+    assert [f["rule"] for f in entry["findings"] if f["rule"] == "KB5"] == ["KB5", "KB5"]
+    assert entry["patch"]["ok"] and entry["patch"]["rules"] == ["KB5"]
+    assert "category:createOnOffButton\n    (" not in entry["patch"]["text"]
+    assert entry["patch"]["text"].count("category:createOnOffButton(") == 2
+    bug_lines = lf.known_bug_report_lines(rep)
+    assert any("DETECTED: (Known Bugs) KB5: MUSE 2.02:" in line for line in bug_lines)
+
+
 def test_KB4_restores_strict_exclusions_pages():
     path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Data Files", "MWSE", "core", "mcm",
                         "components", "pages", "ExclusionsPage.lua")
@@ -730,6 +768,24 @@ def test_cache_skips_unchanged_files(tmp_path, monkeypatch):
     rep2 = lf.check_paths([str(data)], CFG, checker=OkChecker(), game_dir=str(game))
     assert "testmod/util.lua" not in calls                     # unchanged and nothing to fix: from the cache
     assert [e["rel"] for e in rep2.files.values() if e.get("patch")] == ["testmod/main.lua"]
+    ah.close_caches()
+
+
+def test_cache_invalidates_when_known_bug_rules_change(tmp_path, monkeypatch):
+    ah = _load("mwdialog_assets")
+    data, _root = mod_tree(tmp_path, {"main.lua": 'return "before"\n'})
+    game = tmp_path / "game"
+    game.mkdir()
+    lf.check_paths([str(data)], CFG, checker=OkChecker(), game_dir=str(game))
+    ah.shared_cache(str(game)).flush()
+
+    monkeypatch.setattr(lf, "KNOWN_BUGS", lf.KNOWN_BUGS + [
+        ("KB_TEST", "testmod", "testmod/main.lua", 'return "before"', 'return "after"', "cache test")
+    ])
+    rep = lf.check_paths([str(data)], CFG, checker=OkChecker(), game_dir=str(game))
+    entry = next(iter(rep.files.values()))
+    assert entry["patch"]["rules"] == ["KB_TEST"]
+    assert 'return "after"' in entry["patch"]["text"]
     ah.close_caches()
 
 
