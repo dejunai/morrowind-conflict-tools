@@ -183,3 +183,10 @@ def test_automerge_keeps_scripts_and_start_scripts(tmp_path):
     recs = {m.record_id(t, r): r for _o, t, _f, r in m.iter_records(out) if t != "TES3"}
     assert set(recs) == {("SCPT", "qscript"), ("SCPT", "other"), ("SSCR", "qscript")}
     assert b";v2" in m.first_sub(recs[("SCPT", "qscript")], b"SCTX")
+
+
+def test_auto_merge_blacklist_reads_one_plugin_per_line(tmp_path):
+    assert m.read_auto_merge_blacklist(str(tmp_path)) == set()
+    (tmp_path / m.AUTO_MERGE_BLACKLIST).write_text("\ufeff; comment\n# also\n\n  Janel Addon.ESP  \nB.esp\n",
+                                                   encoding="utf-8")
+    assert m.read_auto_merge_blacklist(str(tmp_path)) == {"janel addon.esp", "b.esp"}

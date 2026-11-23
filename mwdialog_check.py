@@ -4292,6 +4292,16 @@ def run_merge(args, plugins, bsas, data_dirs):
 # --------------------------------------------------------------------------
 
 AUTO_MERGE_NAME = "mwdialog_check AutoMerge.esp"
+AUTO_MERGE_BLACKLIST = "mwdialog_auto-merge.blacklist.txt"   # user-edited: one plugin per line, never auto-merged
+
+
+def read_auto_merge_blacklist(game_dir):
+    """Lowercased plugin names from the auto-merge blacklist (blank lines and ; or # comments skipped)."""
+    try:
+        with open(os.path.join(game_dir, AUTO_MERGE_BLACKLIST), "r", encoding="utf-8-sig") as f:
+            return {s.lower() for s in (ln.strip() for ln in f) if s and not s.startswith((";", "#"))}
+    except OSError:
+        return set()
 
 
 def run_auto_merge(args, plugins, bsas, data_dirs):
@@ -4359,6 +4369,7 @@ def run_auto_merge(args, plugins, bsas, data_dirs):
     is_master_of_other = {m.lower() for k, pr in profs.items() if k not in ours for m in pr["masters"]}
     lua_names = lua_named_plugins(data_dir)
     other_merges = {o.lower() for o in rec}
+    blacklist = read_auto_merge_blacklist(game_dir)
     reasons = {}
     cands = []
     for n, _p in order:
@@ -4371,6 +4382,8 @@ def run_auto_merge(args, plugins, bsas, data_dirs):
             why = "master file"
         elif is_our_patch(n) or low in other_merges or low in NOT_A_MOD:
             why = "made by mwdialog_check"
+        elif low in blacklist:
+            why = f"listed in {os.path.basename(AUTO_MERGE_BLACKLIST)}"
         elif pr["cells"]:
             why = "edits cells, land or pathgrids"
         elif low in is_master_of_other:
@@ -9110,7 +9123,8 @@ def _main(argv=None):
                     help=f"find active .esp plugins with no cell/land/pathgrid edits that can move "
                          f"together without changing what wins against any other plugin, merge them into one "
                          f"('{AUTO_MERGE_NAME}', or --merge-name), and deactivate them (recorded in {MERGE_RECORD}; "
-                         f"--add-all-esp leaves them out). Use --dry-run first")
+                         f"--add-all-esp leaves them out). Plugins listed one per line in "
+                         f"{os.path.basename(AUTO_MERGE_BLACKLIST)} are never merged. Use --dry-run first")
     mg.add_argument("--merge-name", metavar="NAME.esp", help="with --auto-merge: the merged plugin's name")
     mg.add_argument("--merge-plan", action="store_true",
                     help="recommend merges --auto-merge doesn't make (plugins with cells, land or "
