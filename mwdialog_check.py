@@ -62,6 +62,7 @@ from collections import Counter, OrderedDict, defaultdict
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mwdialog_paths as MP  # noqa: E402
 from mwdialog_tes3 import check_unchanged, content_id  # noqa: E402
+from mwdialog_cellorder import WHY as CELL_WHY, cell_filter_rules  # noqa: E402
 import mwdialog_text as MT  # noqa: E402
 import mwdialog_tes3  # noqa: E402
 print = MT.printer()  # noqa: A001
@@ -137,6 +138,7 @@ from mwdialog_restore import (  # noqa: E402,F401
 from mwdialog_ownership import door_owner_verdicts, item_owner_verdicts  # noqa: E402,F401
 from mwdialog_footing import (  # noqa: E402,F401
     find_footing, ModelShapes, Placements, RESCUE_DATA, SUNK as ACTOR_SUNK, write_rescue_data)
+from mwdialog_anthology_override import LandMoves  # noqa: E402
 from mwdialog_pathgrid import (PATHGRID_CACHE_FILE, PATHGRID_FIXES_FILE, load_pathgrid_cache,  # noqa: E402
                                repair_pathgrids, save_pathgrid_cache)
 
@@ -5969,7 +5971,7 @@ def fix_cell_winners(args, plugins, report=None):
                         if bk[0] != low:
                             revive_hist[bk].append((low, grp, any(s_ == "DELE" for s_, _d in blk),
                                                     next((d for s_, d in blk if s_ == "NAME"), b"\0"), key))
-                        if bk in door_hist or any(s_ == "DNAM" for s_, _d in blk):
+                        if bk in door_hist or any(s_ in ("DNAM", "DODT") for s_, _d in blk):
                             door_hist[bk].append((low, grp, blk, key))
                         # shortcut: an NPC_ record read after the CELL placing it (same plugin) is missed; the
                         # construction set writes NPC_ first, so only a hand-built plugin would do that
@@ -6283,6 +6285,52 @@ def fix_cell_winners(args, plugins, report=None):
         except OSError:
             pass
 
+    # ---- land a mod moved elsewhere: what mods made for where it was put there goes with it
+    world = Placements(order, ext_recs, land_vers, masters_of)
+    land_moves = LandMoves(world)
+    relocated = set()                            # ref keys moved with the land, or whose arrival was
+    if land_moves.moves:
+        print("  Moved land: looking for what mods made for where it was put there...", file=sys.stderr)
+        ref_moves, moved_with = land_moves.plan(out)
+        for bk, ck, grp, blk in ref_moves:
+            put(ck, grp, bk, blk)
+            out_heads.setdefault(ck, heads.get(ck))
+            relocated.add(bk)
+        arrivals_moved = Counter()
+        for bk, hist in door_hist.items():
+            pl, grp, blk, ck = hist[-1]
+            if has(blk, "DELE") or has(blk, "DNAM"):
+                continue
+            base = out[ck][bk][1] if bk in out.get(ck, {}) else blk
+            dodt = next((d for s_, d in base if s_ == "DODT" and len(d) >= 24), None)
+            if dodt is None:
+                continue
+            introducer = next((h[0] for h in hist if next((d for s_, d in h[2] if s_ == "DODT"), None) == dodt), pl)
+            to = land_moves.arrival(introducer, *struct.unpack_from("<3f", dodt))
+            if to is None:
+                continue
+            nd = struct.pack("<3f", *to) + dodt[12:]
+            put(ck, grp, bk, [[s_, nd if s_ == "DODT" else d] for s_, d in base])
+            out_heads.setdefault(ck, heads.get(ck))
+            relocated.add(bk)
+            arrivals_moved[name_of.get(introducer, introducer)] += 1
+        for mv in land_moves.moves:
+            movers = ", ".join(name_of.get(n, n) for n in sorted(mv.movers))
+            print(f"  Moved land: {movers} put {len(mv.old)} cell(s) of land {mv.offset[0]:+},{mv.offset[1]:+} "
+                  f"cells away")
+        if moved_with:
+            print(f"  Moved land: {sum(moved_with.values())} object(s) of mods made for where it was moved with it:")
+            for (who, _m), n in moved_with.most_common(20):
+                print(f"      {n:6} of {name_of.get(who, who)}'s")
+            if len(moved_with) > 20:
+                print(f"      ... and {len(moved_with) - 20} more")
+        if arrivals_moved:
+            print(f"  Moved land: {sum(arrivals_moved.values())} door arrival(s) there moved with it: "
+                  + ", ".join(f"{n} of {w}'s" for w, n in arrivals_moved.most_common(8)))
+        stays = sorted(name_of.get(p, p) for (_i, p), gone in land_moves.made_for_old.items() if not gone)
+        if stays:
+            print(f"  Moved land: left as they are (their objects stand on the moved land): {', '.join(stays)}")
+
     # ---- reshaped land: where two plugins change the same land's heights, the last one's land is used, and
     # objects put down on the land another plugin saw float or sink. They move up or down with the land.
     contested = {g for g, v in land_vers.items() if len({d for _i, d, _o in v}) >= 2}
@@ -6369,7 +6417,7 @@ def fix_cell_winners(args, plugins, report=None):
             return dz
         moved_by = Counter()
         for bk, (pl, grp, blk, ck) in refs.items():
-            if has(blk, "DELE"):
+            if has(blk, "DELE") or bk in relocated:
                 continue
             base = out[ck][bk][1] if bk in out.get(ck, {}) else blk
             dd = next((d for s_, d in base if s_ == "DATA" and len(d) >= 24), None)
@@ -6395,7 +6443,7 @@ def fix_cell_winners(args, plugins, report=None):
         arrive_fixed = 0
         for bk, hist in door_hist.items():
             pl, grp, blk, ck = hist[-1]
-            if has(blk, "DELE") or any(s_ == "DNAM" for s_, _d in blk):
+            if has(blk, "DELE") or any(s_ == "DNAM" for s_, _d in blk) or bk in relocated:
                 continue
             base = out[ck][bk][1] if bk in out.get(ck, {}) else blk
             dodt = next((d for s_, d in base if s_ == "DODT" and len(d) >= 24), None)
@@ -6530,7 +6578,6 @@ def fix_cell_winners(args, plugins, report=None):
 
     # people left over water: what they stood on was taken away. Runs after all that moves or deletes objects.
     people = {bk: (key[1], key[2]) for bk, (key, oid) in npc_refs.items() if key[0] == "e" and oid not in npc_dead}
-    world = Placements(order, ext_recs, land_vers, masters_of)
     moves, rescue, left = find_footing(world, people, out, kept_dry, tag_of, model_of, shapes)
     for bk, ck, grp, blk in moves:
         put(ck, grp, bk, blk)
@@ -6713,7 +6760,11 @@ def fix_cell_winners(args, plugins, report=None):
                     continue
                 if owner not in midx:
                     continue
-                blk[0] = ["FRMR", struct.pack("<I", (midx[owner] << 24) | idx)]
+                ref = struct.pack("<I", (midx[owner] << 24) | idx)
+                if blk[0][0] == "MVRF":          # moved to another cell: the MVRF and its FRMR name it
+                    blk[:] = [[s_, ref if s_ in ("MVRF", "FRMR") else d] for s_, d in blk]
+                else:
+                    blk[0] = ["FRMR", ref]
                 blocks.append(blk)
             if grp == "t" and blocks:
                 body += pack_sub("NAM0", struct.pack("<I", len(blocks)))
@@ -8337,7 +8388,9 @@ def write_context_rules(rules_path, crules, skipped):
              ";",
              "; These are the patch-after-mod rules --sort works out from what the plugins change: when most of",
              "; the records a small .esp changes are records a much bigger .esp adds (not counting anything an",
-             "; .esm defines), the small one is a patch for the big one and loads after it.",
+             "; .esm defines), the small one is a patch for the big one and loads after it. A plugin whose",
+             "; dialogue filters on a cell only another .esp names loads after that .esp (and before a plugin",
+             "; that then blanks or renames the cell), or the game says \"Cell '...' not found\".",
              "; They rank below the rules in this file and above mlox's. To override one, add an [Order] rule",
              "; below; to turn them all off, use --no-content-order.",
              ";",
@@ -8346,10 +8399,13 @@ def write_context_rules(rules_path, crules, skipped):
              ";"]
     for patch in sorted(by_patch, key=str.lower):
         for mod, why in sorted(by_patch[patch], key=lambda t: t[0].lower()):
-            n = why.split(":", 1)[1].strip().split(" ", 1)[0] if ":" in why else "?"
-            total = re.search(r"'s (\d+) records", why)
             mark = "   (SKIPPED)" if (mod.lower(), patch.lower()) in skipped else ""
             block.append(f";   {mod}")
+            if why.startswith(CELL_WHY):
+                block.append(f";     -> {patch}   [{why[len(CELL_WHY):].strip()}]{mark}")
+                continue
+            n = why.split(":", 1)[1].strip().split(" ", 1)[0] if ":" in why else "?"
+            total = re.search(r"'s (\d+) records", why)
             block.append(f";     -> {patch}   [{n} of its {total.group(1) if total else '?'} records are the mod's]{mark}")
     if not crules:
         block.append(";   (none)")
@@ -8570,12 +8626,17 @@ def run_sort(args, plugins):
     if not args.no_content_order:
         print("  Reading plugins to find patches that must follow the mods they change...", file=sys.stderr)
         crules = content_rules(plugins)
+        ours = {x.lower() for x in OUR_PATCHES} | {AUTO_MERGE_NAME.lower()} | {
+            k.lower() for k in read_merge_record(os.path.dirname(os.path.abspath(args.data_dir)))}
+        frules = cell_filter_rules(plugins, ours)
+        crules += frules
         rule_sets.insert(1, crules)            # after your rules file, before mlox's
-        print(f"  content: {len(crules)} patch-after-mod rule(s) found from what the plugins change")
+        print(f"  content: {len(crules) - len(frules)} patch-after-mod rule(s) found from what the plugins change, "
+              f"{len(frules)} from the cells their dialogue filters on")
     current = [n for n, _p in plugins]
     order, notes = compute_order(plugins, rule_sets, current)
     if not args.no_content_order and not args.dry_run and os.path.exists(rules_path):
-        skipped = {(a.lower(), b.lower()) for a, b, s in notes["cycles"] if str(s).startswith("content:")}
+        skipped = {(a.lower(), b.lower()) for a, b, s in notes["cycles"] if str(s).startswith(("content:", CELL_WHY))}
         if write_context_rules(rules_path, crules, skipped):
             print(f"  Listed the {len(crules)} content rule(s) in a [Context] section at the top of {RULES_FILE}.")
     if not args.no_content_order and not getattr(args, "no_add_masters", False):
@@ -8587,6 +8648,8 @@ def run_sort(args, plugins):
         merged = {k.lower() for k in read_merge_record(os.path.dirname(os.path.abspath(args.data_dir)))}
         added = []
         for _k, (mod, patch), why in crules:
+            if why.startswith(CELL_WHY):
+                continue                         # an order need, not records of that mod: no master
             if (mod.lower(), patch.lower()) in skipped or not patch.lower().endswith(FIXABLE_EXT) \
                     or is_our_patch(patch) or patch.lower() in merged or patch.lower() in NOT_A_MOD \
                     or pos_.get(mod.lower(), 10 ** 9) > pos_.get(patch.lower(), -1):

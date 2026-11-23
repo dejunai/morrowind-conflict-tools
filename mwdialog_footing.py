@@ -1,6 +1,10 @@
 """mwdialog_footing.py - for --fix (Cell Fixes): people left over water because a later mod took away what they
-stood on (a fisherman whose dock another mod rebuilt a little to the side). An NPC is moved only when the structure
-they were placed on is gone, only water is under them now, and level footing of about the same height is close by.
+stood on (a fisherman whose dock another mod rebuilt a little to the side, or a guard whose land another mod sank).
+An NPC is moved only when the structure or land they were placed on is gone and only water is under them now: to
+level footing of about the same height close by, else to the closest dry level footing within WIDE_REACH, so that
+nobody (perhaps someone a quest needs) is left cut off on the seabed. When the land they stood on is in use
+unchanged a few cells away (a mod moved the island), they go to the same spot there. Someone moved into another
+cell is moved there (MVRF), as the CS does when a reference is dragged across a cell border.
 Footing is worked out from the land heights and the collision triangles of the models.
 """
 from collections import defaultdict
@@ -24,6 +28,11 @@ RESCUE_DATA = "mwfloatfix_rescue.json"         # Data Files\MWSE\config\, read b
 SUNK = -64.0                                    # lower than this under their feet, a person is in over the waist
 REACH, RING_STEP = 128, 8                       # footing is looked for this far around, in rings this far apart
 SAME_LEVEL = 64.0                               # new footing is at most this much above or below the old
+WIDE_REACH, WIDE_STEP = 4096, 64                # then any dry footing this far around, across cell borders
+CLIMB = 256.0                                   # out there, footing at most this much above or below the old first
+SETTLE = 1024.0                                 # ...but footing at another height this much closer wins
+SKY = 1e9
+MOVE_CELLS = 16                                 # land a mod moved (an island set elsewhere) is looked for this far
 LEVEL, STAND = 24.0, 24.0                       # footing: five probes this far apart, at most this uneven
 FEET = 8.0                                      # what is right under someone: five probes this far apart
 EYE = 64.0                                      # rays start this far over the feet
@@ -260,28 +269,52 @@ class Surfaces:
         return max((self.floor(x + dx, y + dy, top)
                     for dx, dy in ((0, 0), (FEET, 0), (-FEET, 0), (0, FEET), (0, -FEET))), key=lambda f: f[0])
 
+    def _spot(self, px, py, top):
+        """(height, object) of a dry, level place to stand at (px, py) under top, or None."""
+        h, what, tag = self.floor(px, py, top)
+        if h < 0 or tag not in STAND_ON_TAGS:
+            return None
+        around = [self.floor(px + dx, py + dy, top)[0] for dx, dy in ((STAND, 0), (-STAND, 0), (0, STAND), (0, -STAND))]
+        if min(around) < 0 or max(around + [h]) - min(around + [h]) > LEVEL:
+            return None
+        if self.floor(px, py, h + HEAD_ROOM)[0] > h + LEVEL:
+            return None                          # inside or under something
+        return h, what
+
     def stand_near(self, x, y, z, was, grid):
-        """(x, y, height, object) of the closest level place to stand, or None."""
+        """(x, y, height, object) of the closest place to stand, or None: level footing about as high in the cell
+        within REACH; else the closest dry level footing within WIDE_REACH, anywhere, within CLIMB of the old
+        height unless footing at another height is SETTLE closer."""
         top = max(z, was) + EYE
-        for radius in range(RING_STEP, REACH + 1, RING_STEP):
+        for radius in range(0, REACH + 1, RING_STEP):
             spots = []
-            for i in range(16):
+            for i in range(16 if radius else 1):
                 px, py = x + radius * math.cos(i * math.pi / 8), y + radius * math.sin(i * math.pi / 8)
                 if (math.floor(px / 8192), math.floor(py / 8192)) != grid:
                     continue
-                h, what, tag = self.floor(px, py, top)
-                if h < 0 or tag not in STAND_ON_TAGS or abs(h - was) > SAME_LEVEL:
-                    continue
-                around = [self.floor(px + dx, py + dy, top)[0]
-                          for dx, dy in ((STAND, 0), (-STAND, 0), (0, STAND), (0, -STAND))]
-                if min(around) < 0 or max(around + [h]) - min(around + [h]) > LEVEL:
-                    continue
-                if self.floor(px, py, h + HEAD_ROOM)[0] > h + LEVEL:
-                    continue                     # inside or under something
-                spots.append((abs(h - was), px, py, h, what))
+                s = self._spot(px, py, top)
+                if s and abs(s[0] - was) <= SAME_LEVEL:
+                    spots.append((abs(s[0] - was), px, py, *s))
             if spots:
                 return min(spots)[1:]
-        return None
+        other, other_at, radius = None, 0, RING_STEP
+        while radius <= WIDE_REACH:
+            if other and radius > other_at + SETTLE:
+                return other
+            n = max(16, math.ceil(2 * math.pi * radius / WIDE_STEP))
+            spots = []
+            for i in range(n):
+                px, py = x + radius * math.cos(i * 2 * math.pi / n), y + radius * math.sin(i * 2 * math.pi / n)
+                s = self._spot(px, py, SKY)
+                if s:
+                    spots.append((abs(s[0] - was), px, py, *s))
+            near = [s for s in spots if s[0] <= CLIMB]
+            if near:
+                return min(near)[1:]
+            if spots and other is None:
+                other, other_at = min(spots)[1:], radius
+            radius += RING_STEP if radius < REACH else WIDE_STEP
+        return other
 
 
 def _ref_key(block, masters, own):
@@ -374,6 +407,16 @@ class Placements:
             self._heights[key] = land_heights(first_sub(self._record(v[0], v[2]), b"VHGT"))
         return self._heights[key]
 
+    def moved_land(self, g, known):
+        """(dx, dy) in cells when the land a plugin knowing only `known` had at g was put, unchanged, in exactly
+        one other cell within MOVE_CELLS (a mod moved the island; later mods may touch it up there), else None."""
+        v = next((v for v in reversed(self.land_vers.get(g, ())) if self.names[v[0]] in known), None)
+        if v is None or self.land_vers[g][-1][1] == v[1]:
+            return None
+        hits = [(c[0] - g[0], c[1] - g[1]) for c, vs in self.land_vers.items()
+                if any(x[1] == v[1] for x in vs) and c != g and max(abs(c[0] - g[0]), abs(c[1] - g[1])) <= MOVE_CELLS]
+        return hits[0] if len(hits) == 1 else None
+
     def versions(self, g, bk):
         """The versions of one reference in cell g, as around() gives them."""
         return [(self.names[pi], cell, grp, blk) for pi, key, cell, grp, blk in self.cell(g) if key == bk]
@@ -440,16 +483,21 @@ def find_footing(world, npcs, patched, kept_dry, tag_of, model_of, shapes):
         if was < SUNK:
             continue                             # never had footing that could be found: a swimmer, or placed so
         where = f"{oid} (#{g[0]},{g[1]}, from {author})"
-        if kind == "LAND":
-            left.append(f"{where}: the land they stood on is under the sea now")
-            continue
-        cant_tell = now.unreadable(x, y)
+        cant_tell = now.unreadable(x, y) if kind != "LAND" else None
         if cant_tell:
             left.append(f"{where}: {stood_on} is gone, but {cant_tell}'s model can't be read, so there may be footing")
             continue
-        spot = now.stand_near(x, y, z, was, g)
+        spot = None
+        off = world.moved_land(g, frozenset(world.knows(author))) if kind == "LAND" else None
+        if off:                                  # the same spot where the island is now
+            g2 = (g[0] + off[0], g[1] + off[1])
+            spot = surfaces(g2).stand_near(placed_at[0] + off[0] * 8192, placed_at[1] + off[1] * 8192,
+                                           placed_at[2], was, g2)
         if spot is None:
-            left.append(f"{where}: {stood_on} is gone, and there is no footing like it within {REACH} units")
+            spot = now.stand_near(x, y, z, was, g)
+        if spot is None:
+            lost = "the land they stood on is under the sea now" if kind == "LAND" else f"{stood_on} is gone"
+            left.append(f"{where}: {lost}, and there is no dry footing within {WIDE_REACH} units")
             continue
         blk = base or next((v[3] for v in reversed(vers) if any(s == "DATA" and len(d) >= 24 for s, d in v[3])), None)
         if blk is None:
@@ -457,7 +505,11 @@ def find_footing(world, npcs, patched, kept_dry, tag_of, model_of, shapes):
         px, py, h, _what = spot
         to = (px, py, h + 3.0)
         data = struct.pack("<6f", *to, *pos[3:])
-        new = [[s, data + d[24:] if s == "DATA" and len(d) >= 24 else d] for s, d in blk]
+        new = [[s, data + d[24:] if s == "DATA" and len(d) >= 24 else d] for s, d in blk
+               if s not in ("MVRF", "CNDT", "CNAM")]
+        g_to = (math.floor(px / 8192), math.floor(py / 8192))
+        if g_to != g:                            # into the cell the spot is in, so it loads with that cell
+            new = [["MVRF", new[0][1]], ["CNDT", struct.pack("<ii", *g_to)]] + new
         moves.append((bk, ck, vers[-1][2], new))
         rescue.append(_rescue(oid, g, placed_at[:3], to))
     return moves, rescue, left

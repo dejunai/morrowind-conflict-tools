@@ -22,6 +22,9 @@ On Windows you can also use the included `mwdialog_check.bat` and `vortex_tidy.b
 | `mwdialog_assets.py` | Asset health used by `--asset-check` / `--fix`: unreadable or truncated DDS, missing mipmaps, uncompressed textures, unused loose files, files in the wrong folder. |
 | `mwdialog_mastercheck.py` | Whether a compatibility patch was built for the master that is actually installed (reference resolution, size/date signals). |
 | `mwdialog_longpaths.py` | Asset paths that are too long for Windows `MAX_PATH` or for Morrowind's fixed-length fields. Used by both the checker and tidy. |
+| `mwdialog_footing.py` | `--fix` Cell Fixes: people whose footing a later mod took away (sunk land, deleted docks, a moved island) are moved to the nearest dry footing. |
+| `mwdialog_anthology_override.py` | `--fix` Cell Fixes: when a mod moves a land mass (Anthology Solstheim, Tomb of the Snow Prince), objects and door arrivals of mods made for the old place move with it. |
+| `mwdialog_cellorder.py` | Load-order rule: a plugin whose dialogue filters on a cell another plugin names loads after it. |
 | `vortex_tidy.py` | Tidies each mod folder in Vortex's Morrowind staging directory (from Vortex's settings, or `--staging`): loose docs/images, wrong-folder assets, then the asset check and the Lua check. Plan first, then `--apply`. |
 | `mwdialog_luafix.py` | Static checker and in-place patcher for MWSE Lua (parser-based, not regex). Nil guards, absurd event priorities, log-spam shim, one-shot handlers, and related rules. Plan first, then `--apply`. |
 | `mwdialog_lua.py` | Pure-Python Lua 5.1 / LuaJIT tokenizer and parser, used by `mwdialog_luafix.py`. |

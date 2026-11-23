@@ -73,11 +73,11 @@ def test_other_version_is_reported_and_synced_as_before(game, capsys):
     mor = os.path.getsize(df / "Morrowind.esm")
     plugin(df / "Fooland Patch.esp", [("Morrowind.esm", mor), ("Fooland.esp", 123456)],
            [cont("pt_box", ["zz_a", "zz_b", "zz_c", "zz_gone"])])
-    run(df, "--fix", "--yes")
-    out = capsys.readouterr().out
+    run(df, "--fix", "--yes", "--min-severity", "INFO")
+    out = " ".join(capsys.readouterr().out.split())
     v = verdicts(g)["fooland patch.esp|fooland.esp"]
     assert v["kind"] == "other version" and v["confidence"] < 0.75 and v["misses"] == ["zz_gone"]
-    assert "made for another version of 'Fooland.esp'" in out
+    assert "INFO made for another version of 'Fooland.esp'" in out           # stays enabled: nothing to act on
     assert dict(header(df / "Fooland Patch.esp"))["Fooland.esp"] == os.path.getsize(df / "Fooland.esp")   # synced
 
 
@@ -339,7 +339,7 @@ def test_a_patch_with_changes_of_its_own_stays_and_says_how_much_is_in_the_maste
     mor = os.path.getsize(df / "Morrowind.esm")
     plugin(df / "Fooland Patch.esp", [("Morrowind.esm", mor), ("Fooland.esp", 123456)],
            [misc("zz_a"), misc("pt_own")])
-    run(df)
+    run(df, "--min-severity", "INFO")
     out = " ".join(capsys.readouterr().out.split())
-    assert "1 of the 1 change(s) it makes to 'Fooland.esp' are already in the updated 'Fooland.esp'" in out
+    assert "INFO 1 of the 1 change(s) it makes to 'Fooland.esp' are already in the updated 'Fooland.esp'" in out
     assert "obsolete" not in out and not (g / m.LOAD_ORDER_FILE).exists()

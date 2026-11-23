@@ -868,8 +868,8 @@ def _report(r, v):
         return
     if v.get("absorbed") and v["absorbed"][1]:
         n, same, _rest = v["absorbed"]
-        r.add("WARN", p, "", "", f"{same} of the {n} change(s) it makes to '{m}' are already in the updated '{m}'"
-                                 f" (check whether the patch is still needed)")
+        r.add("INFO", p, "", "", f"{same} of the {n} change(s) it makes to '{m}' are already in the updated '{m}' "
+                                 f"(those records now change nothing; it stays for the rest)")
     if v.get("none_left") == 0:
         r.add("ERROR", p, "", "", f"none of its {v['total']} references into '{m}' exist any more"
                                   + (f" ({ex})" if ex else "") + size
@@ -883,13 +883,14 @@ def _report(r, v):
                                    "them anyway). Get the matching version, or take it out of the load order "
                                    "(--disable-mismatched)")
     elif v["kind"] == "other version":
-        r.add("WARN", p, "", "",
+        # it stays enabled and --fix drops its dead references: worth a WARN only when it may be another mod
+        r.add("WARN" if v["confidence"] >= 0.5 else "INFO", p, "", "",
               f"made for another version of '{m}' (confidence it is a different mod: {pct}%): "
               f"{v['total'] - v['hits']} of {v['total']} references into it are gone"
               + (f" ({ex})" if ex else "") + size
               + (f"; none of them are left, but it has {v['none_left']} record(s) and cell(s) of its own, so it stays "
                  f"enabled (--fix drops the dead references)" if v.get("none_left")
-                 else "; the rest lines up, so it stays enabled"))
+                 else "; the rest lines up, so it stays enabled (--fix drops the dead references)"))
     elif v["kind"] == "no ties" and v["why"] == "listed as a master" and v["confidence"] >= 0.5:
         r.add("INFO", p, "", "", f"lists '{m}' as a master but none of its records override or name anything in it "
                                  f"(confidence it is a different mod: {pct}%)")
