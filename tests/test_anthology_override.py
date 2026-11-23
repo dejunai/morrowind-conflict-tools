@@ -1,4 +1,5 @@
 """Moved-land incompatibilities require a choice, not automatic relocation."""
+import os
 import struct
 import types
 
@@ -67,6 +68,26 @@ def track_conflict_outputs(monkeypatch):
     return calls
 
 
+def pathgrid_winner_game(tmp_path):
+    args, plugins = game(tmp_path, cells=10, pathgrid=True)
+    data = tmp_path / "Data Files"
+    aware_grid = rec("PGRD", sub("NAME", z("")) + sub("DATA", struct.pack("<iiHH", 3, 0, 1, 1))
+                     + sub("PGRP", struct.pack("<iiiBBH", 2000, 2000, 64, 0, 0, 0)))
+    plugin(data / "Aware.esp",
+           [("Master.esm", (data / "Master.esm").stat().st_size),
+            ("Mover.esp", (data / "Mover.esp").stat().st_size)],
+           [aware_grid])
+    initial = ["Master.esm", "Mover.esp", "People.esp", "Aware.esp"]
+    reordered = ["Master.esm", "Mover.esp", "Aware.esp", "People.esp"]
+
+    def set_dates(order):
+        for i, name in enumerate(order):
+            os.utime(data / name, (946684800 + i * 86400, 946684800 + i * 86400))
+
+    set_dates(initial)
+    return args, plugins, data, reordered, set_dates
+
+
 def test_automatic_land_relocation_is_disabled(tmp_path, capsys):
     args, plugins = game(tmp_path)
     m.fix_cell_winners(args, plugins)
@@ -93,8 +114,11 @@ def test_moved_land_requires_a_choice_but_aware_plugins_are_not_flagged(tmp_path
 
 
 @pytest.mark.parametrize("action", ["--fix", "--multipatch", "--auto-merge"])
-def test_direct_builds_and_merges_stop_before_mutating_incompatible_plugins(tmp_path, capsys, action):
+@pytest.mark.parametrize("in_full", [False, True])
+def test_direct_builds_and_merges_stop_before_mutating_incompatible_plugins(tmp_path, capsys, monkeypatch,
+                                                                            action, in_full):
     args, _plugins = game(tmp_path, cells=10, people_land=80)
+    monkeypatch.setattr(m, "IN_FULL", in_full)
     data = tmp_path / "Data Files"
     before = {p.name: p.read_bytes() for p in data.iterdir() if p.is_file()}
     before_order = (tmp_path / m.LOAD_ORDER_FILE).read_bytes()
@@ -105,6 +129,68 @@ def test_direct_builds_and_merges_stop_before_mutating_incompatible_plugins(tmp_
     assert (tmp_path / m.LOAD_ORDER_FILE).read_bytes() == before_order
 
 
+@pytest.mark.parametrize("action", [["--multipatch"], ["--fix"], ["--fix", "--multipatch"], ["--all"]])
+@pytest.mark.parametrize("no_follow", [False, True])
+def test_sort_rechecks_incompatibilities_before_building(tmp_path, monkeypatch, capsys, action, no_follow):
+    args, plugins, data, reordered, set_dates = pathgrid_winner_game(tmp_path)
+    assert m.run_cell_conflicts(args, plugins, incompatible_only=True) == 0
+
+    def sort(sort_args, _plugins):
+        set_dates(reordered)
+        m.write_load_order(str(tmp_path), reordered, "test sort")
+        sort_args.sort_changed = True
+
+    monkeypatch.setattr(m, "run_sort", sort)
+    for name in ("fix_ref_groups", "fix_cell_layouts", "fix_cell_winners", "drop_performers_patch"):
+        monkeypatch.setattr(m, name, lambda *_args: None)
+    monkeypatch.setattr(m, "fix_omwaddon_masters", lambda *_args: False)
+    monkeypatch.setattr(m, "fix_long_names", lambda *_args: False)
+    monkeypatch.setattr(m, "scan", lambda *_args: pytest.fail("built after a newly exposed conflict"))
+    flags = ["--sort", *action, "--yes", "--no-vortex", "--no-sounds", "--no-doubled"]
+    if no_follow:
+        flags.append("--no-follow-up")
+    assert m.main([str(data), *flags]) == 2
+    assert "must be resolved before building or merging" in fold(capsys.readouterr().err)
+
+
+def test_master_repair_sort_rechecks_before_fixing(tmp_path, monkeypatch, capsys):
+    args, plugins, data, reordered, set_dates = pathgrid_winner_game(tmp_path)
+    assert m.run_cell_conflicts(args, plugins, incompatible_only=True) == 0
+
+    def sort(sort_args, _plugins):
+        set_dates(reordered)
+        m.write_load_order(str(tmp_path), reordered, "test master repair")
+        sort_args.sort_changed = True
+
+    monkeypatch.setattr(m, "fix_omwaddon_masters", lambda *_args: True)
+    monkeypatch.setattr(m, "run_sort", sort)
+    monkeypatch.setattr(m, "fix_ref_groups", lambda *_args: pytest.fail("fixed after a newly exposed conflict"))
+    assert m.main([str(data), "--fix", "--yes", "--no-vortex", "--no-sounds"]) == 2
+    assert "must be resolved before building or merging" in fold(capsys.readouterr().err)
+
+
+def test_interactive_build_guard_refuses_unreadable_plugins(tmp_path, monkeypatch, capsys):
+    args, plugins = game(tmp_path)
+    bad = tmp_path / "Data Files" / "Broken.esp"
+    bad.write_bytes(b"not a plugin")
+    plugins.append((bad.name, str(bad)))
+    monkeypatch.setattr(m, "IN_FULL", False)
+    monkeypatch.setattr(m, "cell_conflicts_interactive", lambda _args: True)
+    writes = track_conflict_outputs(monkeypatch)
+    assert m.build_compatibility_guard(args, plugins) == 2
+    assert "cannot check incompatible plugins" in fold(capsys.readouterr().err)
+    assert not writes
+
+
+def test_interactive_build_guard_does_not_regenerate_auxiliary_data_when_no_choice_is_needed(tmp_path, monkeypatch):
+    args, plugins = game(tmp_path)
+    monkeypatch.setattr(m, "IN_FULL", False)
+    monkeypatch.setattr(m, "cell_conflicts_interactive", lambda _args: True)
+    writes = track_conflict_outputs(monkeypatch)
+    assert m.build_compatibility_guard(args, plugins) == 0
+    assert not writes
+
+
 def test_direct_build_detects_incompatible_edits_inside_an_active_automerge(tmp_path, capsys):
     game(tmp_path, cells=10, people_land=80)
     data = tmp_path / "Data Files"
@@ -113,6 +199,21 @@ def test_direct_build_detects_incompatible_edits_inside_an_active_automerge(tmp_
     rc = m.main([str(data), "--fix", "--no-vortex", "--no-sounds", "--no-follow-up"])
     assert rc == 2
     assert "unmerge first" in fold(capsys.readouterr().err)
+
+
+def test_interactive_build_guard_detects_incompatible_active_automerge(tmp_path, monkeypatch, capsys):
+    args, plugins = game(tmp_path, cells=10, people_land=80)
+    data = tmp_path / "Data Files"
+    (data / "People.esp").rename(data / m.AUTO_MERGE_NAME)
+    plugins = [(m.AUTO_MERGE_NAME, str(data / m.AUTO_MERGE_NAME)) if name == "People.esp" else (name, path)
+               for name, path in plugins]
+    m.write_load_order(str(tmp_path), [name for name, _path in plugins], "test")
+    monkeypatch.setattr(m, "IN_FULL", False)
+    monkeypatch.setattr(m, "cell_conflicts_interactive", lambda _args: True)
+    monkeypatch.setattr(m, "conflict_choice", lambda *_args: "s")
+    track_conflict_outputs(monkeypatch)
+    assert m.build_compatibility_guard(args, plugins) == 2
+    assert "unmerge" in fold(capsys.readouterr().out).lower()
 
 
 def test_object_only_old_site_findings_warn_without_forcing_a_choice(tmp_path, monkeypatch, capsys):

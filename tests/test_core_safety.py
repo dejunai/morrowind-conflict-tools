@@ -173,6 +173,17 @@ def test_full_does_not_restore_losers_before_unmerging(tmp_path, monkeypatch):
     assert m.main([str(data), "--full", "--no-vortex"]) == 0
 
 
+@pytest.mark.parametrize("rc,expected_calls", [(0, 1), (1, 1), (2, 0)])
+def test_requested_play_does_not_launch_after_a_failed_build(monkeypatch, capsys, rc, expected_calls):
+    calls = []
+    monkeypatch.setattr(m, "PLAY_REQUEST", [object()])
+    monkeypatch.setattr(m, "launch_game", lambda args: calls.append(args) or 0)
+    assert m.finish_requested_play(rc) == rc
+    assert len(calls) == expected_calls
+    if rc == 2:
+        assert "not starting" in capsys.readouterr().err
+
+
 def test_malformed_conflict_answers_are_dropped_not_crashed_on(tmp_path):
     ST = _load("mwdialog_state")
     (tmp_path / ST.CONFLICT_ANSWERS_FILE).write_text(json.dumps(

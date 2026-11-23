@@ -94,6 +94,22 @@ def test_failed_load_order_write_restores_moved_conflict_plugins(tmp_path, monke
     assert m.read_disabled(str(tmp_path)) == {}
 
 
+def test_incompatible_only_review_preserves_existing_conflict_rules(tmp_path, monkeypatch):
+    args, plugins, masters = _families(tmp_path)
+    args.only_incompatible = True
+    names = {name.lower(): name for name, _path in plugins}
+    conflict = {"place": [], "refs": [], "settings": [], "doubled": False,
+                "incompatible": {"cells": {(1, 2)}, "evidence": {"terrain"}}}
+    rules = (f"{m.CONFLICT_RULES_HEADER}\n[Order]\nUnrelated.esp\nB.esp\n"
+             "; keep B.esp winning where they conflict\n")
+    rules_path = tmp_path / m.RULES_FILE
+    rules_path.write_text(rules, encoding="cp1252")
+    monkeypatch.setattr(m, "IN_FULL", True)
+    monkeypatch.setattr(builtins, "input", lambda _prompt="": "3")
+    assert m._conflict_session(args, [(("a.esp", "b.esp"), conflict)], names, masters, 1, plugins) == 0
+    assert rules_path.read_text(encoding="cp1252") == rules
+
+
 def test_changed_dependency_family_is_not_replayed_without_confirmation(tmp_path, monkeypatch, capsys):
     args, plugins, masters = _families(tmp_path)
     args.only_new = True

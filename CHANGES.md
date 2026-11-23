@@ -6,7 +6,9 @@
 - Conflict choices set aside detected master and exclusive object/script dependents, invalidate affected
   generated patches, and are rechecked if the group changes. Active merges must be undone first.
 - `--full` unmerges before restoring disabled plugins and stops before building if an incompatibility remains.
-  Direct fixes, Multipatch builds and merges refuse detected incompatibilities too.
+  Fixes, Multipatch builds and merges recheck for incompatibilities, including those exposed by later sorts.
+  Unreadable plugins stop the check, existing conflict rules survive mandatory-only reviews, and a failed
+  build does not launch a requested `--play`.
 - `--unmerge --dry-run` no longer changes plugins, records or the load order and does not run a mutating follow-up.
 - Blanked exterior cell names are restored in the responsible .esp; competing nonblank names remain a
   cell-conflict choice. AutoMerge checks cell filters and rejects inputs with mismatched masters.

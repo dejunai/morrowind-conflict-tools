@@ -83,8 +83,9 @@ their required masters and selected group root are available.
 
 The detector is not exhaustive: old-site objects without terrain, pathgrid or matching literal script evidence
 are warnings for review, not mandatory choices, and variable-driven script or Lua dependencies may be missed.
-`--fix`, `--multipatch` and merge commands also refuse detected incompatibilities; a noninteractive `--full`
-stops instead of guessing. Large-scale relocation and script recompilation are not performed.
+`--fix`, `--multipatch` and merge commands also refuse detected incompatibilities; builds recheck after sorting.
+Unreadable plugins stop the compatibility check, and a failed build does not launch a requested `--play`.
+An unattended run stops instead of guessing. Large-scale relocation and script recompilation are not performed.
 
 ## Config files in this repository
 

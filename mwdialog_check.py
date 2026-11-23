@@ -220,6 +220,17 @@ def save_pending_cell_conflicts(_args, _ranked):
     pass
 
 
+def build_compatibility_guard(args, plugins):
+    check_args = copy.copy(args)
+    check_args.only = None
+    check_args.only_incompatible = True
+    prompt_args = TOP_ARGS if IN_FULL and TOP_ARGS is not None else args
+    if cell_conflicts_interactive(prompt_args):
+        check_args.no_interactive = False
+        check_args.defer_follow_up = True
+    return run_cell_conflicts(check_args, plugins, incompatible_only=True)
+
+
 def off_label(kind):
     return {
         "unused": "unused or empty file(s) to move to their mod's Off\\unused\\ (--restore-unused)",
@@ -4993,7 +5004,7 @@ def run_cell_conflicts(args, plugins, collect=False, incompatible_only=False):
         print("\n" + "=" * 70 + "\nCELL CONFLICTS\n" + "=" * 70)
     min_new = getattr(args, "conflict_min", 5)
     skip = {x.lower() for x in OUR_PATCHES} | {CELL_WINNER_PATCH.lower()}
-    if not incompatible_only:
+    if not incompatible_only and not getattr(args, "only_incompatible", False):
         skip.add(AUTO_MERGE_NAME.lower())
     black = read_conflict_blacklist(os.path.dirname(os.path.abspath(args.data_dir)))
     left_out = [n for n, _p in plugins if conflict_blacklisted(n, black)]
@@ -5325,6 +5336,10 @@ def run_cell_conflicts(args, plugins, collect=False, incompatible_only=False):
         elif best_n:
             c["patched_some"] = (partial, best_n, len(cells))
     if not collect:
+        if master_errors and (incompatible_only or getattr(args, "only_incompatible", False)):
+            print("ERROR: cannot check incompatible plugins until unreadable plugins are repaired.",
+                  file=sys.stderr)
+            return 2
         for rows in (*moved_land_vers.values(), *moved_cells.values()):
             rows.sort(key=lambda row: row[0])
         grids = {grid: (pi, off) for grid, rows in moved_pgrds.items()
@@ -5356,11 +5371,9 @@ def run_cell_conflicts(args, plugins, collect=False, incompatible_only=False):
                 print(f"      ... and {len(possible_land) - 10} more")
         if incompatible_only:
             incompatible = [(a, b) for (a, b), c in pairs.items() if c.get("incompatible")]
-            if master_errors:
-                print("ERROR: cannot check incompatible plugins until unreadable plugins are repaired.",
-                      file=sys.stderr)
-                return 2
-            if incompatible:
+            if not incompatible:
+                return 0
+            if not cell_conflicts_interactive(args):
                 print("ERROR: incompatible moved-land plugins must be resolved before building or merging:",
                       file=sys.stderr)
                 for a, b in incompatible:
@@ -5368,7 +5381,6 @@ def run_cell_conflicts(args, plugins, collect=False, incompatible_only=False):
                 print("Run --cell-conflicts interactively, or unmerge first if these plugins are merged.",
                       file=sys.stderr)
                 return 2
-            return 0
     if collect:
         return {"pairs": pairs, "name_of": name_of, "total_new": total_new, "pos": pos, "masters": masters,
                 "doubled": lambda: doubled_objects(args, order, new_objs, pos, name_of, deps, cells_of),
@@ -5629,7 +5641,8 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
     own_text, earlier = split_conflict_rules(text)
     existing = ordering_rules(parse_rules(rules_path, own_text)[0])
     earlier_l = {(a.lower(), b.lower()) for a, b in earlier}
-    if earlier and not args.dry_run:
+    remove_earlier = earlier and not args.dry_run and not getattr(args, "only_incompatible", False)
+    if remove_earlier:
         # wiped before anything is read or asked: this session starts from your own rules only
         shutil.copy2(rules_path, conflict_rule_backup_path(rules_path))
         with atomic_open(rules_path, encoding="cp1252", errors="replace", newline="\r\n") as f:
@@ -5947,7 +5960,7 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
         write_cell_winners(game_dir, winners)
         print(f"\nRecorded {len(new_winners)} rebuilt interior choice(s) in {CELL_WINNERS_FILE}.")
     if not new_rules and not turned_off and not new_winners:
-        print("\nNo new rules and no plugins turned off." + (" (Earlier runs' conflict rules were removed; run --sort so the order follows your own rules.)" if earlier and not args.dry_run else ""))
+        print("\nNo new rules and no plugins turned off." + (" (Earlier runs' conflict rules were removed; run --sort so the order follows your own rules.)" if remove_earlier else ""))
         if unresolved:
             print("ERROR: incompatible plugins remain active; choose a side before building patches.")
             return 0 if args.dry_run else 2
@@ -9910,15 +9923,12 @@ def _main(argv=None):
                 argv2 += ["--ini", args.ini]
             return main(argv2)
         return rc
-    compatibility_checked = False
-    if not IN_FULL and not args.dry_run and not args.cell_conflicts and (
+    if not args.dry_run and not args.cell_conflicts and (
             args.auto_merge or args.merge or args.fix or args.patch_esm or args.multipatch):
-        check_args = copy.copy(args)
-        check_args.only = None
-        rc = run_cell_conflicts(check_args, plugins, incompatible_only=True)
+        rc = build_compatibility_guard(args, plugins)
         if rc:
             return rc
-        compatibility_checked = True
+        plugins, bsas, data_dirs = resolve(args, report)
     if args.auto_merge:
         rc = run_auto_merge(args, plugins, bsas, data_dirs)
         if rc == 0 and getattr(args, "merged_now", False) and not args.no_follow_fix:
@@ -9943,6 +9953,10 @@ def _main(argv=None):
         if not args.sort and not IN_FULL:                    # their masters may load after them: sort
             print("\n" + "=" * 70 + "\nSORT: plugin headers now name different masters\n" + "=" * 70)
             run_sort(args, resolve(args, Report())[0])
+            if getattr(args, "sort_changed", False):
+                rc = build_compatibility_guard(args, resolve(args, Report())[0])
+                if rc:
+                    return rc
         plugins, bsas, data_dirs = resolve(args, report)     # those plugins now find their masters
     if args.fix:
         fix_ref_groups(args, plugins)
@@ -9976,15 +9990,14 @@ def _main(argv=None):
     only = {o.lower() for o in args.only} if args.only else None
     if args.sort:
         run_sort(args, resolve(args, Report())[0])     # every active plugin, our patches included
+        if getattr(args, "sort_changed", False) and not args.dry_run and (
+                args.fix or args.patch_esm or args.multipatch or not args.no_follow_fix):
+            rc = build_compatibility_guard(args, resolve(args, Report())[0])
+            if rc:
+                return rc
         if getattr(args, "sort_changed", False) and not args.no_follow_fix and not (args.fix and args.multipatch):
             # a new order can undo what the patches fixed (a later plugin now blanking 'Caldera Priory',
             # leveled lists merged in the old order): rebuild them and fix what the new order exposes
-            if not IN_FULL and not args.dry_run and not compatibility_checked:
-                check_args = copy.copy(args)
-                check_args.only = None
-                rc = run_cell_conflicts(check_args, resolve(args, Report())[0], incompatible_only=True)
-                if rc:
-                    return rc
             print("\n" + "=" * 70 + "\nFOLLOW-UP: --fix --multipatch with the new load order\n" + "=" * 70)
             args.fix = args.multipatch = True
         if not (args.clean or args.fix or args.multipatch):
@@ -10208,11 +10221,18 @@ def main(argv=None):
                 print(f"\nCould not trim the fix log: {e}", file=sys.stderr)
 
 
+def finish_requested_play(rc):
+    if not PLAY_REQUEST:
+        return rc
+    if rc not in (None, 0, 1):
+        print("--play: not starting because the requested checks failed.", file=sys.stderr)
+        return rc
+    play_rc = launch_game(PLAY_REQUEST[0])
+    return rc if play_rc == 0 else play_rc
+
+
 if __name__ == "__main__":
-    rc = main()
-    if PLAY_REQUEST:
-        play_rc = launch_game(PLAY_REQUEST[0])
-        rc = rc if play_rc == 0 else play_rc
+    rc = finish_requested_play(main())
     # started from Explorer or a shortcut (the batch file says so): keep the window open - but only when the
     # output is on screen; redirected to a file, nobody would see the prompt and it would just hang
     # (and not after starting the game: there's nothing to read, the game is what you're waiting for)
