@@ -3,8 +3,10 @@
 The game checks each dialogue response's cell filter as its plugin loads, against the cells that exist at that
 moment ("Cell 'Fatleg's Camp' not found"). A plugin whose dialogue filters on a cell only another .esp names
 (a patch between two mods that lists neither as a master) must load after that .esp, and before every plugin
-that then blanks or renames the cell. A cell an .esm names needs no rule: .esm files load first, and the Multipatch
-gives an .esm's name back to a cell a later plugin blanked.
+that then blanks or renames the cell (until --fix gives a blanking .esp the name back). A cell an .esm names
+needs no rule: .esm files load first, and --fix gives an .esm's name back to a cell a later plugin took it from.
+
+lost_cell_filter: the same question for --auto-merge, which moves a plugin to the merge's place.
 """
 from collections import defaultdict
 import os
@@ -86,3 +88,24 @@ def cell_filter_rules(plugins, ours=frozenset()):
                 else:
                     add(u, i, f"{names[u]}'s dialogue filters on cell '{c}', which {names[i]} {what}")
     return rules
+
+
+def lost_cell_filter(filters, hist, to, skip=frozenset()):
+    """A dialogue cell filter that doesn't find its cell at load position `to`: a plugin there or before it
+    names the cell, and a later one (up to `to`) blanks or renames it again. hist: cell key -> [(load index,
+    name lower)] in load order; positions in `skip` don't count. (filter, index of the plugin that takes the
+    name, the name it gives instead) or None."""
+    for f in sorted(filters):
+        lost = None
+        for h in hist.values():
+            h = [(i, nm) for i, nm in h if i <= to and i not in skip]
+            gave = [j for j, (_i, nm) in enumerate(h) if nm == f]
+            if not gave:
+                continue
+            if h[-1][1] == f:
+                lost = None
+                break
+            lost = lost or next(e for e in h[gave[-1] + 1:] if e[1] != f)
+        if lost:
+            return (f,) + lost
+    return None

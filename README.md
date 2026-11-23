@@ -23,7 +23,7 @@ On Windows you can also use the included `mwdialog_check.bat` and `vortex_tidy.b
 | `mwdialog_mastercheck.py` | Whether a compatibility patch was built for the master that is actually installed (reference resolution, size/date signals). |
 | `mwdialog_longpaths.py` | Asset paths that are too long for Windows `MAX_PATH` or for Morrowind's fixed-length fields. Used by both the checker and tidy. |
 | `mwdialog_footing.py` | `--fix` Cell Fixes: people whose footing a later mod took away (sunk land, deleted docks, a moved island) are moved to the nearest dry footing. |
-| `mwdialog_anthology_override.py` | `--fix` Cell Fixes: when a mod moves a land mass (Anthology Solstheim, Tomb of the Snow Prince), objects and door arrivals of mods made for the old place move with it. |
+| `mwdialog_anthology_override.py` | Detects incompatible old-site terrain, pathgrids and script coordinates when a mod moves land (including Anthology Solstheim and Tomb of the Snow Prince). Automatic large-scale relocation is disabled. |
 | `mwdialog_cellorder.py` | Load-order rule: a plugin whose dialogue filters on a cell another plugin names loads after it. |
 | `vortex_tidy.py` | Tidies each mod folder in Vortex's Morrowind staging directory (from Vortex's settings, or `--staging`): loose docs/images, wrong-folder assets, then the asset check and the Lua check. Plan first, then `--apply`. |
 | `mwdialog_luafix.py` | Static checker and in-place patcher for MWSE Lua (parser-based, not regex). Nil guards, absurd event priorities, log-spam shim, one-shot handlers, and related rules. Plan first, then `--apply`. |
@@ -70,6 +70,21 @@ On Windows you can also use the included `mwdialog_check.bat` and `vortex_tidy.b
 `--lua-only` on `vortex_tidy.py` replaces only the Lua section of its plan.
 
 `mwdialog_check.py` uses a different confirmation style (`--fix` / `--dry-run` / `--yes`), not this plan-file flow.
+
+## Incompatible plugins
+
+`--full` and `--cell-conflicts` identify evidenced moved-land incompatibilities and require a choice before building.
+Run `python mwdialog_check.py "Data Files" --cell-conflicts` in a console, then choose which side to turn off.
+The choice also sets aside active plugins with declared master dependencies or detected exclusive object/script
+uses; shared objects do not force removal. Review the displayed group and any warnings about MWSE Lua references.
+Generated patches are set aside for rebuilding; active merges must be undone first (`--full` does this).
+Remembered choices are checked again if the dependent group changes. `--reenable` restores plugins only when
+their required masters and selected group root are available.
+
+The detector is not exhaustive: old-site objects without terrain, pathgrid or matching literal script evidence
+are warnings for review, not mandatory choices, and variable-driven script or Lua dependencies may be missed.
+`--fix`, `--multipatch` and merge commands also refuse detected incompatibilities; a noninteractive `--full`
+stops instead of guessing. Large-scale relocation and script recompilation are not performed.
 
 ## Config files in this repository
 

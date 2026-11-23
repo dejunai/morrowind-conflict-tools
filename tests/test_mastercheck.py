@@ -81,6 +81,44 @@ def test_other_version_is_reported_and_synced_as_before(game, capsys):
     assert dict(header(df / "Fooland Patch.esp"))["Fooland.esp"] == os.path.getsize(df / "Fooland.esp")   # synced
 
 
+def test_merged_master_guard_uses_input_masters_and_names(game, capsys):
+    g, df = game
+    mor = os.path.getsize(df / "Morrowind.esm")
+    foo = os.path.getsize(df / "Fooland.esp")
+    good = cont("good_box", ["zz_a"])
+    unrelated = cont("other_box", ["zz_unrelated_" + str(i) for i in range(10)])
+    plugin(df / "Good.esp", [("Morrowind.esm", mor), ("Fooland.esp", foo)], [good])
+    plugin(df / "Other.esp", [("Morrowind.esm", mor)], [unrelated])
+    merge = m.AUTO_MERGE_NAME
+    plugin(df / merge, [("Morrowind.esm", mor), ("Fooland.esp", foo)], [good, unrelated])
+    (g / m.MERGE_RECORD).write_text(f"[{merge}]\nGood.esp\nOther.esp\n")
+    run(df, plugins=("Morrowind.esm", "Fooland.esp", merge))
+    assert verdicts(g).get("good.esp|fooland.esp") is None
+    assert "made for a different 'Fooland.esp'" not in capsys.readouterr().out
+    bad = cont("bad_box", ["zz_missing_" + str(i) for i in range(10)])
+    plugin(df / "Bad.esp", [("Morrowind.esm", mor), ("Fooland.esp", 123456)], [bad])
+    plugin(df / merge, [("Morrowind.esm", mor), ("Fooland.esp", foo)], [good, bad])
+    (g / m.MERGE_RECORD).write_text(f"[{merge}]\nGood.esp\nBad.esp\n")
+    run(df, plugins=("Morrowind.esm", "Fooland.esp", merge))
+    out = capsys.readouterr().out
+    assert "=== Bad.esp ===" in out and "merged into" in out
+    assert verdicts(g)["bad.esp|fooland.esp"]["kind"] == "different mod"
+
+
+def test_auto_merge_rejects_mismatched_input(game, capsys):
+    g, df = game
+    mor = os.path.getsize(df / "Morrowind.esm")
+    for n in ("Good A.esp", "Good B.esp"):
+        plugin(df / n, [("Morrowind.esm", mor)], [misc(n.replace(" ", "_"))])
+    plugin(df / "Bad.esp", [("Morrowind.esm", mor), ("Fooland.esp", 123456)],
+           [cont("bad_box", ["zz_missing_" + str(i) for i in range(10)])])
+    run(df, "--auto-merge", "--dry-run", "--yes",
+        plugins=("Morrowind.esm", "Fooland.esp", "Good A.esp", "Good B.esp", "Bad.esp"))
+    out = capsys.readouterr().out
+    assert "+ Good A.esp" in out and "+ Good B.esp" in out
+    assert "+ Bad.esp" not in out and "master mismatch: Fooland.esp" in out
+
+
 def test_master_named_in_the_file_name_and_removed_refs_from_the_log(game):
     g, df = game
     # no masters at all (tes3cmd-made patch); a --fix already removed the references Fooland.esp doesn't have

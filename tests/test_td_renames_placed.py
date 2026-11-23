@@ -90,6 +90,40 @@ def fix(df, names):
                    "--fix", "--yes", "--fix-log", str(df.parent / "fixes.log")])
 
 
+def test_cell_fixes_deletion_gets_a_hidden_script_target(tmp_path, monkeypatch, capsys):
+    df = tmp_path / "Data Files"
+    df.mkdir()
+    (tmp_path / "Morrowind.ini").write_text("[Game Files]\n")
+    script = rec("SCPT", sub("SCHD", b"plank_script".ljust(32, b"\0") + b"\0" * 20)
+                 + sub("SCTX", b'begin plank_script\n"quest_plank"->Disable\nend\n'))
+    base = plugin(df / "Morrowind.esm", [],
+                  [misc("gold_001"), misc("quest_plank"), script, cell("Town", ref(1, "quest_plank"))])
+    plugin(df / "Mod.esp", [("Morrowind.esm", len(base))], [misc("own")])
+
+    def build_cell_fixes(args, plugins, report=None):
+        plugin(df / m.CELL_WINNER_PATCH, [("Morrowind.esm", len(base))],
+               [cell("Town", ref(edit(1), "quest_plank", deleted=True))])
+
+    monkeypatch.setattr(m, "fix_cell_winners", build_cell_fixes)
+    names = ["Morrowind.esm", "Mod.esp"]
+    for _ in range(2):
+        fix(df, names)
+        refs, _nam0 = placed(df / m.PLACE_PATCH_NAME, m.PLACEHOLDER_CELL)
+        assert list(refs.values()) == [("quest_plank", False)]
+        assert (df / "Morrowind.esm").read_bytes() == base
+        assert any(m.has_sub(body, b"DELE") for _o, t, _f, body in records_of(df / m.CELL_WINNER_PATCH)
+                   if t == "CELL")
+    out = capsys.readouterr().out
+    assert "deleted the last placed copy" in out
+    world = m.World(m.Report())
+    world.file_sizes = {n.lower(): os.path.getsize(df / n) for n in names}
+    for n in names + [m.CELL_WINNER_PATCH, m.PLACE_PATCH_NAME]:
+        world.load_plugin(str(df / n), n)
+    world._check_placed()
+    assert world.placed["quest_plank"] == 1
+    assert not world.unplaced
+
+
 def test_the_map_is_read_from_tools(game):
     game([misc("own")])
     assert m.read_td_renames()["tr_crate"] == "T_Crate"

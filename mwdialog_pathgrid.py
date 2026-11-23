@@ -12,6 +12,7 @@ import json
 import math
 import os
 import struct
+from collections import defaultdict
 
 from mwdialog_footing import SUPPORT_TAGS, Surfaces, _state
 
@@ -206,7 +207,8 @@ def _feed_block(h, blk):
         h.update(len(d).to_bytes(4, "little") + d)
 
 
-def cell_key(world, g, pi, off, author, known, around, patched, tag_of, model_of, shapes):
+def cell_key(world, g, pi, off, author, known, around, patched, tag_of, model_of, shapes,
+             nearby, moved):
     """Everything one cell's check reads: its pathgrid and whose it is, every version of every object in it and the
     eight around it (and the patch's own), what those objects are and their meshes, and the land."""
     h = hashlib.sha1()
@@ -214,7 +216,7 @@ def cell_key(world, g, pi, off, author, known, around, patched, tag_of, model_of
     rec = world._record(pi, off)
     h.update(len(rec).to_bytes(4, "little") + rec)
     oids = set()
-    for bk, vers in sorted(world.around(g).items(), key=lambda kv: repr(kv[0])):
+    for bk, vers in sorted(nearby.items(), key=lambda kv: repr(kv[0])):
         h.update(repr(bk).encode())
         for v in vers:
             h.update(repr(v[:3]).encode())
@@ -225,6 +227,10 @@ def cell_key(world, g, pi, off, author, known, around, patched, tag_of, model_of
             h.update(repr((c, bk, grp)).encode())
             _feed_block(h, blk)
             oids.add(_state([blk])[2])
+    for bk, (source, blk) in sorted(moved.items(), key=lambda kv: repr(kv[0])):
+        h.update(repr((source, bk)).encode())
+        _feed_block(h, blk)
+        oids.add(_state([blk])[2])
     for oid in sorted(oids):
         model = model_of.get(oid)
         h.update(repr((oid, tag_of.get(oid), model)).encode())
@@ -243,6 +249,17 @@ def repair_pathgrids(world, pathgrids, patched, tag_of, model_of, shapes, progre
     inputs are all unchanged is taken from it, the rest are worked out and added. The fourth thing given back
     is how many cells were taken from it."""
     records, fixed, left, reused = {}, [], [], 0
+    moved_to = defaultdict(dict)
+    load_index = {name: i for i, name in enumerate(world.names)}
+    for ck, refs in patched.items():
+        if ck[0] != "e":
+            continue
+        for bk, (_grp, blk) in refs.items():
+            if not blk or blk[0][0] != "MVRF":
+                continue
+            cndt = next((d for s, d in blk if s == "CNDT" and len(d) >= 8), None)
+            if cndt is not None:
+                moved_to[struct.unpack_from("<ii", cndt)][bk] = (ck, blk)
     total = len(pathgrids)
     for n, (g, (pi, off)) in enumerate(sorted(pathgrids.items())):
         if progress and n % 50 == 0:
@@ -250,10 +267,19 @@ def repair_pathgrids(world, pathgrids, patched, tag_of, model_of, shapes, progre
         author, before = world.names[pi], len(fixed)
         known = frozenset(world.knows(author))
         around = [(g[0] + dx, g[1] + dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1)]
+        moved = {bk: entry for c in around for bk, entry in moved_to.get(c, {}).items()}
         if not any(world.names[p] not in known for c in around for p, _o in world.ext_recs.get(c, ())) \
-                and not any(patched.get(("e",) + c) for c in around):
+                and not any(patched.get(("e",) + c) for c in around) and not moved:
             continue                             # nothing here its plugin couldn't see
-        key = cell_key(world, g, pi, off, author, known, around, patched, tag_of, model_of, shapes) \
+        nearby = dict(world.around(g))
+        for bk, (source, _blk) in moved.items():
+            versions = nearby.get(bk, [])
+            seen = {(v[0], v[1], v[2]) for v in versions}
+            versions = versions + [v for v in world.versions(source[1:], bk)
+                                   if (v[0], v[1], v[2]) not in seen]
+            nearby[bk] = sorted(versions, key=lambda v: load_index[v[0]])
+        key = cell_key(world, g, pi, off, author, known, around, patched, tag_of, model_of, shapes,
+                       nearby, moved) \
             if cache is not None else None
         hit = cache.get(key) if key else None
         if hit is not None:
@@ -271,7 +297,7 @@ def repair_pathgrids(world, pathgrids, patched, tag_of, model_of, shapes, progre
             ox, oy = g[0] * 8192, g[1] * 8192
             at = [(p[0] + ox, p[1] + oy, float(p[2])) for p in points]
             placed, new = [], []
-            for bk, vers in world.around(g).items():
+            for bk, vers in nearby.items():
                 mine = [patched[ck][bk][1] for ck in {("e",) + tuple(v[1]) for v in vers} if bk in patched.get(ck, ())]
                 pos, scale, oid, dele = _state([v[3] for v in vers] + mine)
                 tag, model = tag_of.get(oid), model_of.get(oid)
@@ -282,11 +308,11 @@ def repair_pathgrids(world, pathgrids, patched, tag_of, model_of, shapes, progre
                 placed.append(entry)
                 if tag not in OBSTACLE_TAGS:
                     continue
-                if all(v[0] in known for v in vers):
+                if bk not in moved and all(v[0] in known for v in vers):
                     continue                         # only this patch changed it (land followed): not another mod's
                 seen = [v[3] for v in vers if v[0] in known]
                 kpos, kscale, koid, kdele = _state(seen) if seen else (None, 1.0, "", True)
-                ppos, pscale, poid, _pd = _state([v[3] for v in vers])
+                ppos, pscale, poid, _pd = _state([v[3] for v in vers] + (mine if bk in moved else []))
                 if not kdele and kpos and ppos and koid == poid and kscale == pscale and \
                         all(abs(a - b) < 1 for a, b in zip(kpos[:3], ppos[:3])) and \
                         all(abs(a - b) < 0.01 for a, b in zip(kpos[3:], ppos[3:])):

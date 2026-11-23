@@ -77,6 +77,19 @@ def test_an_empty_load_order_falls_back_to_its_backup(tmp_path):
     assert "Tribunal.esm" in path.read_text()                    # restored
 
 
+def test_dry_run_uses_load_order_backup_without_restoring_it(tmp_path):
+    data = tmp_path / "Data Files"
+    data.mkdir()
+    path = tmp_path / LO.LOAD_ORDER_FILE
+    path.write_text("")
+    backup = LO.bak_home(str(path)) + ".bak"
+    with open(backup, "w") as f:
+        f.write("; header\nMorrowind.esm\n")
+    args = types.SimpleNamespace(data_dir=str(data), ini=None, dry_run=True)
+    assert LO.read_load_order(args) == ["Morrowind.esm"]
+    assert path.read_text() == ""
+
+
 def test_a_bom_before_the_first_section_is_ignored(tmp_path):
     ini = tmp_path / "Morrowind.ini"
     ini.write_bytes(b"\xef\xbb\xbf[Game Files]\r\nGameFile0=Morrowind.esm\r\n")
@@ -142,6 +155,22 @@ def test_a_dry_run_reads_morrowind_ini_without_creating_the_load_order(tmp_path)
     args = types.SimpleNamespace(data_dir=str(data), ini=None, dry_run=True)
     assert LO.read_load_order(args) == ["Morrowind.esm"]
     assert not (tmp_path / LO.LOAD_ORDER_FILE).exists()
+
+
+def test_dry_run_does_not_rebuild_lost_doubled_objects(tmp_path, monkeypatch):
+    data = tmp_path / "Data Files"
+    data.mkdir()
+    monkeypatch.setattr(m, "release_lost_doubles", lambda _args: pytest.fail("dry run rebuilt Cell Fixes"))
+    monkeypatch.setattr(m, "run_header", lambda _args: 0)
+    assert m.main([str(data), "--header", "A.esp", "--dry-run", "--no-vortex"]) == 0
+
+
+def test_full_does_not_restore_losers_before_unmerging(tmp_path, monkeypatch):
+    data = tmp_path / "Data Files"
+    data.mkdir()
+    monkeypatch.setattr(m, "release_lost_winners", lambda _args: pytest.fail("restored before unmerge"))
+    monkeypatch.setattr(m, "run_full", lambda _args: 0)
+    assert m.main([str(data), "--full", "--no-vortex"]) == 0
 
 
 def test_malformed_conflict_answers_are_dropped_not_crashed_on(tmp_path):

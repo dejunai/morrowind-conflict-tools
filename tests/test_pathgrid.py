@@ -4,8 +4,15 @@ import struct
 import types
 
 from conftest import m, plugin, rec, sub, z
-from mwdialog_pathgrid import parse_pgrd
+from mwdialog_pathgrid import parse_pgrd, repair_pathgrids
+from mwdialog_footing import Placements
 from nif_fixture import deck
+
+
+def moved_block(blk, x, y, z):
+    new = [[s, struct.pack("<3f", x, y, z) + d[12:] if s == "DATA" and len(d) >= 24 else d]
+           for s, d in blk if s not in ("MVRF", "CNDT", "CNAM")]
+    return [["MVRF", new[0][1]], ["CNDT", struct.pack("<ii", int(x // 8192), int(y // 8192))]] + new
 
 
 def land():
@@ -107,6 +114,42 @@ def test_a_moved_object_or_new_mesh_is_worked_out_again(tmp_path, capsys):
     run(tmp_path, [(1000, 2000), (3000, 2000)], [(0, 1)], (2000, 2020), mesh=False)
     assert "unchanged" not in capsys.readouterr().out
     assert "stall's model can't be read" in (tmp_path / m.PATHGRID_FIXES_FILE).read_text(encoding="utf-8")
+
+
+def test_pathgrid_sees_obstacle_moved_from_a_distant_cell(tmp_path):
+    data = tmp_path / "Data Files"
+    (data / "Meshes").mkdir(parents=True)
+    (data / "Meshes" / "stall.nif").write_bytes(deck(64, 60))
+    master = plugin(data / "Master.esm", [], [
+        rec("STAT", sub("NAME", z("stall")) + sub("MODL", z("stall.nif"))),
+        land(), cell(), pgrd([(1000, 2000), (3000, 2000)], [(0, 1)])])
+    source = rec("CELL", sub("NAME", z("")) + sub("DATA", struct.pack("<Iii", 0, -2, 0))
+                 + ref(1, "stall", -2 * 8192 + 2000, 2000))
+    people = plugin(data / "People.esp", [("Master.esm", len(master))],
+                    [source, pgrd([(1000, 2000), (3000, 2000)], [(0, 1)])])
+    land_off = next(o for o, t, _f, _b in m.iter_records(master) if t == "LAND")
+    grid_off = next(o for o, t, _f, _b in m.iter_records(people) if t == "PGRD")
+    cell_off, body = next((o, b) for o, t, _f, b in m.iter_records(people) if t == "CELL")
+    block = m.split_cell(body)[1][0]
+    world = Placements([("Master.esm", str(data / "Master.esm")), ("People.esp", str(data / "People.esp"))],
+                       {(-2, 0): [(1, cell_off)]}, {(0, 0): [(0, b"land", land_off)]},
+                       {"master.esm": [], "people.esp": ["master.esm"]})
+    key = ("people.esp", 1)
+    patched = {("e", -2, 0): {key: ("p", moved_block(block, 2000, 2000, 0))}}
+    shapes = m.ModelShapes(str(data), [])
+    cache = {}
+    def check():
+        return repair_pathgrids(world, {(0, 0): (1, grid_off)}, patched,
+                                {"stall": "STAT"}, {"stall": "stall.nif"}, shapes, cache=cache)
+
+    records, fixed, _left, reused = check()
+    assert (0, 0) in records and fixed and reused == 0
+    _, points, links = parse_pgrd(next(m.iter_records(records[(0, 0)]))[3])
+    assert len(points) > 2 and 1 not in links[0]
+    assert check()[3] == 1
+    patched[("e", -2, 0)][key] = ("p", moved_block(block, 2000, 4000, 0))
+    records, fixed, _left, reused = check()
+    assert not records and not fixed and reused == 0
 
 
 def test_dry_run_writes_nothing(tmp_path):

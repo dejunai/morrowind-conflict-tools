@@ -65,7 +65,7 @@ def test_unattended_asks_nothing(tmp_path, monkeypatch, console, no_interactive)
     (True, True, False, True, True),        # --yes doesn't answer these, as with the redundant plugins
     (True, False, True, True, False),
     (False, False, False, True, False),
-    (True, False, False, False, False),     # no answers yet: a report, and the question at the end
+    (True, False, False, False, True),      # no answers yet: ask incompatible pairs before building
 ])
 def test_full_conflict_step(tmp_path, monkeypatch, console, yes, no_interactive, answers, asks):
     (tmp_path / "Data Files").mkdir()
@@ -87,5 +87,19 @@ def test_full_conflict_step(tmp_path, monkeypatch, console, yes, no_interactive,
     assert ("--no-interactive" not in step) == asks
     assert first.index("--cell-conflicts") < first.index("--clean")
     assert all("--no-interactive" in c for c in calls if c is not step)
-    if asks:
+    if asks and not answers:
+        assert "--only-incompatible" in step
+    if asks and answers:
         assert not any("Answer them now" in p for p in prompts)     # put off: not asked twice in one run
+
+
+def test_full_stops_before_building_when_incompatibility_is_unresolved(tmp_path, monkeypatch):
+    (tmp_path / "Data Files").mkdir()
+    calls = []
+    monkeypatch.setattr(m, "main", lambda argv: calls.append(argv[1]) or (2 if argv[1] == "--cell-conflicts" else 0))
+    for name in ("full_check", "full_reset", "multipatch_aside"):
+        monkeypatch.setattr(m, name, lambda *args, **kwargs: 0)
+    monkeypatch.setattr(m, "full_missing_masters", lambda *args, **kwargs: [])
+    monkeypatch.setattr(m, "read_load_order", lambda _args: [])
+    assert m.run_full(full_args(tmp_path, no_redundant=True, no_interactive=True)) == 2
+    assert calls == ["--cell-conflicts"]

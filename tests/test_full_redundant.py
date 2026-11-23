@@ -55,6 +55,19 @@ def test_stage_order_redundant_runs_before_everything_that_reads_plugins(staged,
     assert s.count("--redundant") + s.count("--redundant-auto") == 1
 
 
+def test_full_unmerges_before_reenabling_disabled_plugins(staged, tmp_path, monkeypatch):
+    (tmp_path / m.MERGE_RECORD).write_text("[mwdialog_check AutoMerge.esp]\nX.esp\n", encoding="utf-8")
+    phases = []
+    original = m.main
+    def record(argv):
+        phases.append(argv[1])
+        return original(argv)
+    monkeypatch.setattr(m, "main", record)
+    monkeypatch.setattr(m, "full_reset", lambda *_args: phases.append("--reset") or 0)
+    m.run_full(full_args(tmp_path))
+    assert phases.index("--unmerge") < phases.index("--reset") < phases.index("--redundant-auto")
+
+
 def test_later_stages_see_the_plugin_turned_off(staged, tmp_path):
     m.run_full(full_args(tmp_path))
     after = [lo for args_, lo in staged if lo is not None]
@@ -119,6 +132,30 @@ def test_redundant_automerge_input_marks_the_merge_for_rebuild(tmp_path):
     lo = order(tmp_path)
     assert "Other2.esp" in lo and "Small.esp" not in lo
     assert m.read_merge_rebuild(str(tmp_path)) == {}
+
+
+def test_unmerge_dry_run_preserves_merge_order_and_records(tmp_path, capsys):
+    from test_redundant import write
+    df, _paths = game(tmp_path, [BASE, ("Big.esp", [misc("a", 7)], MW, "")])
+    write(df, "Small.esp", [misc("a", 7)], MW, "")
+    write(df, "Other2.esp", [misc("o2", 1)], MW, "")
+    merge = "mwdialog_check AutoMerge.esp"
+    write(df, merge, [misc("a", 7), misc("o2", 1)], MW, "")
+    (tmp_path / m.MERGE_RECORD).write_text(f"[{merge}]\nSmall.esp\nOther2.esp\n", encoding="utf-8")
+    m.write_disabled(str(tmp_path), {"Small.esp": "conflicts with Big.esp"})
+    m.write_load_order(str(tmp_path), ["Morrowind.esm", merge, "Big.esp"])
+    before = {p: p.read_bytes() for p in (tmp_path / "Morrowind.ini", tmp_path / m.LOAD_ORDER_FILE,
+                                           tmp_path / m.MERGE_RECORD, tmp_path / m.DISABLED_RECORD,
+                                           tmp_path / "Data Files" / merge)}
+    before_names = {p.name for p in (tmp_path / "Data Files").iterdir()}
+    run(tmp_path, "--unmerge", "--dry-run")
+    assert "Dry run: would unmerge" in capsys.readouterr().out
+    changed = [p.name for p, contents in before.items() if not p.exists() or p.read_bytes() != contents]
+    assert changed == []
+    assert {p.name for p in (tmp_path / "Data Files").iterdir()} == before_names
+    run(tmp_path, "--unmerge", "--no-follow-up")
+    assert "Small.esp" not in order(tmp_path)
+    assert "Other2.esp" in order(tmp_path)
 
 
 def test_undo_of_a_merged_input_waits_for_the_merge(tmp_path):

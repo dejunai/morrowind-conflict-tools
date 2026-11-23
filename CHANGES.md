@@ -1,6 +1,21 @@
-# Moved land, drowned people, cell filters (2026-11-22)
+# Incompatible plugins and safer rebuilds (2026-11-23)
 
-- `--fix` (Cell Fixes): when a mod moves a land mass (Anthology Solstheim and Tomb of the Snow Prince put Solstheim 7 cells east, 6 north), the objects and door arrivals of mods made for the old place are moved to the new one (MVRF, as the CS does), raised or lowered with the land there (`mwdialog_anthology_override.py`). The move is found from the land; `KNOWN_MOVES` and `MADE_FOR_MOVED` name the Solstheim movers and their add-ons. Only cells the mover sank count as the old place.
+- Moved-land terrain, winning pathgrids and matching literal script coordinates can require choosing one
+  incompatible plugin family; object-only findings remain warnings. Automatic large-scale relocation and
+  script recompilation are not performed.
+- Conflict choices set aside detected master and exclusive object/script dependents, invalidate affected
+  generated patches, and are rechecked if the group changes. Active merges must be undone first.
+- `--full` unmerges before restoring disabled plugins and stops before building if an incompatibility remains.
+  Direct fixes, Multipatch builds and merges refuse detected incompatibilities too.
+- `--unmerge --dry-run` no longer changes plugins, records or the load order and does not run a mutating follow-up.
+- Blanked exterior cell names are restored in the responsible .esp; competing nonblank names remain a
+  cell-conflict choice. AutoMerge checks cell filters and rejects inputs with mismatched masters.
+- Scripts whose last placed target was deleted by Cell Fixes receive a hidden placeholder; merged-input
+  diagnostics identify the original plugin.
+
+# Moved land, drowned people, cell filters (2026-11-22; relocation superseded)
+
+- The experimental `--fix` relocation of objects and door arrivals for moved land was later disabled; see the entry above.
 - `--fix`: people left over water follow an island a later mod moved, and the footing search reaches further before giving up (`mwdialog_footing.py`).
 - `--fix`: a plugin whose dialogue filters on a cell another plugin names loads after it (`mwdialog_cellorder.py`).
 - Master check: changes already in the updated master and dead references `--fix` drops are INFO.

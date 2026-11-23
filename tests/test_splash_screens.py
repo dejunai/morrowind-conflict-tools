@@ -81,9 +81,9 @@ def test_splashes_are_capped_at_2048_made_24_bit_and_kept_in_off(game):
 
 
 def test_a_mod_with_mwse_code_keeps_its_dds_splash(game):
-    mod = game / "staging" / "Regional Splash"
-    (mod / "MWSE" / "mods" / "RegionalSplash").mkdir(parents=True)
-    (mod / "MWSE" / "mods" / "RegionalSplash" / "main.lua").write_text("return {}\n")
+    mod = game / "staging" / "Example Splash"
+    (mod / "MWSE" / "mods" / "ExampleSplash").mkdir(parents=True)
+    (mod / "MWSE" / "mods" / "ExampleSplash" / "main.lua").write_text("return {}\n")
     tga(mod / "Splash" / "Morrowind.tga", 64, 8)
     dds_from(mod / "Splash" / "Morrowind.tga", mod / "Splash")
     issues, fixes = ah.check_folder(str(mod), m, str(game / "Data Files"))

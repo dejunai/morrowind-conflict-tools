@@ -158,6 +158,30 @@ def test_a_dry_run_writes_nothing(tmp_path):
     assert run(tmp_path, 160.0, dry_run=True) == (None, None)
 
 
+def test_dry_run_does_not_replace_moved_pieces_report(tmp_path, capsys):
+    data = tmp_path / "Data Files"
+    data.mkdir()
+    def interior(*refs):
+        return rec("CELL", sub("NAME", z("House")) + sub("DATA", struct.pack("<Iii", 1, 0, 0))
+                   + b"".join(refs))
+    size = len(plugin(data / "Master.esm", [], [
+        rec("STAT", sub("NAME", z("table"))),
+        rec("STAT", sub("NAME", z("candle"))),
+        interior(ref(1, "table", 0, 0, 0))]))
+    plugin(data / "People.esp", [("Master.esm", size)], [interior(ref(1, "candle", 10, 0, 0))])
+    plugin(data / "Mover.esp", [("Master.esm", size)], [interior(ref((1 << 24) | 1, "table", 300, 0, 0))])
+    order = ["Master.esm", "People.esp", "Mover.esp"]
+    m.write_load_order(str(tmp_path), order, "test")
+    report = tmp_path / m.CELL_FIXES_REPORT
+    report.write_text("existing report", encoding="utf-8")
+    args = types.SimpleNamespace(data_dir=str(data), dry_run=True, ini=str(tmp_path / "Morrowind.ini"),
+                                 fix_log="fix.log", fix=False)
+    m.fix_cell_winners(args, [(n, str(data / n)) for n in order])
+    assert "Moved pieces: 1 object(s)" in capsys.readouterr().out
+    assert report.read_text(encoding="utf-8") == "existing report"
+    assert not (data / m.CELL_WINNER_PATCH).exists()
+
+
 def test_the_model_reader_follows_the_games_collision_rules():
     assert len(nif_triangles(deck(64, 10))) == 2
     assert len(nif_triangles(deck(64, 10, root=b"RootCollisionNode"))) == 2

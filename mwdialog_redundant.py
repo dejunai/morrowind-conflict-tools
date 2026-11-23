@@ -14,12 +14,14 @@ from mwdialog_console import (  # noqa: E402
     print)
 from mwdialog_datatree import (  # noqa: E402
     hard_link_names)
+from mwdialog_mastercheck import (  # noqa: E402
+    script_ids)
 from mwdialog_patchfile import (  # noqa: E402
     PATCH_NAME)
 from mwdialog_state import (  # noqa: E402
     CELL_WINNER_PATCH)
 from mwdialog_tes3 import (  # noqa: E402
-    FormatError, MW_ERRORS, cstr, first_sub, iter_records, iter_subs,
+    FormatError, MW_ERRORS, cell_key, cstr, first_sub, iter_records, iter_subs,
     record_id)
 
 
@@ -78,12 +80,21 @@ def plugin_profile(path):
     with open(path, "rb") as f:
         data = f.read()
     prof = {"size": len(data), "masters": [], "scripts": False, "cells": False, "keys": set(),
-            "refs": set(), "ids": set(), "infos": set(), "links": set(), "data": None}
+            "refs": set(), "ids": set(), "infos": set(), "links": set(), "data": None,
+            "cell_names": {}, "filters": set(), "regions": set()}
     topic = None
     for off, tag, flags, body in iter_records(data):
         if tag == "TES3":
             prof["masters"] = [cstr(d) for n, d in iter_subs(body) if n == "MAST"]
             continue
+        if tag == "CELL":
+            key, _label = cell_key(body)
+            if key is not None:
+                prof["cell_names"][key] = cstr(first_sub(body, b"NAME") or b"").strip().lower()
+        elif tag == "REGN":
+            fn = first_sub(body, b"FNAM")
+            if fn:
+                prof["regions"].add(cstr(fn).strip().lower())
         if tag in ("SCPT", "SSCR"):
             prof["scripts"] = True
             tx = first_sub(body, b"SCTX")
@@ -108,6 +119,8 @@ def plugin_profile(path):
                         prof["links"].add(v)
                 elif n in ("ONAM", "ANAM", "RNAM", "CNAM", "FNAM", "DNAM"):
                     prof["refs"].add(cstr(d).lower())
+                    if n == "ANAM" and cstr(d).strip():
+                        prof["filters"].add(cstr(d).strip().lower())
                 elif n == "SCVR" and len(d) > 5:
                     prof["refs"].add(d[5:].decode(_T.ENC, MW_ERRORS).split("\0")[0].lower())
             continue
@@ -133,10 +146,27 @@ USE_OBJ_TAGS = {"ACTI", "ALCH", "APPA", "ARMO", "BOOK", "CLOT", "CONT", "CREA", 
 _OBJECT_USE = {}
 
 
+def read_checked_masters(path):
+    """Read a complete TES3 header or fail instead of treating a damaged plugin as masterless."""
+    with open(path, "rb") as f:
+        head = f.read(16)
+        if len(head) != 16 or head[:4] != b"TES3":
+            raise FormatError("missing or truncated TES3 header")
+        size = struct.unpack_from("<I", head, 4)[0]
+        body = f.read(size)
+        if len(body) != size:
+            raise FormatError("truncated TES3 header body")
+    return [cstr(d) for n, d in iter_subs(body) if n == "MAST"]
+
+
 def object_use(plugins):
-    """{plugin lower: (ids it defines, ids it uses)} for the active plugins (lists, inventories, placed
-    objects). The merged plugin counts as one; our generated patches don't. Read once per run."""
-    key = tuple(n.lower() for n, _p in plugins)
+    """{plugin lower: (ids it defines, ids it uses)} for active plugins, including known script uses.
+    The merged plugin counts as one; our generated patches don't. Read once per run."""
+    key = []
+    for n, p in plugins:
+        stat = os.stat(p)
+        key.append((n.lower(), os.path.normcase(os.path.abspath(p)), stat.st_size, stat.st_mtime_ns))
+    key = tuple(key)
     if key in _OBJECT_USE:
         return _OBJECT_USE[key]
     skip = {x.lower() for x in OUR_PATCHES} | {CELL_WINNER_PATCH.lower(), PERFORMER_PATCH.lower()}
@@ -162,10 +192,73 @@ def object_use(plugins):
                     uses.update(cstr(d[4:36]).lower() for s, d in iter_subs(body) if s == "NPCO" and len(d) >= 36)
             elif tag == "CELL":
                 uses.update(cstr(d).lower() for s, d in iter_subs(body) if s == "NAME")
+            elif tag == "SCPT":
+                header = first_sub(body, b"SCHD")
+                if header:
+                    defs.add(cstr(header[:32]).lower())
+                uses.update(script_ids(cstr(first_sub(body, b"SCTX") or b"")))
+            elif tag == "INFO":
+                for s, d in iter_subs(body):
+                    if s == "BNAM":
+                        uses.update(script_ids(cstr(d)))
+                    elif s in ("ONAM", "RNAM", "CNAM", "FNAM"):
+                        uses.add(cstr(d).lower())
         out[n.lower()] = (defs, uses - defs)
     _OBJECT_USE.clear()
     _OBJECT_USE[key] = out
     return out
+
+
+def disable_dependents(plugins, masters, roots, also_off=(), rebuild=()):
+    """Plan a removal with transitive masters and known object users, without changing the load order."""
+    names = {name.lower(): name for name, _path in plugins}
+    declared = {name.lower(): [master.lower() for master in values] for name, values in masters.items()}
+    missing = names.keys() - declared.keys()
+    if missing:
+        raise ValueError("master lists unavailable for " + ", ".join(sorted(names[name] for name in missing)))
+    gone = {name.lower() for name in also_off}
+    roots = {name.lower() for name in roots}
+    if roots - names.keys():
+        raise ValueError("plugins not active: " + ", ".join(sorted(roots - names.keys())))
+    plan = {name: ("selected", "") for name in names if name in roots and name not in gone}
+    gone.update(roots)
+    for name in rebuild:
+        name = name.lower()
+        if name in names and name not in gone:
+            plan[name] = ("generated", "")
+            gone.add(name)
+    use = object_use(plugins)
+    skipped = {name.lower() for name in OUR_PATCHES}
+    unreadable = names.keys() - use.keys() - skipped
+    if unreadable:
+        raise ValueError("could not read object dependencies in " + ", ".join(sorted(names[name] for name in unreadable)))
+    while True:
+        added = {}
+        for name in names:
+            if name in gone:
+                continue
+            missing_master = next((master for master in declared[name] if master in gone), None)
+            if missing_master:
+                added[name] = ("master", missing_master)
+        gone.update(added)
+        plan.update(added)
+        lost = set().union(*(use[name][0] for name in gone if name in use))
+        for name, (defined, _used) in use.items():
+            if name not in gone:
+                lost.difference_update(defined)
+                if not lost:
+                    break
+        users = {}
+        if lost:
+            for name, (_defined, used) in use.items():
+                missing_ids = used & lost if name not in gone else set()
+                if missing_ids:
+                    users[name] = ("objects", ", ".join(sorted(missing_ids)[:4]))
+            gone.update(users)
+            plan.update(users)
+        if not added and not users:
+            break
+    return plan
 
 
 def relied_on(plugins, x, also_off=()):

@@ -19,7 +19,9 @@ exactly the installed size, the verdict is at most "other version" unless the mi
 least SAME_SIZE_OVERWHELMING (90%) of the references into the master don't resolve, and at least
 SAME_SIZE_MIN_MISSES (8) of them (a cell-reference error counts as 3). For "different mod" mwdialog_check
 does not sync the header size or strip the dead references (it warns instead), and --disable-mismatched takes
-the plugin out of the load order. Log parses and archive reads are cached in mwdialog_mastercheck_cache.json."""
+the plugin out of the load order. Merges are assessed per original input and its own masters, not the union
+of unrelated inputs' references. Auto-merge excludes inputs judged "different mod". Log parses and archive
+reads are cached in mwdialog_mastercheck_cache.json."""
 import hashlib
 import json
 import os
@@ -738,7 +740,7 @@ def staging_folder_of(path, vortex_root, mw):
     return None
 
 
-def check(world, mw, args=None):
+def check(world, mw, args=None, only_plugins=None):
     """Judge every .esp's masters (listed or named); report; returns {(plugin lower, master lower): verdict}.
     Called from World.check before the header checks."""
     r = world.r
@@ -761,15 +763,23 @@ def check(world, mw, args=None):
     sizes = read_sizes_record(game_dir)
     evidence = cache.setdefault("evidence", {})
     defined = set(world.all_ids) | set(world.topics) | set(world.info_home)
-    names = {n: os.path.basename(world.paths[n]) if n in world.paths else n for n in world.loaded}
-    loaded = [names[n] for n in world.loaded]
+    active = [(os.path.basename(world.paths[n]), world.paths[n]) for n in world.loaded if n in world.paths]
+    expanded, owners = mw.expand_merged(active, getattr(world, "merge_inputs", {}))
+    paths = dict(world.paths)
+    paths.update({n.lower(): p for n, p in expanded})
+    names = {n.lower(): n for n, _p in expanded}
+    loaded = list(names.values())
     verdicts = {}
-    for plugin_l in world.loaded:
+    for plugin_l in names:
         plugin = names.get(plugin_l, plugin_l)
-        path = world.paths.get(plugin_l)
+        path = paths.get(plugin_l)
+        if only_plugins is not None and plugin_l not in only_plugins:
+            continue
         if not path or not plugin_l.endswith(".esp") or mw.is_our_patch(plugin):
             continue
-        declared = world.masters.get(plugin_l, [])
+        declared = world.masters.get(plugin_l)
+        if declared is None:
+            declared = [n for n, _s in header_masters(T.read_plugin_bytes(path))]
         cands = candidate_masters(plugin, declared, [x for x in loaded if x.lower() != plugin_l])
         if not cands:
             continue
@@ -784,11 +794,13 @@ def check(world, mw, args=None):
         original = None                                   # the downloaded copy, when the header was rewritten
         for master, why in cands.items():
             ml = master.lower()
-            mpath = world.paths.get(ml)
+            mpath = paths.get(ml)
             prof = master_profile(mpath) if mpath else None
             if prof is None:
                 continue
             inst_size = world.file_sizes.get(ml)
+            if inst_size is None and mpath:
+                inst_size = os.path.getsize(mpath)
             orig, src = None, None
             if ml in logs["syncs"].get(plugin_l, {}):
                 orig, src = logs["syncs"][plugin_l][ml][0], "fix log"
@@ -840,6 +852,8 @@ def check(world, mw, args=None):
             v = {"plugin": plugin, "master": master, "why": why, "confidence": conf, "kind": kind,
                  "original_size": orig, "size_source": src, "installed_size": inst_size,
                  "from_archive": (original or {}).get("archive") if original else None, **info}
+            if plugin_l in owners:
+                v["merged_into"] = owners[plugin_l]
             verdicts[(plugin_l, ml)] = v
             if info["misses"]:
                 evidence[f"{plugin_l}|{ml}"] = sorted(set(seen) | set(info["misses"]))[:500]
@@ -855,6 +869,11 @@ def check(world, mw, args=None):
 
 def _report(r, v):
     p, m, pct = v["plugin"], v["master"], int(round(v["confidence"] * 100))
+    origin = f"; merged into {v['merged_into']}" if v.get("merged_into") else ""
+
+    def add(severity, message):
+        r.add(severity, p, "", "", message + origin)
+
     size = ""
     if v["original_size"] is not None and v["installed_size"] is not None:
         size = (f"; it was saved against a {v['original_size']}-byte '{m}' ({v['size_source']}), the installed one is "
@@ -862,21 +881,21 @@ def _report(r, v):
     ex = ", ".join(v["misses"][:5])
     if v.get("obsolete"):
         n = v["absorbed"][0]
-        r.add("ERROR", p, "", "", f"obsolete: '{m}' was updated, and all {n} change(s) it makes to '{m}' are in the "
+        add("ERROR", f"obsolete: '{m}' was updated, and all {n} change(s) it makes to '{m}' are in the "
                                   f"installed '{m}' as they are{size}; it has nothing else, so it is taken out of the "
                                   f"load order (add it back to the load order to keep it)")
         return
     if v.get("absorbed") and v["absorbed"][1]:
         n, same, _rest = v["absorbed"]
-        r.add("INFO", p, "", "", f"{same} of the {n} change(s) it makes to '{m}' are already in the updated '{m}' "
+        add("INFO", f"{same} of the {n} change(s) it makes to '{m}' are already in the updated '{m}' "
                                  f"(those records now change nothing; it stays for the rest)")
     if v.get("none_left") == 0:
-        r.add("ERROR", p, "", "", f"none of its {v['total']} references into '{m}' exist any more"
+        add("ERROR", f"none of its {v['total']} references into '{m}' exist any more"
                                   + (f" ({ex})" if ex else "") + size
                                   + f"; it uses nothing from the installed '{m}' and has nothing of its own, so it "
                                     f"is taken out of the load order (add it back to the load order to keep it)")
     elif v["kind"] == "different mod":
-        r.add("WARN", p, "", "", f"made for a different '{m}' than the one installed (confidence {pct}%): "
+        add("WARN", f"made for a different '{m}' than the one installed (confidence {pct}%): "
                                  f"{v['total'] - v['hits']} of {v['total']} references into it don't resolve"
                                  + (f" ({ex})" if ex else "") + size
                                  + "; its header is left alone and --fix drops the dead references (the game ignores "
@@ -884,7 +903,7 @@ def _report(r, v):
                                    "(--disable-mismatched)")
     elif v["kind"] == "other version":
         # it stays enabled and --fix drops its dead references: worth a WARN only when it may be another mod
-        r.add("WARN" if v["confidence"] >= 0.5 else "INFO", p, "", "",
+        add("WARN" if v["confidence"] >= 0.5 else "INFO",
               f"made for another version of '{m}' (confidence it is a different mod: {pct}%): "
               f"{v['total'] - v['hits']} of {v['total']} references into it are gone"
               + (f" ({ex})" if ex else "") + size
@@ -892,7 +911,7 @@ def _report(r, v):
                  f"enabled (--fix drops the dead references)" if v.get("none_left")
                  else "; the rest lines up, so it stays enabled (--fix drops the dead references)"))
     elif v["kind"] == "no ties" and v["why"] == "listed as a master" and v["confidence"] >= 0.5:
-        r.add("INFO", p, "", "", f"lists '{m}' as a master but none of its records override or name anything in it "
+        add("INFO", f"lists '{m}' as a master but none of its records override or name anything in it "
                                  f"(confidence it is a different mod: {pct}%)")
 
 

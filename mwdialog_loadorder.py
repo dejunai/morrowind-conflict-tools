@@ -87,7 +87,8 @@ def read_load_order(args):
         if out:
             if source != path:
                 print(f"{LOAD_ORDER_FILE} has no plugins (damaged?): using its backup {source}", file=sys.stderr)
-                write_load_order(game_dir, out, "restored from its backup")
+                if not getattr(args, "dry_run", False):
+                    write_load_order(game_dir, out, "restored from its backup")
             return out
         print(f"{source} lists no plugins (damaged?): not used", file=sys.stderr)
     ini = default_ini(args)

@@ -62,7 +62,7 @@ from collections import Counter, OrderedDict, defaultdict
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mwdialog_paths as MP  # noqa: E402
 from mwdialog_tes3 import check_unchanged, content_id  # noqa: E402
-from mwdialog_cellorder import WHY as CELL_WHY, cell_filter_rules  # noqa: E402
+from mwdialog_cellorder import WHY as CELL_WHY, cell_filter_rules, lost_cell_filter  # noqa: E402
 import mwdialog_text as MT  # noqa: E402
 import mwdialog_tes3  # noqa: E402
 print = MT.printer()  # noqa: A001
@@ -125,9 +125,9 @@ from mwdialog_patchfile import (  # noqa: E402,F401
     read_td_renames, renamed_copy,
     placeholder_record, write_patch)
 from mwdialog_redundant import (  # noqa: E402,F401
-    AUTO_SKIP_TAGS, describe_overlap, describe_plugin, find_redundant, _id_text, lua_named_plugins, lua_required_plugins,
+    AUTO_SKIP_TAGS, describe_overlap, describe_plugin, disable_dependents, find_redundant, _id_text, lua_named_plugins, lua_required_plugins,
     _OBJECT_USE, object_use, OUR_PATCHES, PATCH_WORD_RE, PERFORMER_PATCH, PLACE_PATCH_NAME, plugin_profile,
-    plugin_summary, REDUNDANT_MAX_VERSIONS, REDUNDANT_VARIANT_MIN, REDUNDANT_VARIANT_SAME, REDUNDANT_VARIANT_SHARE, relied_on, relied_on_text,
+    plugin_summary, read_checked_masters, REDUNDANT_MAX_VERSIONS, REDUNDANT_VARIANT_MIN, REDUNDANT_VARIANT_SAME, REDUNDANT_VARIANT_SHARE, relied_on, relied_on_text,
     _same_mod_name, _type_text, USE_OBJ_TAGS, vortex_mod_name)
 from mwdialog_generated import (  # noqa: E402,F401
     _ASSET_BACKUP_OF, backup_asset_original, find_vortex_root, FOLLOWUP_RE, FULLSIZE_DIR, keep_new_original, record_repair, off_dest,
@@ -138,7 +138,8 @@ from mwdialog_restore import (  # noqa: E402,F401
 from mwdialog_ownership import door_owner_verdicts, item_owner_verdicts  # noqa: E402,F401
 from mwdialog_footing import (  # noqa: E402,F401
     find_footing, ModelShapes, Placements, RESCUE_DATA, SUNK as ACTOR_SUNK, write_rescue_data)
-from mwdialog_anthology_override import LandMoves  # noqa: E402
+from mwdialog_anthology_override import (  # noqa: E402
+    absolute_script_positions, find_moves, incompatible_land_plugins)
 from mwdialog_pathgrid import (PATHGRID_CACHE_FILE, PATHGRID_FIXES_FILE, load_pathgrid_cache,  # noqa: E402
                                repair_pathgrids, save_pathgrid_cache)
 
@@ -397,6 +398,8 @@ class World:
         self.cell_name_at = {}             # cell key -> [(load index, plugin, name)] in load order
         self.info_cells = []               # (load index, plugin, topic, info id, cell filter) as loaded
         self.restored_cells = set()        # (cell key, plugin) already given its name back
+        self.merge_inputs = {}             # merged plugin lower -> [(input, path)] (see _merged_from)
+        self._info_input = {}              # merged plugin lower -> {info id lower: input it came from}
         self.region_at = {}                # lowercase region name (FNAM) -> load index it first appears at
         self.cell_loads = []               # (load index, plugin, cell key, name, references in the record)
         self.door_dest = defaultdict(set)  # lowercase interior name a door leads to -> plugins with that door
@@ -700,20 +703,27 @@ class World:
                 lost[prev[1].strip().lower()].append((key, hist[-1][0], prev[0], prev[1].strip(), hist[-1][1]))
         return lost
 
-    def _restore_cell_name(self, entries, why, done):
+    def _restore_cell_name(self, entries, why, done, sev="ERROR"):
+        """Give each (key, winner) its name back in the winner's own record. why: what looks for the name,
+        or None for a blank name nothing in particular uses (still a bug: see _restore_blanked_cells)."""
         for key, winner, giver, cname, raw in entries:
             if (key, winner.lower()) in done:
                 continue
             done.add((key, winner.lower()))
             x, y = key[1], key[2]
-            if raw.strip():
+            if why is None:
+                what = "is only spaces" if raw else "is empty"
+                msg = (f"cell ({x}, {y}): its name {what}, which erases '{cname}' (from {giver}); a plugin "
+                       f"has no reason to blank a cell's name (the Construction Set saves the cell as its own "
+                       f"masters have it), and it breaks dialogue and scripts that look for '{cname}'")
+            elif raw.strip():
                 msg = (f"cell ({x}, {y}): renamed '{raw.strip()}', but {giver} calls it '{cname}' and "
                        f"{why} looks for '{cname}'")
             else:
                 what = "is only spaces" if raw else "is empty"
                 msg = (f"cell ({x}, {y}): its name {what}, which renames '{cname}' (from {giver}) to nothing, "
                        f"and {why} looks for '{cname}'")
-            self.r.add("ERROR", winner, "", "", msg)
+            self.r.add(sev, winner, "", "", msg)
             self.item_fixes.append({"plugin": winner, "tag": "CELL", "id": f"({x}, {y})", "key": key,
                                     "set": {"NAME": cname}, "npco": set(), "head_only": True,
                                     "msgs": [(msg, f"name it '{cname}' again, as {giver} does")]})
@@ -775,6 +785,48 @@ class World:
                     for n in hits:
                         self._restore_cell_name(lost[n], f"dialogue in {info.source} ({t.name})", done)
 
+    def _merged_from(self, plugin, iid):
+        """The input plugin a merged plugin's dialogue response came from (read from the inputs, which stay
+        on disk while merged), or None if `plugin` isn't a merge or the response isn't found."""
+        low = plugin.lower()
+        if low not in self.merge_inputs or not iid:
+            return None
+        if low not in self._info_input:
+            m = self._info_input[low] = {}
+            for name, path in self.merge_inputs[low]:
+                try:
+                    data = read_plugin_bytes(path) if path else b""
+                except (OSError, FormatError):
+                    continue
+                for _off, tag, _fl, body in iter_records(data):
+                    if tag == "INFO":
+                        m[cstr(first_sub(body, b"INAM") or b"").lower()] = name
+        return self._info_input[low].get(iid.lower())
+
+    @staticmethod
+    def _may_restore(plugin):
+        """A plugin whose blank cell names --fix writes back: an .esp mod (never a master, nor our own patches,
+        which are rebuilt from the fixed plugins)."""
+        return plugin.lower().endswith(".esp") and not is_our_patch(plugin)
+
+    def _restore_blanked_cells(self):
+        """A plugin that saves an exterior cell with a blank name (or only spaces) after an earlier plugin named
+        it is a bug: exterior cells are found by grid position, so the name is only a label, and blanking it is
+        never intended; the Construction Set just saved the cell as the plugin's own masters had it (ST Alchemy
+        Replacer blanks 'Fatleg's Camp', which OAAB Brother Junipers Twin Lamps names). The game still checks
+        dialogue cell filters and script cell names against it, so every later plugin loses the name. Fix: the
+        blanking .esp gets the name back in its own record, whatever loads around it."""
+        for key, hist in self.cell_name_hist.items():
+            if key[0] != "e":
+                continue
+            named = None                           # (plugin, name) of the latest plugin naming the cell
+            for plugin, raw in hist:
+                if raw.strip():
+                    named = (plugin, raw.strip())
+                elif named and self._may_restore(plugin):
+                    self._restore_cell_name([(key, plugin, named[0], named[1], raw)], None,
+                                            self.restored_cells, sev="WARN")
+
     def _check_load_time_cells(self):
         """The game checks each dialogue response's cell filter as its plugin loads, against the cells that
         exist at that moment, and needs a cell with exactly that name ("Gorne, Temple" doesn't count for
@@ -823,21 +875,33 @@ class World:
                     raw = took[2]
                     self._restore_cell_name([(key, took[1], esm[1], esm[2], raw)], why, self.restored_cells)
                     fixed = True
+                elif not took[2] and self._may_restore(took[1]):
+                    self._restore_cell_name([(key, took[1], gave[1], gave[2], "")], why, self.restored_cells)
+                    fixed = True
             if fixed:
                 continue
             if clobbered:
                 key, gave, took, hist = clobbered[0]
                 back = next((h for h in hist if h[0] > idx and h[2].lower() == c), None)
                 what = f"renamed it '{took[2]}'" if took[2] else "blanked its name"
-                hint = (f"load it before {took[1]}" + (f" or after {back[1]}, which names it again" if back else ""))
+                src = self._merged_from(plugin, iid)
+                if src:
+                    hint = (f"it comes from {src}, merged into {plugin}: add {src} to "
+                            f"{os.path.basename(AUTO_MERGE_BLACKLIST)} and run --auto-merge again")
+                else:
+                    hint = (f"load it before {took[1]}" + (f" or after {back[1]}, which names it again" if back else ""))
                 self.r.add("ERROR", plugin, topic, iid,
                            f"cell filter '{cell}' is not found when this plugin loads: {gave[1]} names the cell, "
                            f"but {took[1]} {what} first (the game warns \"Cell '{cell}' not found\"); {hint}")
             elif later:
                 key, first = later[0]
+                src = self._merged_from(plugin, iid)
                 if plugin.lower().endswith(".esm") and not first[1].lower().endswith(".esm"):
                     hint = "an .esm always loads before every .esp, so the game warns about this at every start (harmless otherwise)"
                     sev = "INFO"
+                elif src:
+                    hint, sev = (f"it comes from {src}, merged into {plugin}: add {src} to "
+                                 f"{os.path.basename(AUTO_MERGE_BLACKLIST)} and run --auto-merge again"), "ERROR"
                 else:
                     hint, sev = f"load {plugin} after {first[1]}", "ERROR"
                 self.r.add(sev, plugin, topic, iid,
@@ -2193,6 +2257,7 @@ class World:
         self._check_item_refs()
         self._check_script_cells()
         self._check_load_time_cells()
+        self._restore_blanked_cells()
         self._check_cell_kind_clash()
         self._check_leveled()
         if self.assets is not None:
@@ -3259,9 +3324,23 @@ def apply_plan(path, plugin, plan, world, log, collect=None, backup=True):
     return changes
 
 
+def fix_scan_plugins(args, plugins):
+    """Exclude patches rebuilt by run_fix, but include Cell Fixes' final reference deletions."""
+    rebuild = {n.lower() for n in OUR_PATCHES} - {CELL_WINNER_PATCH.lower()}
+    order = [(n, p) for n, p in plugins if n.lower() not in rebuild]
+    path = os.path.join(args.data_dir, CELL_WINNER_PATCH)
+    if getattr(args, "fix", False) and os.path.isfile(path) \
+            and not any(n.lower() == CELL_WINNER_PATCH.lower() for n, _p in order):
+        order.append((CELL_WINNER_PATCH, path))
+    return order
+
+
 def scan(args, plugins, bsas, data_dirs, report):
     world = World(report)
     world.trace = {t.lower() for t in (getattr(args, "trace", None) or [])}
+    if getattr(args, "data_dir", None):
+        dd = os.path.abspath(args.data_dir)
+        world.merge_inputs = merged_inputs_of(os.path.dirname(dd), dd)
     world.file_sizes = {}
     for name, path in plugins:
         try:
@@ -4405,18 +4484,45 @@ def run_auto_merge(args, plugins, bsas, data_dirs):
                 cands.remove(n)
                 reasons[n] = "not in --only"
 
+    if cands and not getattr(args, "no_master_guard", False):
+        mc = mastercheck_module()
+        guard = World(Report())
+        guard.args_data_dir = data_dir
+        guard.loaded = [n.lower() for n, _p in order]
+        guard.paths = {n.lower(): p for n, p in order}
+        guard.masters = {n: pr["masters"] for n, pr in profs.items()}
+        guard.file_sizes = {n: pr["size"] for n, pr in profs.items()}
+        for n, pr in profs.items():
+            if n in ours:
+                continue
+            for key in pr["keys"]:
+                guard.all_ids[key[-1]] = key[0]
+        verdicts = mc.check(guard, sys.modules[__name__], args, only_plugins={n.lower() for n in cands})
+        bad = mc.mismatched(verdicts, getattr(args, "mismatch_threshold", None) or mc.DIFFERENT_AT)
+        for n in list(cands):
+            if n.lower() in bad:
+                v = next(v for (p, _m), v in verdicts.items()
+                         if p == n.lower() and v["kind"] == "different mod")
+                cands.remove(n)
+                reasons[n] = f"master mismatch: {v['master']} ({round(v['confidence'] * 100)}% confidence)"
+
     # who defines / refers to what, by load position (non-candidates only matter)
     definers = defaultdict(list)       # key -> [pos]
     first_pos = {}                     # id lower -> first position defining it
     referrers = defaultdict(list)      # name lower -> [pos]
     info_at = defaultdict(list)        # info id -> [pos]
     linkers = defaultdict(list)        # info id -> [pos] of plugins whose responses link to it
+    cell_hist = defaultdict(list)      # cell key -> [(pos, name)]: dialogue cell filters are checked on load
+    region_names = {"wilderness"}
     for n, _p in order:
         low = n.lower()
         pr = profs.get(low)
         if pr is None or low in ours:
             continue
         i = pos[low]
+        for k, nm in pr["cell_names"].items():
+            cell_hist[k].append((i, nm))
+        region_names |= pr["regions"]
         for k in pr["keys"]:
             definers[k].append(i)
         for x in pr["ids"]:
@@ -4482,6 +4588,14 @@ def run_auto_merge(args, plugins, bsas, data_dirs):
                     if hit is not None:
                         why = f"{order[hit][0]} (loads between) links to its response {x}"
                         break
+            if not why and pr["filters"]:
+                lost = lost_cell_filter(pr["filters"] - region_names, cell_hist, P,
+                                        {pos[x] for x in cset if x != c.lower()})
+                if lost:
+                    f, hit, nm = lost
+                    what = f"renames it '{nm}'" if nm else "blanks its name"
+                    why = (f"its dialogue filters on cell '{f}', which {order[hit][0]} (loads between it and "
+                           f"the merge) {what}")
             if why:
                 cands.remove(c)
                 cset.discard(c.lower())
@@ -4506,6 +4620,9 @@ def run_auto_merge(args, plugins, bsas, data_dirs):
         if "between" in why or "links" in why or "Multipatch" in why:
             continue
         print(f"    {cnt:4d}  {why}")
+    for n, why in reasons.items():
+        if why.startswith("master mismatch:"):
+            print(f"            {n}: {why}")
     order_conf = [(c, w) for c, w in reasons.items() if "between" in w or "links" in w or "Multipatch" in w]
     if order_conf:
         print(f"    {len(order_conf):4d}  would change what wins against a plugin loading between it and the merge:")
@@ -4636,21 +4753,28 @@ def run_unmerge(args, plugins):
         print("--unmerge: no recorded merge by that name. Recorded: " + (", ".join(rec) or "none"))
         return 1
     active = [n for n, _p in plugins]
-    restore = []
+    restore = [name for out in todo for name in rec[out]]
+    lookup = index_dir(data_dir)
+    keep = [n for n in active if n.lower() not in {t.lower() for t in todo}]
+    red_off = {n.lower() for n in read_redundant(game_dir)[0]}
+    disabled = {n.lower() for n in read_disabled(game_dir)}
+    left_off = [r for r in restore if r.lower() in red_off | disabled]
+    kept = {n.lower() for n in keep}
+    back = [lookup[r.lower()] for r in restore
+            if r.lower() in lookup and r.lower() not in red_off | disabled | kept]
+    missing = [r for r in restore if r.lower() not in lookup]
+    if args.dry_run:
+        print(f"  Dry run: would unmerge {', '.join(todo)} and restore {len(back)} plugin(s)"
+              + (f"; not found: {', '.join(missing)}" if missing else "")
+              + (f"; left off: {', '.join(left_off)}" if left_off else "") + ".")
+        return 0
     for out in todo:
-        restore += rec[out]
         p = os.path.join(data_dir, out)
         if os.path.exists(p):
             bak = backup_path(p)
             os.replace(p, bak)
             print(f"  {out}: removed (kept as {os.path.basename(bak)})")
         del rec[out]
-    lookup = index_dir(data_dir)
-    keep = [n for n in active if n.lower() not in {t.lower() for t in todo}]
-    red_off = {n.lower() for n in read_redundant(game_dir)[0]}
-    left_off = [r for r in restore if r.lower() in red_off]      # --redundant turned these off: they stay off
-    back = [lookup[r.lower()] for r in restore if r.lower() in lookup and r.lower() not in red_off]
-    missing = [r for r in restore if r.lower() not in lookup]
     full = sort_vanilla([lookup[n.lower()] for n in keep if n.lower() in lookup] + back)
     bak = set_game_files(ini, [os.path.basename(p) for p in full], "unmerge")
     write_merge_record(game_dir, rec)
@@ -4659,7 +4783,7 @@ def run_unmerge(args, plugins):
         write_merge_rebuild(game_dir, OrderedDict((k, v) for k, v in pending.items()
                                                   if k.lower() not in {t.lower() for t in todo}))
     print(f"  {len(back)} plugin(s) active again" + (f"; not found: {', '.join(missing)}" if missing else "")
-          + (f"; left off ({REDUNDANT_RECORD}): {', '.join(left_off)}" if left_off else "")
+          + (f"; left off ({REDUNDANT_RECORD} or {DISABLED_RECORD}): {', '.join(left_off)}" if left_off else "")
           + f" (old list saved as {bak}).")
     return 0
 
@@ -4819,14 +4943,19 @@ DESC_OFF, DESC_LEN = AUTH_OFF + AUTH_LEN, 256
 
 
 CELL_SETTING_NAMES = {"AMBI": "lighting and fog", "WHGT": "water height", "INTV": "water height",
-                      "RGNN": "region", "FLAGS": "cell flags (water / no sleeping / behaves like exterior)"}
+                      "RGNN": "region", "FLAGS": "cell flags (water / no sleeping / behaves like exterior)",
+                      "NAME": "name"}
 
 
 def _cell_settings(head):
-    """The settings a cell header carries, comparable across plugins."""
+    """The settings a cell header carries, comparable across plugins. An exterior cell's name counts only when
+    it has one: a blank name is a bug --fix repairs (the cell gets the latest name back), not a choice."""
     out = {}
+    interior = any(n == "DATA" and len(d) >= 4 and struct.unpack_from("<I", d)[0] & 1 for n, d in head)
     for n, d in head:
-        if n == "DATA" and len(d) >= 4:
+        if n == "NAME" and not interior and cstr(d).strip():
+            out["NAME"] = cstr(d).strip()
+        elif n == "DATA" and len(d) >= 4:
             out["FLAGS"] = struct.unpack_from("<I", d)[0] & 0x86
         elif n == "AMBI" and len(d) >= 16:
             amb, sun, fog = d[0:4], d[4:8], d[8:12]
@@ -4848,25 +4977,29 @@ def _show_setting(field, v):
     if field == "FLAGS":
         bits = [t for b, t in ((0x02, "water"), (0x04, "no sleeping"), (0x80, "like exterior")) if v & b]
         return ", ".join(bits) or "none"
+    if field == "NAME":
+        return f"'{v}'"
     return str(v)
 
 
                                                 # leads somewhere of its own), containers (their contents)
 
 
-def run_cell_conflicts(args, plugins, collect=False):
+def run_cell_conflicts(args, plugins, collect=False, incompatible_only=False):
     """--cell-conflicts: plugins that don't know about each other (neither is a master of the other)
     but work on the same cells: both add many new objects in the same spot, both change the same
     placed objects differently, or both change the same cell settings. Report only."""
-    if not collect:
+    if not collect and not incompatible_only:
         print("\n" + "=" * 70 + "\nCELL CONFLICTS\n" + "=" * 70)
     min_new = getattr(args, "conflict_min", 5)
-    skip = {x.lower() for x in OUR_PATCHES} | {AUTO_MERGE_NAME.lower(), CELL_WINNER_PATCH.lower()}
+    skip = {x.lower() for x in OUR_PATCHES} | {CELL_WINNER_PATCH.lower()}
+    if not incompatible_only:
+        skip.add(AUTO_MERGE_NAME.lower())
     black = read_conflict_blacklist(os.path.dirname(os.path.abspath(args.data_dir)))
     left_out = [n for n, _p in plugins if conflict_blacklisted(n, black)]
     # still read: they load in game, so what they move or delete counts for mwfloatfix and mwcollide
     quiet = {n.lower() for n in left_out}
-    if left_out and not collect:
+    if left_out and not collect and not incompatible_only:
         print(f"  left out ({CONFLICT_BLACKLIST_FILE}: they always lose): " + ", ".join(left_out))
     order = [(n, p) for n, p in plugins if n.lower() not in skip]
     pos = {n.lower(): i for i, (n, _p) in enumerate(order)}
@@ -4880,12 +5013,19 @@ def run_cell_conflicts(args, plugins, collect=False):
             hist_pos[n.lower()] = seen_n - 0.5
         else:
             seen_n += 1
-    masters = {}
+    masters, master_errors = {}, {}
     for n, p in order + ours_hist:
         try:
-            masters[n.lower()] = [m.lower() for m in read_header_masters(p)]
-        except (OSError, FormatError):
+            masters[n.lower()] = [m.lower() for m in read_checked_masters(p)]
+        except (OSError, FormatError) as e:
             masters[n.lower()] = []
+            master_errors[n] = str(e)
+    args._cell_master_errors = master_errors
+    if master_errors and not collect:
+        print("  WARNING: plugin choices cannot safely disable dependents because these master lists "
+              "could not be read:", file=sys.stderr)
+        for n, error in master_errors.items():
+            print(f"      {n}: {error}", file=sys.stderr)
     closure = {}
 
     def deps(n):
@@ -4912,6 +5052,9 @@ def run_cell_conflicts(args, plugins, collect=False):
     moved = {}                            # (interior, ref) -> (plugin index, x, y, z): the last plugin to place it
     ref_hist = defaultdict(dict)          # cell key -> ref -> [(plugin index, plugin, object, (x,y,z) or None, scale, deleted)]
     land_v = defaultdict(list)            # exterior grid -> [(plugin index, plugin, VHGT)]
+    moved_land_vers, moved_cells = defaultdict(list), defaultdict(list)
+    moved_pgrds, moved_interiors = defaultdict(list), set()
+    moved_scripts = {}
 
     # interiors where you chose whose version wins (CELL_WINNERS_FILE): the Cell Fixes patch takes the
     # loser's work there out, so it doesn't count against anyone in that place
@@ -4922,12 +5065,50 @@ def run_cell_conflicts(args, plugins, collect=False):
     def read(n, p, keys=None, own_digests=None, hist_keys=()):
         try:
             data = open(p, "rb").read()
-        except OSError:
+        except OSError as e:
+            master_errors[n] = str(e)
+            print(f"  WARNING: could not read {n}: {e}", file=sys.stderr)
             return
+
+        def records():
+            try:
+                yield from iter_records(data)
+            except FormatError as e:
+                master_errors[n] = str(e)
+                print(f"  WARNING: could not fully read {n}: {e}", file=sys.stderr)
+
         mast = masters.get(n.lower(), [])
         esm = n.lower().endswith(".esm")
         ix = pos[n.lower()] if n.lower() in pos else hist_pos[n.lower()]
-        for off, tag, flags, body in iter_records(data):
+        for off, tag, flags, body in records():
+            if not collect and own_digests is None and n.lower() in pos:
+                if tag == "LAND":
+                    iv, vh = first_sub(body, b"INTV"), first_sub(body, b"VHGT")
+                    if iv and len(iv) >= 8 and vh and len(vh) >= 4 + 65 * 65:
+                        grid = struct.unpack_from("<ii", iv)
+                        moved_land_vers[grid].append(
+                            (ix, hashlib.md5(vh[:4 + 65 * 65], usedforsecurity=False).digest(), off))
+                elif tag == "CELL":
+                    key, _label = cell_key(body)
+                    if key and key[0] == "e":
+                        moved_cells[key[1:]].append((ix, off))
+                    elif key:
+                        moved_interiors.add(key[1])
+                elif tag == "PGRD":
+                    gd = first_sub(body, b"DATA")
+                    if gd and len(gd) >= 8:
+                        nm = cstr(first_sub(body, b"NAME") or b"").lower()
+                        moved_pgrds[struct.unpack_from("<ii", gd)].append((ix, off, nm))
+                elif tag == "SCPT":
+                    header = first_sub(body, b"SCHD")
+                    if header:
+                        script = cstr(header[:32]).lower()
+                        previous = moved_scripts.get(script)
+                        if previous is None or previous[0] <= ix:
+                            text = cstr(first_sub(body, b"SCTX") or b"")
+                            commands = ([] if flags & 0x20 or first_sub(body, b"DELE") is not None
+                                        else absolute_script_positions(text))
+                            moved_scripts[script] = (ix, n.lower(), commands)
             if tag == "LAND" and own_digests is None:     # for mwfloatfix_data.json: whose land an item sits on
                 iv, vh = first_sub(body, b"INTV"), first_sub(body, b"VHGT")
                 if iv and len(iv) >= 8 and vh:
@@ -5107,9 +5288,6 @@ def run_cell_conflicts(args, plugins, collect=False):
     if getattr(args, "only", None):
         only = {o.lower() for o in args.only}
         pairs = {k: v for k, v in pairs.items() if k[0] in only or k[1] in only}
-    if not pairs and not collect:
-        print("  No conflicts found between plugins that don't know about each other.")
-
     def cell_name(key):
         lab = (labels.get(key) or "").strip()
         if key[0] == "i":
@@ -5146,27 +5324,55 @@ def run_cell_conflicts(args, plugins, collect=False):
             del pairs[(a, b)]
         elif best_n:
             c["patched_some"] = (partial, best_n, len(cells))
+    if not collect:
+        for rows in (*moved_land_vers.values(), *moved_cells.values()):
+            rows.sort(key=lambda row: row[0])
+        grids = {grid: (pi, off) for grid, rows in moved_pgrds.items()
+                 for pi, off, nm in [max((r for r in rows if r[2] not in moved_interiors), default=(-1, 0, ""))]
+                 if pi >= 0}
+        world = Placements(order, moved_cells, moved_land_vers, masters)
+        land_pairs = incompatible_land_plugins(world, grids, ((owner, commands)
+                                                 for _pi, owner, commands in moved_scripts.values()))
+        possible_land = []
+        for (owner, mover), evidence in land_pairs.items():
+            if getattr(args, "only", None) and not ({owner, mover} & {n.lower() for n in args.only}):
+                continue
+            if not evidence["requires_choice"]:
+                possible_land.append((owner, mover, evidence))
+                continue
+            pk = pair_key(owner, mover)
+            if pk in patched:
+                pairs[pk] = patched.pop(pk)[0]
+            c = pairs.setdefault(pk, {"place": [], "refs": [], "settings": [], "score": 0,
+                                      "doubled": False, "dups": 0})
+            c["incompatible"] = evidence
+            c["score"] += 1000000
+        if possible_land and not incompatible_only:
+            print(f"  Moved land: {len(possible_land)} plugin pair(s) have old-site objects without evidence "
+                  "of an unrepairable terrain, pathgrid or script conflict; review them:")
+            for owner, mover, evidence in possible_land[:10]:
+                print(f"      {name_of[owner]} vs {name_of[mover]}: {len(evidence['cells'])} cell(s)")
+            if len(possible_land) > 10:
+                print(f"      ... and {len(possible_land) - 10} more")
+        if incompatible_only:
+            incompatible = [(a, b) for (a, b), c in pairs.items() if c.get("incompatible")]
+            if master_errors:
+                print("ERROR: cannot check incompatible plugins until unreadable plugins are repaired.",
+                      file=sys.stderr)
+                return 2
+            if incompatible:
+                print("ERROR: incompatible moved-land plugins must be resolved before building or merging:",
+                      file=sys.stderr)
+                for a, b in incompatible:
+                    print(f"  {name_of[a]} vs {name_of[b]}", file=sys.stderr)
+                print("Run --cell-conflicts interactively, or unmerge first if these plugins are merged.",
+                      file=sys.stderr)
+                return 2
+            return 0
     if collect:
         return {"pairs": pairs, "name_of": name_of, "total_new": total_new, "pos": pos, "masters": masters,
                 "doubled": lambda: doubled_objects(args, order, new_objs, pos, name_of, deps, cells_of),
                 "edits": edits}
-    if not args.dry_run:
-        try:
-            write_collide_data(args, order, new_objs, labels, pos, name_of, deps, cells_of)
-        except (OSError, ValueError) as e:
-            print(f"  (could not write {COLLIDE_DATA}: {e})", file=sys.stderr)
-        try:
-            write_float_data(args, order, ref_hist, land_v, labels, name_of, deps)
-        except (OSError, ValueError) as e:
-            print(f"  (could not write mwfloatfix_data.json: {e})", file=sys.stderr)
-        # each step below reads every plugin again without a word: say what is going on (a minute or more
-        # with Tamriel Rebuilt's masters)
-        print("  Working through distant land (which hidden objects to leave out of it), please be patient...",
-              file=sys.stderr, flush=True)
-        try:                                       # MGE XE never sees those hides: keep them out of distant land
-            write_ghost_statics(os.path.dirname(os.path.abspath(args.data_dir)), args.data_dir, plugins)
-        except (OSError, ValueError, FormatError) as e:
-            print(f"  (could not write the distant land overrides: {e})", file=sys.stderr)
     doors_at, arrivals = defaultdict(list), defaultdict(list)
     for bk, (_pi, ckey, at, dest, to, dele) in door_final.items():
         if dele:
@@ -5177,12 +5383,32 @@ def run_cell_conflicts(args, plugins, collect=False):
     print("  Working through rearranged cells and stranded doors, please be patient...", file=sys.stderr, flush=True)
     report_rearranged(order, own_pos, deletions, new_objs, labels, pos, name_of, deps, cells_of,
                       doors_at, arrivals, lost)
-    if not args.dry_run:
+
+    def write_auxiliary():
+        if args.dry_run:
+            return
+        try:
+            write_collide_data(args, order, new_objs, labels, pos, name_of, deps, cells_of)
+        except (OSError, ValueError) as e:
+            print(f"  (could not write {COLLIDE_DATA}: {e})", file=sys.stderr)
+        try:
+            write_float_data(args, order, ref_hist, land_v, labels, name_of, deps)
+        except (OSError, ValueError) as e:
+            print(f"  (could not write mwfloatfix_data.json: {e})", file=sys.stderr)
+        print("  Working through distant land (which hidden objects to leave out of it), please be patient...",
+              file=sys.stderr, flush=True)
+        try:
+            write_ghost_statics(os.path.dirname(os.path.abspath(args.data_dir)), args.data_dir, plugins)
+        except (OSError, ValueError, FormatError) as e:
+            print(f"  (could not write the distant land overrides: {e})", file=sys.stderr)
         try:
             write_stranded_data(args, order, lost)
         except (OSError, ValueError) as e:
             print(f"  (could not write {STRANDED_DATA}: {e})", file=sys.stderr)
+
     if not pairs and not patched:
+        print("  No conflicts found between plugins that don't know about each other.")
+        write_auxiliary()
         return 0
     if patched:
         print(f"  {len(patched)} pair(s) already handled by a patch (a plugin made for both, covering every cell "
@@ -5191,13 +5417,14 @@ def run_cell_conflicts(args, plugins, collect=False):
             print(f"    {name_of[a]}  vs  {name_of[b]}: patched by {', '.join(name_of[x] for x in pls)}")
         if not pairs:
             print("  No other conflicts.")
+            write_auxiliary()
             return 0
     # pairs whose only trouble is a few objects near each other (no layout clash, no object changed both
     # ways, no cell setting, nothing placed twice): mwcollide hides what actually overlaps as the cell loads,
     # and the rest is just two mods' clutter side by side. Counted, not asked about.
     def collide_only(c):
         return (not c["refs"] and not c["settings"] and not c.get("doubled") and c["place"]
-                and not any(p[6] for p in c["place"]))
+                and not c.get("incompatible") and not any(p[6] for p in c["place"]))
     by_collide = {k: c for k, c in pairs.items() if collide_only(c)}
     if by_collide:
         pairs = {k: c for k, c in pairs.items() if k not in by_collide}
@@ -5209,6 +5436,7 @@ def run_cell_conflicts(args, plugins, collect=False):
                       f"other in {len(c['place'])} cell(s)")
         if not pairs:
             print("  No other conflicts.")
+            write_auxiliary()
             return 0
     ranked = sorted(pairs.items(), key=lambda kv: -kv[1]["score"])
     majors = [kv for kv in ranked if any(p[6] for p in kv[1]["place"]) or len(kv[1]["refs"]) >= 20]
@@ -5256,9 +5484,13 @@ def run_cell_conflicts(args, plugins, collect=False):
 
     for (a, b), c in shown:
         major = any(p[6] for p in c["place"]) or len(c["refs"]) >= 20
-        kind = "DOUBLED" if c["doubled"] else "MAJOR" if major else "minor"
+        kind = "INCOMPATIBLE" if c.get("incompatible") else "DOUBLED" if c["doubled"] else "MAJOR" if major else "minor"
         print(f"\n=== {kind}: {name_of[a]}  vs  {name_of[b]}")
-        print(f"    your answer: {answer_text(a, b)}")
+        print("    your answer: " + ("one side must be turned off" if c.get("incompatible") else answer_text(a, b)))
+        if c.get("incompatible"):
+            evidence = c["incompatible"]
+            print(f"    moved land leaves {', '.join(sorted(evidence['evidence']))} at the old location in "
+                  f"{len(evidence['cells'])} cell(s); choose which plugin and its dependents to keep")
         if c["doubled"]:
             print(f"    {c['dups']} identical objects are placed twice in the same spot (of {total_new[a]} and "
                   f"{total_new[b]} new objects): these look like two versions of the same mod, or one already "
@@ -5291,7 +5523,9 @@ def run_cell_conflicts(args, plugins, collect=False):
                       f"{_show_setting(field, lv)} (wins)")
             if len(c["settings"]) > 5:
                 print(f"      ... and {len(c['settings']) - 5} more")
-        if c["doubled"]:
+        if c.get("incompatible"):
+            print("    -> load order alone cannot safely repair this moved-land conflict")
+        elif c["doubled"]:
             pass
         elif c["place"]:
             print("    -> the two build over each other: expect overlapping or floating objects. Usually only "
@@ -5304,8 +5538,32 @@ def run_cell_conflicts(args, plugins, collect=False):
     interactive = cell_conflicts_interactive(args)
     if interactive or (getattr(args, "use_answers", False) and not args.dry_run):
         # every pair is asked (or replayed), not only the ones printed above: --conflict-top limits the summary
-        return conflict_session(args, ranked, name_of, masters, total_new, plugins, labels)
+        ask_ranked = ([(k, c) for k, c in ranked if c.get("incompatible")]
+                      if getattr(args, "only_incompatible", False) else ranked)
+        if ask_ranked:
+            rc = conflict_session(args, ask_ranked, name_of, masters, total_new, plugins, labels)
+            if rc:
+                return rc
+            current = read_load_order(args) or []
+            if {n.lower() for n in current} != {n.lower() for n, _p in plugins}:
+                lookup = index_dir(os.path.abspath(args.data_dir))
+                missing = [n for n in current if n.lower() not in lookup]
+                if missing:
+                    print("ERROR: cannot rebuild conflict data; active plugins are missing: " + ", ".join(missing),
+                          file=sys.stderr)
+                    return 2
+                again = copy.copy(args)
+                again.no_interactive, again.use_answers, again.only_new = True, False, False
+                print("  Load order changed: refreshing conflict data for the remaining plugins.")
+                return run_cell_conflicts(again, [(n, lookup[n.lower()]) for n in current])
+            write_auxiliary()
+            return 0
     save_pending_cell_conflicts(args, ranked)
+    if any(c.get("incompatible") for _k, c in ranked):
+        print("\nERROR: incompatible moved-land plugins need a choice before building patches. "
+              "Run --cell-conflicts interactively.")
+        return 0 if args.dry_run else 2
+    write_auxiliary()
     return 0
 
 
@@ -5318,6 +5576,26 @@ NEW_CONFLICTS_FILE = "mwdialog_new_conflicts.txt"     # pairs the last --use-ans
 
 
 POSTPONED = []                                       # pairs postponed ([s]) in this session
+
+
+def conflict_rule_backup_path(rules_path):
+    return f"{bak_home(rules_path)}.mwdialog-{time.strftime('%Y%m%d-%H%M%S')}.bak"
+
+
+def conflict_choice(index, total, kind, a, b, conflict, labels, options, default,
+                    off_plans, blockers, active_names, lua_named):
+    return input("  > ").strip().lower()
+
+
+def move_conflict_plugins(args, names):
+    return move_doubled_plugins(args, names)
+
+
+def rollback_conflict_moves(moved):
+    for source, target in reversed(moved):
+        if os.path.exists(source):
+            raise FileExistsError(f"Cannot restore {source}: a file already exists")
+        os.replace(target, source)
 
 
 def conflict_session(args, ranked, name_of, masters, total_new, plugins=(), labels=None):
@@ -5353,7 +5631,7 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
     earlier_l = {(a.lower(), b.lower()) for a, b in earlier}
     if earlier and not args.dry_run:
         # wiped before anything is read or asked: this session starts from your own rules only
-        shutil.copy2(rules_path, f"{bak_home(rules_path)}.mwdialog-{time.strftime('%Y%m%d-%H%M%S')}.bak")
+        shutil.copy2(rules_path, conflict_rule_backup_path(rules_path))
         with atomic_open(rules_path, encoding="cp1252", errors="replace", newline="\r\n") as f:
             f.write(own_text)
         print(f"\nRemoved the {len(earlier)} [Order] rule(s) earlier --cell-conflicts runs added to {RULES_FILE} "
@@ -5376,6 +5654,10 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
                                 for k in cs)
 
     new_rules, turned_off = [], []
+    active_names = {n.lower(): n for n, _p in plugins}
+    active_merges = ({AUTO_MERGE_NAME.lower()} | {n.lower() for n in read_merge_record(game_dir)}) & active_names.keys()
+    generated = [n for n, _p in plugins if is_our_patch(n)]
+    lua_named = lua_required_plugins(args.data_dir) if plugins else set()
     answers = read_conflict_answers(game_dir)        # last time's answers: the defaults
     answered = {}
     only_new = bool(getattr(args, "only_new", False))       # --only-new: replay answered pairs, ask the new ones
@@ -5388,31 +5670,25 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
         """An old "skip" answer is dropped: a postponed pair has no answer."""
         if args.dry_run:
             return
-        try:
-            cur = read_conflict_answers(game_dir)
-            if cur.pop(k, None) is not None:
-                write_conflict_answers(game_dir, cur)
-            answers.pop(k, None)
-        except (OSError, ValueError):
-            pass
+        cur = read_conflict_answers(game_dir)
+        if cur.pop(k, None) is not None:
+            write_conflict_answers(game_dir, cur)
+        answers.pop(k, None)
 
     def save_now(k):
         """Each answer is written to the answers file the moment it's given: a crash or a closed window
         loses nothing. Run again and those pairs come back answered ([a] or --only-new takes them)."""
         if args.dry_run or getattr(args, "use_answers", False) and use_all:
             return
-        try:
-            cur = read_conflict_answers(game_dir)
-            cur[k] = answered[k]
-            write_conflict_answers(game_dir, cur)
-        except (OSError, ValueError):
-            pass
+        cur = read_conflict_answers(game_dir)
+        cur[k] = answered[k]
+        write_conflict_answers(game_dir, cur)
     unanswered = []                                         # pairs with no answer yet (left for you)
     # An .esm always loads before every .esp, so an [Order] rule can't change who wins between them:
     # list those pairs as warnings and only ask about the rest.
     # (one that both rebuilt an interior is still asked: whose version of the place wins doesn't depend on order)
     mixed = lambda k: k[0].endswith(".esm") != k[1].endswith(".esm")
-    esm_vs_esp = [(k, c) for k, c in ranked if mixed(k) and not rebuilt(c)]
+    esm_vs_esp = [(k, c) for k, c in ranked if mixed(k) and not rebuilt(c) and not c.get("incompatible")]
     if esm_vs_esp:
         print("\n" + "=" * 70 + f"\nWARNINGS: {len(esm_vs_esp)} conflict(s) between an .esm and an .esp"
               "\n(an .esm always loads first, so the .esp always wins; no [Order] rule can change that)\n" + "=" * 70)
@@ -5427,9 +5703,9 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
                 parts.append(f"{len(c['settings'])} cell setting(s)")
             extra = f"; {c['dups']} objects placed twice" if c.get("doubled") else ""
             print(f"  WARN {esp} overrides {esm}: {', '.join(parts)}{extra}")
-        ranked = [(k, c) for k, c in ranked if not mixed(k) or rebuilt(c)]
+        ranked = [(k, c) for k, c in ranked if not mixed(k) or rebuilt(c) or c.get("incompatible")]
     # interiors where you already chose whose version wins: decided
-    picked = [(k, c) for k, c in ranked if chosen(k[0], k[1], c)]
+    picked = [(k, c) for k, c in ranked if not c.get("incompatible") and chosen(k[0], k[1], c)]
     if picked:
         print("\n" + "=" * 70 + f"\nREBUILT INTERIORS ALREADY CHOSEN: {len(picked)} conflict(s) (not asked; "
               f"{CELL_WINNERS_FILE})\n" + "=" * 70)
@@ -5440,7 +5716,8 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
         picked_keys = {k for k, _c in picked}
         ranked = [(k, c) for k, c in ranked if k not in picked_keys]
     # pairs your own rules already order: decided, so only a warning
-    ruled = [(k, c) for k, c in ranked if has_rule(k[0], k[1]) or has_rule(k[1], k[0])]
+    ruled = [(k, c) for k, c in ranked if not c.get("incompatible")
+             and (has_rule(k[0], k[1]) or has_rule(k[1], k[0]))]
     if ruled:
         print("\n" + "=" * 70 + f"\nALREADY DECIDED BY YOUR RULES: {len(ruled)} conflict(s) (not asked)\n" + "=" * 70)
         for (a, b), c in ruled:
@@ -5458,7 +5735,8 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
         if a in {x.lower() for x, _w in turned_off} or b in {x.lower() for x, _w in turned_off}:
             continue
         A, B = name_of[a], name_of[b]
-        kind = "DOUBLED" if c.get("doubled") else "MAJOR" if (any(p[6] for p in c["place"]) or len(c["refs"]) >= 20) else "minor"
+        kind = ("INCOMPATIBLE" if c.get("incompatible") else "DOUBLED" if c.get("doubled") else
+                "MAJOR" if (any(p[6] for p in c["place"]) or len(c["refs"]) >= 20) else "minor")
         parts = []
         if c["place"]:
             parts.append(f"build in the same spot in {len(c['place'])} cell(s)")
@@ -5467,7 +5745,12 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
         if c["settings"]:
             parts.append(f"change {len(c['settings'])} cell setting(s)")
         print(f"\n[{i}/{len(ranked)}] {kind}: {A}  vs  {B}")
-        print(f"    they {', '.join(parts)}; {B} loads later, so its version wins now")
+        if parts:
+            print(f"    they {', '.join(parts)}; {B} loads later, so its version wins now")
+        if c.get("incompatible"):
+            evidence = c["incompatible"]
+            print(f"    moved land leaves {', '.join(sorted(evidence['evidence']))} at the old location in "
+                  f"{len(evidence['cells'])} cell(s); one side must be turned off")
         if c.get("patched_some"):
             pl, k, t = c["patched_some"]
             print(f"    ({name_of.get(pl, pl)} patches the two of them, but only in {k} of these {t} cell(s))")
@@ -5477,7 +5760,10 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
             print(f"    (an earlier run chose: {B} after {A})")
         elif (b, a) in earlier_l:
             print(f"    (an earlier run chose: {A} after {B})")
-        if mixed((a, b)):
+        if c.get("incompatible"):
+            opts = {}
+            print("    Load order and automatic relocation cannot safely resolve this conflict.")
+        elif mixed((a, b)):
             # an .esm always loads before an .esp: no [Order] rule changes who wins, but the user can still
             # confirm the winner (remembered, so it is not asked again)
             opts = {"1": ("keep", B, A, f"keep {B} winning")}
@@ -5486,7 +5772,7 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
             opts = {"1": ("order", A, B, f"keep {B} winning"), "2": ("order", B, A, f"make {A} win")}
             print(f"  [1] keep  {B} winning   (adds [Order] {A} > {B})")
             print(f"  [2] make  {A} win   (adds [Order] {B} > {A})")
-        rb = rebuilt(c)
+        rb = [] if c.get("incompatible") else rebuilt(c)
         if rb:
             names = ", ".join(f"'{labels.get(k, k[1])}'" for k in rb[:4]) + (f" and {len(rb) - 4} more" if len(rb) > 4 else "")
             print(f"    both rebuilt {names}")
@@ -5496,15 +5782,50 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
                   f"there are removed and its doors in arrive in {B}'s layout")
             print(f"  [6] use {A}'s version of {'that place' if len(rb) == 1 else 'those places'} (the same, the "
                   f"other way round)")
-        for key, n in (("3", A), ("4", B)):
-            hit = relied_on(plugins, n, [x for x, _w in turned_off]) if plugins and n.lower() not in needed else {}
-            if n.lower() in needed:
-                print(f"  [{key}] (can't turn off {n}: another active plugin needs it as a master)")
-            elif hit:
-                print(f"  [{key}] (can't turn off {n}: {relied_on_text(hit, name_of)})")
+        off_plans, blockers = {}, {}
+        for key, n, keep in (("3", A, B), ("4", B, A)):
+            if not plugins:
+                if n.lower() in needed:
+                    blockers[key] = f"can't turn off {n}: another active plugin needs it as a master"
+                    print(f"  [{key}] ({blockers[key]})")
+                    continue
+                plan = {n.lower(): ("selected", "")}
             else:
-                opts[key] = ("off", n, A if n == B else B, f"turn off {n}")
-                print(f"  [{key}] turn off {n}")
+                errors = getattr(args, "_cell_master_errors", {})
+                if errors:
+                    blockers[key] = f"can't safely turn off {n}: some active master lists could not be read"
+                    print(f"  [{key}] ({blockers[key]})")
+                    continue
+                if active_merges:
+                    merges = ", ".join(active_names[p] for p in sorted(active_merges))
+                    blockers[key] = f"can't safely turn off {n}: unmerge {merges} first"
+                    print(f"  [{key}] ({blockers[key]})")
+                    continue
+                try:
+                    plan = disable_dependents(plugins, masters, [n], [x for x, _w in turned_off], generated)
+                except (OSError, FormatError, ValueError) as e:
+                    blockers[key] = f"can't safely turn off {n}: {e}"
+                    print(f"  [{key}] ({blockers[key]})")
+                    continue
+                if keep.lower() in plan:
+                    blockers[key] = f"can't turn off {n}: {keep} also depends on it"
+                    print(f"  [{key}] ({blockers[key]})")
+                    continue
+                if AUTO_MERGE_NAME.lower() in plan:
+                    blockers[key] = f"can't turn off {n}: {AUTO_MERGE_NAME} depends on it; unmerge first"
+                    print(f"  [{key}] ({blockers[key]})")
+                    continue
+            off_plans[key] = plan
+            others = [active_names.get(p, name_of.get(p, p)) for p in plan if p != n.lower()]
+            label = f"turn off {n}" + (f" and {len(others)} dependent plugin(s)" if others else "")
+            opts[key] = ("off", n, keep, label)
+            print(f"  [{key}] {label}")
+            if others:
+                print("      also set aside: " + ", ".join(others))
+            lua_affected = [active_names[p] for p in plan if p in lua_named and p in active_names]
+            if lua_affected:
+                print("      WARNING: MWSE Lua or metadata also names: " + ", ".join(lua_affected)
+                      + "; review those mods separately")
         pair_key = "|".join(sorted((a, b)))
         last = answers.get(pair_key) or {}
         if last.get("do") == "skip":
@@ -5514,6 +5835,14 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
             want = last["plugin"].lower()
             default = next((k for k, (w, x, _y, _l) in opts.items()
                             if w == last["do"] and x.lower() == want), "")
+            if default and last["do"] == "off":
+                affected = last.get("affected")
+                planned = set(off_plans[default])
+                if not isinstance(affected, list) or not all(isinstance(n, str) for n in affected):
+                    if len(planned) != 1:
+                        default = ""
+                elif {n.lower() for n in affected} != planned:
+                    default = ""
         if default:
             shown = f"[{default}] {opts[default][3]}"
             print(f"  [Enter] last time: {shown}   [s] later (ask again next run)   [a] last time's answers "
@@ -5531,12 +5860,15 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
             print(f"  > {ans}  (last time's answer)")
         else:
             valid = set(opts) | {"", "s", "a", "q"}
+            def choose():
+                return conflict_choice(i, len(ranked), kind, A, B, c, labels, opts, default,
+                                       off_plans, blockers, active_names, lua_named)
             try:
-                ans = input("  > ").strip().lower()
+                ans = choose()
                 while ans not in valid:              # a slip ("2\\", "`"): ask again, nothing is decided
                     print(f"    '{ans}' isn't one of the choices ({', '.join(sorted(k for k in valid if k))}, or "
                           f"Enter); try again")
-                    ans = input("  > ").strip().lower()
+                    ans = choose()
             except EOFError:
                 ans = "q"
             if ans == "a":
@@ -5549,10 +5881,10 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
                     print("    (taking last time's answers from here on; new conflicts like this one are still "
                           "asked)")
                     try:
-                        ans = input("  > ").strip().lower()
+                        ans = choose()
                         while ans not in valid:
                             print(f"    '{ans}' isn't one of the choices; try again")
-                            ans = input("  > ").strip().lower()
+                            ans = choose()
                     except EOFError:
                         ans = "q"
                     if ans in ("", "a"):
@@ -5573,6 +5905,8 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
             continue
         what, x, y, label = opts[ans]
         answered[pair_key] = {"do": what, "plugin": x, "pair": [A, B], "when": time.strftime("%Y-%m-%d %H:%M")}
+        if what == "off":
+            answered[pair_key]["affected"] = [active_names.get(n, name_of.get(n, n)) for n in off_plans[ans]]
         save_now(pair_key)
         if what == "cell":
             for k in rebuilt(c):
@@ -5587,14 +5921,23 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
             existing.append([x.lower(), y.lower()])
             print(f"    -> [Order] {x} > {y}")
         else:
-            turned_off.append((x, f"turned off by --cell-conflicts (conflicts with {y})"))
-            print(f"    -> {x} will be turned off")
+            for n, (kind, detail) in off_plans[ans].items():
+                actual = active_names.get(n, name_of.get(n, n))
+                why = ("turned off by --cell-conflicts" if kind == "selected"
+                       else f"needs {active_names.get(detail, detail)}, turned off with {x}" if kind == "master"
+                       else f"generated patch set aside for rebuilding after turning off {x}" if kind == "generated"
+                       else f"uses {detail} removed with {x}")
+                turned_off.append((actual, f"{why} (conflicts with {y})"))
+            rebuild = any(is_our_patch(active_names.get(n, n)) for n in off_plans[ans])
+            print(f"    -> {label}" + ("; generated patches will need rebuilding" if rebuild else ""))
+    gone = {n.lower() for n, _why in turned_off}
+    unresolved = [(a, b) for (a, b), c in ranked if c.get("incompatible") and a not in gone and b not in gone]
     if not args.dry_run:                             # what is still unanswered, for --full's last question
         try:
             with open(os.path.join(game_dir, NEW_CONFLICTS_FILE), "w", encoding="utf-8") as _nf:
                 _nf.write("\n".join(p_ for p_ in unanswered if p_ not in answered))
-        except OSError:
-            pass
+        except OSError as e:
+            print(f"ERROR: could not save unanswered conflicts: {e}", file=sys.stderr)
     if answered and not args.dry_run:
         answers.update(answered)
         write_conflict_answers(game_dir, answers)
@@ -5605,11 +5948,14 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
         print(f"\nRecorded {len(new_winners)} rebuilt interior choice(s) in {CELL_WINNERS_FILE}.")
     if not new_rules and not turned_off and not new_winners:
         print("\nNo new rules and no plugins turned off." + (" (Earlier runs' conflict rules were removed; run --sort so the order follows your own rules.)" if earlier and not args.dry_run else ""))
+        if unresolved:
+            print("ERROR: incompatible plugins remain active; choose a side before building patches.")
+            return 0 if args.dry_run else 2
         return 0
     stamp = time.strftime("%Y-%m-%d %H:%M")
-    if new_rules:
+    if new_rules and not args.dry_run:
         if os.path.exists(rules_path):
-            shutil.copy2(rules_path, f"{bak_home(rules_path)}.mwdialog-{time.strftime('%Y%m%d-%H%M%S')}.bak")
+            shutil.copy2(rules_path, conflict_rule_backup_path(rules_path))
         with atomic_open(rules_path, encoding="cp1252", errors="replace", newline="\r\n") as f:
             f.write(own_text.rstrip("\n") + "\n" if own_text.strip() else "")
             f.write(f"\n{CONFLICT_RULES_HEADER} {stamp} ----\n")
@@ -5618,18 +5964,32 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
         print(f"\nWrote {len(new_rules)} [Order] rule(s) to {RULES_FILE}"
               + (f", replacing the {len(earlier)} from earlier --cell-conflicts runs" if earlier else "")
               + " (old file backed up).")
-    if turned_off:
+    if turned_off and not args.dry_run:
         gone = {n.lower() for n, _w in turned_off}
         cur = read_load_order(args) or []
-        set_game_files(default_ini(args), [n for n in cur if n.lower() not in gone], "--cell-conflicts")
+        moved = move_conflict_plugins(args, [n for n, _w in turned_off if not is_our_patch(n)])
+        try:
+            set_game_files(default_ini(args), [n for n in cur if n.lower() not in gone], "--cell-conflicts")
+        except (OSError, ValueError):
+            rollback_conflict_moves(moved)
+            raise
         rec = read_disabled(game_dir)
         for n, w in turned_off:
-            rec[n] = w
+            if not is_our_patch(n):
+                rec[n] = w
         write_disabled(game_dir, rec)
         print(f"Turned off {len(turned_off)} plugin(s): {', '.join(n for n, _w in turned_off)} "
               f"(listed in {DISABLED_RECORD}; --reenable NAME turns one back on).")
+        if moved:
+            print(f"  Moved {len(moved)} disabled plugin(s) out of Data Files.")
+    if unresolved:
+        print("ERROR: incompatible plugins remain active; choose a side before building patches.")
+        return 0 if args.dry_run else 2
     if IN_FULL:
         print("(--full sorts next, so the changes take effect.)")
+        return 0
+    if args.dry_run or getattr(args, "defer_follow_up", False):
+        print("(follow-up deferred; sort and rebuild patches when ready.)")
         return 0
     what = "--sort --fix --multipatch" if (turned_off or new_winners) else "--sort"
     if getattr(args, "use_answers", False):
@@ -5917,8 +6277,9 @@ def fix_cell_winners(args, plugins, report=None):
                 if nm:
                     (cont_ids if tag == "CONT" else actor_ids).add(cstr(nm).lower())
                 if nm and tag == "NPC_":
-                    npc_class[cstr(nm).lower()] = cstr(first_sub(body, b"CNAM") or b"").lower()
-                    npc_name[cstr(nm).lower()] = cstr(first_sub(body, b"FNAM") or b"").lower()
+                    npc_id = cstr(nm).lower()
+                    npc_class[npc_id] = cstr(first_sub(body, b"CNAM") or b"").lower()
+                    npc_name[npc_id] = cstr(first_sub(body, b"FNAM") or b"").lower()
                     npdt = first_sub(body, b"NPDT")
                     if npdt and len(npdt) == 52 and not struct.unpack_from("<H", npdt, 38)[0]:
                         npc_dead.add(cstr(nm).lower())
@@ -6275,65 +6636,29 @@ def fix_cell_winners(args, plugins, report=None):
         for (who, mover, c), n in sorted(followed.items(), key=lambda kv: -kv[1])[:15]:
             print(f"      - {n} of {who}'s in '{c}' (moved by {mover})")
         if len(followed) > 15:
-            print(f"      ... and {len(followed) - 15} more (all listed in {os.path.basename(cell_fixes_report_path(game_dir))})")
-        try:
-            with open(cell_fixes_report_path(game_dir), "w", encoding="utf-8") as lf:
-                lf.write("; objects the Cell Fixes patch moves with the piece they were placed by, which another mod "
-                         "moved (rewritten by each --fix)\n")
-                for (who, mover, c), n in sorted(followed.items(), key=lambda kv: (kv[0][2], -kv[1])):
-                    lf.write(f"{c}\t{n} of {who}'s\tmoved by {mover}\n")
-        except OSError:
-            pass
+            print(f"      ... and {len(followed) - 15} more"
+                  + ("" if args.dry_run else f" (all listed in {os.path.basename(cell_fixes_report_path(game_dir))})"))
+        if not args.dry_run:
+            try:
+                with open(cell_fixes_report_path(game_dir), "w", encoding="utf-8") as lf:
+                    lf.write("; objects the Cell Fixes patch moves with the piece they were placed by, which another mod "
+                             "moved (rewritten by each --fix)\n")
+                    for (who, mover, c), n in sorted(followed.items(), key=lambda kv: (kv[0][2], -kv[1])):
+                        lf.write(f"{c}\t{n} of {who}'s\tmoved by {mover}\n")
+            except OSError as e:
+                print(f"  (could not write {CELL_FIXES_REPORT}: {e})", file=sys.stderr)
 
-    # ---- land a mod moved elsewhere: what mods made for where it was put there goes with it
+    # Do not move objects or people from the old site of a relocated land mass.
     world = Placements(order, ext_recs, land_vers, masters_of)
-    land_moves = LandMoves(world)
-    relocated = set()                            # ref keys moved with the land, or whose arrival was
-    if land_moves.moves:
-        print("  Moved land: looking for what mods made for where it was put there...", file=sys.stderr)
-        ref_moves, moved_with = land_moves.plan(out)
-        for bk, ck, grp, blk in ref_moves:
-            put(ck, grp, bk, blk)
-            out_heads.setdefault(ck, heads.get(ck))
-            relocated.add(bk)
-        arrivals_moved = Counter()
-        for bk, hist in door_hist.items():
-            pl, grp, blk, ck = hist[-1]
-            if has(blk, "DELE") or has(blk, "DNAM"):
-                continue
-            base = out[ck][bk][1] if bk in out.get(ck, {}) else blk
-            dodt = next((d for s_, d in base if s_ == "DODT" and len(d) >= 24), None)
-            if dodt is None:
-                continue
-            introducer = next((h[0] for h in hist if next((d for s_, d in h[2] if s_ == "DODT"), None) == dodt), pl)
-            to = land_moves.arrival(introducer, *struct.unpack_from("<3f", dodt))
-            if to is None:
-                continue
-            nd = struct.pack("<3f", *to) + dodt[12:]
-            put(ck, grp, bk, [[s_, nd if s_ == "DODT" else d] for s_, d in base])
-            out_heads.setdefault(ck, heads.get(ck))
-            relocated.add(bk)
-            arrivals_moved[name_of.get(introducer, introducer)] += 1
-        for mv in land_moves.moves:
-            movers = ", ".join(name_of.get(n, n) for n in sorted(mv.movers))
-            print(f"  Moved land: {movers} put {len(mv.old)} cell(s) of land {mv.offset[0]:+},{mv.offset[1]:+} "
-                  f"cells away")
-        if moved_with:
-            print(f"  Moved land: {sum(moved_with.values())} object(s) of mods made for where it was moved with it:")
-            for (who, _m), n in moved_with.most_common(20):
-                print(f"      {n:6} of {name_of.get(who, who)}'s")
-            if len(moved_with) > 20:
-                print(f"      ... and {len(moved_with) - 20} more")
-        if arrivals_moved:
-            print(f"  Moved land: {sum(arrivals_moved.values())} door arrival(s) there moved with it: "
-                  + ", ".join(f"{n} of {w}'s" for w, n in arrivals_moved.most_common(8)))
-        stays = sorted(name_of.get(p, p) for (_i, p), gone in land_moves.made_for_old.items() if not gone)
-        if stays:
-            print(f"  Moved land: left as they are (their objects stand on the moved land): {', '.join(stays)}")
+    moves = find_moves(world)
+    old_moved_land = {grid for move in moves for grid in move.old}
+    if moves:
+        print("  Moved land: automatic relocation is disabled; use --cell-conflicts to resolve incompatible plugins.")
 
     # ---- reshaped land: where two plugins change the same land's heights, the last one's land is used, and
     # objects put down on the land another plugin saw float or sink. They move up or down with the land.
-    contested = {g for g, v in land_vers.items() if len({d for _i, d, _o in v}) >= 2}
+    contested = {g for g, v in land_vers.items()
+                 if len({d for _i, d, _o in v}) >= 2 and g not in old_moved_land}
     tag_of, model_of, _scripted = object_info(order) if contested or npc_refs else ({}, {}, set())
     shapes = ModelShapes(data_dir, active_archives(args))
     kept_dry = set()                             # references the sea stopped from following the land down
@@ -6417,7 +6742,7 @@ def fix_cell_winners(args, plugins, report=None):
             return dz
         moved_by = Counter()
         for bk, (pl, grp, blk, ck) in refs.items():
-            if has(blk, "DELE") or bk in relocated:
+            if has(blk, "DELE"):
                 continue
             base = out[ck][bk][1] if bk in out.get(ck, {}) else blk
             dd = next((d for s_, d in base if s_ == "DATA" and len(d) >= 24), None)
@@ -6443,7 +6768,7 @@ def fix_cell_winners(args, plugins, report=None):
         arrive_fixed = 0
         for bk, hist in door_hist.items():
             pl, grp, blk, ck = hist[-1]
-            if has(blk, "DELE") or any(s_ == "DNAM" for s_, _d in blk) or bk in relocated:
+            if has(blk, "DELE") or any(s_ == "DNAM" for s_, _d in blk):
                 continue
             base = out[ck][bk][1] if bk in out.get(ck, {}) else blk
             dodt = next((d for s_, d in base if s_ == "DODT" and len(d) >= 24), None)
@@ -6577,7 +6902,9 @@ def fix_cell_winners(args, plugins, report=None):
             f.writelines(x + "\n" for x in doubled_rows)
 
     # people left over water: what they stood on was taken away. Runs after all that moves or deletes objects.
-    people = {bk: (key[1], key[2]) for bk, (key, oid) in npc_refs.items() if key[0] == "e" and oid not in npc_dead}
+    people = {bk: (key[1], key[2]) for bk, (key, oid) in npc_refs.items()
+              if key[0] == "e" and oid not in npc_dead
+              and (key[1], key[2]) not in old_moved_land}
     moves, rescue, left = find_footing(world, people, out, kept_dry, tag_of, model_of, shapes)
     for bk, ck, grp, blk in moves:
         put(ck, grp, bk, blk)
@@ -7529,7 +7856,23 @@ def release_lost_doubles(args):
 
 
 WINNER_RE = re.compile(r"(?:doubled with|conflicts with) (?P<w>.+?)\)?$")
+GROUP_ROOT_RE = re.compile(r"(?:turned off with|removed with) (?P<root>.+?) \(conflicts with .+\)$")
 PATHGRID_LINE_RE = re.compile(r"#(?P<cell>-?\d+,-?\d+) \((?P<author>.+?)'s pathgrid\): (?P<msg>.*)$")
+
+
+def reenable_candidate_path(data_dir, name, lookup):
+    return lookup.get(name.lower())
+
+
+def restore_reenabled_plugins(data_dir, names):
+    return []
+
+
+def rollback_reenabled_moves(restored):
+    for source, target in reversed(restored):
+        if os.path.exists(source):
+            raise FileExistsError(f"Cannot restore {source}: a file already exists")
+        os.replace(target, source)
 
 
 def release_lost_winners(args):
@@ -7556,17 +7899,18 @@ def release_lost_winners(args):
             lost.append((loser, winner, "is no longer in Data Files"))
         elif winner.lower() not in active:
             lost.append((loser, winner, "is no longer in the load order"))
-    lost = [x for x in lost if x[0].lower() in lookup]
+    lost = [x for x in lost if reenable_candidate_path(data_dir, x[0], lookup)]
     if not lost:
         return 0
     print("\nPlugins turned off in favour of another that is gone:")
     for loser, winner, how in lost:
-        print(f"  {loser}: turned off for {winner}, which {how}; turning {loser} back on")
+        print(f"  {loser}: turned off for {winner}, which {how}; checking whether it can be turned back on")
     a2 = copy.copy(args)
     a2.reenable = [l for l, _w, _h in lost]
     a2.dry_run = False
     run_reenable(a2)
-    return len(lost)
+    remaining = {n.lower() for n in read_disabled(game_dir)}
+    return sum(loser.lower() not in remaining for loser, _winner, _how in lost)
 
 
 def run_reenable(args):
@@ -7582,17 +7926,81 @@ def run_reenable(args):
     ini = args.ini or os.path.join(game_dir, "Morrowind.ini")
     lookup = index_dir(data_dir)
     cur = read_load_order(args) or []
+    missing_active = [n for n in cur if n.lower() not in lookup]
+    if missing_active:
+        print("--reenable: active plugins are missing from Data Files; load order left unchanged: "
+              + ", ".join(missing_active))
+        return 1
+    active = {n.lower() for n in cur}
+    candidates, blocked = {}, {}
+    for name in todo:
+        low = name.lower()
+        path = reenable_candidate_path(data_dir, name, lookup)
+        if not path:
+            blocked[name] = "plugin file is missing"
+            continue
+        try:
+            masters = [n.lower() for n in read_checked_masters(path)]
+        except (OSError, FormatError) as e:
+            blocked[name] = f"could not read its masters: {e}"
+            continue
+        group = GROUP_ROOT_RE.search(rec[name])
+        if group and group["root"].lower() != low:
+            masters.append(group["root"].lower())
+        if low.endswith(".esm") and any(n.endswith(".esp") for n in masters):
+            blocked[name] = "an .esm cannot load after an .esp master"
+            continue
+        candidates[low] = (name, path, masters)
+    while True:
+        available = (active - {n.lower() for n in blocked}) | candidates.keys()
+        missing = {low: next((n for n in masters if n not in available), None)
+                   for low, (_name, _path, masters) in candidates.items()}
+        missing = {low: master for low, master in missing.items() if master is not None}
+        if not missing:
+            break
+        for low, master in missing.items():
+            name, _path, _masters = candidates.pop(low)
+            blocked[name] = f"master {master} is not active or being restored"
+    if blocked:
+        print("--reenable: these plugins remain disabled:")
+        for name, why in blocked.items():
+            print(f"  {name}: {why}")
+    if not candidates:
+        return 1
     paths = [lookup[n.lower()] for n in cur if n.lower() in lookup] + \
-            [lookup[n.lower()] for n in todo if n.lower() in lookup and n.lower() not in {c.lower() for c in cur}]
+            [path for low, (_name, path, _masters) in candidates.items() if low not in active]
+    pending = sort_vanilla(paths)
+    paths, placed = [], set()
+    while pending:
+        ready = next((p for p in pending if os.path.basename(p).lower() not in candidates
+                      or all(n in placed for n in candidates[os.path.basename(p).lower()][2])), None)
+        if ready is None:
+            print("--reenable: master dependencies cannot be ordered; no plugins were turned back on.")
+            return 1
+        pending.remove(ready)
+        paths.append(ready)
+        placed.add(os.path.basename(ready).lower())
+    enabled = [name for name, _path, _masters in candidates.values()]
     if args.dry_run:
-        print("--reenable would turn back on: " + ", ".join(todo))
-        return 0
-    backup = set_game_files(ini, [os.path.basename(p) for p in sort_vanilla(paths)], "reenable")
-    for n in todo:
+        print("--reenable would turn back on: " + ", ".join(enabled))
+        return 1 if blocked else 0
+    restored = restore_reenabled_plugins(data_dir, enabled)
+    restored_lookup = index_dir(data_dir)
+    missing = [n for n in enabled if n.lower() not in restored_lookup]
+    if missing:
+        rollback_reenabled_moves(restored)
+        print("--reenable: plugin files could not be restored: " + ", ".join(missing))
+        return 1
+    try:
+        backup = set_game_files(ini, [os.path.basename(p) for p in paths], "reenable")
+    except (OSError, ValueError):
+        rollback_reenabled_moves(restored)
+        raise
+    for n in enabled:
         del rec[n]
     write_disabled(game_dir, rec)
-    print(f"  Turned back on: {', '.join(todo)} (old list saved as {backup}).")
-    return 0
+    print(f"  Turned back on: {', '.join(enabled)} (old list saved as {backup}).")
+    return 1 if blocked else 0
 
 
 # --------------------------------------------------------------------------
@@ -8894,6 +9302,9 @@ def full_conflict_step(args, common):
     not), the pairs without one are asked now, so the patches built next already have them. With no answers
     remembered it only reports: every pair would be a question."""
     if not getattr(args, "use_answers", False):
+        if cell_conflicts_interactive(args):
+            return ("cell conflicts (asks about incompatible plugins)",
+                    ["--cell-conflicts", "--only-incompatible"] + [c for c in common if c != "--no-interactive"])
         return ("cell conflicts (report)", ["--cell-conflicts", "--no-interactive"] + common)
     if cell_conflicts_interactive(args):
         return ("cell conflicts (your remembered answers; asks the new ones)",
@@ -8940,9 +9351,10 @@ def run_full(args):
         common += ["--ini", args.ini]
     if args.vortex_dir:
         common += ["--vortex-dir", args.vortex_dir]
-    first = [("turn back on what earlier runs turned off", None)]
+    first = []
     if read_merge_record(game_dir):
         first.append(("undo the auto-merge", ["--unmerge", "--no-follow-up"]))
+    first.append(("turn back on what earlier runs turned off", None))
     if args.add_all_esp:
         first.append(("add every plugin in Data Files", ["--add-all-esp"]))
     if not getattr(args, "no_redundant", False):
@@ -9223,14 +9635,16 @@ def _main(argv=None):
                          "conflict by conflict: an [Order] rule, turn one off, or for an interior both rebuilt, "
                          "whose version of the place wins (" + CELL_WINNERS_FILE + "; --fix builds "
                          + CELL_WINNER_PATCH + ")")
+    tc.add_argument("--only-incompatible", action="store_true",
+                    help="with --cell-conflicts: ask only about incompatible plugins that require a choice")
     tc.add_argument("--only-new", action="store_true",
                     help="with --cell-conflicts: replay every remembered answer and ask only about the conflicts "
                          "that have none yet")
     tc.add_argument("--fresh-answers", action="store_true",
                     help="with --full: don't replay the answers remembered in " + CONFLICT_ANSWERS_FILE +
                          " (by default --full replays them, so your rebuilt-interior winners and [Order] choices "
-                         "stand, and asks only about new conflicts); the conflicts are only reported and you are "
-                         "asked at the end")
+                         "stand, and asks only about new conflicts); incompatible plugins are still asked about "
+                         "before patches are built")
     tc.add_argument("--use-answers", action="store_true",
                     help="with --cell-conflicts: take every answer remembered in " + CONFLICT_ANSWERS_FILE
                          + " (a pair with none is asked in a console; skipped with --no-interactive or when "
@@ -9317,12 +9731,13 @@ def _main(argv=None):
                 drop_vanished_added_masters(args)
             except (OSError, UnicodeError, ValueError) as e:
                 print(f"(could not check {ADDED_MASTERS_RECORD}: {e})", file=sys.stderr)
-        if getattr(args, "data_dir", None) and os.path.isdir(args.data_dir) and not args.reenable:
+        if (getattr(args, "data_dir", None) and os.path.isdir(args.data_dir)
+                and args.reenable is None and not args.full):
             try:
                 release_lost_winners(args)
             except (OSError, UnicodeError) as e:
                 print(f"(could not check {DISABLED_RECORD}: {e})", file=sys.stderr)
-            if not args.fix:                       # --fix rebuilds Cell Fixes anyway
+            if not args.fix and not args.dry_run:  # --fix rebuilds Cell Fixes anyway
                 try:
                     release_lost_doubles(args)
                 except (OSError, UnicodeError, FormatError) as e:
@@ -9481,7 +9896,7 @@ def _main(argv=None):
         return 0
     if args.unmerge is not None:
         rc = run_unmerge(args, plugins)
-        if rc == 0 and not args.no_follow_fix:
+        if rc == 0 and not args.dry_run and not args.no_follow_fix:
             # the merged plugins are back: activate everything and put it in rule order
             print("\n" + "=" * 70 + "\nFOLLOW-UP: --add-all-esp --sort\n" + "=" * 70)
             argv2 = [args.data_dir, "--add-all-esp", "--sort", "--fix-log", args.fix_log, "--encoding", args.encoding]
@@ -9495,6 +9910,15 @@ def _main(argv=None):
                 argv2 += ["--ini", args.ini]
             return main(argv2)
         return rc
+    compatibility_checked = False
+    if not IN_FULL and not args.dry_run and not args.cell_conflicts and (
+            args.auto_merge or args.merge or args.fix or args.patch_esm or args.multipatch):
+        check_args = copy.copy(args)
+        check_args.only = None
+        rc = run_cell_conflicts(check_args, plugins, incompatible_only=True)
+        if rc:
+            return rc
+        compatibility_checked = True
     if args.auto_merge:
         rc = run_auto_merge(args, plugins, bsas, data_dirs)
         if rc == 0 and getattr(args, "merged_now", False) and not args.no_follow_fix:
@@ -9537,14 +9961,14 @@ def _main(argv=None):
     if args.fix:
         fix_cell_winners(args, plugins, report)
     loaded_patches = {n.lower() for n, _p in plugins} & {x.lower() for x in OUR_PATCHES}
-    if args.fix or args.patch_esm or args.multipatch:   # rebuilt from scratch: leave them out of the scan
+    if args.fix or args.patch_esm or args.multipatch:   # rebuilt patches excluded; Cell Fixes' deletions still count
         names = [n.lower() for n, _p in plugins]
         if PATCH_NAME.lower() in names:            # where the ESM patch really loads
             args.esm_patch_pos = sum(1 for n in names[:names.index(PATCH_NAME.lower())]
                                      if n not in [x.lower() for x in OUR_PATCHES])
         else:                                      # new: right after the masters
             args.esm_patch_pos = sum(1 for n in names if n.endswith(".esm"))
-        plugins = [(n, p) for n, p in plugins if n.lower() not in [x.lower() for x in OUR_PATCHES]]
+        plugins = fix_scan_plugins(args, plugins)
     if not plugins:
         print("No plugins found.", file=sys.stderr)
         return 2
@@ -9555,6 +9979,12 @@ def _main(argv=None):
         if getattr(args, "sort_changed", False) and not args.no_follow_fix and not (args.fix and args.multipatch):
             # a new order can undo what the patches fixed (a later plugin now blanking 'Caldera Priory',
             # leveled lists merged in the old order): rebuild them and fix what the new order exposes
+            if not IN_FULL and not args.dry_run and not compatibility_checked:
+                check_args = copy.copy(args)
+                check_args.only = None
+                rc = run_cell_conflicts(check_args, resolve(args, Report())[0], incompatible_only=True)
+                if rc:
+                    return rc
             print("\n" + "=" * 70 + "\nFOLLOW-UP: --fix --multipatch with the new load order\n" + "=" * 70)
             args.fix = args.multipatch = True
         if not (args.clean or args.fix or args.multipatch):
@@ -9562,7 +9992,7 @@ def _main(argv=None):
         plugins, bsas, data_dirs = resolve(args, report)   # dates changed: read the new order
         if (args.fix or args.patch_esm or args.multipatch) and not hasattr(args, "esm_patch_pos"):
             args.esm_patch_pos = sum(1 for n, _p in plugins if n.lower().endswith(".esm"))
-        plugins = [(n, p) for n, p in plugins if n.lower() not in [x.lower() for x in OUR_PATCHES]] \
+        plugins = fix_scan_plugins(args, plugins) \
             if (args.fix or args.patch_esm or args.multipatch) else plugins
     if args.clean:
         run_clean(args, plugins, only)        # cleaned files are what the checks below see
@@ -9726,7 +10156,7 @@ def apply_load_order_to_ini(args):
     """At the end of a run that changed mwdialog_load_order.txt (a sort, --add-all-esp, a merge, a plugin
     turned off...), write it into Morrowind.ini's [Game Files] too: tools that read the ini, like MGE XE's
     distant land generator, then see the same load order. Plugins that aren't in Data Files are left out."""
-    if args is None or getattr(args, "plugins", None) or getattr(args, "openmw_cfg", None):
+    if args is None or getattr(args, "dry_run", False) or getattr(args, "plugins", None) or getattr(args, "openmw_cfg", None):
         return
     game_dir = os.path.dirname(os.path.abspath(args.data_dir))
     if game_dir not in LOAD_ORDER_WRITTEN:
@@ -9772,7 +10202,8 @@ def main(argv=None):
             LOAD_ORDER_WRITTEN.clear()
             MP.release_game_locks()
             try:
-                cap_fix_log(TOP_ARGS)
+                if TOP_ARGS is not None and not TOP_ARGS.dry_run:
+                    cap_fix_log(TOP_ARGS)
             except OSError as e:
                 print(f"\nCould not trim the fix log: {e}", file=sys.stderr)
 
