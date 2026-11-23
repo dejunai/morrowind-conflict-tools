@@ -1,6 +1,6 @@
 local config = require("mwpersonaleffects.config")
 local template = mwse.mcm.createTemplate({ name = "mwpersonaleffects" })
-template:saveOnClose("mwpersonaleffects", config)
+template.onClose = function() config.save() end   -- not saveOnClose: config holds functions
 
 local page = template:createSideBarPage({
     label = "Personal Effects",

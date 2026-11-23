@@ -14,4 +14,12 @@ function config.isPersonalEffectsActive()
         or tes3.getScript("R0_pe_init_scr") ~= nil
 end
 
+function config.save()
+    local plain = {}                    -- the functions on this table cannot go into JSON
+    for k, v in pairs(config) do
+        if type(v) ~= "function" then plain[k] = v end
+    end
+    mwse.saveConfig(NAME, plain)
+end
+
 return config
