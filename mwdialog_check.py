@@ -8686,7 +8686,7 @@ def compute_order(plugins, rule_sets, current_order):
     if AUTO_MERGE_NAME not in merges:
         merges.insert(0, AUTO_MERGE_NAME)
     for want in list(ORDER_TAIL_EXTRA) + merges + [
-            PERFORMER_PATCH, CELL_WINNER_PATCH, PLACE_PATCH_NAME, MULTI_PATCH_NAME]:
+            PERFORMER_PATCH, CELL_WINNER_PATCH, PLACE_PATCH_NAME, "mwdialog_check - MWSoundFix.esp", MULTI_PATCH_NAME]:
         n = low.get(want.lower())
         if n not in order or n in tail:
             continue
@@ -9761,6 +9761,22 @@ def _main(argv=None):
                     help="with --fix: don't remove doubled bards (two plugins' performers in one inn)")
     tc.add_argument("--no-doubled", action="store_true",
                     help="with --fix: don't look for (or turn off) plugins that place the same objects twice")
+    tc.add_argument("--soundfix", action="store_true",
+                    help="rewrite the scripts that start a sound only while GetSoundPlaying says it isn't playing "
+                         "(this engine answers 0, so they restart it every frame) to keep their own state, and "
+                         "recompile them with MWRecompile into 'mwdialog_check - MWSoundFix.esp'. --fix does this too. "
+                         "Only scripts whose source recompiles to their shipped bytecode are changed; the report "
+                         "(mwdialog_soundfix_report.txt) lists the rest. --dry-run: report only")
+    tc.add_argument("--soundfix-report", action="store_true", help="--soundfix --dry-run: write the report only")
+    tc.add_argument("--soundfix-undo", action="store_true",
+                    help="take 'mwdialog_check - MWSoundFix.esp' out (backed up first), with its helper data")
+    tc.add_argument("--soundfix-loop-mode", choices=("flag", "restart"), default="flag",
+                    help="flag (default): a loop starts once, re-armed on a game load and by the mwsoundfix MWSE "
+                         "helper when its object comes back; restart: also restarted on every cell change "
+                         "(for an install without MWSE)")
+    tc.add_argument("--no-soundfix", action="store_true", help="with --fix: don't rebuild the sound-script patch")
+    tc.add_argument("--mwrecompile", metavar="PATH",
+                    help="MWRecompile.exe to use (default: tools\\MWRecompile\\, or the MWRECOMPILE variable)")
     tc.add_argument("--reenable", nargs="*", metavar="NAME",
                     help=f"turn back on plugins --fix turned off as doubled (all of them with no name; see {DISABLED_RECORD})")
     tc.add_argument("--redundant", action="store_true",
@@ -10020,6 +10036,11 @@ def _main(argv=None):
         return run_merge(args, plugins, bsas, data_dirs)
     if args.cell_conflicts:
         return run_cell_conflicts(args, plugins)
+    if args.soundfix_undo or ((args.soundfix or args.soundfix_report) and not args.fix):
+        import mwdialog_soundfix
+        if args.soundfix_undo:
+            return mwdialog_soundfix.undo(args)
+        return mwdialog_soundfix.run_soundfix(args, plugins, bsas)
     if args.fix and fix_omwaddon_masters(args) and not args.dry_run:
         if not args.sort and not IN_FULL:                    # their masters may load after them: sort
             print("\n" + "=" * 70 + "\nSORT: plugin headers now name different masters\n" + "=" * 70)
@@ -10157,6 +10178,11 @@ def _main(argv=None):
     fixed = False
     if args.fix or args.patch_esm:
         fixed = run_fix(args, plugins, bsas, data_dirs, report, world, only, hidden)
+    if args.fix and only is None and not args.openmw_cfg and not args.no_soundfix:
+        import mwdialog_soundfix                     # after the fixes and the auto-merge, before the Multipatch
+        sf_plugins, sf_bsas, _dirs = resolve(args, Report())
+        if mwdialog_soundfix.run_soundfix(args, sf_plugins, sf_bsas, standalone=False) == 2:
+            print("  (the sound-script patch was not rebuilt; the rest of --fix is unaffected)")
     if args.multipatch:
         run_multipatch(args, plugins, world)
 

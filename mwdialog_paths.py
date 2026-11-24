@@ -115,6 +115,19 @@ def find_texconv(game_dir=None):
     return find_program("texconv", game_dir)
 
 
+def find_mwrecompile(game_dir=None, explicit=None):
+    """MWRecompile.exe: --mwrecompile, the MWRECOMPILE environment variable, tools\\MWRecompile\\ (a release drop
+    with its licence and source), then find_program's places. None if missing."""
+    for p in (explicit, os.environ.get("MWRECOMPILE")):
+        if p:
+            return p if os.path.isfile(p) else None
+    for d in [TOOL_DIR] + [d for d in tool_dirs(game_dir) if d != TOOL_DIR]:
+        p = os.path.join(d, "tools", "MWRecompile", "MWRecompile.exe")
+        if os.path.isfile(p):
+            return p
+    return find_program("MWRecompile", game_dir)
+
+
 def deploy_lua_tools(data_dir, src=None):
     """Copy every file of the suite's Lua mods (lua tools\\, laid out like Data Files) that Data Files doesn't
     have yet; files already there (deployed by Vortex, edited, or repaired by luafix) are left alone.

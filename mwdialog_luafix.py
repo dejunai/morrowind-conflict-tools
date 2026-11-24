@@ -102,7 +102,7 @@ MARK = "localpatch"            # what is written into a mod never carries this t
 OWN_MODS = {"mwcollide", "mwcompanions", "mwcriminal", "mwcustomclasspersistence",
             "mweffectinspector", "mwexitguard", "mwfloatfix", "mwguard", "mwhangwatch", "mwinfoloop",
             "mwmouseguard", "mwperformers", "mwpersonaleffects", "mwplainpaperfix", "mwpluginpatches",
-            "mwquicktoggle", "mwsaveguard", "mwsoundguard", "mwstranded", "mwteleportguard",
+            "mwquicktoggle", "mwsaveguard", "mwsoundfix", "mwsoundguard", "mwstranded", "mwteleportguard",
             "mwwarnsuppression", "mwmanager", "mwmanagermenu", "mwsuite"}
 
 # defaults; mwguard.json (shared with the runtime guard) and mwdialog_luafix.json override them

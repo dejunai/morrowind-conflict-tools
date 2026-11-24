@@ -25,7 +25,9 @@ def test_no_mw_mod_defaults_to_enabled():
 def test_every_mw_mod_has_an_enabled_switch():
     missing = []
     for name in sorted(os.listdir(MODS)):
-        if not name.startswith("mw") or name == "mwmanagermenu":
+        # mwsoundfix isn't a guard: it is the runtime half of the --soundfix patch, idle unless that patch is
+        # active, and with it off the patched loops wouldn't come back when their cell does
+        if not name.startswith("mw") or name in ("mwmanagermenu", "mwsoundfix"):
             continue
         text = "".join(open(os.path.join(base, f), encoding="utf-8").read()
                        for base, _d, files in os.walk(os.path.join(MODS, name)) for f in files if f.endswith(".lua"))

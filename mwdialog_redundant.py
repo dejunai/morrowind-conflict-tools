@@ -31,7 +31,10 @@ PLACE_PATCH_NAME = "mwdialog_check PlaceholderCell ESP Patch.esp"
 
 PERFORMER_PATCH = "mwdialog_check Performers Patch.esp"
 
-OUR_PATCHES = (PATCH_NAME, PLACE_PATCH_NAME, "mwdialog_check Multipatch.esp", CELL_WINNER_PATCH, PERFORMER_PATCH)
+SOUNDFIX_NAME = "mwdialog_check - MWSoundFix.esp"   # mwdialog_soundfix's patch (same name there)
+
+OUR_PATCHES = (PATCH_NAME, PLACE_PATCH_NAME, "mwdialog_check Multipatch.esp", CELL_WINNER_PATCH, PERFORMER_PATCH,
+               SOUNDFIX_NAME)
 
 AUTO_SKIP_TAGS = {"CELL", "LAND", "PGRD"}          # placing/moving objects, land, pathgrids: not merged
 SCRIPT_REF_RE = re.compile(r'"([^"\n]+)"|([A-Za-z_][\w\'\-]*)')

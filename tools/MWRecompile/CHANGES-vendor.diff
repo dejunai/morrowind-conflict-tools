@@ -1,0 +1,1367 @@
+--- upstream/Common/dl_base.h
++++ mwrecompile/Common/dl_base.h
+@@ -286,7 +286,13 @@
+  * global strings the program allocates.
+  *
+  *=========================================================================*/
+-#define DEFINE_FILE(string) static TCHAR ThisFile[] = _T(string);
++#ifdef MWRECOMPILE
++	/* MWRecompile: GCC gives the static redefinition external linkage after the
++	 * extern below, so per-file names clash at link time. Use one global. */
++	#define DEFINE_FILE(string)
++#else
++	#define DEFINE_FILE(string) static TCHAR ThisFile[] = _T(string);
++#endif
+ 
+ /* Eliminates errors from not using the DEFINE_FILE() macro */
+ extern TCHAR ThisFile[];
+--- upstream/Common/String/SString.cpp
++++ mwrecompile/Common/String/SString.cpp
+@@ -20,8 +20,12 @@
+ 	0,
+ 	0
+ };
+-static CSStringData *s_pSDataNull = (CSStringData *)&s_SSData;
+-static const TCHAR *s_pSStringNull = (const TCHAR *)(((byte *)s_pSDataNull) + sizeof(CSStringData));
++/* MWRecompile: GCC initialises these pointers at run time (dynamic init), so a
++ * global CSString in another file constructed earlier got m_pString == NULL and
++ * its destructor freed address -8 at exit (heap corruption 0xC0000374 on real
++ * Windows). Use compile-time constants instead, as MSVC effectively does. */
++#define s_pSDataNull   ((CSStringData *)s_SSData)
++#define s_pSStringNull ((const TCHAR *)(s_SSData + 2))
+ 
+ 
+ /*===========================================================================
+--- upstream/project/EsmScriptCompile.cpp
++++ mwrecompile/project/EsmScriptCompile.cpp
+@@ -647,6 +647,13 @@
+ };
+ 
+ esmscrparsetable_t l_RightIDBlock[] = {
++	/* MWRecompile: remote variables in SET expressions ("to a.x + 1") */
++	{
++		ESMSCR_TOKEN_VAROP,
++		ESTF_ONE | ESTF_STOP | ESTF_OPT,
++		NULL,
++		&CEsmScriptCompile::ParseIfVarRef
++	},
+ //#if MWEDIT_SCRIPT_MWSE
+ 	{
+ 		ESMSCR_TOKEN_FUNCOP,
+@@ -690,7 +697,7 @@
+ 		ESMSCR_TOKEN_SYMBOL,
+ 		ESTF_ONE | ESTF_STOP | ESTF_OPT,
+ 		l_LeftVarIDBlock,
+-		&CEsmScriptCompile::ParseSymbolID
++		&CEsmScriptCompile::MwrParseSetSymbol
+ 	},
+ 	{
+ 		ESMSCR_TOKEN_STRING,
+@@ -876,7 +883,7 @@
+ 		ESMSCR_TOKEN_SYMBOL,
+ 		ESTF_ONE | ESTF_OPT | ESTF_STOP,
+ 		l_IfLeftIDBlock,
+-		&CEsmScriptCompile::ParseSymbolID
++		&CEsmScriptCompile::MwrParseIfSymbol
+ 	},
+ 	{
+ 		ESMSCR_TOKEN_STRING,
+@@ -1291,7 +1298,7 @@
+ esmscrparsetable_t l_ElseIfBlock[] = {
+ 	{
+ 		ESMSCR_TOKEN_OPENBRAC,
+-		ESTF_ONE,
++		ESTF_ONE | ESTF_OPT, /* MWRecompile: the CS allows IF without brackets */
+ 		NULL,
+ 		NULL
+ 	},
+@@ -1329,7 +1336,7 @@
+ 	//},
+ 	{
+ 		ESMSCR_TOKEN_CLOSEBRAC,
+-		ESTF_ONE,
++		ESTF_ONE | ESTF_OPT, /* MWRecompile */
+ 		NULL,
+ 		NULL,
+ 		&CEsmScriptCompile::OutputIfFinish
+@@ -1357,7 +1364,7 @@
+ esmscrparsetable_t l_IfBlock[] = {
+ 	{
+ 		ESMSCR_TOKEN_OPENBRAC,
+-		ESTF_ONE,
++		ESTF_ONE | ESTF_OPT, /* MWRecompile: the CS allows IF without brackets */
+ 		NULL,
+ 		NULL
+ 	},
+@@ -1389,7 +1396,7 @@
+ 	//},
+ 	{
+ 		ESMSCR_TOKEN_CLOSEBRAC,
+-		ESTF_ONE,
++		ESTF_ONE | ESTF_OPT, /* MWRecompile */
+ 		NULL,
+ 		NULL,
+ 		&CEsmScriptCompile::OutputIfFinish
+@@ -1444,7 +1451,7 @@
+ esmscrparsetable_t l_WhileBlock[] = {
+ 	{
+ 		ESMSCR_TOKEN_OPENBRAC,
+-		ESTF_ONE,
++		ESTF_ONE | ESTF_OPT, /* MWRecompile: the CS allows IF without brackets */
+ 		NULL,
+ 		NULL
+ 	},
+@@ -1476,7 +1483,7 @@
+ 	//},
+ 	{
+ 		ESMSCR_TOKEN_CLOSEBRAC,
+-		ESTF_ONE,
++		ESTF_ONE | ESTF_OPT, /* MWRecompile */
+ 		NULL,
+ 		NULL,
+ 		&CEsmScriptCompile::OutputWhileFinish
+@@ -1544,7 +1551,7 @@
+ 		ESTF_ONE | ESTF_STOP | ESTF_OPT,
+ 		l_FunctionBlock,
+ 		NULL,
+-		&CEsmScriptCompile::OutputFunction
++		&CEsmScriptCompile::MwrOutputRefLineFunction
+ 	},
+ 	{
+ 		ESMSCR_TOKEN_FUNCTIONX,
+@@ -1700,6 +1707,218 @@
+ 		NULL
+ 	}
+ };
++
++/* MWRecompile */
++esmscrparsetable_t l_MwrStrayElseIfBlock[] = {
++	{
++		ESMSCR_TOKEN_OPENBRAC,
++		ESTF_ONE | ESTF_OPT, /* MWRecompile: the CS allows IF without brackets */
++		NULL,
++		NULL
++	},
++	{
++		ESMSCR_BEGINBLOCK,
++		ESTF_ONE,
++		l_IfLeftExprBlock,
++		&CEsmScriptCompile::ParseIfRExprStart
++	},
++	{
++		ESMSCR_TOKEN_RELOP,
++		ESTF_ONE | ESTF_OPT,
++		l_IfRightExprBlock,
++		&CEsmScriptCompile::ParseIfRExprStart,
++		&CEsmScriptCompile::OutputIfRelOp
++	},
++	//{
++	//	ESMSCR_BEGINBLOCK,
++	//	ESTF_ONE,
++	//	l_LeftExprBlock,
++	//	NULL
++	//},
++	//{
++	//	ESMSCR_TOKEN_RELOP,
++	//	ESTF_ONE | ESTF_OPT,
++	//	l_IfRightBlock,
++	//	NULL,
++	//	&CEsmScriptCompile::OutputIfRelOp
++	//},
++	//{
++	//	ESMSCR_BEGINBLOCK,
++	//	ESTF_ONE,
++	//	l_IfRightBlock,
++	//	NULL
++	//},
++	{
++		ESMSCR_TOKEN_CLOSEBRAC,
++		ESTF_ONE | ESTF_OPT, /* MWRecompile */
++		NULL,
++		NULL,
++		&CEsmScriptCompile::OutputIfFinish
++	},
++	{
++		ESMSCR_TOKEN_EOL,
++		ESTF_ONE,
++		NULL,
++		NULL
++	},
++	{
++		ESMSCR_BEGINBLOCK,
++		ESTF_MANY,
++		l_StatementBlock,
++		NULL
++	},
++	{
++		ESMSCR_ENDTABLE,
++		0,
++		NULL,
++		NULL
++	}
++};
++
++esmscrparsetable_t l_MwrStrayElseBlock[] = {
++	{
++		ESMSCR_TOKEN_EOL,
++		ESTF_ONE,
++		NULL,
++		NULL
++	},
++	{
++		ESMSCR_BEGINBLOCK,
++		ESTF_MANY,
++		l_StatementBlock,
++		NULL
++	},
++	{
++		ESMSCR_ENDTABLE,
++		0,
++		NULL,
++		NULL
++	}
++};
++
++esmscrparsetable_t l_MwrTopStatementBlock[] = {
++	{
++		ESMSCR_TOKEN_TYPEOP,
++		ESTF_ONE | ESTF_STOP | ESTF_OPT,
++		NULL,
++		&CEsmScriptCompile::ParseNewLocalVar
++	},
++	{
++		ESMSCR_TOKEN_SET,
++		ESTF_ONE | ESTF_STOP | ESTF_OPT,
++		l_SetBlock,
++		NULL,
++		&CEsmScriptCompile::OutputSet
++	},
++	{
++		ESMSCR_TOKEN_SETX,
++		ESTF_ONE | ESTF_STOP | ESTF_OPT,
++		l_LetBlock,
++		NULL,
++		NULL
++	},
++	{
++		ESMSCR_TOKEN_IF,
++		ESTF_ONE | ESTF_STOP | ESTF_OPT,
++		l_IfBlock,
++		NULL,
++		&CEsmScriptCompile::OutputIf
++	},
++	{
++		ESMSCR_TOKEN_IFX,
++		ESTF_ONE | ESTF_STOP | ESTF_OPT,
++		l_XIfBlock,
++		NULL,
++		NULL
++	},
++	{
++		ESMSCR_TOKEN_WHILE,
++		ESTF_ONE | ESTF_STOP | ESTF_OPT,
++		l_WhileBlock,
++		NULL,
++		&CEsmScriptCompile::OutputWhile
++	},
++	{
++		ESMSCR_TOKEN_WHILEX,
++		ESTF_ONE | ESTF_STOP | ESTF_OPT,
++		l_XWhileBlock,
++		NULL
++	},
++	{
++		ESMSCR_TOKEN_RETURN,
++		ESTF_ONE | ESTF_STOP | ESTF_OPT,
++		l_ReturnBlock,
++		NULL,
++		&CEsmScriptCompile::OutputReturn
++	},
++	{
++		ESMSCR_TOKEN_SYMBOL,
++		ESTF_ONE | ESTF_STOP | ESTF_OPT,
++		l_ObjRefFuncBlock,
++		&CEsmScriptCompile::ParseLineSymbolID
++	},
++	{
++		ESMSCR_TOKEN_STRING,
++		ESTF_ONE | ESTF_STOP | ESTF_OPT,
++		l_ObjRefFuncBlock,
++		&CEsmScriptCompile::ParseLineStringID
++	},
++	{
++		ESMSCR_TOKEN_LOCALVAR,
++		ESTF_ONE | ESTF_STOP | ESTF_OPT,
++		l_ObjRefFuncBlock,
++		NULL
++	},
++	{
++		ESMSCR_TOKEN_FUNCTION,
++		ESTF_ONE | ESTF_STOP | ESTF_OPT,
++		l_FuncLineBlock,
++		NULL,
++		&CEsmScriptCompile::OutputLineFunction
++	},
++	{
++		ESMSCR_TOKEN_FUNCTIONX,
++		ESTF_ONE | ESTF_STOP | ESTF_OPT,
++		l_FuncXLineBlock,
++		&CEsmScriptCompile::ParseFunctionLine,
++		NULL
++	},
++	/* MWRecompile: the CS compiles unmatched endif/else/elseif lines at the
++	 * top level of a script as plain statements (vanilla scripts rely on it). */
++	{
++		ESMSCR_TOKEN_ENDIF,
++		ESTF_ONE | ESTF_STOP | ESTF_OPT,
++		NULL,
++		NULL,
++		&CEsmScriptCompile::MwrOutputStrayEndIf
++	},
++	{
++		ESMSCR_TOKEN_ELSEIF,
++		ESTF_ONE | ESTF_STOP | ESTF_OPT,
++		l_MwrStrayElseIfBlock,
++		NULL,
++		&CEsmScriptCompile::MwrOutputStrayElseIf
++	},
++	{
++		ESMSCR_TOKEN_ELSE,
++		ESTF_ONE | ESTF_STOP | ESTF_OPT,
++		l_MwrStrayElseBlock,
++		NULL,
++		&CEsmScriptCompile::MwrOutputStrayElse
++	},
++	{
++		ESMSCR_TOKEN_EOL,
++		ESTF_ONE | ESTF_STOP | ESTF_OPT,
++		NULL,
++		NULL
++	},
++	{
++		ESMSCR_ENDTABLE,
++		ESTF_STOP | ESTF_OPT,
++		NULL,
++		NULL
++	}
++};
+ //#else
+ //
+ //esmscrparsetable_t l_StatementBlock[] = {
+@@ -1788,7 +2007,7 @@
+ 	{
+ 		ESMSCR_BEGINBLOCK,
+ 		ESTF_MANY,
+-		l_StatementBlock,
++		l_MwrTopStatementBlock,
+ 		NULL
+ 	},
+ 	{
+@@ -1817,7 +2036,8 @@
+ 		ESMSCR_TOKEN_BEGIN,
+ 		ESTF_ONE,
+ 		NULL,
+-		NULL
++		NULL,
++		&CEsmScriptCompile::MwrOutputBegin
+ 	},
+ 	{
+ 		ESMSCR_BEGINBLOCK,
+@@ -2276,7 +2496,7 @@
+  * Adds a script error to the internal message list.
+  *
+  *=========================================================================*/
+-void CEsmScriptCompile::AddError(const TCHAR *pString, ...) {
++void CEsmScriptCompile::AddErrorRaw(const TCHAR *pString, ...) {
+ 	TCHAR UserMsg[256];
+ 	TCHAR ErrorString[512];
+ 	va_list Args;
+@@ -2334,7 +2554,7 @@
+  * Adds a script warning to the internal message list.
+  *
+  *=========================================================================*/
+-void CEsmScriptCompile::AddWarning(const TCHAR *pString, ...) {
++void CEsmScriptCompile::AddWarningRaw(const TCHAR *pString, ...) {
+ 	TCHAR UserMsg[256];
+ 	TCHAR ErrorString[512];
+ 	va_list Args;
+@@ -2369,7 +2589,7 @@
+  * an error that requires the compile to abort.
+  *
+  *=========================================================================*/
+-bool CEsmScriptCompile::AddMessage(const int MessageID, const TCHAR *pString, ...) {
++bool CEsmScriptCompile::AddMessageRaw(const int MessageID, const TCHAR *pString, ...) {
+ 	DEFINE_FUNCTION("CEsmScriptCompile::AddMessage()");
+ 	CEsmScriptError *pError;
+ 	TCHAR UserMsg[256];
+@@ -2880,8 +3100,18 @@
+ 		}
+ 	}
+ 
+-	/* Don't enforce rigid checks for cell IDs */
+-	//if ((ArgFlags & ESMSCR_FUNC_CELLID) != 0) return (true);
++	/* MWRecompile: the CS does not check cell names (PositionCell to a cell
++	 * that does not exist compiles), and it compiles an ID of the wrong kind
++	 * using the kind of record it names. Both become warnings. */
++	if (!Optional && pRecord == NULL && (ArgFlags & ESMSCR_FUNC_CELLID) != 0) {
++		Result = AddMessage(ESMSCR_WARNING_IDCONFLICT, _T("Cell '%s' was not found in the loaded files."), s_IDBuffer);
++		return Result ? true : false;
++	}
++
++	if (!Optional && pRecord != NULL) {
++		Result = AddMessage(ESMSCR_WARNING_IDCONFLICT, _T("ID '%s' is not a %s type."), s_IDBuffer, GetFuncArgIDType(ArgFlags));
++		return Result ? true : false;
++	}
+ 
+ 	/* Is the argument optional or not? */
+ 	if (pRecord == NULL) {
+@@ -3249,6 +3479,45 @@
+  * symbol type (ex: ' r' or ' o' etc...).
+  *
+  *=========================================================================*/
++/* MWRecompile: the CS picks the expression argument type letter from the
++ * record the ID actually resolves to (e.g. a faction gives ' t' even for
++ * functions declared with a generic ID argument, and a GetPCCell name that
++ * is not a cell but a dialogue topic gives ' d'). */
++const TCHAR *CEsmScriptCompile::MwrRefTypeForID(const long long ArgFlags, const TCHAR *pID) {
++	const TCHAR *pType = GetFuncArgRefType(ArgFlags);
++	const TCHAR *pWantType = NULL;
++
++	if (pID == NULL || m_pDocument == NULL) {
++		return pType;
++	}
++
++	if (strcmp(pType, _T(" c")) == 0) pWantType = MWESM_REC_CELL;
++	else if (strcmp(pType, _T(" t")) == 0) pWantType = MWESM_REC_FACT;
++	else if (strcmp(pType, _T(" a")) == 0) pWantType = MWESM_REC_RACE;
++	else if (strcmp(pType, _T(" d")) == 0) pWantType = MWESM_REC_DIAL;
++
++	if (pWantType != NULL) {
++		/* The expected kind of record exists: normal case */
++		if (m_pDocument->FindRecord(pID, pWantType) != NULL) return pType;
++
++		/* Otherwise the CS uses the kind of record the ID really names
++		 * (GetPCRank "House Telvanni" -> ' d' for the dialogue topic) */
++		if (m_pDocument->FindRecord(pID, MWESM_REC_DIAL) != NULL) return _T(" d");
++		if (m_pDocument->FindRecord(pID, MWESM_REC_FACT) != NULL) return _T(" t");
++		if (m_pDocument->FindRecord(pID, MWESM_REC_RACE) != NULL) return _T(" a");
++		return pType;
++	}
++
++	if (strcmp(pType, _T(" r")) == 0 && (m_pCurrentFunc == NULL || m_pCurrentFunc->OpCode != 0x114e)) {
++		if (m_pDocument->FindObjectRecord(pID) == NULL) {
++			if (m_pDocument->FindRecord(pID, MWESM_REC_FACT) != NULL) return _T(" t");
++			if (m_pDocument->FindRecord(pID, MWESM_REC_RACE) != NULL) return _T(" a");
++		}
++	}
++
++	return pType;
++}
++
+ const TCHAR *CEsmScriptCompile::GetFuncArgRefType(const long long ArgFlags) {
+ 	/* Special case for the GetDetected function */
+ 	if (m_pCurrentFunc != NULL && m_pCurrentFunc->OpCode == 0x114e) {
+@@ -3380,6 +3649,43 @@
+ int CEsmScriptCompile::GetNextToken() {
+ 	//DEFINE_FUNCTION("CEsmScriptCompile::GetNextToken()");
+ 	m_LastToken = m_Token;
++	m_MwrPrevTokenID = m_TokenID;
++	m_MwrFirstOnLine = (m_TokenID == ESMSCR_TOKEN_EOL || m_pParse == NULL || m_CurrentLine <= 1 && m_CurrentCharPos == 0);
++	m_MwrRawToken.Empty();
++
++	/* MWRecompile: the CS takes the script name after Begin as the next
++	 * whitespace-delimited word and ignores anything else on that line
++	 * ("begin changeWater_-550_400", "Begin Float", "Begin Museum RobeLich"). */
++	if (m_MwrRawNameNext) {
++		m_MwrRawNameNext = false;
++
++		if (IsParseWhiteSpace()) {
++			SkipTokenWhiteSpace();
++		}
++
++		const TCHAR *pStart = m_pParse;
++		m_StartCharPos = m_CurrentCharPos;
++		m_StartLine = m_CurrentLine;
++		m_TokenParsed = false;
++
++		while (*m_pParse != NULL_CHAR && *m_pParse != ESMSCR_CHAR_EOL && *m_pParse != ' ' && *m_pParse != '\t'
++		       && *m_pParse != '\r' && *m_pParse != ';') {
++			m_pParse++;
++			m_CurrentCharPos++;
++		}
++
++		if (m_pParse > pStart) {
++			m_Token.Copy(pStart, m_pParse - pStart);
++			m_TokenID = ESMSCR_TOKEN_SYMBOL;
++
++			while (*m_pParse != NULL_CHAR && *m_pParse != ESMSCR_CHAR_EOL) {
++				m_pParse++;
++				m_CurrentCharPos++;
++			}
++
++			return ESMSCR_RESULT_OK;
++		}
++	}
+ 
+ 	/* Skip any space/comments before the token */
+ 	if (IsParseWhiteSpace()) {
+@@ -3404,6 +3710,9 @@
+ 		m_pParse++;
+ 		m_LineHasRef = false;
+ 		m_LastLineDataPos = m_ScriptDataSize;
++		m_MwrExprFunc = false; /* MWRecompile */
++		m_MwrPendingComma = false;
++		m_MwrStmtFunc = false;
+ 	} else if (*m_pParse == NULL_CHAR) {
+ 		m_TokenID = ESMSCR_TOKEN_EOS;
+ 		m_Token = "";
+@@ -3411,7 +3720,8 @@
+ 		return GetStringToken();
+ 	} else if (IsParseSymbolF()) {
+ 		return GetSymbolToken();
+-	} else if (IsParseDigit()) {
++	} else if (IsParseDigit() || (*m_pParse == '.' && isdigit((unsigned char)m_pParse[1]))) {
++		/* MWRecompile: ".75" is a number to the CS */
+ 		return GetNumberToken();
+ 	} else if (IsParseOperator()) {
+ 		return GetOperatorToken();
+@@ -3512,6 +3822,12 @@
+ 	/* Check for special operators/conditions */
+ 	if (m_TokenID == ESMSCR_TOKEN_VAROP || m_TokenID == ESMSCR_TOKEN_FUNCOP) {
+ 		/* Line can only have one object reference */
++		/* MWRecompile: the CS allows several remote variables on one line
++		 * ("set a.x to a.x + 1"); only a second '->' is an error. */
++		if (m_LineHasRef && m_TokenID == ESMSCR_TOKEN_VAROP) {
++			return ESMSCR_RESULT_OK;
++		}
++
+ 		if (m_LineHasRef) {
+ 			AddMessage(ESMSCR_ERROR_MULTREF, _T("Multiple object references found on line!"));
+ 			return ESMSCR_RESULT_ERROR;
+@@ -3627,8 +3943,17 @@
+ 
+ 	/* Copy the token name */
+ 	m_Token.Copy(pStart, m_pParse - pStart);
++	m_MwrRawToken = m_Token;
+ 	m_TokenID = ESMSCR_TOKEN_SYMBOL;
+ 
++	/* MWRecompile: a local named like a keyword or function ("end", "move",
++	 * "journal") is the local everywhere except at the start of a statement
++	 * or after '->', which is how the CS resolves it. */
++	if (!m_MwrFirstOnLine && m_MwrPrevTokenID != ESMSCR_TOKEN_FUNCOP && FindLocalVar(m_Token)) {
++		m_TokenID = ESMSCR_TOKEN_LOCALVAR;
++		return ESMSCR_RESULT_OK;
++	}
++
+ 	/* Check if the token is a reserved word */
+ 	Result = GetESMScriptResToken(m_Token);
+ 
+@@ -3637,9 +3962,14 @@
+ 		return ESMSCR_RESULT_OK;
+ 	}
+ 
+-	/* Check if the token is a local variable */
++	/* Check if the token is a local variable (MWRecompile: at the start of a
++	 * statement or after '->' a function of the same name wins) */
+ 	fResult = FindLocalVar(m_Token);
+ 
++	if (fResult && (m_MwrFirstOnLine || m_MwrPrevTokenID == ESMSCR_TOKEN_FUNCOP) && GetESMScriptFuncInfo(m_Token) != NULL) {
++		fResult = false;
++	}
++
+ 	if (fResult) {
+ 		m_TokenID = ESMSCR_TOKEN_LOCALVAR;
+ 		return ESMSCR_RESULT_OK;
+@@ -3658,6 +3988,18 @@
+ 	pFunc = GetESMScriptFuncInfo(m_Token);
+ 
+ 	if (pFunc != NULL) {
++		/* MWRecompile: the CS cannot nest a function in a statement's
++		 * argument list; it writes 0 for that argument instead
++		 * ("RemoveItem Gold_001 GetPCCrimeLevel" -> count 0). */
++		if (m_pCurrentFunc != NULL && m_MwrStmtFunc) {
++			AddMessage(ESMSCR_WARNING_BADFUNCARG,
++			           _T("Function '%s' used as an argument of '%s' is compiled as 0 (as the CS does)."),
++			           (const TCHAR *)m_Token, m_pCurrentFunc->Name);
++			m_Token = _T("0");
++			m_TokenID = ESMSCR_TOKEN_NUMBER;
++			return ESMSCR_RESULT_OK;
++		}
++
+ 		if (m_pCurrentFunc != NULL) {
+ 			AddMessage(ESMSCR_ERROR_BADTOKEN,
+ 			           _T("Cannot call the function '%s' from within another function!"),
+@@ -3757,6 +4099,28 @@
+ 		return false;
+ 	}
+ 
++	/* MWRecompile fix: strip the ID quotes before shifting, otherwise the
++	 * existing line data is moved 2 bytes too far for quoted IDs, leaving
++	 * 2 stale bytes and truncating the last 2 bytes of the line. */
++	if (pData[0] == '"') {
++		++pData;
++		Size -= 2;
++	}
++
++	/* MWRecompile: the CS stores the object reference with the case of the
++	 * record's own ID, not as typed in the script. */
++	TCHAR RefBuffer[MWESM_ID_MAXSIZE * 2 + 4];
++	if (Size > 0 && Size < (int)sizeof(RefBuffer) - 1) {
++		memcpy(RefBuffer, pData, Size);
++		RefBuffer[Size] = NULL_CHAR;
++		esmrecinfo_t *pRefInfo = m_pDocument->FindObjectRecord(RefBuffer);
++		CEsmRecord *pRefRecord = pRefInfo ? pRefInfo->pRecord : NULL;
++		if (pRefRecord != NULL && (int)strlen(pRefRecord->GetID()) == Size) {
++			memcpy(RefBuffer, pRefRecord->GetID(), Size);
++			pData = RefBuffer;
++		}
++	}
++
+ 	/* Shift existing line output data */
+ 	if (m_ScriptDataSize >= m_LastLineDataPos) {
+ 		memmove(m_ScriptData + m_LastLineDataPos + Size + 3,
+@@ -3768,14 +4132,8 @@
+ 	OpCode = 0x010C;
+ 	memcpy(m_ScriptData + m_LastLineDataPos, &OpCode, 2);
+ 
+-	if (pData[0] == '"') {
+-		Size -= 2;
+-		m_ScriptData[m_LastLineDataPos + 2] = (byte)Size;
+-		memcpy(m_ScriptData + m_LastLineDataPos + 3, pData + 1, (byte)Size);
+-	} else {
+-		m_ScriptData[m_LastLineDataPos + 2] = (byte)Size;
+-		memcpy(m_ScriptData + m_LastLineDataPos + 3, pData, (byte)Size);
+-	}
++	m_ScriptData[m_LastLineDataPos + 2] = (byte)Size;
++	memcpy(m_ScriptData + m_LastLineDataPos + 3, pData, (byte)Size);
+ 
+ 	/* Adjust the set position if required */
+ 	if (m_LastSetPos >= m_LastLineDataPos) {
+@@ -3950,9 +4308,19 @@
+ 	if ((FuncFlags & ESMSCR_FUNC_OPTSTART) != 0) {
+ 		m_FuncOptPos = m_ScriptDataSize;
+ 		m_FuncOptCount = m_NumFuncArgs;
++		m_AiWanderIdle2NonZero = false; /* MWRecompile */
+ 		AddScriptData("\0\0", 2);
+ 	}
+ 
++	/* MWRecompile: an ID-only argument whose text matches a variable name is
++	 * still an ID to the CS (StartScript MatchMakeGoval with a global of the
++	 * same name, StopScript Contract_Calvus with a local of the same name). */
++	if ((m_TokenID == ESMSCR_TOKEN_GLOBALVAR || m_TokenID == ESMSCR_TOKEN_LOCALVAR)
++	    && (FuncFlags & ESMSCR_FUNC_ID) != 0 && (FuncFlags & ESMSCR_FUNC_NUMBER) == 0
++	    && (FuncFlags & ESMSCR_FUNC_RESET) == 0) {
++		m_TokenID = ESMSCR_TOKEN_SYMBOL;
++	}
++
+ 	/* Check the type of the current token */
+ 	switch (m_TokenID) {
+ 		case ESMSCR_TOKEN_RESET:
+@@ -4897,6 +5265,12 @@
+ int CEsmScriptCompile::ParseFuncComma() {
+ 	bool Result;
+ 
++	/* MWRecompile: inside expressions the CS keeps a comma typed before an
++	 * ID argument ("GetDistance, Player" -> X<op>, r<len>Player). */
++	if (m_pCurrentFunc != NULL) {
++		m_MwrPendingComma = true;
++	}
++
+ 	/* Check for an optional function argument */
+ 	if (m_LastFuncArg != m_NumFuncArgs) {
+ 		if (m_FuncArgIndex < ESMSCR_MAX_FUNCARGS
+@@ -4936,6 +5310,21 @@
+ 		return ESMSCR_RESULT_OK;
+ 	}
+ 
++	/* MWRecompile: the CS ignores extra arguments after a statement-level
++	 * function ("disable "reeh_jah"", "StopCombat Player",
++	 * "AiFollow Player 0 0 0 0 0 0"): skip to the end of the line. */
++	if (m_MwrStmtFunc && !m_TokenParsed && m_TokenID != ESMSCR_TOKEN_EOL && m_TokenID != ESMSCR_TOKEN_EOS) {
++		AddMessage(ESMSCR_WARNING_BADFUNCARG, _T("Extra argument(s) to '%s' ignored ('%s')."), m_pCurrentFunc->Name, (const TCHAR *)m_Token);
++
++		while (*m_pParse != NULL_CHAR && *m_pParse != ESMSCR_CHAR_EOL) {
++			m_pParse++;
++			m_CurrentCharPos++;
++		}
++
++		m_MwrStmtFunc = false;
++		GetNextToken();
++	}
++
+ 	if (m_NumFuncArgs == 0) {
+ 		m_NumFuncArgs = 1;
+ 	}
+@@ -4986,7 +5375,10 @@
+ 		} else if ((m_pCurrentFunc->Var[Index] & ESMSCR_FUNC_RESET) != 0) {
+ 			/* Special case for AiWander */
+ 			if (m_pCurrentFunc->OpCode == 0x10F9 && m_FuncArgIndex > 3) {
+-				AddScriptData("\1", 1);
++				/* MWRecompile: the CS writes the text length of Idle2 here
++				 * (0 -> 1, 60 -> 2), verified on the vanilla AiWander calls */
++				char Byte = (char)(m_AiWanderIdle2NonZero ? (m_MwrResetLen > 255 ? 255 : m_MwrResetLen) : 1);
++				AddScriptData(&Byte, 1);
+ 			} else {
+ 				AddScriptData("\0", 1);
+ 			}
+@@ -5016,9 +5408,22 @@
+ 
+ 	if (m_FuncOptCount > 0 && m_FuncOptPos > 0) {
+ 		short Count = m_NumFuncArgs - m_FuncOptCount;
++
++		/* MWRecompile: for AiWander the CS count is the number of idle shorts
++		 * written after it (the argument counting above can go negative). */
++		if (m_pCurrentFunc->OpCode == 0x10F9) {
++			Count = (short)((m_ScriptDataSize - 1 - (m_FuncOptPos + 2)) / 2);
++			if (Count < 0) Count = 0;
++		}
++
+ 		*(short *)(m_ScriptData + m_FuncOptPos) = Count;
+ 	}
+ 
++	/* MWRecompile: forget the optional-count position so that a later function
++	 * (e.g. one inside an IF expression) cannot overwrite this count */
++	m_FuncOptCount = 0;
++	m_FuncOptPos = 0;
++
+ 	OutputFuncEnd();
+ 	m_pCurrentFunc = NULL;
+ 	return ESMSCR_RESULT_OK;
+@@ -5082,12 +5487,29 @@
+ 			break;
+ 
+ 		case ESMSCR_TOKEN_LOCALVAR:
+-			AddMessage(ESMSCR_ERROR_BADLOCAL,
+-			           _T("Local variable '%s' has already been defined!"),
+-			           m_Token);
+-			return ESMSCR_RESULT_ERROR;
++			/* MWRecompile: the CS accepts a repeated declaration and stores
++			 * it again in SCVR; references resolve to the first one. */
++			Result = AddMessage(ESMSCR_WARNING_IDCONFLICT,
++			                    _T("Local variable '%s' has already been defined!"),
++			                    m_Token);
++
++			if (!Result) {
++				return ESMSCR_RESULT_ERROR;
++			}
++
++			break;
+ 
+ 		default:
++			/* MWRecompile: the CS accepts locals named like functions or
++			 * keywords ("short move", "short end", "short journal"). */
++			if (MwrIsIdentifier(m_Token)) {
++				if (m_TokenID == ESMSCR_TOKEN_FUNCTION) {
++					m_pCurrentFunc = NULL; /* the tokenizer started a function call */
++				}
++
++				break;
++			}
++
+ 			AddMessage(ESMSCR_ERROR_BADLOCAL,
+ 			           _T("Invalid local variable name '%s'!"),
+ 			           m_Token);
+@@ -5105,8 +5527,9 @@
+ 		}
+ 	}
+ 
+-	/* Attempt to create a new local */
+-	Result = AddLocalVar(m_Token, NewType);
++	/* Attempt to create a new local (MWRecompile: with the name as typed,
++	 * not recased to a global of the same name) */
++	Result = AddLocalVar(m_MwrRawToken.IsEmpty() ? (const TCHAR *)m_Token : (const TCHAR *)m_MwrRawToken, NewType);
+ 
+ 	if (!Result) {
+ 		return ESMSCR_RESULT_ERROR;
+@@ -5148,7 +5571,10 @@
+ 
+ 	m_NumSetExpr++;
+ 
+-	if (m_LastSetNegative && m_TokenID != ESMSCR_TOKEN_NUMBER) {
++	/* MWRecompile: in SET expressions the CS also compiles a leading negative
++	 * number as "-1 N *"; in IF/WHILE expressions it keeps "-N". */
++	bool MwrLeadingNeg = m_MwrInSet && m_NumSetExpr == 1;
++	if (m_LastSetNegative && (m_TokenID != ESMSCR_TOKEN_NUMBER || MwrLeadingNeg)) {
+ 		AddScriptData(" -1", 3);
+ 	}
+ 
+@@ -5229,9 +5655,20 @@
+ 			break;
+ 
+ 		case ESMSCR_TOKEN_NUMBER:
+-			AddScriptData(" ", 1);
++			/* MWRecompile: in IF expressions the CS keeps the source spacing,
++			 * so "<=256" stays "<=256" rather than "<= 256". */
++			if (!m_MwrInSet && !m_LastSetNegative) {
++				const TCHAR *pStart = m_pParse - m_Token.GetLength();
++				if ((pStart > m_pScriptText && !isspace((unsigned char)pStart[-1])) || m_Token[0] == '.') {
++					/* no separator (the CS also writes ".75" straight after the operator) */
++				} else {
++					AddScriptData(" ", 1);
++				}
++			} else {
++				AddScriptData(" ", 1);
++			}
+ 
+-			if (m_LastSetNegative) {
++			if (m_LastSetNegative && !MwrLeadingNeg) {
+ 				AddScriptData("-", 1);
+ 				m_LastSetNegative = false;
+ 			}
+@@ -5275,6 +5712,7 @@
+ 			ASSERT(m_pCurrentFunc != NULL);
+ 			AddScriptData(&(m_pCurrentFunc->OpCode), 2);
+ 			m_LastFuncArgSymbol = false;
++			m_MwrStmtFunc = false; m_MwrExprFunc = !m_MwrInSet; /* MWRecompile: commas are kept in IF expressions only */
+ 
+ 			if (m_LastSetNegative) {
+ 				m_LastSetNegative = false;
+@@ -5667,7 +6105,8 @@
+ 	} else if ((TableEntry.Flags & ESTF_MANY) != 0) {
+ 		Result = ESMSCR_RESULT_BLOCKEND;
+ 	} else if ((TableEntry.Flags & ESTF_OPT) != 0) { /* No token match, but it's optional */
+-		if (m_TokenID != TableEntry.TokenID) {
++		/* MWRecompile: a missing closing bracket of an IF still finishes the condition */
++		if (m_TokenID != TableEntry.TokenID && TableEntry.TokenID != ESMSCR_TOKEN_CLOSEBRAC) {
+ 			Output = false;
+ 		}
+ 
+@@ -5743,14 +6182,23 @@
+ 			return ESMSCR_RESULT_ERROR;
+ 	}
+ 
+-	/* Get the object reference for the variable */
+-	pRecord = FindRecord(m_VarToken);
++	/* Get the object reference for the variable.
++	 * MWRecompile: prefer a placeable object, then a script, so that a
++	 * dialogue topic with the same name as an NPC is not picked up. */
++	{
++		esmrecinfo_t *pObjInfo = m_pDocument->FindObjectRecord(m_VarToken);
++		pRecord = pObjInfo ? pObjInfo->pRecord : FindRecord(m_VarToken, MWESM_REC_SCPT);
++		if (pRecord == NULL) pRecord = FindRecord(m_VarToken);
++	}
+ 
+ 	if (pRecord == NULL) {
+ 		AddMessage(ESMSCR_ERROR_BADID, _T("Unknown object id '%s' found!"), m_VarToken);
+ 		return ESMSCR_RESULT_ERROR;
+ 	}
+ 
++	/* MWRecompile: the CS writes the object's ID with the record's own case */
++	CEsmRecord *pNameRecord = pRecord;
++
+ 	if (InIf) {
+ 		if (m_LastSetNegative) {
+ 			AddScriptData(" -1", 3);
+@@ -5786,7 +6234,11 @@
+ 	/* Output the script/object name */
+ 	StrLength = (byte)m_VarToken.GetLength();
+ 
+-	if (m_VarToken[0] == '"') {
++	if (pNameRecord != NULL && strlen(pNameRecord->GetID()) == (size_t)(m_VarToken[0] == '"' ? StrLength - 2 : StrLength)) {
++		StrLength = (byte)strlen(pNameRecord->GetID());
++		AddScriptData(&StrLength, 1);
++		AddScriptData(pNameRecord->GetID(), StrLength);
++	} else if (m_VarToken[0] == '"') {
+ 		StrLength -= 2;
+ 		AddScriptData(&StrLength, 1);
+ 		AddScriptData(((const TCHAR *)m_VarToken) + 1, StrLength);
+@@ -5829,7 +6281,9 @@
+ 		}
+ 
+ 		//m_LastIfPos = m_ScriptDataSize - 1;
+-		m_LastSetPos = m_ScriptDataSize - 1;
++		if (!m_MwrInSet) { /* MWRecompile: keep the SET length position for "to a.x" */
++			m_LastSetPos = m_ScriptDataSize - 1;
++		}
+ 	} else {
+ 		AddScriptData("\0", 1);
+ 		m_LastSetPos = m_ScriptDataSize - 1;
+@@ -6107,6 +6561,7 @@
+  *
+  *=========================================================================*/
+ int CEsmScriptCompile::OutputIf() {
++	m_MwrInSet = false; /* MWRecompile */
+ 	//DEFINE_FUNCTION("CEsmScriptCompile::OutputIf()");
+ 	int LinePos = m_ScriptDataSize;
+ 	/* Output the initial if token */
+@@ -6179,6 +6634,14 @@
+ 	//Length = snprintf (Buffer, 15, _T(" %s "), m_Token);
+ 	Length = snprintf(Buffer, 15, _T(" %s"), static_cast<const char *>(m_Token));
+ 
++	/* MWRecompile: keep the source spacing ("foo==1" stays "foo==1") */
++	{
++		const TCHAR *pStart = m_pParse - m_Token.GetLength();
++		if (pStart > m_pScriptText && !isspace((unsigned char)pStart[-1])) {
++			Length = snprintf(Buffer, 15, _T("%s"), static_cast<const char *>(m_Token));
++		}
++	}
++
+ 	if (Length > 0) {
+ 		Result = AddScriptData(Buffer, Length);
+ 
+@@ -6210,6 +6673,19 @@
+ 
+ int CEsmScriptCompile::OutputIfRNumber() {
+ 	bool Result;
++
++	/* MWRecompile: the CS keeps the source spacing, so "<=256" stays "<=256"
++	 * rather than "<= 256". Drop the separator space if the number was
++	 * written straight after the operator. */
++	{
++		const TCHAR *pStart = m_pParse - m_Token.GetLength();
++		if (((pStart > m_pScriptText && !isspace((unsigned char)pStart[-1]) && pStart[-1] != '-' && pStart[-1] != '+') || m_Token[0] == '.')
++		    && m_ScriptDataSize > 0 && m_ScriptData[m_ScriptDataSize - 1] == ' ') {
++			--m_ScriptDataSize;
++			if (m_LastLineDataPos > m_ScriptDataSize) m_LastLineDataPos = m_ScriptDataSize;
++		}
++	}
++
+ 	Result = AddScriptData(m_Token, m_Token.GetLength());
+ 
+ 	if (!Result) {
+@@ -6310,6 +6786,7 @@
+  *
+  *=========================================================================*/
+ int CEsmScriptCompile::OutputSet() {
++	m_MwrInSet = true; /* MWRecompile */
+ 	int LinePos;
+ 	int Result;
+ 	LinePos = m_ScriptDataSize;
+@@ -6423,6 +6900,7 @@
+  *
+  *=========================================================================*/
+ int CEsmScriptCompile::OutputElseIf() {
++	m_MwrInSet = false; /* MWRecompile */
+ 	DEFINE_FUNCTION("CEsmScriptCompile::OutputElseIf()");
+ 	int Result;
+ 	int LinePos = m_ScriptDataSize;
+@@ -6476,6 +6954,25 @@
+ 	/* Output the intial empty statement count */
+ 	AddScriptData(_T("\00"), 1);
+ 
++	/* MWRecompile: the CS ignores anything after 'else' on the same line
++	 * ("else set x to 8" compiles as an empty else) */
++	{
++		const TCHAR *p = m_pParse;
++
++		while (*p == ' ' || *p == '\t') {
++			++p;
++		}
++
++		if (*p != NULL_CHAR && *p != ESMSCR_CHAR_EOL && *p != '\r' && *p != ';') {
++			AddMessage(ESMSCR_WARNING_BADFUNCARG, _T("Text after 'else' is ignored (as the CS does)."));
++
++			while (*m_pParse != NULL_CHAR && *m_pParse != ESMSCR_CHAR_EOL) {
++				m_pParse++;
++				m_CurrentCharPos++;
++			}
++		}
++	}
++
+ 	/* Initialize the required if related variables */
+ 	m_LastLineDataPos = LinePos;
+ 
+@@ -6580,12 +7077,17 @@
+ 	//DEFINE_FUNCTION("CEsmScriptCompile::OutputIfFunction()");
+ 	AddScriptData(" ", 1);
+ 	AddScriptData("X", 1);
+-	return OutputFunction();
++	int Result = OutputFunction();
++	m_MwrExprFunc = true; /* MWRecompile */
++	m_MwrStmtFunc = false;
++	return Result;
+ }
+ 
+ int CEsmScriptCompile::OutputLineFunction() {
+ 	//DEFINE_FUNCTION("CEsmScriptCompile::OutputLineFunction()");
+ 	m_StatementCount++;
++	m_MwrExprFunc = false; /* MWRecompile */
++	m_MwrStmtFunc = true;
+ 	return OutputFunction();
+ }
+ 
+@@ -6596,6 +7098,7 @@
+ 	OutputStoredFuncOp();
+ //#endif
+ 	AddScriptData(&(m_pCurrentFunc->OpCode), 2);
++	m_MwrPendingComma = false; /* MWRecompile */
+ 	m_LastMsgBoxArgs = -1;
+ 	m_LastMsgBoxBut = -1;
+ 	m_NumMsgArgs = 0;
+@@ -6627,12 +7130,15 @@
+ }
+ 
+ int CEsmScriptCompile::OutputFuncArgNum() {
++	m_MwrPendingComma = false; /* MWRecompile */
+ 	float fValue = (float)atof(m_Token);
+ 	long lValue = (long)atol(m_Token);
+ 	short sValue = (short)atoi(m_Token);
+ 	char bValue = (char)sValue;
+ 	__int64 FuncArgFlag;
+ 
++	bool MwrNegative = m_LastTokenNegative;
++
+ 	if (m_LastTokenNegative) {
+ 		fValue = -fValue;
+ 		lValue = -lValue;
+@@ -6652,14 +7158,31 @@
+ 		AddScriptData(&fValue, 4);
+ 	} else if ((FuncArgFlag & ESMSCR_FUNC_NOOUTPUT) != 0) {
+ 		++m_FuncOptCount; /* Reduce the optional argument count which is output by one */
++		/* MWRecompile: the CS turns AiWander's first idle (Idle2) into the trailing flag byte */
++		m_AiWanderIdle2NonZero = true;
++		m_MwrResetLen = m_Token.GetLength() + (MwrNegative ? 1 : 0);
+ 	} else if ((FuncArgFlag & ESMSCR_FUNC_FLOAT) != 0) {
+ 		AddScriptData(&fValue, 4);
+ 	} else if ((FuncArgFlag & ESMSCR_FUNC_LONG) != 0) {
+ 		AddScriptData(&lValue, 4);
+ 	} else if ((FuncArgFlag & ESMSCR_FUNC_SHORT) != 0) {
+ 		AddScriptData(&sValue, 2);
++
++		/* MWRecompile: for Random the CS follows the short value with the
++		 * rest of the number's text after its first character ("Random 75"
++		 * -> 75, '5'; "Random 101" -> 101, "01"). Verified on all vanilla uses. */
++		if (m_pCurrentFunc->OpCode == 0x1021 && m_Token.GetLength() > 1) {
++			AddScriptData(((const TCHAR *)m_Token) + 1, m_Token.GetLength() - 1);
++			m_LastFuncArgSymbol = true;
++			return 0;
++		}
+ 	} else if ((FuncArgFlag & ESMSCR_FUNC_RESET) != 0) {
+-		AddScriptData("\1", 1);
++		/* MWRecompile: the CS writes the length of the reset argument's text
++		 * here, not a flag ("0" -> 1, "90" -> 2, "180"/"270" -> 3), verified
++		 * on every AiTravel in the vanilla masters. */
++		int Len = m_Token.GetLength() + (MwrNegative ? 1 : 0);
++		char Byte = (char)(Len > 255 ? 255 : Len);
++		AddScriptData(&Byte, 1);
+ 	} else if ((FuncArgFlag & ESMSCR_FUNC_BYTE) != 0) {
+ 		AddScriptData(&bValue, 1);
+ 	}
+@@ -6672,6 +7195,123 @@
+ 	return 0;
+ }
+ 
++/* MWRecompile: the original CS cannot pass a variable to a numeric argument
++ * of a function not flagged as accepting variables; it silently writes a zero
++ * of the argument's size instead (PlaceAtPC id 1 distVar 1 -> distance 0.0). */
++int CEsmScriptCompile::MwrOutputStrayEndIf() {
++	AddMessage(ESMSCR_WARNING_BADFUNCARG, _T("Unmatched 'endif' compiled as a statement (as the CS does)."));
++	return OutputEndIf();
++}
++
++int CEsmScriptCompile::MwrOutputStrayElse() {
++	AddMessage(ESMSCR_WARNING_BADFUNCARG, _T("Unmatched 'else' compiled as a statement (as the CS does)."));
++	return OutputElse();
++}
++
++int CEsmScriptCompile::MwrOutputStrayElseIf() {
++	AddMessage(ESMSCR_WARNING_BADFUNCARG, _T("Unmatched 'elseif' compiled as a statement (as the CS does)."));
++	return OutputElseIf();
++}
++
++/* MWRecompile: "set undeclared to 1" -- the CS compiles an unknown, undotted
++ * SET target as 'V' with index 1 (seen in AhniaNote, bardoor3Script,
++ * avSlavehunter, ColonyFalco); keep doing so, with a warning. */
++int CEsmScriptCompile::MwrParseSetSymbol() {
++	const TCHAR *p = m_pParse;
++
++	while (*p == ' ' || *p == '\t') {
++		++p;
++	}
++
++	if (*p != '.' && !IsSymbolID(m_Token)) {
++		AddMessage(ESMSCR_WARNING_BADFUNCVAR, _T("Unknown variable '%s' in SET (the CS compiles it as an undefined variable)."), (const TCHAR *)m_Token);
++		AddScriptData("V\1\0", 3);
++		AddScriptData("\0", 1);
++		m_LastSetPos = m_ScriptDataSize - 1;
++		m_TokenParsed = true;
++		return ESMSCR_RESULT_TABLEEND;
++	}
++
++	return ParseSymbolID();
++}
++
++int CEsmScriptCompile::MwrOutputRefLineFunction() {
++	m_MwrExprFunc = false;
++	m_MwrStmtFunc = true; /* "ref->Func args": extra args are ignored like plain statements */
++	return OutputFunction();
++}
++
++/* MWRecompile: a bare ID in an IF expression ("if ( BM_BearHunt1 == 0 )")
++ * is written by the CS as a typed reference: ' d' + length + ID. */
++int CEsmScriptCompile::MwrParseIfSymbol() {
++	const TCHAR *p = m_pParse;
++
++	while (*p == ' ' || *p == '\t') {
++		++p;
++	}
++
++	if (*p == '.' || (p[0] == '-' && p[1] == '>') || m_pDocument == NULL) {
++		return ParseSymbolID();
++	}
++
++	const TCHAR *pType = NULL;
++	esmrecinfo_t *pRecord = NULL;
++
++	if ((pRecord = m_pDocument->FindRecord(m_Token, MWESM_REC_DIAL)) != NULL) pType = _T(" d");
++	else if ((pRecord = m_pDocument->FindRecord(m_Token, MWESM_REC_FACT)) != NULL) pType = _T(" t");
++	else if ((pRecord = m_pDocument->FindRecord(m_Token, MWESM_REC_RACE)) != NULL) pType = _T(" a");
++	else if ((pRecord = m_pDocument->FindObjectRecord(m_Token)) != NULL) pType = _T(" r");
++
++	if (pType == NULL) {
++		return ParseSymbolID();
++	}
++
++	AddMessage(ESMSCR_WARNING_BADFUNCVAR, _T("ID '%s' used as a value in an expression (compiled as the CS does)."), (const TCHAR *)m_Token);
++	byte Len = (byte)m_Token.GetLength();
++	AddScriptData(pType, 2);
++	AddScriptData(&Len, 1);
++	AddScriptData((const TCHAR *)m_Token, Len);
++	m_IsEmptyIf = false;
++	m_TokenParsed = true;
++	return ESMSCR_RESULT_TABLEEND;
++}
++
++int CEsmScriptCompile::MwrOutputBegin() {
++	m_MwrRawNameNext = true;
++	return 0;
++}
++
++bool CEsmScriptCompile::MwrIsIdentifier(const TCHAR *pText) {
++	if (pText == NULL || *pText == NULL_CHAR) return false;
++	if (!isalpha((unsigned char)*pText) && *pText != '_') return false;
++	for (const TCHAR *p = pText; *p != NULL_CHAR; ++p) {
++		if (!isalnum((unsigned char)*p) && *p != '_') return false;
++	}
++	return true;
++}
++
++bool CEsmScriptCompile::MwrIsIDOnlyArg() {
++	if (m_pCurrentFunc == NULL || m_FuncArgIndex < 0 || m_FuncArgIndex >= MWESM_SCRIPT_MAXARGS) return false;
++	long long Arg = m_pCurrentFunc->Var[m_FuncArgIndex];
++	return (Arg & ESMSCR_FUNC_ID) != 0 && (Arg & ESMSCR_FUNC_NUMBER) == 0 && (Arg & ESMSCR_FUNC_RESET) == 0;
++}
++
++bool CEsmScriptCompile::MwrOutputZeroArgForVar() {
++	if (m_pCurrentFunc == NULL || m_FuncArgIndex < 0 || m_FuncArgIndex >= MWESM_SCRIPT_MAXARGS) return false;
++	if ((m_pCurrentFunc->Flags & ESMSCR_FUNC_VAR) != 0) return false;
++	if (GetEsmOptAllowExtFuncs()) return false; /* MWSE handles variable arguments */
++	long long Arg = m_pCurrentFunc->Var[m_FuncArgIndex];
++	if ((Arg & ESMSCR_FUNC_FLOAT) != 0 || (Arg & ESMSCR_FUNC_LONG) != 0) {
++		AddScriptData("\0\0\0\0", 4);
++	} else if ((Arg & ESMSCR_FUNC_SHORT) != 0) {
++		AddScriptData("\0\0", 2);
++	} else {
++		return false;
++	}
++	m_LastFuncArgSymbol = false;
++	return true;
++}
++
+ int CEsmScriptCompile::OutputFuncArgGlobal() {
+ 	char GlobalSize = m_Token.GetLength();
+ 
+@@ -6681,6 +7321,14 @@
+ 		}
+ 	}
+ 
++	if (MwrIsIDOnlyArg()) {
++		return 0; /* MWRecompile: written as an ID by CheckFuncArg */
++	}
++
++	if (MwrOutputZeroArgForVar()) {
++		return 0;
++	}
++
+ 	if ((m_pCurrentFunc->Flags & ESMSCR_FUNC_SHORTVAR) == 0) {
+ 		AddScriptData(" ", 1);
+ 	}
+@@ -6720,6 +7368,14 @@
+ 		}
+ 	}
+ 
++	if (MwrIsIDOnlyArg()) {
++		return 0; /* MWRecompile: written as an ID by CheckFuncArg */
++	}
++
++	if (MwrOutputZeroArgForVar()) {
++		return 0;
++	}
++
+ 	FuncIndex = FindLocalVarIndex(m_Token, FuncType);
+ 
+ 	if ((m_pCurrentFunc->Flags & ESMSCR_FUNC_SHORTVAR) == 0) {
+@@ -6740,32 +7396,48 @@
+ 	return 0;
+ }
+ 
+-int CEsmScriptCompile::OutputFuncArgStrSym() {
+-	char StringLen = m_Token.GetLength() - 2;
++int CEsmScriptCompile::MwrOutputFuncArgID(const TCHAR *pID, int Length) {
++	char StringLen = (char)Length;
+ 
+ 	if (m_OutputFuncIDRef) {
+-		AddScriptData(GetFuncArgRefType(m_pCurrentFunc->Var[m_FuncArgIndex]), 2);
+-	}
++		TCHAR Buffer[MWESM_ID_MAXSIZE * 2 + 4];
++		strnncpy(Buffer, pID, Length < (int)sizeof(Buffer) - 1 ? Length : (int)sizeof(Buffer) - 1);
++		const TCHAR *pType = MwrRefTypeForID(m_pCurrentFunc->Var[m_FuncArgIndex], Buffer);
+ 
+-	AddScriptData(&StringLen, 1);
+-	AddScriptData(((const TCHAR *)m_Token) + 1, (int)StringLen);
+-	m_LastFuncArgSymbol = false;
+-	return 0;
+-}
++		/* MWRecompile: the CS keeps a comma typed before an ID argument */
++		if (m_MwrPendingComma) {
++			AddScriptData(",", 1);
++		}
+ 
+-int CEsmScriptCompile::OutputFuncArgSym() {
+-	char StringLen = m_Token.GetLength();
++		AddScriptData(pType, 2);
++	}
+ 
+-	if (m_OutputFuncIDRef) {
+-		AddScriptData(GetFuncArgRefType(m_pCurrentFunc->Var[m_FuncArgIndex]), 2);
++	m_MwrPendingComma = false;
++
++	/* MWRecompile: the CS NUL-pads IDs shorter than 4 characters to 4 bytes
++	 * (GetRace "Orc" -> 4,"Orc\0"; StartCombat "Ken" -> 4,"Ken\0") */
++	if (Length < 4) {
++		StringLen = 4;
++		AddScriptData(&StringLen, 1);
++		AddScriptData(pID, Length);
++		AddScriptData("\0\0\0\0", 4 - Length);
++	} else {
++		AddScriptData(&StringLen, 1);
++		AddScriptData(pID, Length);
+ 	}
+ 
+-	AddScriptData(&StringLen, 1);
+-	AddScriptData(m_Token, (int)StringLen);
+ 	m_LastFuncArgSymbol = false;
+ 	return 0;
+ }
+ 
++int CEsmScriptCompile::OutputFuncArgStrSym() {
++	return MwrOutputFuncArgID(((const TCHAR *)m_Token) + 1, m_Token.GetLength() - 2);
++}
++
++int CEsmScriptCompile::OutputFuncArgSym() {
++	return MwrOutputFuncArgID((const TCHAR *)m_Token, m_Token.GetLength());
++}
++
+ int CEsmScriptCompile::OutputFuncArgString() {
+ 	short StringLen = m_Token.GetLength() - 2;
+ 
+@@ -6843,6 +7515,7 @@
+  *
+  *=========================================================================*/
+ int CEsmScriptCompile::OutputWhile() {
++	m_MwrInSet = false; /* MWRecompile */
+ 	int LinePos = m_ScriptDataSize;
+ 
+ 	/* Output the initial if token */
+--- upstream/project/EsmScriptCompile.h
++++ mwrecompile/project/EsmScriptCompile.h
+@@ -237,6 +237,16 @@
+ 	int m_FuncOptCount;
+ 	int m_FuncOptPos;
+ 	int m_StatementCount;
++	bool m_MwrPendingComma = false;
++	bool m_MwrRawNameNext = false;
++	bool m_MwrStmtFunc = false;           /* MWRecompile: current function is a statement */        /* MWRecompile: next token is the raw Begin name */
++	bool m_MwrFirstOnLine = true;         /* MWRecompile: current token starts a statement */
++	int  m_MwrPrevTokenID = 0;
++	CSString m_MwrRawToken;               /* MWRecompile: symbol text as typed */
++	int  m_MwrResetLen = 1;               /* MWRecompile: text length of AiWander's Idle2 */      /* MWRecompile: a comma preceded the next argument */
++	bool m_MwrExprFunc = false;          /* MWRecompile: current function is inside an IF expression */
++	bool m_MwrInSet = false;             /* MWRecompile: expression belongs to a SET */
++	bool m_AiWanderIdle2NonZero = false; /* MWRecompile: CS AiWander flag byte */
+ 
+ 	CGenStack m_IfStatementStack; /* Tracks statement count for if statements */
+ 
+@@ -252,9 +262,30 @@
+ 	bool AddIfBlock(const int StatementCount, const int ScriptPos);
+ 
+ 	/* Add error or warning messages */
+-	void AddError(const TCHAR *pString, ...);
+-	void AddWarning(const TCHAR *pString, ...);
+-	bool AddMessage(const int MessageID, const TCHAR *pString, ...);
++	void AddErrorRaw(const TCHAR *pString, ...);
++	void AddWarningRaw(const TCHAR *pString, ...);
++	bool AddMessageRaw(const int MessageID, const TCHAR *pString, ...);
++
++	/* MWRecompile: MSVC passes CSString objects through '...' as their string
++	 * pointer; GCC does not. These wrappers convert CSString arguments to
++	 * plain string pointers before they reach the variadic functions. */
++	static const TCHAR *MwrArg(const CSString &s) { return (const TCHAR *)s; }
++	template <typename T> static T MwrArg(T v) { return v; }
++
++	template <typename... A> void AddError(const TCHAR *pString, A &&... a) {
++		AddErrorRaw(pString, MwrArg(a)...);
++	}
++	template <typename... A> void AddWarning(const TCHAR *pString, A &&... a) {
++		AddWarningRaw(pString, MwrArg(a)...);
++	}
++	template <typename... A> bool AddMessage(const int MessageID, const TCHAR *pString, A &&... a) {
++		return AddMessageRaw(MessageID, pString, MwrArg(a)...);
++	}
++
++  public:
++	/* MWRecompile: last error text, including errors not added to the error array */
++	const TCHAR *GetLastErrorMessage() { return m_ErrorMessage; }
++  protected:
+ 
+ 	/* Ensure that the current token is the given type */
+ 	int AssertToken(const int Token);
+@@ -287,6 +318,11 @@
+ 	/* Converts a function argument ID type flags to a string */
+ 	const TCHAR *GetFuncArgIDType(const long long FuncArgs);
+ 	const TCHAR *GetFuncArgRefType(const long long FuncArgs);
++	const TCHAR *MwrRefTypeForID(const long long FuncArgs, const TCHAR *pID);
++	int MwrOutputFuncArgID(const TCHAR *pID, int Length);
++	bool MwrOutputZeroArgForVar();
++	bool MwrIsIDOnlyArg();
++	bool MwrIsIdentifier(const TCHAR *pText);
+ 
+ 	/* Generates the script local variable data block */
+ 	void MakeScriptVarData();
+@@ -534,6 +570,13 @@
+ 	int OutputFuncArgString();
+ 	int OutputFuncArgReset();
+ 	int OutputFuncEnd();
++	int MwrOutputBegin(); /* MWRecompile */
++	int MwrParseSetSymbol();
++	int MwrParseIfSymbol();
++	int MwrOutputRefLineFunction();
++	int MwrOutputStrayEndIf();
++	int MwrOutputStrayElse();
++	int MwrOutputStrayElseIf();
+ 	int OutputScriptName() {
+ 		m_ScriptName = m_Token;
+ 		return 0;
+--- upstream/project/EsmScriptDefs.cpp
++++ mwrecompile/project/EsmScriptDefs.cpp
+@@ -255,6 +255,7 @@
+ 
+ 			case '>':
+ 			case '<':
++			case '=': /* MWRecompile: the CS accepts a lone '=' as a compare operator */
+ 				return ESMSCR_TOKEN_RELOP;
+ 
+ 			case '.':
+--- upstream/project/EsmScriptFuncs.cpp
++++ mwrecompile/project/EsmScriptFuncs.cpp
+@@ -5097,8 +5097,8 @@
+ 		VB,
+ 		VB,
+ 		VB,
+-		VB,
+-		VB,
++		VB | VOPT /* MWRecompile: snow/blizzard optional; the CS pads them with 0 */,
++		VB | VOPT,
+ 		VN,
+ 	},
+ 	{

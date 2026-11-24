@@ -9,6 +9,7 @@ with its license; the only exception is `Translation.txt` (below).
 | texconv (DirectXTex) | `texconv.exe` | MIT (`TEXCONV_LICENSE.txt`) | https://github.com/microsoft/DirectXTex |
 | FFmpeg 9.0.2 with LAME 3.100, our audio-only build | `ffmpeg.exe`, `ffprobe.exe` | LGPL v2.1 or later (`LGPL-2.1.txt`; LAME: `source/LAME_LICENSE.txt`) | `source/` (complete, see below) |
 | 7-Zip 26.02 | `7z/7z.exe`, `7z/7z.dll` | GNU LGPL v2.1 + unRAR restriction (`7z/License.txt`, `7z/LGPL-2.1.txt`) | `7z/7z2602-src.7z` |
+| MWRecompile 1.0.0 (MWEdit 0.7.0's script compiler, headless) | `MWRecompile/MWRecompile.exe` | MIT (dej) + MWEdit MIT (Walrus Tech; Dave Humphrey), both in `MWRecompile/LICENSE.txt` | `MWRecompile/source/MWRecompile-1.0.0-src.zip`; changes to MWEdit in `MWRecompile/CHANGES.md` and `CHANGES-vendor.diff` |
 | LuaJIT 2.1 | `luajit/` | MIT (`luajit/COPYRIGHT`) | https://luajit.org/ |
 
 Keep each license file beside its binaries when redistributing.

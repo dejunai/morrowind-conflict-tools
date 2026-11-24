@@ -128,6 +128,10 @@ The "deleted by vortex_tidy" folder is derived from the resolved staging folder 
 
 `lua tools/MWSE/mods/` holds the mw* Lua suite these tools work with (`mwsuite`); `--play` copies any of its files missing from `Data Files` (existing files are never overwritten). Among them are `mwguard` (a passive profiler: it times per-frame handlers and logs extreme priorities to `MWSE\logs\mwguard.log`, without throttling or changing other mods), `mwsoundguard` and `mwhangwatch`.
 
+## Sound scripts (`--soundfix`)
+
+Many scripts start a sound only while `GetSoundPlaying` says it isn't playing. Where the engine answers 0 for object sounds, they restart it every frame. `--soundfix` (also run by `--fix`; `--no-soundfix` skips it) rewrites them to keep their own state, a flag for a loop and a one-frame-early timer for a one-shot, and recompiles them with `tools\MWRecompile\` into `mwdialog_check - MWSoundFix.esp`, which the sorter loads just before the Multipatch. A script is changed only when its unchanged source recompiles to exactly the bytecode it ships with; `generated\mwdialog_soundfix_report.txt` lists every script and why any was left alone (those stay under `mwsoundguard`). The `mwsoundfix` MWSE mod re-arms the patched scripts on every load and when their objects come back. `--dry-run` or `--soundfix-report` only report; `--soundfix-undo` takes the patch out; `--soundfix-loop-mode restart` is for an install without MWSE. New games are assumed: old saves aren't migrated.
+
 ## Output wrapping
 
 Human-readable feedback (console, `mwdialog_report.txt` when stdout is redirected, dated lines in `mwdialog_fixes.log`, and `argparse --help`) is wrapped at 115 characters. A continuation line is indented two spaces beyond the line's own indent, or aligns under a `- ` bullet or under the message after a log timestamp. A path or other single token longer than 115 characters is left on its own line.
