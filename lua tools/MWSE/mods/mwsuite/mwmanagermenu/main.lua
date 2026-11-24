@@ -14,7 +14,7 @@ local PER_ROW = 4
 
 -- the suite, in tab order (tests/test_unified_menu.py checks this against reference/mwse-lua-guards/mods)
 local SUITE = {
-    "mwsaveguard", "mwteleportguard", "mwmouseguard", "mwwarnsuppression", "mwpersonaleffects",
+    "mwsaveguard", "mwteleportguard", "mwmouseguard", "mwwarnsuppression",
     "mweffectinspector", "mwpluginpatches", "mwfloatfix", "mwcollide", "mwstranded",
     "mwperformers", "mwinfoloop", "mwsoundguard", "mwsoundfix", "mwhangwatch", "mwguard",
     "mwexitguard", "mwquicktoggle", "mwcustomclasspersistence",

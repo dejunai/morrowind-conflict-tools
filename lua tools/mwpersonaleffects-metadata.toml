@@ -1,8 +1,0 @@
-[package]
-name = "mwpersonaleffects"
-description = "Standalone Lua fixes for Personal Effects' Census and Excise scripts."
-category = "Bug Fixes"
-
-[tools.mwse]
-lua-mod = "mwsuite.mwpersonaleffects"
-load-priority = 4500
