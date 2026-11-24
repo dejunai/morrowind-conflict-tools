@@ -3878,6 +3878,7 @@ def run_fix(args, plugins, bsas, data_dirs, report, world, only, hidden=frozense
         """Write a patch; a brand-new one gets the day after the newest plugin (date-based load order)."""
         is_new = not os.path.exists(path)
         result = write_patch(path, *a, **kw)
+        back_in_load_order(args, os.path.basename(path))
         if is_new:
             when = next_free_date(args.data_dir, os.path.basename(path))
             if when:
@@ -9517,6 +9518,24 @@ def full_check(args, game_dir, stage):
 
 
 IN_FULL = False
+
+
+def back_in_load_order(args, name):
+    """A generated patch that was just (re)built but isn't in the load order goes back in: the ESM fixes patch
+    right after the masters, the others just before the Multipatch. (--cell-conflicts sets our patches aside when
+    it turns off a plugin they name as a master; only some of their writers put them back themselves.)"""
+    cur = read_load_order(args) or []
+    if args.dry_run or not cur or name.lower() in {n.lower() for n in cur}:
+        return False
+    if name.lower() == PATCH_NAME.lower():
+        at = sum(1 for n in cur if n.lower().endswith(".esm"))
+    else:
+        at = next((i for i, n in enumerate(cur) if n.lower() == MULTI_PATCH_NAME.lower()), len(cur))
+    game_dir = os.path.dirname(os.path.abspath(args.data_dir))
+    set_game_files(args.ini or os.path.join(game_dir, "Morrowind.ini"), cur[:at] + [name] + cur[at:],
+                   f"--fix ({name} back in the load order)")
+    print(f"  {name}: back in the load order")
+    return True
 
 
 def multipatch_aside(args, game_dir):
