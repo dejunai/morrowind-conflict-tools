@@ -463,3 +463,18 @@ def test_normal_map_stand_in_is_flat(tmp_path, name):
     assert data[:4] == b"DDS " and struct.unpack_from("<4I", data, 92) == (0x00FF0000, 0x0000FF00, 0x000000FF,
                                                                            0xFF000000)
     assert data[128:] == bytes((255, 128, 128, 255)) * 16           # BGRA: RGB (128, 128, 255) = flat normal
+
+
+def test_a_missing_stand_in_is_copied_out_of_morrowind_bsa_and_kept(tmp_path, monkeypatch):
+    # the stand-ins are the game's own files, never shipped: the tools take them from the player's Morrowind.bsa
+    game = tmp_path / "game"
+    (game / "Data Files").mkdir(parents=True)
+    (game / "Data Files" / "Morrowind.bsa").write_bytes(bsa([(r"meshes\m\misc_dwrv_coin00.nif", b"COIN")]))
+    dummies = tmp_path / "dummy assets"
+    monkeypatch.setitem(m.dummy_path.__globals__, "DUMMY_DIR", str(dummies))
+    path = m.dummy_path(m.DUMMY_NIF, str(game))
+    assert open(path, "rb").read() == b"COIN" and (dummies / m.DUMMY_NIF).exists()
+    (game / "Data Files" / "Morrowind.bsa").unlink()
+    assert m.dummy_path(m.DUMMY_NIF, str(game)) == path                  # kept: no BSA needed the next time
+    with pytest.raises(OSError):
+        m.dummy_path(m.DUMMY_KF, str(game))                                # none kept and no BSA: an error

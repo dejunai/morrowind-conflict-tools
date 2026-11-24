@@ -286,10 +286,10 @@ def placeholder_dds(name):
 def stand_in_bytes(rel):
     ext = os.path.splitext(rel)[1].lower()
     if ext == ".kf":                        # an animation: the game's smallest one (a few frames, harmless)
-        with open(os.path.join(DUMMY_DIR, DUMMY_KF), "rb") as f:
+        with open(dummy_path(DUMMY_KF), "rb") as f:
             return f.read()
     if ext == ".nif":                       # a missing model: a small coin, not the engine's huge "!" marker
-        with open(os.path.join(DUMMY_DIR, DUMMY_NIF), "rb") as f:
+        with open(dummy_path(DUMMY_NIF), "rb") as f:
             return f.read()
     if ext == ".dds" and rel.replace("/", "\\").lower().startswith("icons\\"):
         return placeholder_icon()
@@ -330,6 +330,32 @@ DUMMY_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dummy asse
 DUMMY_NIF = "mwdialog_dummy.nif"       # a small vanilla Dwemer coin, for missing models
 
 DUMMY_KF = "mwdialog_dummy.kf"                   # the game's xin_dagoth_bridge00.kf (510 bytes): broken animations
+# the stand-ins are the game's own files, never shipped: each is copied out of Morrowind.bsa when first needed
+DUMMY_SOURCES = {DUMMY_NIF: "meshes\\m\\misc_dwrv_coin00.nif", DUMMY_KF: "meshes\\i\\xin_dagoth_bridge00.kf",
+                 "mwdialog_dummy_marker.nif": "meshes\\editormarker.nif",
+                 "mwdialog_dummy_anim.nif": "meshes\\base_anim.nif"}
+
+
+def dummy_path(name, game_dir=None):
+    """The stand-in `name` in DUMMY_DIR. A missing one is copied out of the game's Morrowind.bsa and kept there
+    for the next time. Raises OSError when there is none and no Morrowind.bsa to copy it from."""
+    path = os.path.join(DUMMY_DIR, name)
+    if os.path.exists(path) or name not in DUMMY_SOURCES:
+        return path
+    import mwdialog_paths as MP
+    from mwdialog_bsa import bsa_index
+    bsa = os.path.join(game_dir or MP.find_game_dir() or "", "Data Files", "Morrowind.bsa")
+    entry = bsa_index(bsa).get(DUMMY_SOURCES[name]) if os.path.isfile(bsa) else None
+    if entry is None:
+        raise FileNotFoundError(f"{path}: missing, and no Morrowind.bsa with {DUMMY_SOURCES[name]} to copy it from")
+    with open(bsa, "rb") as f:
+        f.seek(entry[0])
+        data = f.read(entry[1])
+    os.makedirs(DUMMY_DIR, exist_ok=True)
+    with open(path + ".tmp", "wb") as f:
+        f.write(data)
+    os.replace(path + ".tmp", path)
+    return path
 
 
 def nif_is_empty(data):

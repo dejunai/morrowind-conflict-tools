@@ -111,6 +111,42 @@ def nif_links_past_end(data):
     return [count, top] if top >= count else None
 
 
+BROKEN_MODELS = []          # (rel, what is done about it): repeated at the end of the run, where it isn't missed
+
+
+def broken_models_notice(out=None):
+    """The last lines of a run: every broken model found (a line lost in a long report is a crash in game)."""
+    if not BROKEN_MODELS:
+        return
+    out = out or (lambda t: print(t, file=sys.stderr, flush=True))
+    found = dict(BROKEN_MODELS)
+    out(f"\n*** {len(found)} broken model(s): the game crashes loading each one:")
+    for rel, what in found.items():
+        out(f"    {rel}: {what}")
+    BROKEN_MODELS.clear()
+
+
+def _is_stand_in(b, m, rel):
+    try:
+        return b == m.stand_in_bytes(rel)
+    except OSError:                         # no "dummy assets" folder: no stand-in was ever put anywhere
+        return False
+
+
+def _broken_original(root, rel):
+    """True when <mod>\\Off\\broken\\<plugin>\\<rel> keeps a model with links past its end: the file at rel is
+    then the stand-in --fix put in its place."""
+    base = os.path.join(root, "Off", "broken")
+    for name in (os.listdir(base) if os.path.isdir(base) else ()):
+        try:
+            with open(os.path.join(base, name, rel), "rb") as f:
+                if nif_links_past_end(f.read()):
+                    return True
+        except OSError:
+            pass
+    return False
+
+
 CACHE_FILE = "mwdialog_asset_cache.json"           # the old format: converted once, then renamed
 CACHE_DB = "mwdialog_asset_cache.sqlite"
 MIGRATED_SUFFIX = ".migrated"
@@ -1236,7 +1272,13 @@ def check(world, m):
             count, top = facts["past"]
             r.add("ERROR", "Data Files", "", "", f"{rel}: broken model: a node in it points at block {top}, but its "
                                                  f"header says it has only {count}; the game crashes loading it. "
-                                                 f"Let another mod's copy of this file win (Vortex), or remove it")
+                                                 f"--fix keeps it in Off\\...\\broken\\ and puts a stand-in model in "
+                                                 f"its place; then run vortex_tidy --apply and Deploy in Vortex, so "
+                                                 f"another mod's copy can win")
+            fixes.append(("broken", full, rel, "broken model"))
+            BROKEN_MODELS.append((rel, "--fix puts a stand-in in its place (original kept in Off\\...\\broken\\); "
+                                       "then run vortex_tidy --apply and Deploy in Vortex, so another mod's copy wins"))
+            continue
         if rel.lower().endswith(".nif") and facts.get("noshape") and "marker" not in rel.lower():
             r.add("WARN", "Data Files", "", "", f"{rel}: model has no polygons (draws nothing); fine if the mod "
                                                 f"hides something on purpose")
@@ -1819,7 +1861,8 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None, stats=None):
         key = mod_key + norm_rel(rel)
         got = cache.get(key, stamp)
         if got is not None and got.get("c") and (top != "splash" or got.get("sr") == splash_rule()) \
-                and not (top in TEX_DIRS and _over_texture_cap(got.get("t"), m)):
+                and not (top in TEX_DIRS and _over_texture_cap(got.get("t"), m)) \
+                and not (low.endswith(".nif") and "past" not in (got.get("f") or {})):   # from before that check
             if top == "meshes":
                 tn = (got.get("f") or {}).get("tn")
                 if tn is None and low.endswith(".nif"):        # an older record: the model is read once
@@ -1919,8 +1962,19 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None, stats=None):
             past = nif_links_past_end(b) if low.endswith(".nif") else None
             if past:
                 issues.append(("ERROR", rel, f"broken model: a node in it points at block {past[1]}, but its header "
-                                             f"says it has only {past[0]}; the game crashes loading it. Let another "
-                                             f"mod's copy win, or remove it"))
+                                             f"says it has only {past[0]}; the game crashes loading it -> moved to "
+                                             f"Off\\...\\broken\\; Deploy in Vortex so another mod's copy wins"))
+                fixes.append(("brokenout", full, rel, "broken model"))
+                BROKEN_MODELS.append((rel, f"in {os.path.basename(os.path.normpath(root))}: vortex_tidy --apply moves "
+                                           f"it to Off\\...\\broken\\; then Deploy in Vortex so another mod's copy "
+                                           f"wins (with none, objects using it show no model)"))
+                continue
+            if low.endswith(".nif") and os.path.isdir(os.path.join(root, "Off", "broken")) \
+                    and _is_stand_in(b, m, rel) and _broken_original(root, rel):
+                issues.append(("ERROR", rel, "stand-in --fix put in place of a broken model -> removed; Deploy in "
+                                             "Vortex so another mod's copy wins"))
+                fixes.append(("brokenout", full, rel, "stand-in"))
+                continue
             if low.endswith(".nif") and nif_without_shapes(b) and "marker" not in low:
                 issues.append(("WARN", rel, "model has no polygons (draws nothing); fine if it hides something on "
                                             "purpose"))
@@ -1997,7 +2051,7 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None, stats=None):
     return issues, fixes
 
 
-FIX_ORDER = {"ascii": 0, "broken": 1, "orphan": 2, "snd": 3, "keys": 4, "abs": 5, "tex": 6, "splash": 6}
+FIX_ORDER = {"ascii": 0, "broken": 1, "brokenout": 1, "orphan": 2, "snd": 3, "keys": 4, "abs": 5, "tex": 6, "splash": 6}
 
 
 def _backup_in_mod(root, rel, full, plugin_name, feature="converted"):
@@ -2180,7 +2234,7 @@ def apply_folder(root, fixes, m, game_dir, plugin_name):
     for kind, full, rel, job in fixes:
         if full in gone:
             continue                               # already moved out (broken / orphaned)
-        if kind in ("broken", "orphan"):
+        if kind in ("broken", "orphan", "brokenout"):
             gone.add(full)
         try:
             data = open(full, "rb").read()
@@ -2189,6 +2243,18 @@ def apply_folder(root, fixes, m, game_dir, plugin_name):
                 dest = broken_dest(root, rel, "orphaned", plugin_name)
                 os.makedirs(os.path.dirname(dest), exist_ok=True)
                 if not os.path.exists(dest):
+                    os.replace(full, dest)
+                done += 1
+                continue
+            if kind == "brokenout":                  # out of the mod (no stand-in): Vortex deploys the next copy
+                if job == "stand-in":
+                    os.remove(full)                  # ours; the broken original is in Off already
+                else:
+                    dest = broken_dest(root, rel, "broken", plugin_name)
+                    if os.path.exists(dest):
+                        stem, ext = os.path.splitext(dest)
+                        dest = f"{stem}.{time.strftime('%Y%m%d-%H%M%S')}{ext}"
+                    os.makedirs(os.path.dirname(dest), exist_ok=True)
                     os.replace(full, dest)
                 done += 1
                 continue

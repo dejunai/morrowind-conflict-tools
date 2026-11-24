@@ -93,3 +93,6 @@ generated/
 
 # Personal notes and plans kept beside the tools (conflict-tools\_backup\)
 _backup/
+
+# Stand-ins the tools copy out of the player's own Morrowind.bsa (game files: never committed)
+dummy assets/

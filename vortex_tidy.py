@@ -1205,5 +1205,14 @@ def _finish_plan(args, st, reviewed, audit):
     return left
 
 
+def _main_with_notice():
+    try:
+        return main()
+    finally:
+        ah = sys.modules.get("mwdialog_assets")
+        if ah is not None:
+            ah.broken_models_notice()
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(_main_with_notice())
