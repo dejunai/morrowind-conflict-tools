@@ -31,7 +31,7 @@ local defaults = {
     logNoticeToMWSE = true,      -- output summary notices of costly handlers to MWSE.log
     exemptMods = {
         "mwguard", "mwcriminal", "mwcompanions", "mwhangwatch", "mwfloatfix", "mwstranded", "mwcollide",
-        "mwperformers", "mwinfoloop", "mwsoundguard", "mwsaveguard", "mwwarnsuppression",
+        "mwperformers", "mwinfoloop", "mwsoundguard", "mwsoundfix", "mwsaveguard", "mwwarnsuppression",
         "mwpersonaleffects", "mwpluginpatches", "mweffectinspector", "mwmouseguard",
         "mwteleportguard", "mwexitguard", "mwcustomclasspersistence", "mwquicktoggle"
     },
