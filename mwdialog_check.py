@@ -1241,6 +1241,47 @@ class World:
             self.item_fixes.append({"plugin": plugin, "tag": tag, "id": oid, "set": {}, "npco": set(),
                                     "lev_drop": gone, "rename": rename, "msgs": msgs})
 
+    def _mesh_owner(self, model):
+        """The mod or BSA that actually ships this .nif, not the plugin that owns the record."""
+        A = self.assets
+        norm_m = A.norm(model)
+        cache = self.__dict__.setdefault("_mesh_owner_cache", {})
+        if norm_m in cache:
+            return cache[norm_m]
+        owner = None
+        if norm_m in A.mesh_loose:
+            full = A.mesh_loose[norm_m]
+            rel = os.path.join("Meshes", norm_m)
+            data_dir = full
+            for _ in range(rel.replace("/", os.sep).count(os.sep) + 1):
+                data_dir = os.path.dirname(data_dir)
+            try:
+                mod_dir, pl = asset_owner_folder(data_dir, rel)
+            except Exception:
+                mod_dir, pl = None, None
+            if mod_dir:
+                has_plugin = (pl and pl.lower().endswith((".esp", ".esm", ".omwaddon"))
+                              and os.path.isfile(os.path.join(mod_dir, pl)))
+                owner = (pl if has_plugin else os.path.basename(mod_dir),
+                         None if has_plugin else mod_dir)
+        elif norm_m in A.mesh_bsa:
+            bsa_path = A.mesh_bsa[norm_m][0]
+            bsa_name = os.path.basename(bsa_path)
+            data_dir = os.path.dirname(bsa_path)
+            try:
+                mod_dir, pl = asset_owner_folder(data_dir, bsa_name)
+            except Exception:
+                mod_dir, pl = None, None
+            if (mod_dir and pl and pl.lower().endswith((".esp", ".esm", ".omwaddon"))
+                    and os.path.isfile(os.path.join(mod_dir, pl))):
+                owner = (pl, None)
+            elif mod_dir:
+                owner = (os.path.basename(mod_dir), mod_dir)
+            else:
+                owner = (bsa_name, None)
+        cache[norm_m] = owner
+        return owner
+
     def _texture_stand_ins(self, win):
         """A used object's model exists but some of its textures don't: put the real texture in from an
         undeployed Vortex folder, or a small placeholder (the model then draws instead of failing)."""
@@ -1248,20 +1289,23 @@ class World:
         for (sub, kind), v in win[2].items():
             if kind != "mesh" or not A.mesh_exists(v):
                 continue
+            mesh_owner = self._mesh_owner(v)
+            blamed, blamed_dir = mesh_owner if mesh_owner else (win[1], None)
             for t in A.missing_textures(v):
                 rel_t = re.sub(r"^[\\/]+", "", t)
                 orphan = A.find_orphaned("textures", rel_t, any_ext=True)
                 if orphan:
                     self.generated.append((os.path.join("Textures", os.path.splitext(rel_t)[0] + os.path.splitext(orphan)[1]),
-                                           f"model '{v}'", orphan, win[1]))
+                                           f"model '{v}' ({blamed})", orphan, blamed, blamed_dir))
                     continue
                 hit = self.vortex.find("textures", rel_t, any_ext=True) if self.vortex is not None else None
                 if hit:
                     rel = os.path.join("Textures", os.path.splitext(rel_t)[0] + os.path.splitext(hit[0])[1].lower())
-                    self.generated.append((rel, f"model '{v}' from Vortex mod '{hit[1]}'", hit[0], win[1]))
+                    self.generated.append((rel, f"model '{v}' ({blamed}) from Vortex mod '{hit[1]}'",
+                                           hit[0], blamed, blamed_dir))
                 else:
                     self.generated.append((os.path.join("Textures", os.path.splitext(rel_t)[0] + ".dds"),
-                                           f"model '{v}' ({win[1]})", None, win[1]))
+                                           f"model '{v}' ({blamed})", None, blamed, blamed_dir))
 
     def _fallback_pool(self):
         """Working files by (record type, subtype, field), counted over the winning records."""
@@ -1766,6 +1810,9 @@ class World:
                     if o in self.deleted_by_obj:
                         why = (f"'{self.defined_by_obj.get(o, '?')}' defines it but "
                                f"'{self.deleted_by_obj[o]}' deletes it")
+                        miss = self.missing_objects.setdefault(o, {"id": obj, "arrow": False, "used_by": []})
+                        miss["arrow"] |= arrow
+                        miss["used_by"].append((plugin, sname))
                     elif o in self.script_locals or o in self.ids.get("GLOB", ()):
                         continue                       # a script or global name, not an object
                     else:
@@ -10519,18 +10566,24 @@ def write_bug_reports(args, plugins, report, world, *, section="mwdialog_check")
     data_dir = os.path.abspath(args.data_dir)
     game_dir = os.path.dirname(data_dir)
     names = {n.lower(): (n, p) for n, p in plugins}
-    per = mwdialog_bugreports.collect(sys.modules[__name__], plugins, report, world)
-    # the scan saw every plugin: one that is clean now loses an old section
+    per = mwdialog_bugreports.collect(
+        sys.modules[__name__], plugins, report, world,
+        placeholders_active=bool(getattr(args, "fix", False) and not getattr(args, "no_placeholders", False)),
+        esm_patch_active=bool(getattr(args, "fix", False) or getattr(args, "patch_esm", False)),
+    )
+    # the scan saw every plugin: one that is clean now loses an old section. Asset findings live in
+    # their own section so a later --fix / --all pass without --asset-check does not wipe them.
+    asset_section = f"{section} (assets)"
+    conflict_section = f"{section} (conflicts)"
     written = cleared = 0
     for low, (name, path) in names.items():
-        if is_our_patch(name) or low in NOT_A_MOD:
+        if is_our_patch(name) or low == AUTO_MERGE_NAME.lower() or low in NOT_A_MOD:
             continue
         d = per.get(low)
-        lines = []
+        lines, asset_lines, conflict_lines = [], [], []
         if d:
             for title, key in (("Errors (the game reports these, or the content breaks)", "ERROR"),
                                ("Warnings", "WARN"),
-                               ("Files the plugin needs that no mod provides", "missing"),
                                (f"Repaired by {section} --fix (the author may want to fix these in the plugin)",
                                 "repaired")):
                 if d[key]:
@@ -10538,12 +10591,40 @@ def write_bug_reports(args, plugins, report, world, *, section="mwdialog_check")
                     lines.append(f"{title}: {len(unique)}")
                     lines += unique[:300]
                     lines.append("")
+            if d.get("missing"):
+                unique = sorted(set(d["missing"]))
+                asset_lines.append(f"Files the plugin needs that no mod provides: {len(unique)}")
+                asset_lines += unique[:300]
+                asset_lines.append("")
+            if d.get("conflicts"):
+                unique = sorted(set(d["conflicts"]))
+                conflict_lines.append(f"Compatibility notes (not this plugin's own defects): {len(unique)}")
+                conflict_lines += unique[:300]
+                conflict_lines.append("")
         out = ah.bug_report_path(data_dir, game_dir, name, sys.modules[__name__])
-        if not lines and not os.path.exists(out):
-            continue
-        ah.update_bug_report(out, section, ah.bug_report_header(path, sys.modules[__name__]), lines)
-        written += bool(lines)
-        cleared += not lines
+        head = ah.bug_report_header(path, sys.modules[__name__])
+        if lines or os.path.exists(out):
+            ah.update_bug_report(out, section, head, lines)
+        if getattr(args, "asset_check", False) and (asset_lines or os.path.exists(out)):
+            ah.update_bug_report(out, asset_section, head, asset_lines)
+        if conflict_lines or os.path.exists(out):
+            ah.update_bug_report(out, conflict_section, head, conflict_lines)
+        has_out = bool(lines or conflict_lines or (getattr(args, "asset_check", False) and asset_lines))
+        written += has_out
+        cleared += not has_out
+    if getattr(args, "asset_check", False):
+        for key, d in sorted((k, v) for k, v in per.items() if isinstance(k, tuple) and k[0] == "__package__"):
+            _kind, mod_dir, mod_label = key
+            if not d.get("missing"):
+                continue
+            unique = sorted(set(d["missing"]))
+            pkg_lines = [f"Files the mod needs that no mod provides: {len(unique)}"] + unique[:300] + [""]
+            head = [f"Bug report for {mod_label}",
+                    f"Mod: {mod_label} (package-wide files, not an individual plugin)",
+                    f"Generated {time.strftime('%Y-%m-%d %H:%M')} by {section}.",
+                    "Paths are relative to Data Files."]
+            ah.update_bug_report(ah.package_bug_report_path(mod_dir, mod_label), asset_section, head, pkg_lines)
+            written += 1
     if written or cleared:
         print(f"\nBug reports: {written} plugin(s) have <plugin>.bugreport.txt in their mod folder (or in "
               f"bugreports\\)" + (f"; {cleared} cleared" if cleared else "") + ".")

@@ -2380,23 +2380,33 @@ BUG_END = "======== end of {} ========"
 
 
 def update_bug_report(path, section, header, lines):
-    """Write/replace `section` in the bug report at `path` (the header is rewritten too). An empty `lines`
-    removes the section; a report left with no sections is deleted."""
+    """Write/replace `section` in the bug report at `path`, preserving the existing header and other tools'
+    sections. An empty `lines` removes only `section`; a report left with no sections is deleted."""
     old = ""
     try:
         with open(path, encoding="utf-8") as f:
             old = f.read()
     except OSError:
         pass
-    sections, cur, buf = {}, None, []
+    old_header, sections, cur, buf = [], {}, None, []
+    saw_section = False
     for ln in old.splitlines():
         if ln.startswith("======== end of ") and cur:
             sections[cur] = buf
             cur, buf = None, []
         elif ln.startswith("======== ") and ln.endswith(" ========") and not ln.startswith("======== end of "):
             cur, buf = ln[9:-9], []
+            saw_section = True
         elif cur:
             buf.append(ln)
+        elif not saw_section:
+            old_header.append(ln)
+    while old_header and not old_header[-1].strip():
+        old_header.pop()
+    if old.strip() and not saw_section and old_header:
+        # A legacy unsectioned report: keep its text rather than discarding it.
+        sections.setdefault("previous report", old_header)
+        old_header = []
     if lines:
         sections[section] = list(lines)
     else:
@@ -2407,7 +2417,8 @@ def update_bug_report(path, section, header, lines):
         except OSError:
             pass
         return None
-    out = list(header) + [""]
+    kept_header = old_header if old_header else list(header)
+    out = list(kept_header) + [""]
     for name in sorted(sections):
         out.append(BUG_SECTION.format(name))
         out += sections[name]

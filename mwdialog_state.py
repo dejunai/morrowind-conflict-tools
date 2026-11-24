@@ -17,7 +17,7 @@ from mwdialog_tes3 import (  # noqa: E402
     MW_ERRORS, safe_write_bytes)
 print = MT.printer()  # noqa: A001
 
-NORMAL_MAP_RE = re.compile(r"_nm?\.(dds|tga|bmp)$", re.I)
+NORMAL_MAP_RE = re.compile(r"_(n|nm|normal|nrm)\.(dds|tga|bmp)$", re.I)
 
 
 def read_generated_record(rec_path):
