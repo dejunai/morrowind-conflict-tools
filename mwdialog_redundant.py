@@ -212,7 +212,7 @@ def object_use(plugins, *, refresh=False):
     return out
 
 
-def disable_dependents(plugins, masters, roots, also_off=(), rebuild=()):
+def disable_dependents(plugins, masters, roots, also_off=(), rebuild=(), use=None):
     """Plan a removal with transitive masters and known object users, without changing the load order."""
     names = {name.lower(): name for name, _path in plugins}
     declared = {name.lower(): [master.lower() for master in values] for name, values in masters.items()}
@@ -230,7 +230,7 @@ def disable_dependents(plugins, masters, roots, also_off=(), rebuild=()):
         if name in names and name not in gone:
             plan[name] = ("generated", "")
             gone.add(name)
-    use = object_use(plugins, refresh=True)
+    use = use if use is not None else object_use(plugins, refresh=True)   # a session passes its one read
     skipped = {name.lower() for name in OUR_PATCHES}
     unreadable = names.keys() - use.keys() - skipped
     if unreadable:

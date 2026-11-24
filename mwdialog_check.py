@@ -5793,6 +5793,20 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
     if not ranked:
         print("\nNo conflicts left to decide.")
         return 0
+    # a plugin kept against an incompatible partner wins its other incompatible pairs without asking
+    kept_winners = set()
+    for (a_, b_), c_ in ranked:
+        last_ = answers.get("|".join(sorted((a_, b_)))) or {}
+        if c_.get("incompatible") and last_.get("do") == "off" and last_.get("plugin"):
+            kept_winners.add(b_ if last_["plugin"].lower() == a_ else a_)
+    _use = []
+
+    def use_index():
+        """Which plugins use which objects: read fresh once for the session, then reused."""
+        if not _use:
+            _use.append(object_use(plugins, refresh=True))
+        return _use[0]
+
     print("\n" + "=" * 70 + "\nCHOOSE WHAT TO DO (most serious first; Enter takes last time's answer, or skips; "
           "s skips, a takes last time's answers for the rest, q stops)\n" + "=" * 70)
     for i, ((a, b), c) in enumerate(ranked, 1):
@@ -5801,113 +5815,146 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
         A, B = name_of[a], name_of[b]
         kind = ("INCOMPATIBLE" if c.get("incompatible") else "DOUBLED" if c.get("doubled") else
                 "MAJOR" if (any(p[6] for p in c["place"]) or len(c["refs"]) >= 20) else "minor")
-        parts = []
-        if c["place"]:
-            parts.append(f"build in the same spot in {len(c['place'])} cell(s)")
-        if c["refs"]:
-            parts.append(f"change {len(c['refs'])} of the same objects")
-        if c["settings"]:
-            parts.append(f"change {len(c['settings'])} cell setting(s)")
-        print(f"\n[{i}/{len(ranked)}] {kind}: {A}  vs  {B}")
-        if parts:
-            print(f"    they {', '.join(parts)}; {B} loads later, so its version wins now")
-        if c.get("incompatible"):
-            evidence = c["incompatible"]
-            print(f"    moved land leaves {', '.join(sorted(evidence['evidence']))} at the old location in "
-                  f"{len(evidence['cells'])} cell(s); one side must be turned off")
-        if c.get("patched_some"):
-            pl, k, t = c["patched_some"]
-            print(f"    ({name_of.get(pl, pl)} patches the two of them, but only in {k} of these {t} cell(s))")
-        if c.get("doubled"):
-            print(f"    {c['dups']} identical objects are placed twice: two versions of one mod, keep only one")
-        if (a, b) in earlier_l:
-            print(f"    (an earlier run chose: {B} after {A})")
-        elif (b, a) in earlier_l:
-            print(f"    (an earlier run chose: {A} after {B})")
-        if c.get("incompatible"):
-            opts = {}
-            print("    Load order and automatic relocation cannot safely resolve this conflict.")
-        elif mixed((a, b)):
-            # an .esm always loads before an .esp: no [Order] rule changes who wins, but the user can still
-            # confirm the winner (remembered, so it is not asked again)
-            opts = {"1": ("keep", B, A, f"keep {B} winning")}
-            print(f"  [1] keep  {B} winning   (an .esm always loads before an .esp; nothing changes)")
-        else:
-            opts = {"1": ("order", A, B, f"keep {B} winning"), "2": ("order", B, A, f"make {A} win")}
-            print(f"  [1] keep  {B} winning   (adds [Order] {A} > {B})")
-            print(f"  [2] make  {A} win   (adds [Order] {B} > {A})")
-        rb = [] if c.get("incompatible") else rebuilt(c)
-        if rb:
-            names = ", ".join(f"'{labels.get(k, k[1])}'" for k in rb[:4]) + (f" and {len(rb) - 4} more" if len(rb) > 4 else "")
-            print(f"    both rebuilt {names}")
-            opts["5"] = ("cell", B, A, f"{B}'s version of the rebuilt interior(s)")
-            opts["6"] = ("cell", A, B, f"{A}'s version of the rebuilt interior(s)")
-            print(f"  [5] use {B}'s version of {'that place' if len(rb) == 1 else 'those places'}: {A}'s objects "
-                  f"there are removed and its doors in arrive in {B}'s layout")
-            print(f"  [6] use {A}'s version of {'that place' if len(rb) == 1 else 'those places'} (the same, the "
-                  f"other way round)")
-        off_plans, blockers = {}, {}
-        for key, n, keep in (("3", A, B), ("4", B, A)):
-            if not plugins:
-                if n.lower() in needed:
-                    blockers[key] = f"can't turn off {n}: another active plugin needs it as a master"
-                    print(f"  [{key}] ({blockers[key]})")
-                    continue
-                plan = {n.lower(): ("selected", "")}
-            else:
-                errors = getattr(args, "_cell_master_errors", {})
-                if errors:
-                    blockers[key] = f"can't safely turn off {n}: some active master lists could not be read"
-                    print(f"  [{key}] ({blockers[key]})")
-                    continue
-                if active_merges:
-                    merges = ", ".join(active_names[p] for p in sorted(active_merges))
-                    blockers[key] = f"can't safely turn off {n}: unmerge {merges} first"
-                    print(f"  [{key}] ({blockers[key]})")
-                    continue
-                try:
-                    plan = disable_dependents(plugins, masters, [n], [x for x, _w in turned_off], generated)
-                except (OSError, FormatError, ValueError) as e:
-                    blockers[key] = f"can't safely turn off {n}: {e}"
-                    print(f"  [{key}] ({blockers[key]})")
-                    continue
-                if keep.lower() in plan:
-                    blockers[key] = f"can't turn off {n}: {keep} also depends on it"
-                    print(f"  [{key}] ({blockers[key]})")
-                    continue
-                if AUTO_MERGE_NAME.lower() in plan:
-                    blockers[key] = f"can't turn off {n}: {AUTO_MERGE_NAME} depends on it; unmerge first"
-                    print(f"  [{key}] ({blockers[key]})")
-                    continue
-            off_plans[key] = plan
-            others = [active_names.get(p, name_of.get(p, p)) for p in plan if p != n.lower()]
-            label = f"turn off {n}" + (f" and {len(others)} dependent plugin(s)" if others else "")
-            opts[key] = ("off", n, keep, label)
-            print(f"  [{key}] {label}")
-            if others:
-                print("      also set aside: " + ", ".join(others))
-            lua_affected = [active_names[p] for p in plan if p in lua_named and p in active_names]
-            if lua_affected:
-                print("      WARNING: MWSE Lua or metadata also names: " + ", ".join(lua_affected)
-                      + "; review those mods separately")
         pair_key = "|".join(sorted((a, b)))
         last = answers.get(pair_key) or {}
         if last.get("do") == "skip":
             last = {}                                # skipped = postponed: asked again, never an answer
-        default = ""
-        if last.get("do") and last.get("plugin"):
+        synthetic = ""
+        if not last and c.get("incompatible") and (a in kept_winners) != (b in kept_winners):
+            winner, loser = (A, B) if a in kept_winners else (B, A)
+            last, synthetic = {"do": "off", "plugin": loser}, winner   # it already won: no need to ask
+        quick = bool(last.get("do") and last.get("plugin")) and (use_all or only_new or auto_known or bool(synthetic))
+
+        def build(say, only_off):
+            """The pair's details (said with `say`) and its options; only_off: plan only that side's turn-off."""
+            parts = []
+            if c["place"]:
+                parts.append(f"build in the same spot in {len(c['place'])} cell(s)")
+            if c["refs"]:
+                parts.append(f"change {len(c['refs'])} of the same objects")
+            if c["settings"]:
+                parts.append(f"change {len(c['settings'])} cell setting(s)")
+            if parts:
+                say(f"    they {', '.join(parts)}; {B} loads later, so its version wins now")
+            if c.get("incompatible"):
+                evidence = c["incompatible"]
+                say(f"    moved land leaves {', '.join(sorted(evidence['evidence']))} at the old location in "
+                      f"{len(evidence['cells'])} cell(s); one side must be turned off")
+            if c.get("patched_some"):
+                pl, k, t = c["patched_some"]
+                say(f"    ({name_of.get(pl, pl)} patches the two of them, but only in {k} of these {t} cell(s))")
+            if c.get("doubled"):
+                say(f"    {c['dups']} identical objects are placed twice: two versions of one mod, keep only one")
+            if (a, b) in earlier_l:
+                say(f"    (an earlier run chose: {B} after {A})")
+            elif (b, a) in earlier_l:
+                say(f"    (an earlier run chose: {A} after {B})")
+            if c.get("incompatible"):
+                opts = {}
+                say("    Load order and automatic relocation cannot safely resolve this conflict.")
+            elif mixed((a, b)):
+                # an .esm always loads before an .esp: no [Order] rule changes who wins, but the user can still
+                # confirm the winner (remembered, so it is not asked again)
+                opts = {"1": ("keep", B, A, f"keep {B} winning")}
+                say(f"  [1] keep  {B} winning   (an .esm always loads before an .esp; nothing changes)")
+            else:
+                opts = {"1": ("order", A, B, f"keep {B} winning"), "2": ("order", B, A, f"make {A} win")}
+                say(f"  [1] keep  {B} winning   (adds [Order] {A} > {B})")
+                say(f"  [2] make  {A} win   (adds [Order] {B} > {A})")
+            rb = [] if c.get("incompatible") else rebuilt(c)
+            if rb:
+                names = ", ".join(f"'{labels.get(k, k[1])}'" for k in rb[:4]) + (f" and {len(rb) - 4} more" if len(rb) > 4 else "")
+                say(f"    both rebuilt {names}")
+                opts["5"] = ("cell", B, A, f"{B}'s version of the rebuilt interior(s)")
+                opts["6"] = ("cell", A, B, f"{A}'s version of the rebuilt interior(s)")
+                say(f"  [5] use {B}'s version of {'that place' if len(rb) == 1 else 'those places'}: {A}'s objects "
+                      f"there are removed and its doors in arrive in {B}'s layout")
+                say(f"  [6] use {A}'s version of {'that place' if len(rb) == 1 else 'those places'} (the same, the "
+                      f"other way round)")
+            off_plans, blockers = {}, {}
+            for key, n, keep in (("3", A, B), ("4", B, A)):
+                if only_off is not None and n.lower() != only_off:
+                    continue                             # replaying an answer: only its side is planned
+                if not plugins:
+                    if n.lower() in needed:
+                        blockers[key] = f"can't turn off {n}: another active plugin needs it as a master"
+                        say(f"  [{key}] ({blockers[key]})")
+                        continue
+                    plan = {n.lower(): ("selected", "")}
+                else:
+                    errors = getattr(args, "_cell_master_errors", {})
+                    if errors:
+                        blockers[key] = f"can't safely turn off {n}: some active master lists could not be read"
+                        say(f"  [{key}] ({blockers[key]})")
+                        continue
+                    if active_merges:
+                        merges = ", ".join(active_names[p] for p in sorted(active_merges))
+                        blockers[key] = f"can't safely turn off {n}: unmerge {merges} first"
+                        say(f"  [{key}] ({blockers[key]})")
+                        continue
+                    try:
+                        plan = disable_dependents(plugins, masters, [n], [x for x, _w in turned_off], generated,
+                                                  use=use_index())
+                    except (OSError, FormatError, ValueError) as e:
+                        blockers[key] = f"can't safely turn off {n}: {e}"
+                        say(f"  [{key}] ({blockers[key]})")
+                        continue
+                    if keep.lower() in plan:
+                        blockers[key] = f"can't turn off {n}: {keep} also depends on it"
+                        say(f"  [{key}] ({blockers[key]})")
+                        continue
+                    if AUTO_MERGE_NAME.lower() in plan:
+                        blockers[key] = f"can't turn off {n}: {AUTO_MERGE_NAME} depends on it; unmerge first"
+                        say(f"  [{key}] ({blockers[key]})")
+                        continue
+                off_plans[key] = plan
+                others = [active_names.get(p, name_of.get(p, p)) for p in plan if p != n.lower()]
+                label = f"turn off {n}" + (f" and {len(others)} dependent plugin(s)" if others else "")
+                opts[key] = ("off", n, keep, label)
+                say(f"  [{key}] {label}")
+                if others:
+                    say("      also set aside: " + ", ".join(others))
+                lua_affected = [active_names[p] for p in plan if p in lua_named and p in active_names]
+                if lua_affected:
+                    say("      WARNING: MWSE Lua or metadata also names: " + ", ".join(lua_affected)
+                          + "; review those mods separately")
+            return opts, off_plans, blockers
+
+        def pick(opts, off_plans):
+            """The option last time's answer (or an accepted winner) points to, or '' if it no longer fits."""
+            if not (last.get("do") and last.get("plugin")):
+                return ""
             want = last["plugin"].lower()
-            default = next((k for k, (w, x, _y, _l) in opts.items()
-                            if w == last["do"] and x.lower() == want), "")
-            if default and last["do"] == "off":
+            got = next((k for k, (w, x, _y, _l) in opts.items() if w == last["do"] and x.lower() == want), "")
+            if got and last["do"] == "off" and not synthetic:
                 affected = last.get("affected")
-                planned = set(off_plans[default])
+                planned = set(off_plans[got])
                 if not isinstance(affected, list) or not all(isinstance(n, str) for n in affected):
                     if len(planned) != 1:
-                        default = ""
+                        return ""
                 elif {n.lower() for n in affected} != planned:
-                    default = ""
-        if default:
+                    return ""
+            return got
+
+        if quick:
+            opts, off_plans, blockers = build(lambda *_a, **_k: None,
+                                              last["plugin"].lower() if last["do"] == "off" else "")
+            default = pick(opts, off_plans)
+            if default:
+                print(f"[{i}/{len(ranked)}] {A} vs {B}: "
+                      + (f"{synthetic} was kept against another incompatible plugin: " if synthetic else
+                         "last time's answer: ") + opts[default][3])
+            else:
+                quick = False                         # it no longer fits: show everything and ask
+        if not quick:
+            print(f"\n[{i}/{len(ranked)}] {kind}: {A}  vs  {B}")
+            opts, off_plans, blockers = build(print, None)
+            default = pick(opts, off_plans)
+        pair_key = "|".join(sorted((a, b)))
+        last = answers.get(pair_key) or {}
+        if quick:
+            pass
+        elif default:
             shown = f"[{default}] {opts[default][3]}"
             print(f"  [Enter] last time: {shown}   [s] later (ask again next run)   [a] last time's answers "
                   f"for the rest   [q] stop")
@@ -5919,7 +5966,7 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
             if use_all:
                 print("  > (new conflict: no answer yet; left for you)")
                 continue
-        if use_all or ((only_new or auto_known) and last and default):
+        if quick or use_all or ((only_new or auto_known) and last and default):
             ans = default or "s"
             print(f"  > {ans}  (last time's answer)")
         else:
@@ -5968,6 +6015,8 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
                     forget_now(pair_key)
             continue
         what, x, y, label = opts[ans]
+        if what == "off" and c.get("incompatible"):
+            kept_winners.add(y.lower())
         answered[pair_key] = {"do": what, "plugin": x, "pair": [A, B], "when": time.strftime("%Y-%m-%d %H:%M")}
         if what == "off":
             answered[pair_key]["affected"] = [active_names.get(n, name_of.get(n, n)) for n in off_plans[ans]]
