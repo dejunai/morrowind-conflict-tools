@@ -141,4 +141,4 @@ Plan files (`vortex_tidy_plan.txt`, `mwdialog_luafix_plan.txt`) are written unwr
 
 ## License
 
-No license is attached. Ask the author before reusing or redistributing this work.
+MIT; see [LICENSE](LICENSE). The bundled programs in `tools/` keep their own licenses; see [tools/README.md](tools/README.md).

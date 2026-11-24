@@ -9,6 +9,8 @@
 - 7-Zip is looked up in `tools\7z\` before PATH.
 - `tools\` now ships in the repo with its licenses: texconv (MIT), FFmpeg 9.0.2 LGPL shared build, 7-Zip (LGPL +
   unRAR), LuaJIT (MIT). Only Tamriel Data's `Translation.txt` stays gitignored.
+- Project code is MIT (`LICENSE`). `tools\` adds `GPLv3.txt` beside FFmpeg's LGPLv3 text and the exact FFmpeg
+  and 7-Zip source for the bundled builds.
 
 # Install folder and backups (2026-11-23)
 

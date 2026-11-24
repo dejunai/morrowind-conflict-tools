@@ -7,11 +7,19 @@ with its license; the only exception is `Translation.txt` (below).
 | Tool | Files | License | Source |
 | --- | --- | --- | --- |
 | texconv (DirectXTex) | `texconv.exe` | MIT (`TEXCONV_LICENSE.txt`) | https://github.com/microsoft/DirectXTex |
-| FFmpeg 9.0.2, LGPL shared build | `ffmpeg.exe`, `ffprobe.exe`, `av*.dll`, `sw*.dll` | LGPL v3 (`FFMPEG_LICENSE.txt`) | https://ffmpeg.org/, https://github.com/BtbN/FFmpeg-Builds |
+| FFmpeg 9.0.2, LGPL shared build | `ffmpeg.exe`, `ffprobe.exe`, `av*.dll`, `sw*.dll` | LGPL v3 (`FFMPEG_LICENSE.txt` + `GPLv3.txt`) | https://ffmpeg.org/, https://github.com/BtbN/FFmpeg-Builds |
 | 7-Zip 26.02 | `7z/7z.exe`, `7z/7z.dll` | GNU LGPL + unRAR restriction (`7z/License.txt`) | https://www.7-zip.org/ |
 | LuaJIT 2.1 | `luajit/` | MIT (`luajit/COPYRIGHT`) | https://luajit.org/ |
 
 Keep each license file beside its binaries when redistributing.
+
+Exact sources for the bundled builds:
+
+- FFmpeg: source for this build is FFmpeg commit `7adfbe40dc` (n9.0.2-39-g7adfbe40dc, release/9.0 branch,
+  https://git.ffmpeg.org/ffmpeg.git), built by BtbN release `autobuild-2026-10-31-12-59`:
+  https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-10-31-12-59
+  (asset `ffmpeg-n9.0.2-39-g7adfbe40dc-win64-lgpl-shared-9.0.zip`; build scripts at https://github.com/BtbN/FFmpeg-Builds).
+- 7-Zip 26.02 source: https://www.7-zip.org/ (download page, 7-Zip 26.02 source code).
 
 ## texconv
 
@@ -22,7 +30,8 @@ DDS conversion, mipmaps and compression in the asset fixer.
 `mwdialog_check.py --fix` repairs broken sounds with `ffmpeg`; the sound-length cache reads MP3 durations with
 `ffprobe`. This is the shared (DLL) LGPL build, so both programs use the same DLLs and every file stays under
 GitHub's 100 MB limit (`winget install BtbN.FFmpeg.LGPL.Shared.9.0`; copy `bin\` without `ffplay.exe`, plus
-`LICENSE.txt` as `FFMPEG_LICENSE.txt`).
+`LICENSE.txt` as `FFMPEG_LICENSE.txt`). LGPLv3 is a set of additional permissions on top of the GPLv3, so
+`GPLv3.txt` ships beside it.
 
 ## 7-Zip (`7z/`)
 
