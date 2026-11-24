@@ -113,3 +113,39 @@ def test_late_declarations_and_a_stray_endif_are_handled_like_the_cs():
 def test_what_it_cant_prove_safe_is_left_alone(src, why):
     with pytest.raises(SF.Skip, match=why):
         rw(src)
+
+
+NESTED = """begin Swamp
+if ( GetSoundPlaying "a" == 0 )
+\tif ( GetSoundPlaying "b" == 0 )
+\t\tPlayLoopSound3D "a"
+\tendif
+endif
+if ( GetSoundPlaying "a" == 0 )
+\tif ( GetSoundPlaying "b" == 0 )
+\t\tPlayLoopSound3D "b"
+\tendif
+endif
+if ( GetSoundPlaying "a" )
+\tStopSound "a"
+elseif ( GetSoundPlaying "b" )
+\tStopSound "b"
+endif
+end
+"""
+
+
+def test_nested_guards_give_every_played_sound_its_own_state():
+    new, groups = rw(NESTED)
+    assert [(g["var"], g["sounds"]) for g in groups] == [("mwsfOn1", ["a"]), ("mwsfOn2", ["b"])]
+    lines = [SF.split_comment(ln)[0].strip() for ln in new.split("\r\n")]
+    assert lines.count("if ( mwsfOn1 == 0 )") == 2 and lines.count("if ( mwsfOn2 == 0 )") == 2
+    assert "if ( mwsfOn1 == 1 )" in lines and "elseif ( mwsfOn2 == 1 )" in lines
+    assert lines[lines.index('StopSound "b"') + 1] == "set mwsfOn2 to 0"
+
+
+def test_nested_guards_on_a_sound_the_script_never_plays_are_left_alone():
+    src = 'begin A\nif ( GetSoundPlaying "x" == 0 )\n\tif ( GetSoundPlaying "y" == 0 )\n\t\tPlayLoopSound3D "y"\n' \
+          '\tendif\nendif\nif ( GetSoundPlaying "y" == 0 )\n\tPlayLoopSound3D "y"\nendif\nend\n'
+    with pytest.raises(SF.Skip, match="never plays"):
+        rw(src)

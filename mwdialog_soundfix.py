@@ -156,7 +156,7 @@ def rewrite(text, length_of, loop_mode="flag"):
     level, ends = structure(codes)
 
     # 1. the groups: each guard that asks whether a sound is NOT playing, with the plays inside its branch
-    groups, by_key = [], {}
+    groups, by_key, guards = [], {}, []
     for i, code in enumerate(codes):
         m = COND_RE.match(code)
         g = m and guard_kind(m.group(3))
@@ -188,8 +188,28 @@ def rewrite(text, length_of, loop_mode="flag"):
             raise Skip(f"line {i + 1}: '{snd}' is used both as a loop and a one-shot")
         grp["guards"].append(i)
         grp["sounds"].update(s for _j, _k, s, _p in plays)
+        guards.append((i, ref, snd, plays))
     if not groups:
         raise Skip("no play under a GetSoundPlaying-is-0 test")
+    played = [(g["ref"], s) for g in groups for s in g["sounds"]]
+    if len(played) != len(set(played)):
+        # nested guards ("if A == 0 / if B == 0 / play A or B") share sounds: give every played sound its own
+        # state, which is what GetSoundPlaying itself answers. A tested sound this script never plays has no
+        # state to read, so that case stays left alone.
+        groups, by_key = [], {}
+        for i, ref, _snd, plays in guards:
+            for _j, k, s, _p in plays:
+                kind = "loop" if k.startswith("playloop") else "timer"
+                grp = by_key.get((ref, s))
+                if grp is None:
+                    grp = by_key[(ref, s)] = {"ref": ref, "sounds": {s}, "kind": kind, "guards": []}
+                    groups.append(grp)
+                elif grp["kind"] != kind:
+                    raise Skip(f"'{s}' is used both as a loop and a one-shot")
+        for i, ref, snd, _plays in guards:
+            if (ref, snd) not in by_key:
+                raise Skip(f"line {i + 1}: nested guards test '{snd}', which this script never plays")
+            by_key[(ref, snd)]["guards"].append(i)
     for n, grp in enumerate(groups, 1):
         grp["var"] = f"mwsfOn{n}" if grp["kind"] == "loop" else f"mwsfT{n}"
 
