@@ -5,12 +5,16 @@
   Lua suite (formerly the repo's `Data Files\`). `--play` copies any `lua tools` file missing from `Data Files`
   before starting the game; files already there are left alone.
 - Bundled programs (`texconv`, `ffmpeg`, `ffprobe`) are looked up in `tools\` first, then beside the scripts, the
-  game folder, and PATH. `--fix` sound repair now finds `tools\ffmpeg.exe`; recommended build is FFmpeg LGPL.
+  game folder, and PATH. `--fix` sound repair now finds `tools\ffmpeg.exe`.
 - 7-Zip is looked up in `tools\7z\` before PATH.
-- `tools\` now ships in the repo with its licenses: texconv (MIT), FFmpeg 9.0.2 LGPL shared build, 7-Zip (LGPL +
+- `tools\` now ships in the repo with its licenses: texconv (MIT), FFmpeg 9.0.2 + LAME 3.100 (LGPL), 7-Zip (LGPL +
   unRAR), LuaJIT (MIT). Only Tamriel Data's `Translation.txt` stays gitignored.
-- Project code is MIT (`LICENSE`). `tools\` adds `GPLv3.txt` beside FFmpeg's LGPLv3 text and the exact FFmpeg
-  and 7-Zip source for the bundled builds.
+- Project code is MIT (`LICENSE`).
+- `ffmpeg.exe` / `ffprobe.exe` are now our own static audio-only build (about 5 MB each, no DLLs) instead of
+  BtbN's 60-library shared build. Its complete source (FFmpeg 9.0.2, LAME 3.100, `build-ffmpeg.sh`) ships in
+  `tools\source\`; 7-Zip's 26.02 source archive and the LGPL 2.1 text ship in `tools\7z\`.
+- `--no-reduce-textures` / `--no-reduce-splash` (`vortex_tidy.py`, `mwdialog_check.py --asset-check`): keep
+  textures and splash screens over 2048 full size; other texture and splash repairs still apply.
 
 # Install folder and backups (2026-11-23)
 

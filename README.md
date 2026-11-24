@@ -70,6 +70,8 @@ On Windows you can also use the included `mwdialog_check.bat` and `vortex_tidy.b
 
 `--lua-only` on `vortex_tidy.py` replaces only the Lua section of its plan.
 
+Textures larger than 2048 and splash screens wider than 2048 are reduced to 2048 by default. `--no-reduce-textures` and `--no-reduce-splash` (on `vortex_tidy.py`, and with `mwdialog_check.py --asset-check`) keep them full size; give the same flags for the plan and `--apply`, or `--apply` refuses because the plan changed.
+
 `mwdialog_check.py` uses a different confirmation style (`--fix` / `--dry-run` / `--yes`), not this plan-file flow.
 
 ## Incompatible plugins

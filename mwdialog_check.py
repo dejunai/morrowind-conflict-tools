@@ -9742,6 +9742,11 @@ def _main(argv=None):
                     help="also check the files records, scripts and Morrowind.ini name (models and their textures, "
                          "icons, sounds, music, videos, fonts), search Vortex mod folders and .Orphaned for missing "
                          "ones, and with --fix put them back or use stand-ins (adds a few minutes)")
+    tc.add_argument("--no-reduce-textures", action="store_true",
+                    help=f"with --asset-check: don't reduce textures larger than {TEXTURE_MAX_EDGE}")
+    tc.add_argument("--no-reduce-splash", action="store_true",
+                    help="with --asset-check: don't reduce splash screens wider than 2048 (they are still made "
+                         "24-bit RLE TGA)")
     tc.add_argument("--no-models", action="store_true", help=argparse.SUPPRESS)   # the old opt-out; now the default
     tc.add_argument("--performers-patch", action="store_true",
                     help="with --fix: delete doubled bards with mwdialog_check Performers Patch.esp, instead of "
@@ -9779,6 +9784,8 @@ def _main(argv=None):
                          "(use --dry-run to preview)")
     fx.add_argument("--fix-log", default="mwdialog_fixes.log", help="where to append a record of fixes (default mwdialog_fixes.log)")
     args = ap.parse_args(argv)
+    if args.no_reduce_textures or args.no_reduce_splash:
+        asset_health_module().keep_full_size(sys.modules[__name__], args.no_reduce_textures, args.no_reduce_splash)
     if args.data_dir is None:
         args.data_dir = MP.default_data_dir()
         if args.data_dir is None:

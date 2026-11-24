@@ -69,3 +69,19 @@ mwdialog.lock
 tools/Translation.txt
 
 /texconv.exe
+tools/source/build/
+
+# Per-install records the tools write (your load order and decisions): never published
+mwdialog_added_masters.json
+mwdialog_cell_fixes.txt
+mwdialog_cell_winners.txt
+mwdialog_conflict_answers.json
+mwdialog_disabled.txt
+mwdialog_generated_files.txt
+mwdialog_ignored_normal_maps.txt
+mwdialog_load_order.txt
+mwdialog_master_sizes.json
+mwdialog_merged.txt
+mwdialog_reduced_textures.txt
+mwdialog_redundant.txt
+mwdialog_short_meshes.txt

@@ -1060,7 +1060,14 @@ def main():
     ap.add_argument("--luajit", help="the LuaJIT (or luac) the Lua check compiles with")
     ap.add_argument("--lua-log", choices=("flagged", "all", "off"),
                     help="which mods the Lua check gives the log shim: flagged (default), all, off")
+    ap.add_argument("--no-reduce-textures", action="store_true", help="don't reduce textures larger than 2048")
+    ap.add_argument("--no-reduce-splash", action="store_true",
+                    help="don't reduce splash screens wider than 2048 (they are still made 24-bit RLE TGA)")
     args = ap.parse_args()
+    if args.no_reduce_textures or args.no_reduce_splash:
+        m, ah = _tool_modules()
+        if ah is not None:
+            ah.keep_full_size(m, args.no_reduce_textures, args.no_reduce_splash)
     if not (MP.acquire_run_lock()
             and (not os.path.isdir(os.path.join(HERE, "Data Files")) or MP.acquire_game_lock(HERE))):
         print(MP.RUN_LOCKED_MESSAGE, file=sys.stderr)

@@ -101,3 +101,11 @@ def test_a_mod_with_mwse_code_keeps_its_dds_splash(game):
     issues, fixes = ah.check_folder(str(mod), m, str(game / "Data Files"))
     assert not [f for f in fixes if f[0] == "splash"]
     assert any("MWSE code may load it by name" in msg for _s, _r, msg in issues)
+
+def test_no_reduce_flags_turn_off_both_size_limits(monkeypatch):
+    monkeypatch.setattr(m, "TEXTURE_MAX_EDGE", 2048)
+    monkeypatch.setattr(ah, "SPLASH_MAX_WIDTH", 2048)
+    monkeypatch.setattr(m.MP, "default_data_dir", lambda: None)
+    with pytest.raises(SystemExit):                     # stops at "no Data Files given", after the flags apply
+        m._main(["--no-reduce-textures", "--no-reduce-splash"])
+    assert m.TEXTURE_MAX_EDGE > 1 << 20 and ah.SPLASH_MAX_WIDTH is None

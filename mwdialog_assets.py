@@ -902,6 +902,16 @@ def _texconv_tga(path, texconv, tmp, width=None, height=None):
     return result
 
 
+def keep_full_size(m, textures=False, splash=False):
+    """--no-reduce-textures / --no-reduce-splash: m (the mwdialog_check module) reduces no texture, and
+    splashes keep their width; other texture and splash repairs still apply."""
+    global SPLASH_MAX_WIDTH
+    if textures:
+        m.TEXTURE_MAX_EDGE = 1 << 30
+    if splash:
+        SPLASH_MAX_WIDTH = None
+
+
 def splash_too_wide(width):
     """SPLASH_MAX_WIDTH None: splashes keep their width (MWManager's reduce_splash_2048 = false)."""
     return SPLASH_MAX_WIDTH is not None and width > SPLASH_MAX_WIDTH
