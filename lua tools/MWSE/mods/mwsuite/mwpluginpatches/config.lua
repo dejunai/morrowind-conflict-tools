@@ -73,6 +73,13 @@ function config.isAiVoicesActive()
     return (lfs and lfs.fileexists and lfs.fileexists("Data Files/MWSE/mods/AI Voices/main.lua")) or false
 end
 
+function config.isPersonalEffectsActive()
+    return tes3.isModActive("Personal Effects_MWSE.ESP")
+        or tes3.isModActive("Personal Effects.ESP")
+        or tes3.getObject("R0_pe_basecont") ~= nil
+        or tes3.getScript("R0_pe_init_scr") ~= nil
+end
+
 function config.isBardicInspirationActive()
     return tes3.isModActive("BardicInspiration.esp") == true
 end
@@ -159,6 +166,9 @@ local function getDynamicDefaults()
 
         -- Mabrigash Distribution Popup Suppression
         mabrDistSuppressionEnabled = mabr,
+
+        -- Personal Effects: its Census and Excise scripts run in Lua
+        personalEffectsEnabled = config.isPersonalEffectsActive(),
 
         -- Voices of Vvardenfell: its routine lines in the player's console
         aiVoicesConsoleEnabled = config.isAiVoicesActive(),

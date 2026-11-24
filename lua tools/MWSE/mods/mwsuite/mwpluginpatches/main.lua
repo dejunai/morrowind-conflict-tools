@@ -14,6 +14,7 @@ local graphicHerbalismRespawn = require("mwpluginpatches.patches.graphicHerbalis
 local bardicInstruments = require("mwpluginpatches.patches.bardicInstruments")
 local aiVoicesConsole = require("mwpluginpatches.patches.aiVoicesConsole")
 local uiExpansionTopics = require("mwpluginpatches.patches.uiExpansionTopics")
+local personalEffects = require("mwpluginpatches.patches.personalEffects")
 
 local function onInitialized()
     if not config.enabled then
@@ -82,6 +83,9 @@ local function onInitialized()
     end
     if config.uiExpansionTopicsEnabled and config.isUIExpansionActive() then
         uiExpansionTopics.init()
+    end
+    if config.personalEffectsEnabled and config.isPersonalEffectsActive() then
+        personalEffects.init()
     end
 
     mwse.log("[mwpluginpatches] Unified plugin compatibility patches initialized.")

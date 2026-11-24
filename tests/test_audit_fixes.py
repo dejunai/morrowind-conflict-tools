@@ -396,9 +396,8 @@ assert(ran:find('then go"', 1, true), ran)
 @pytest.mark.parametrize("receipt", [0, 1])
 def test_personaleffects_fills_and_empties_once(tmp_path, receipt):
     lua(tmp_path, r"""
-package.preload["mwpersonaleffects.config"] = function() return { enabled = true, isPersonalEffectsActive = function() return true end } end
-assert(loadfile("MODS/mwpersonaleffects/main.lua"))()
-fire("initialized")
+package.preload["mwpluginpatches.config"] = function() return { personalEffectsEnabled = true, isPersonalEffectsActive = function() return true end } end
+assert(loadfile("MODS/mwpluginpatches/patches/personalEffects.lua"))().init()
 local chest = { baseObject = { id = "R0_pe_basecont" }, object = { inventory = {} }, enable = function() end }
 local itemData = { condition = 17 }
 local ring = { baseObject = { id = "R0_pe_cont_mage" }, position = { x = 0, y = 0, z = 0 },

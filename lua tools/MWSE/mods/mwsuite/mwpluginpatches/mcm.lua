@@ -33,7 +33,8 @@ Active Plugin Status:
   • The Lost Heir: %s
   • Mabrigash Distribution: %s
   • Clean Tales of Seyda Neen: %s
-  • Trainer Log: %s]],
+  • Trainer Log: %s
+  • Personal Effects: %s]],
     config.isMcaActive() and "Active" or "Not Active",
     config.isEbonheartUnderworksActive() and "Active" or "Not Active",
     config.isPAndSActive() and "Active" or "Not Active",
@@ -42,7 +43,8 @@ Active Plugin Status:
     config.isLostHeirActive() and "Active" or "Not Active",
     config.isMabrDistActive() and "Active" or "Not Active",
     config.isTalesOfSeydaNeenActive() and "Active" or "Not Active",
-    config.isTrainerLogActive() and "Active" or "Not Active"),
+    config.isTrainerLogActive() and "Active" or "Not Active",
+    config.isPersonalEffectsActive() and "Active" or "Not Active"),
 })
 
 -- SECTION 1: FRIENDS & FRENS (JIUB COMPANION DELAY)
@@ -330,6 +332,17 @@ topicsCategory:createYesNoButton({
         .. "menu out early (ImmersiveTravel, with travel NPCs), that is too soon and every topic stays amber. This makes "
         .. "the colouring wait for the list. Neither mod is edited. Takes effect after a restart.",
     variable = mwse.mcm.createTableVariable({ id = "uiExpansionTopicsEnabled", table = config }),
+})
+
+local personalEffectsCategory = page:createCategory(string.format("Personal Effects: Census and Excise%s",
+    getStatusText(config.isPersonalEffectsActive())))
+
+personalEffectsCategory:createYesNoButton({
+    label = "Run Its Census Scripts in Lua",
+    description = "Replaces Personal Effects' Census and Excise scripts (its ESP stays required): the class effects "
+        .. "chest is unlocked and filled once, the legacy scripts are stopped, Sellus Gravius and the door guard keep "
+        .. "their facing, and duplicate chests and player clones are cleaned up. Takes effect after a restart.",
+    variable = mwse.mcm.createTableVariable({ id = "personalEffectsEnabled", table = config }),
 })
 
 local voicesCategory = page:createCategory(string.format("Voices of Vvardenfell: Console%s",

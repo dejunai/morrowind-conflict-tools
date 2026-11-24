@@ -1,4 +1,12 @@
-local config = require("mwpersonaleffects.config")
+--[[
+Personal Effects: its Census and Excise scripts, run in Lua (mwpluginpatches calls init when this patch is on and
+Personal Effects is active). The ESP's records stay required. The class effects chest is unlocked and filled once,
+the legacy scripts are stopped, Sellus Gravius and the door guard keep their facing, and duplicate chests and
+player clones are cleaned up. The save keeps its "mwpersonaleffectsFilled" flag name, so a game saved with the
+standalone mod is not refilled.
+]]
+
+local config = require("mwpluginpatches.config")
 
 local personalEffectsFix = {}
 local unlockLogged = false
@@ -199,12 +207,12 @@ local function handlePersonalEffectsUnlock()
 
     if not unlockLogged then
         unlockLogged = true
-        mwse.log("[mwpersonaleffects] Personal effects chest unlocked and loaded for class '%s'.", classId)
+        mwse.log("[mwpluginpatches] Personal effects chest unlocked and loaded for class '%s'.", classId)
     end
 end
 
 function personalEffectsFix.init()
-    if not config.enabled or not config.isPersonalEffectsActive() then
+    if not config.personalEffectsEnabled or not config.isPersonalEffectsActive() then
         return
     end
 
@@ -302,16 +310,7 @@ function personalEffectsFix.init()
     startBackgroundCheck()
     event.register(tes3.event.loaded, startBackgroundCheck)
 
-    mwse.log("[mwpersonaleffects] Personal Effects Sellus Gravius & Census Door Guard script overrides and facing fixes active.")
+    mwse.log("[mwpluginpatches] Personal Effects Sellus Gravius & Census Door Guard script overrides and facing fixes active.")
 end
-
-event.register(tes3.event.initialized, function()
-    if config.enabled and config.isPersonalEffectsActive() then
-        personalEffectsFix.init()
-    end
-end)
-event.register(tes3.event.modConfigReady, function()
-    require("mwpersonaleffects.mcm")
-end)
 
 return personalEffectsFix
