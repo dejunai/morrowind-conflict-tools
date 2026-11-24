@@ -64,18 +64,6 @@ function config.isMabrDistActive()
         or tes3.getScript("mabDist") ~= nil
 end
 
-function config.isCaveDripsActive()
-    return tes3.isModActive("Cave Drips.ESP") or tes3.getScript("R0_Sound_Cave_Drip_scr") ~= nil
-end
-
-function config.isSwampSoundsActive()
-    return tes3.isModActive("Yet Another Better Sounds Patch.esp") or tes3.getScript("SwampSoundScript") ~= nil
-end
-
-function config.isExpandedSoundsActive()
-    return tes3.isModActive("Expanded Sounds.esp")
-end
-
 function config.isCoastGuardContrabandActive()
     return tes3.isModActive("Vvardenfell Distribution - Seyda Neen Coast Guard.ESP")
         or tes3.findDialogue("contraband") ~= nil
@@ -105,9 +93,6 @@ local function getDynamicDefaults()
     local fnf = config.isFriendsAndFrensActive()
     local lostHeir = config.isLostHeirActive()
     local mabr = config.isMabrDistActive()
-    local drips = config.isCaveDripsActive()
-    local swamp = config.isSwampSoundsActive()
-    local expandedSounds = config.isExpandedSoundsActive()
     local tales = config.isTalesOfSeydaNeenActive()
     local trainerLog = config.isTrainerLogActive()
     local coastGuard = config.isCoastGuardContrabandActive()
@@ -174,11 +159,6 @@ local function getDynamicDefaults()
 
         -- Mabrigash Distribution Popup Suppression
         mabrDistSuppressionEnabled = mabr,
-
-        -- Looping sound scripts the engine restarts every frame (mwsoundguard RUNAWAY entries)
-        caveDripSoundEnabled = drips,
-        swampSoundEnabled = swamp,
-        expandedSoundsEnabled = expandedSounds,
 
         -- Voices of Vvardenfell: its routine lines in the player's console
         aiVoicesConsoleEnabled = config.isAiVoicesActive(),
