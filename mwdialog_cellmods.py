@@ -77,14 +77,18 @@ FLOAT_REACH, FLOAT_BELOW, FLOAT_ABOVE = 128.0, -32.0, 256.0
 FLOAT_ON_LAND = 32.0                           # an item at most this far above the land it was placed on rests on it
 
 
-def float_items(ref_hist, land_v, deps, tag_of, tol=FLOAT_TOLERANCE):
+def float_items(ref_hist, land_v, deps, tag_of, tol=FLOAT_TOLERANCE, ours=frozenset(), esm_only=frozenset()):
     """What write_float_data lists: cell key ("name" / "#x,y") -> {(id, x, y, z): (plugin, why)} for loose items
     whose final version sits on something changed by a plugin the item's plugin doesn't know about: a static,
     container or activator within reach below it moved, rescaled or deleted, or, outside, the land under it
     lowered by more than tol. (A replacer's new mesh isn't counted: without NIF bounds nearly every piece of
     furniture would count.) ref_hist: cell key -> ref ->
     [(plugin index, plugin, object, (x, y, z) or None, scale, deleted)]; land_v: grid -> [(plugin index,
-    plugin, VHGT)]."""
+    plugin, VHGT)].
+    ours: this tool's own patches (Cell Fixes, the auto-merge, ...). Their versions are the final word on where a
+    thing is or whether it is gone, but they "know" every plugin, so an item whose last version is one of them is
+    judged by what its real author knew (the last version not from `ours`); an item only `ours` ever placed (an
+    auto-merged plugin's) is judged against the .esm files alone (`esm_only`)."""
     lands = {g: sorted(v, key=lambda t: t[0]) for g, v in land_v.items() if len(v) > 1}
     heights = {}
 
@@ -102,15 +106,16 @@ def float_items(ref_hist, land_v, deps, tag_of, tol=FLOAT_TOLERANCE):
             tag = tag_of.get(oid.lower())
             if tag in FLOAT_ITEM_TAGS:
                 if not vs[-1][5] and vs[-1][3]:
-                    items.append((oid, vs[-1]))
+                    items.append((oid, vs[-1], vs))
             elif tag in FLOAT_SUPPORT_TAGS and len(vs) > 1:
                 for v in vs:                       # filed under every spot it was ever at
                     if v[3]:
                         grid[(int(v[3][0] // FLOAT_REACH), int(v[3][1] // FLOAT_REACH))].append((oid, vs))
         if not items:
             continue
-        for oid, last in items:
-            known = deps(last[1]) | {last[1]}
+        for oid, last, ivs in items:
+            author = next((v for v in reversed(ivs) if v[1] not in ours), None)
+            known = (deps(author[1]) | {author[1]}) if author else set(esm_only)
             x, y, z = last[3]
             why, looked = None, set()
             gx, gy = int(x // FLOAT_REACH), int(y // FLOAT_REACH)
@@ -140,15 +145,31 @@ def float_items(ref_hist, land_v, deps, tag_of, tol=FLOAT_TOLERANCE):
                         why = f"land lowered {was - now:.0f} by {lv[-1][1]}"
             if why:
                 ck = key[1] if key[0] == "i" else f"#{int(math.floor(x / 8192))},{int(math.floor(y / 8192))}"
-                found[ck][(oid, int(math.floor(x + 0.5)), int(math.floor(y + 0.5)), int(math.floor(z + 0.5)))] = (last[1], why)
+                found[ck][(oid, int(math.floor(x + 0.5)), int(math.floor(y + 0.5)), int(math.floor(z + 0.5)))] = \
+                    ((author or last)[1], why)
     return found
 
 
-def write_float_data(args, order, ref_hist, land_v, labels, name_of, deps):
-    """For the mwfloatfix MWSE mod: the loose items that could float (float_items), so it checks only those."""
+def patch_sources(data_dir, names):
+    """{file name: {"size", "mtime"}} of the generated patches the data was built against, so the MWSE side can tell
+    when one was rebuilt (or removed) after the data was written and stop trusting the list."""
+    out = {}
+    for n in names:
+        try:
+            st = os.stat(os.path.join(data_dir, n))
+        except OSError:
+            continue
+        out[n] = {"size": st.st_size, "mtime": int(st.st_mtime)}
+    return out
+
+
+def write_float_data(args, order, ref_hist, land_v, labels, name_of, deps, ours=(), ours_names=()):
+    """For the mwfloatfix MWSE mod: the loose items that could float (float_items), so it checks only those.
+    ours / ours_names: this tool's patches that were read as history (lower-case / as on disk)."""
     data_dir = os.path.abspath(args.data_dir)
     tag_of, _model_of, _scripted = object_info(order)
-    found = float_items(ref_hist, land_v, deps, tag_of)
+    esm_only = {n.lower() for n, _p in order if n.lower().endswith(".esm")}
+    found = float_items(ref_hist, land_v, deps, tag_of, ours=frozenset(ours), esm_only=frozenset(esm_only))
     cells, count = {}, 0
     for ck, hits in sorted(found.items()):
         name = ck if ck.startswith("#") else (labels.get(("i", ck)) or ck).lower()
@@ -157,7 +178,8 @@ def write_float_data(args, order, ref_hist, land_v, labels, name_of, deps):
         count += len(hits)
     out_dir = os.path.join(data_dir, "MWSE", "config")
     os.makedirs(out_dir, exist_ok=True)
-    payload = {"version": 1, "generated": time.strftime("%Y-%m-%d %H:%M:%S"), "count": count, "cells": cells}
+    payload = {"version": 1, "generated": time.strftime("%Y-%m-%d %H:%M:%S"), "count": count, "cells": cells,
+               "sources": patch_sources(data_dir, ours_names)}
     tmp = os.path.join(out_dir, FLOAT_DATA + ".tmp")
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=1)

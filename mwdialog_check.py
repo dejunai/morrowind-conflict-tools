@@ -5162,11 +5162,56 @@ def _show_setting(field, v):
                                                 # leads somewhere of its own), containers (their contents)
 
 
-def run_cell_conflicts(args, plugins, collect=False, incompatible_only=False):
+def _cell_keys_of(path):
+    """The cell keys a plugin has a CELL record for (read-only)."""
+    keys = set()
+    try:
+        for _off, tag, _flags, body in iter_records(open(path, "rb").read()):
+            if tag == "CELL":
+                k, _l = cell_key(body)
+                if k:
+                    keys.add(k)
+    except (OSError, FormatError):
+        pass
+    return keys
+
+
+def write_suite_data(args, plugins, order, ref_hist, land_v, labels, name_of, deps, new_objs, pos, cells_of,
+                     own_pos, deletions, door_final, ours_hist):
+    """run_cell_conflicts(aux_only=True)'s tail: the same files write_auxiliary writes, nothing judged or asked."""
+    if args.dry_run:
+        return 0
+    doors_at, arrivals = defaultdict(list), defaultdict(list)
+    for bk, (_pi, ckey, at, dest, to, dele) in door_final.items():
+        if not dele:
+            arrivals[dest].append(to)
+            doors_at[ckey].append((at, dest, to))
+    lost = []
+    report_rearranged(order, own_pos, deletions, new_objs, labels, pos, name_of, deps, cells_of,
+                      doors_at, arrivals, lost)
+    ours_l = [n.lower() for n, _p in ours_hist]
+    for what, fn in ((COLLIDE_DATA, lambda: write_collide_data(args, order, new_objs, labels, pos, name_of, deps,
+                                                                 cells_of)),
+                     ("mwfloatfix_data.json", lambda: write_float_data(args, order, ref_hist, land_v, labels, name_of,
+                                                                        deps, ours=ours_l,
+                                                                        ours_names=[n for n, _p in ours_hist])),
+                     ("the distant land overrides", lambda: write_ghost_statics(
+                         os.path.dirname(os.path.abspath(args.data_dir)), args.data_dir, plugins)),
+                     (STRANDED_DATA, lambda: write_stranded_data(args, order, lost))):
+        try:
+            fn()
+        except (OSError, ValueError, FormatError) as e:
+            print(f"  (could not write {what}: {e})", file=sys.stderr)
+    return 0
+
+
+def run_cell_conflicts(args, plugins, collect=False, incompatible_only=False, aux_only=False):
     """--cell-conflicts: plugins that don't know about each other (neither is a master of the other)
     but work on the same cells: both add many new objects in the same spot, both change the same
-    placed objects differently, or both change the same cell settings. Report only."""
-    if not collect and not incompatible_only:
+    placed objects differently, or both change the same cell settings. Report only.
+    aux_only: only (re)write the MWSE suite's data (mwfloatfix / mwcollide / mwstranded / distant land) from this
+    load order - --fix calls it last, on the final order, so Cell Fixes' moves and deletions are the last word."""
+    if not collect and not incompatible_only and not aux_only:
         print("\n" + "=" * 70 + "\nCELL CONFLICTS\n" + "=" * 70)
     min_new = getattr(args, "conflict_min", 5)
     skip = {x.lower() for x in OUR_PATCHES} | {CELL_WINNER_PATCH.lower()}
@@ -5367,6 +5412,9 @@ def run_cell_conflicts(args, plugins, collect=False, incompatible_only=False):
         if not n.lower().endswith(".esm"):
             read(n, p)
     esp_cells = set(new_objs) | set(settings)
+    for n, p in ours_hist:                 # an auto-merged plugin's cells are only in the auto-merge now
+        if n.lower() == AUTO_MERGE_NAME.lower():
+            esp_cells |= _cell_keys_of(p)
     # every cell or land an .esp touches: the .esm versions there are what its changes are measured against
     esp_touched = {k for pl, ks in cells_of.items() if not pl.endswith(".esm") for k in ks} | {("e",) + g for g in land_v}
     for n, p in order:
@@ -5378,6 +5426,12 @@ def run_cell_conflicts(args, plugins, collect=False, incompatible_only=False):
         v = own_pos.get(key, {}).get(bk)
         if v is not None and pos.get(v[4], -1) < _pi:
             own_pos[key][bk] = (v[0], x, y, z, v[4])
+    ours_l = [n.lower() for n, _p in ours_hist]
+    if aux_only:
+        if not ours_hist or CELL_WINNER_PATCH.lower() not in ours_l:
+            print(f"  (suite data built without {CELL_WINNER_PATCH}: it isn't in this load order)", file=sys.stderr)
+        return write_suite_data(args, plugins, order, ref_hist, land_v, labels, name_of, deps, new_objs, pos,
+                                cells_of, own_pos, deletions, door_final, ours_hist)
     # the master's own version of each contested reference, so unchanged ("dirty") copies don't count
     contested = {bk: v for bk, v in edits.items() if len({d for _p, d, _x, _o, _k in v}) > 1
                  and len({p for p, *_r in v}) > 1}
@@ -5576,7 +5630,8 @@ def run_cell_conflicts(args, plugins, collect=False, incompatible_only=False):
         except (OSError, ValueError) as e:
             print(f"  (could not write {COLLIDE_DATA}: {e})", file=sys.stderr)
         try:
-            write_float_data(args, order, ref_hist, land_v, labels, name_of, deps)
+            write_float_data(args, order, ref_hist, land_v, labels, name_of, deps,
+                             ours=ours_l, ours_names=[n for n, _p in ours_hist])
         except (OSError, ValueError) as e:
             print(f"  (could not write mwfloatfix_data.json: {e})", file=sys.stderr)
         print("  Working through distant land (which hidden objects to leave out of it), please be patient...",
@@ -10428,6 +10483,18 @@ def _main(argv=None):
             print("  (the sound-script patch was not rebuilt; the rest of --fix is unaffected)")
     if args.multipatch:
         run_multipatch(args, plugins, world)
+    if args.fix and only is None and not args.dry_run and not args.openmw_cfg:
+        # the MWSE suite's data last, from the load order the game will load - resolve() reads
+        # generated\mwdialog_load_order.txt, the list --play gives the game, never a [Game Files] section that
+        # Windows may have cut short - with Cell Fixes (rebuilt above), the
+        # auto-merge, the sound patch and the Multipatch included - Cell Fixes is the last word on what is where
+        # and what is gone. (The --cell-conflicts step of --full runs before any of them are rebuilt.)
+        print("\n  Refreshing the MWSE suite's data (mwfloatfix / mwcollide / mwstranded) from the final load order...")
+        try:
+            final_plugins, _b, _d = resolve(args, Report())
+            run_cell_conflicts(args, final_plugins, aux_only=True)
+        except (OSError, FormatError, ValueError) as e:
+            print(f"  (the suite's data was not refreshed: {e})", file=sys.stderr)
 
     if args.fix and fixed and not args.dry_run and only is None and not args.openmw_cfg:
         from mwdialog_soundcache import write_sound_cache

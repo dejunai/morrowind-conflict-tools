@@ -496,6 +496,24 @@ end
 local floatList                          -- cell key -> object id -> { {x, y, z}, ... }; nil: check everything
 do
     local data = mwse.loadConfig("mwfloatfix_data")
+    -- the list was worked out against the generated patches (Cell Fixes first: it has the last word on what is
+    -- where and what is gone). If one was rebuilt or removed since, the list may miss what floats now: check
+    -- every loose item instead, as without the file, until mwdialog_check --fix writes it again.
+    local stale
+    if data and type(data.sources) == "table" then
+        for name, s in pairs(data.sources) do
+            local a = lfs.attributes("Data Files\\" .. name)
+            if type(s) == "table" and (not a or a.size ~= s.size or (s.mtime and a.modification ~= s.mtime)) then
+                stale = name
+                break
+            end
+        end
+    end
+    if stale then
+        mwse.log("[mwfloatfix] mwfloatfix_data.json is older than %s: checking every loose item until "
+            .. "mwdialog_check --fix rewrites it", stale)
+        data = nil
+    end
     if data and type(data.cells) == "table" then
         floatList = {}
         for cellId, entries in pairs(data.cells) do
