@@ -73,6 +73,27 @@ do
     end
 end
 
+-- mwsoundfix_data.json (mwdialog_check --soundfix): which scripts the recompile rewrote, and why it left others
+local soundfix
+do
+    local ok, data = pcall(mwse.loadConfig, "mwsoundfix_data")
+    if ok and type(data) == "table" and type(data.scripts) == "table" then soundfix = data end
+end
+
+-- why a runaway is still possible: one line for the log
+local function soundfixNote(scriptId)
+    if not scriptId or scriptId == "" or scriptId == "?" or scriptId == "none" then
+        return "no script on the object: the sound is the object's own (a light's or door's), an MWSE mod's "
+            .. "or another script's; recompiling this object's script can't change it"
+    end
+    if not soundfix then return "mwsoundfix_data.json not found: --soundfix hasn't been run" end
+    local id = scriptId:lower()
+    if soundfix.scripts[id] then return "MWSoundFix rewrote this script (" .. tostring(soundfix.scripts[id].owner) .. ")" end
+    local sk = type(soundfix.skipped) == "table" and soundfix.skipped[id]
+    if sk then return "MWSoundFix left this script as it is: " .. tostring(sk.why) end
+    return "not in MWSoundFix: the script has no GetSoundPlaying-guarded play (the restarts come from elsewhere)"
+end
+
 local function cachedDuration(snd, pitch)
     if not soundLengths or not snd or type(pitch) ~= "number" or pitch <= 0 or pitch >= math.huge
         or pitch ~= pitch then return nil end
@@ -169,6 +190,7 @@ local function reportRunaway(ref, snd, path, rec, why)
         .. "object's script %s (from %s); object's own sound %s; engine says playing: %s; %d start(s) in %.2f s",
         rec.loop and "loop" or "one-shot", d.sound, why, d.ref, d.obj, d.objMod, tostring(d.objType), d.cell, d.file,
         d.soundMod, d.script, d.scriptMod, d.attached, playing, rec.total, clock() - rec.first)
+    ownLog("  soundfix: %s", soundfixNote(d.script))
     if playing == "no" and rec.loop then
         ownLog("  note: the engine reports this loop as not playing, so a script that checks GetSoundPlaying "
             .. "before PlayLoopSound3D will keep asking; mwsoundguard keeps one copy and drops the rest.")

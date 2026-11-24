@@ -527,6 +527,23 @@ def write_report(game_dir, patched, skipped, mode, dry_run):
     return path
 
 
+def _code_digest():
+    """A short digest of this module: the MWSE helper and --fix can tell a patch built by older rules."""
+    import hashlib
+    with open(os.path.abspath(__file__), "rb") as f:
+        return hashlib.sha1(f.read().replace(b"\r\n", b"\n")).hexdigest()[:12]
+
+
+def soundfix_is_stale(data_dir):
+    """True when mwsoundfix_data.json was written by a different version of this module (the plugin then
+    holds the old rules' choices: rerun --soundfix)."""
+    try:
+        with open(os.path.join(data_dir, "MWSE", "config", DATA_JSON), encoding="utf-8") as f:
+            return json.load(f).get("code") != _code_digest()
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
 def _load_order_with(args, add):
     """Put the patch in the load order (just before the Multipatch, else last), or take it out."""
     from mwdialog_loadorder import read_load_order, set_game_files
@@ -585,7 +602,11 @@ def run_soundfix(args, plugins, bsas, standalone=True):
             "scripts": {sid: {"owner": i["owner"], "loopFlags": [g["var"] for g in i["groups"] if g["kind"] == "loop"],
                               "repairs": [("loop: " if g["kind"] == "loop" else "one-shot: ") + ", ".join(g["sounds"])
                                           + (f" (on {g['ref']})" if g["ref"] else "") for g in i["groups"]]}
-                        for sid, i in sorted(patched.items())}}       # repairs: shown in its MCM page
+                        for sid, i in sorted(patched.items())},       # repairs: shown in its MCM page
+            # left as they are, with the reason: mwsoundguard quotes it when one of them runs away, so a log line
+            # says why the recompile didn't take it (and a stale patch shows as "built by older code")
+            "skipped": {sid: {"owner": o, "why": w} for sid, (o, w) in sorted(skipped.items())},
+            "code": _code_digest()}
     tmp = data_path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=1)
