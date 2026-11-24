@@ -9958,6 +9958,24 @@ def _main(argv=None):
                 if rc:
                     return rc
         plugins, bsas, data_dirs = resolve(args, report)     # those plugins now find their masters
+    if args.sort:
+        # Sorting persists the intended order; validate it before any record or patch repairs run.
+        run_sort(args, resolve(args, Report())[0])     # every active plugin, our patches included
+        if getattr(args, "sort_changed", False) and not args.dry_run and (
+                args.fix or args.patch_esm or args.multipatch or not args.no_follow_fix):
+            rc = build_compatibility_guard(args, resolve(args, Report())[0])
+            if rc:
+                return rc
+        if getattr(args, "sort_changed", False) and not args.no_follow_fix and not (args.fix and args.multipatch):
+            print("\n" + "=" * 70 + "\nFOLLOW-UP: --fix --multipatch with the new load order\n" + "=" * 70)
+            args.fix = args.multipatch = True
+        if not (args.clean or args.fix or args.multipatch):
+            return 0
+        plugins, bsas, data_dirs = resolve(args, report)
+        if (args.fix or args.patch_esm or args.multipatch) and not hasattr(args, "esm_patch_pos"):
+            args.esm_patch_pos = sum(1 for n, _p in plugins if n.lower().endswith(".esm"))
+        plugins = fix_scan_plugins(args, plugins) \
+            if (args.fix or args.patch_esm or args.multipatch) else plugins
     if args.fix:
         fix_ref_groups(args, plugins)
         fix_cell_layouts(args, plugins)
@@ -9972,6 +9990,13 @@ def _main(argv=None):
         fix_performers(args, plugins)
     elif args.fix and not args.dry_run:
         drop_performers_patch(args)       # the mwperformers MWSE mod decides in the game now
+    if args.fix and args.sort and getattr(args, "sort_changed", False) and not args.dry_run:
+        args._cell_ctx = None
+        plugins, _bsas, _data_dirs = resolve(args, Report())
+        rc = build_compatibility_guard(args, plugins)
+        if rc:
+            return rc
+        plugins, bsas, data_dirs = resolve(args, report)
     if args.fix:
         fix_cell_winners(args, plugins, report)
     loaded_patches = {n.lower() for n, _p in plugins} & {x.lower() for x in OUR_PATCHES}
@@ -9988,25 +10013,6 @@ def _main(argv=None):
         return 2
 
     only = {o.lower() for o in args.only} if args.only else None
-    if args.sort:
-        run_sort(args, resolve(args, Report())[0])     # every active plugin, our patches included
-        if getattr(args, "sort_changed", False) and not args.dry_run and (
-                args.fix or args.patch_esm or args.multipatch or not args.no_follow_fix):
-            rc = build_compatibility_guard(args, resolve(args, Report())[0])
-            if rc:
-                return rc
-        if getattr(args, "sort_changed", False) and not args.no_follow_fix and not (args.fix and args.multipatch):
-            # a new order can undo what the patches fixed (a later plugin now blanking 'Caldera Priory',
-            # leveled lists merged in the old order): rebuild them and fix what the new order exposes
-            print("\n" + "=" * 70 + "\nFOLLOW-UP: --fix --multipatch with the new load order\n" + "=" * 70)
-            args.fix = args.multipatch = True
-        if not (args.clean or args.fix or args.multipatch):
-            return 0
-        plugins, bsas, data_dirs = resolve(args, report)   # dates changed: read the new order
-        if (args.fix or args.patch_esm or args.multipatch) and not hasattr(args, "esm_patch_pos"):
-            args.esm_patch_pos = sum(1 for n, _p in plugins if n.lower().endswith(".esm"))
-        plugins = fix_scan_plugins(args, plugins) \
-            if (args.fix or args.patch_esm or args.multipatch) else plugins
     if args.clean:
         run_clean(args, plugins, only)        # cleaned files are what the checks below see
 

@@ -1,6 +1,7 @@
 """--cell-conflicts: an .esm vs an .esp pair can't be reordered, but its current winner can still be confirmed
 ([1] keep ... winning) and that answer is remembered."""
 import builtins
+import os
 import types
 
 import pytest
@@ -155,6 +156,23 @@ def test_group_includes_script_and_dialogue_users_but_not_shared_objects(tmp_pat
     assert set(m.disable_dependents(plugins, masters, ["A.esp"])) == {
         "a.esp", "a addon.esp", "a addon patch.esp", "a b patch.esp",
         "object user.esp", "script user.esp", "dialogue user.esp"}
+
+
+def test_family_choice_refreshes_dependency_index_when_content_metadata_is_unchanged(tmp_path):
+    _args, plugins, masters = _families(tmp_path)
+    data = tmp_path / "Data Files"
+    plugin(data / "Object user.esp", [], [rec("CELL", sub("NAME", z("x_object")))])
+    m.object_use(plugins)
+
+    root = data / "A.esp"
+    original = root.stat()
+    plugin(root, [], [rec("STAT", sub("NAME", z("x_object")))])
+    os.utime(root, ns=(original.st_atime_ns, original.st_mtime_ns))
+    changed = root.stat()
+    assert (changed.st_size, changed.st_mtime_ns) == (original.st_size, original.st_mtime_ns)
+
+    plan = m.disable_dependents(plugins, masters, ["A.esp"])
+    assert "object user.esp" in plan
 
 
 def test_generated_patches_are_set_aside_and_active_merges_block_choices(tmp_path, monkeypatch, capsys):

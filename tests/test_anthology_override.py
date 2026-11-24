@@ -142,7 +142,7 @@ def test_sort_rechecks_incompatibilities_before_building(tmp_path, monkeypatch, 
 
     monkeypatch.setattr(m, "run_sort", sort)
     for name in ("fix_ref_groups", "fix_cell_layouts", "fix_cell_winners", "drop_performers_patch"):
-        monkeypatch.setattr(m, name, lambda *_args: None)
+        monkeypatch.setattr(m, name, lambda *_args: pytest.fail("repair ran before the sorted-order guard"))
     monkeypatch.setattr(m, "fix_omwaddon_masters", lambda *_args: False)
     monkeypatch.setattr(m, "fix_long_names", lambda *_args: False)
     monkeypatch.setattr(m, "scan", lambda *_args: pytest.fail("built after a newly exposed conflict"))
@@ -151,6 +151,36 @@ def test_sort_rechecks_incompatibilities_before_building(tmp_path, monkeypatch, 
         flags.append("--no-follow-up")
     assert m.main([str(data), *flags]) == 2
     assert "must be resolved before building or merging" in fold(capsys.readouterr().err)
+
+
+def test_sort_revalidates_after_repairs_change_plugin_state(tmp_path, monkeypatch):
+    _args, _plugins, data, reordered, set_dates = pathgrid_winner_game(tmp_path)
+    events = []
+
+    def guard(_args, _plugins):
+        events.append("guard")
+        return 2 if events.count("guard") == 3 else 0
+
+    def sort(sort_args, plugins):
+        events.append("sort")
+        set_dates(reordered)
+        m.write_load_order(str(tmp_path), reordered, "test post-repair guard")
+        sort_args.sort_changed = True
+
+    monkeypatch.setattr(m, "build_compatibility_guard", guard)
+    monkeypatch.setattr(m, "run_sort", sort)
+    monkeypatch.setattr(m, "fix_omwaddon_masters", lambda *_args: False)
+    monkeypatch.setattr(m, "fix_long_names", lambda *_args: False)
+    monkeypatch.setattr(m, "fix_ref_groups", lambda *_args: events.append("fix_ref_groups"))
+    monkeypatch.setattr(m, "fix_cell_layouts", lambda *_args: events.append("fix_cell_layouts"))
+    monkeypatch.setattr(m, "drop_performers_patch", lambda *_args: events.append("drop_performers_patch"))
+    monkeypatch.setattr(m, "fix_cell_winners", lambda *_args: pytest.fail("patch built after post-repair conflict"))
+    monkeypatch.setattr(m, "scan", lambda *_args: pytest.fail("report built after post-repair conflict"))
+
+    flags = ["--sort", "--fix", "--yes", "--no-vortex", "--no-sounds", "--no-doubled", "--no-follow-up"]
+    assert m.main([str(data), *flags]) == 2
+    assert events == ["guard", "sort", "guard", "fix_ref_groups", "fix_cell_layouts",
+                      "drop_performers_patch", "guard"]
 
 
 def test_master_repair_sort_rechecks_before_fixing(tmp_path, monkeypatch, capsys):

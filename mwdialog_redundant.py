@@ -159,15 +159,15 @@ def read_checked_masters(path):
     return [cstr(d) for n, d in iter_subs(body) if n == "MAST"]
 
 
-def object_use(plugins):
+def object_use(plugins, *, refresh=False):
     """{plugin lower: (ids it defines, ids it uses)} for active plugins, including known script uses.
-    The merged plugin counts as one; our generated patches don't. Read once per run."""
+    The merged plugin counts as one; our generated patches don't. Family-choice planning forces a fresh read."""
     key = []
     for n, p in plugins:
         stat = os.stat(p)
         key.append((n.lower(), os.path.normcase(os.path.abspath(p)), stat.st_size, stat.st_mtime_ns))
     key = tuple(key)
-    if key in _OBJECT_USE:
+    if not refresh and key in _OBJECT_USE:
         return _OBJECT_USE[key]
     skip = {x.lower() for x in OUR_PATCHES} | {CELL_WINNER_PATCH.lower(), PERFORMER_PATCH.lower()}
     print("  Reading which plugins use which objects...", file=sys.stderr)
@@ -227,7 +227,7 @@ def disable_dependents(plugins, masters, roots, also_off=(), rebuild=()):
         if name in names and name not in gone:
             plan[name] = ("generated", "")
             gone.add(name)
-    use = object_use(plugins)
+    use = object_use(plugins, refresh=True)
     skipped = {name.lower() for name in OUR_PATCHES}
     unreadable = names.keys() - use.keys() - skipped
     if unreadable:
