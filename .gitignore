@@ -86,6 +86,7 @@ mwdialog_merged.txt
 mwdialog_reduced_textures.txt
 mwdialog_redundant.txt
 mwdialog_short_meshes.txt
+mwdialog_patch_inputs.json
 
 # The tools' own records, caches and logs (conflict-tools\generated\)
 generated/
