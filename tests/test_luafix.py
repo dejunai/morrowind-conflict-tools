@@ -888,6 +888,310 @@ assert(calls == 1 and seen == "sun", "updated once there is weather")
     assert result.returncode == 0, result.stderr
 
 
+ROBENHOOD_LUA = """local staticConfig = { itemWeatherMap = { [4] = { item = "hood_lv" } } }
+local logger = { trace = function() end, debug = function() end }
+local function alreadyHasHelm() return false end
+local function getHoodForRobedNPC() return nil end
+local function getHatWeather() return nil end
+
+local function isBadWeather(weather)
+    weather = weather or tes3.getCurrentWeather()
+    local weatherIsBad = staticConfig.itemWeatherMap[weather.index] ~= nil
+    logger:trace("%s is %sbad weather", weather, weatherIsBad and "" or "not ")
+    return weatherIsBad
+end
+
+local function getHatFromWeather(npc, weather)
+    logger:trace("Getting hat from weather")
+    local item
+    item = getHatWeather(npc, weather)
+    if item then return item end
+    return staticConfig.itemWeatherMap[weather.index] and "hood_picked" or nil
+end
+
+local function findHat(npc, weather)
+    logger:debug("findHat: finding hat for %s in weather %s", npc, weather.name)
+    local item = getHoodForRobedNPC(npc)
+    if item == nil and not alreadyHasHelm(npc) then
+        item = getHatFromWeather(npc, weather)
+    end
+    return item
+end
+
+return { isBadWeather = isBadWeather, getHatFromWeather = getHatFromWeather, findHat = findHat }
+"""
+
+
+@pytest.mark.parametrize("eol", ["\n", "\r\n"])
+def test_KB10_robenhood_guards_nil_weather_after_new_game(eol):
+    source = ROBENHOOD_LUA.replace("\n", eol)
+    path = "robenhood/main.lua"
+    findings = [f for f in analyse(source, path).findings if f["rule"] == "KB10"]
+    assert len(findings) == 3
+    assert not [f for f in analyse(source, "another/main.lua").findings if f["rule"] == "KB10"]
+    repaired, applied = lf.build_patch(source, findings, "Robe'n'Hood", CFG, "high", False)
+    assert set(applied) == {"KB10"} and repaired.count("\n") == repaired.count(eol)
+    assert not [f for f in analyse(repaired, path).findings if f["rule"] == "KB10"]
+    assert lf.verify_patch(source, repaired, applied, None, "Robe'n'Hood", path, CFG, "high")["ok"]
+    luajit = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools", "luajit", "luajit.exe")
+    if not os.path.isfile(luajit):
+        pytest.skip("LuaJIT executable not available for behavioral verification")
+    script = r"""
+local cur = nil
+tes3 = { getCurrentWeather = function() return cur end }
+local mod = assert(loadstring([==[SOURCE]==]))()
+assert(mod.isBadWeather(nil) == false)
+assert(mod.getHatFromWeather("npc", nil) == nil)
+assert(mod.findHat("npc", nil) == nil)
+cur = { index = 4, name = "Rain" }
+assert(mod.isBadWeather(nil) == true)
+assert(mod.findHat("npc", cur) == "hood_picked")
+"""
+    result = subprocess.run([luajit, "-"], input=script.replace("SOURCE", repaired.replace("\r", "")),
+                            text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
+NM_UTIL_LUA = """local niceWeather = { [0] = true }
+local util = {}
+function util.isNiceWeather()
+	return niceWeather[tes3.worldController.weatherController.currentWeather.index] or false
+end
+return util
+"""
+
+NM_MANAGER_LUA = """local Class = { new = function() return {} end }
+local EffectManager = Class:new()
+function EffectManager:new()
+	local t = Class:new()
+	setmetatable(t, self)
+
+	t.activeEffects = {}
+	t.nextUpdateTimestamp = -1
+	t.lastUpdateState = {}
+
+	self.__index = self
+	return t
+end
+
+
+-- Sets appCulled state of moths node on given reference.
+return EffectManager
+"""
+
+NM_MAIN_LUA = """local effectManager = require("nm_manager"):new()
+local function onCellChanged()
+	effectManager:onCellChanged()
+end
+event.register(tes3.event.cellChanged, onCellChanged)
+
+event.register(tes3.event.keyDown, function() end)
+return effectManager
+"""
+
+
+@pytest.mark.parametrize("eol", ["\n", "\r\n"])
+def test_KB11_nocturnal_moths_guards_nil_weather_and_resets_on_load(eol, tmp_path):
+    files = {
+        "util/init.lua": NM_UTIL_LUA.replace("\n", eol),
+        "effectManager.lua": NM_MANAGER_LUA.replace("\n", eol),
+        "main.lua": NM_MAIN_LUA.replace("\n", eol),
+    }
+    mod_root, _ = mod_tree(tmp_path, files, name="Nocturnal Moths")
+    res = lf.check_paths([str(mod_root)], CFG, use_cache=False, data_dir=str(tmp_path / "none"))
+    repaired = {}
+    for rel, src in files.items():
+        p = str(mod_root / "MWSE" / "mods" / "Nocturnal Moths" / rel)
+        ent = res.files[p]
+        kb = [f for f in ent["findings"] if f["rule"] == "KB11"]
+        assert len(kb) == 1, (rel, kb)
+        out, applied = lf.build_patch(src, kb, "Nocturnal Moths", CFG, "high", False)
+        assert set(applied) == {"KB11"} and out.count("\n") == out.count(eol)
+        assert lf.verify_patch(src, out, applied, None, "Nocturnal Moths", f"nocturnal moths/{rel}", CFG, "high")["ok"]
+        assert not [f for f in analyse(out, f"nocturnal moths/{rel}").findings if f["rule"] == "KB11"]
+        repaired[rel] = out.replace("\r", "")
+    assert "KB11" in lf.KNOWN_BUGS_WHOLE
+    luajit = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools", "luajit", "luajit.exe")
+    if not os.path.isfile(luajit):
+        pytest.skip("LuaJIT executable not available for behavioral verification")
+    script = r"""
+local handlers = {}
+event = { register = function(name, fn) handlers[name] = fn end }
+local wc = { currentWeather = nil }
+tes3 = {
+  event = { cellChanged = "cellChanged", keyDown = "keyDown", load = "load" },
+  worldController = { weatherController = wc },
+}
+package.preload["nm_manager"] = function() return assert(loadstring([==[MANAGER]==]))() end
+local util = assert(loadstring([==[UTIL]==]))()
+assert(util.isNiceWeather() == false)
+wc.currentWeather = { index = 0 }
+assert(util.isNiceWeather() == true)
+local em = assert(loadstring([==[MAIN]==]))()
+em.activeEffects["oldRef"] = "node"
+em.nextUpdateTimestamp = 99999
+em.lastUpdateState = { isNight = true }
+handlers.load()
+assert(next(em.activeEffects) == nil and em.nextUpdateTimestamp == -1 and next(em.lastUpdateState) == nil)
+"""
+    script = (script.replace("MANAGER", repaired["effectManager.lua"])
+                    .replace("UTIL", repaired["util/init.lua"])
+                    .replace("MAIN", repaired["main.lua"]))
+    result = subprocess.run([luajit, "-"], input=script, text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
+TD_WEATHER_LUA = """local this = {}
+local defaultStormOrigin = "default"
+local region_storm_origins = {}
+function this.changeStormOrigin(e)
+	local weather
+	if not e.to then
+		weather = tes3.getCurrentWeather()
+	else
+		weather = e.to
+	end
+
+	if weather and weather.index == tes3.weather.ash or weather.index == tes3.weather.blight then
+		weather.stormOrigin = defaultStormOrigin
+	end
+end
+
+function this.silenceCreatures(e)
+	if e.sound.id == "T_SndCrea_SeagullScream1" or e.sound.id == "T_SndCrea_SeagullScream2" or e.sound.id == "T_SndCrea_SeagullFlap" then	-- Could also account for T_SndCrea_MastreeveMoan, T_SndCrea_MastreeveRoar, T_SndCrea_MastreeveScream?
+		if tes3.getCurrentWeather().index == tes3.weather.ash then
+			return false
+		end
+	end
+end
+return this
+"""
+
+
+@pytest.mark.parametrize("eol", ["\n", "\r\n"])
+def test_KB12_tamriel_data_weather_guards_nil_weather(eol):
+    source = TD_WEATHER_LUA.replace("\n", eol)
+    path = "tamrieldata/weather.lua"
+    findings = [f for f in analyse(source, path).findings if f["rule"] == "KB12"]
+    assert len(findings) == 2
+    assert not [f for f in analyse(source, "another/weather.lua").findings if f["rule"] == "KB12"]
+    repaired, applied = lf.build_patch(source, findings, "Tamriel Data", CFG, "high", False)
+    assert set(applied) == {"KB12"} and repaired.count("\n") == repaired.count(eol)
+    assert not [f for f in analyse(repaired, path).findings if f["rule"] == "KB12"]
+    assert lf.verify_patch(source, repaired, applied, None, "Tamriel Data", path, CFG, "high")["ok"]
+    luajit = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools", "luajit", "luajit.exe")
+    if not os.path.isfile(luajit):
+        pytest.skip("LuaJIT executable not available for behavioral verification")
+    script = r"""
+local cur = nil
+tes3 = { weather = { ash = 4, blight = 5 }, getCurrentWeather = function() return cur end }
+local w = assert(loadstring([==[SOURCE]==]))()
+w.changeStormOrigin({})
+assert(w.silenceCreatures({ sound = { id = "T_SndCrea_SeagullScream1" } }) == nil)
+cur = { index = 5 }
+w.changeStormOrigin({})
+assert(cur.stormOrigin == "default")
+cur = { index = 4 }
+assert(w.silenceCreatures({ sound = { id = "T_SndCrea_SeagullScream1" } }) == false)
+"""
+    result = subprocess.run([luajit, "-"], input=script.replace("SOURCE", repaired.replace("\r", "")),
+                            text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
+UIEX_COMMON_LUA = """local common = {}
+function common.createSearchBar(p)
+	local border = p.parent:createThinBorder()
+	return { border = border, input = { text = "", color = nil } }
+end
+local uiExFilterFunction = {}
+uiExFilterFunction.__index = uiExFilterFunction
+
+function uiExFilterFunction:setFiltersExact(params)
+	params = params or {}
+	self.searchText = params.text
+	if (self.createSearchBar and self.searchText == nil and self.searchBlock ~= nil) then
+		self.searchBlock.input.text = self.searchTextPlaceholder
+	end
+	for _, filter in pairs(self.filtersOrdered) do
+		if (filter.iconElement) then
+			filter.iconElement.alpha = 1.0
+		end
+		if (filter.buttonElement) then
+			filter.buttonElement.visible = true
+		end
+	end
+end
+
+function uiExFilterFunction:createElements(parent)
+	local searchBarParams = { parent = parent }
+	self.searchBlock = common.createSearchBar(searchBarParams)
+
+	-- Create icons for filtering.
+	if (self.createIcons) then
+		local block = parent:createThinBorder({})
+		self.iconFiltersBlock = block
+		block:registerBefore("destroy", function()
+			self.iconFiltersBlock = nil
+		end)
+		self.filtersOrdered[1].iconElement = { alpha = 0 }
+	end
+	if (self.createButtons) then
+		local block = parent:createBlock({})
+		self.buttonFiltersBlock = block
+		block:registerBefore("destroy", function()
+			self.buttonFiltersBlock = nil
+		end)
+		self.filtersOrdered[1].buttonElement = { visible = false }
+	end
+end
+return { common = common, mt = uiExFilterFunction }
+"""
+
+
+@pytest.mark.parametrize("eol", ["\n", "\r\n"])
+def test_KB13_ui_expansion_clears_searchBlock_and_filter_elements_on_destroy(eol):
+    source = UIEX_COMMON_LUA.replace("\n", eol)
+    path = "ui expansion/common.lua"
+    findings = [f for f in analyse(source, path).findings if f["rule"] == "KB13"]
+    assert len(findings) == 3
+    assert not [f for f in analyse(source, "another/common.lua").findings if f["rule"] == "KB13"]
+    partial = source.replace("\t\tself.buttonFiltersBlock = block", "\t\tself.other = block")
+    assert [f for f in analyse(partial, path).findings if f["rule"] == "KB13" and f["conf"] == "report"]
+    assert not [f for f in analyse(partial, path).findings if f["rule"] == "KB13" and f["edits"]]
+    repaired, applied = lf.build_patch(source, findings, "UI Expansion", CFG, "high", False)
+    assert set(applied) == {"KB13"} and repaired.count("\n") == repaired.count(eol)
+    assert not [f for f in analyse(repaired, path).findings if f["rule"] == "KB13"]
+    assert lf.verify_patch(source, repaired, applied, None, "UI Expansion", path, CFG, "high")["ok"]
+    luajit = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools", "luajit", "luajit.exe")
+    if not os.path.isfile(luajit):
+        pytest.skip("LuaJIT executable not available for behavioral verification")
+    script = r"""
+local destroyCbs = {}
+local function makeEl()
+  local el = {}
+  function el:registerBefore(ev, fn) if ev == "destroy" then table.insert(destroyCbs, fn) end end
+  function el:createThinBorder() return makeEl() end
+  function el:createBlock() return makeEl() end
+  return el
+end
+local m = assert(loadstring([==[SOURCE]==]))()
+local f = setmetatable({
+  createSearchBar = true, createIcons = true, createButtons = true,
+  searchTextPlaceholder = "Search", filtersOrdered = { {} },
+}, m.mt)
+f:createElements(makeEl())
+assert(f.searchBlock ~= nil and f.filtersOrdered[1].iconElement ~= nil and f.filtersOrdered[1].buttonElement ~= nil)
+for _, fn in ipairs(destroyCbs) do fn() end
+assert(f.searchBlock == nil and f.iconFiltersBlock == nil and f.buttonFiltersBlock == nil)
+assert(f.filtersOrdered[1].iconElement == nil and f.filtersOrdered[1].buttonElement == nil)
+f:setFiltersExact()
+"""
+    result = subprocess.run([luajit, "-"], input=script.replace("SOURCE", repaired.replace("\r", "")),
+                            text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
 MWSE_FIX = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "mwse")
 
 

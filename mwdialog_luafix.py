@@ -1862,7 +1862,7 @@ KNOWN_BUGS = [
      "ExclusionsPage destroys outerContainer and then dereferences that destroyed element's parent"),
 ]
 
-KNOWN_BUGS_WHOLE = {"KB4"}    # rules whose parts depend on each other: every part matches, or none is applied
+KNOWN_BUGS_WHOLE = {"KB4", "KB11", "KB13"}    # rules whose parts depend on each other: every part matches, or none is applied
 KB4 = ("ExclusionsPage builds one UI element per item, unbounded (thousands with Tamriel Data); pages of 100 "
        "per column keep every match. Exact text of MWSE's ExclusionsPage.lua as shipped since 2024-07-19; all of "
        "KB4 applies or none of it")
@@ -2330,6 +2330,124 @@ KNOWN_BUGS += [
     ("KB9", "Directional Sunrays", "directionalsunrays/main.lua",
      "\t\t\tupdateSun()\n\t\t\tlocal sunPosition",
      "\t\t\tif not updateSun() then return end\n\t\t\tlocal sunPosition", KB9),
+]
+
+
+KB10 = ("isBadWeather, findHat, and getHatFromWeather dereference weather.index / weather.name without checking "
+        "for nil; right after starting a new game from inside a running game tes3.getCurrentWeather() is nil "
+        "(MWSE.log 2026-11-24)")
+KNOWN_BUGS += [
+    ("KB10", "Robe'n'Hood", "robenhood/main.lua",
+     "local function isBadWeather(weather)\n"
+     "    weather = weather or tes3.getCurrentWeather()\n"
+     "    local weatherIsBad = staticConfig.itemWeatherMap[weather.index] ~= nil",
+     "local function isBadWeather(weather)\n"
+     "    weather = weather or tes3.getCurrentWeather()\n"
+     "    if not weather then return false end -- local fix: no current weather yet after in-game new game\n"
+     "    local weatherIsBad = staticConfig.itemWeatherMap[weather.index] ~= nil", KB10),
+    ("KB10", "Robe'n'Hood", "robenhood/main.lua",
+     "local function getHatFromWeather(npc, weather)\n"
+     '    logger:trace("Getting hat from weather")\n'
+     "    local item",
+     "local function getHatFromWeather(npc, weather)\n"
+     "    if not weather then return nil end -- local fix: guard nil weather\n"
+     '    logger:trace("Getting hat from weather")\n'
+     "    local item", KB10),
+    ("KB10", "Robe'n'Hood", "robenhood/main.lua",
+     "local function findHat(npc, weather)\n"
+     '    logger:debug("findHat: finding hat for %s in weather %s", npc, weather.name)',
+     "local function findHat(npc, weather)\n"
+     '    logger:debug("findHat: finding hat for %s in weather %s", npc, weather and weather.name or "nil")', KB10),
+]
+
+
+KB11 = ("util.isNiceWeather indexes currentWeather.index without a nil check (nil right after a new game is "
+        "started inside a running game), and EffectManager caches activeEffects/nextUpdateTimestamp across saves "
+        "without resetting on load (MWSE.log 2026-11-24)")
+KNOWN_BUGS += [
+    ("KB11", "Nocturnal Moths", "nocturnal moths/util/init.lua",
+     "function util.isNiceWeather()\n"
+     "\treturn niceWeather[tes3.worldController.weatherController.currentWeather.index] or false\n"
+     "end",
+     "function util.isNiceWeather()\n"
+     "\tlocal weather = tes3.worldController.weatherController.currentWeather\n"
+     "\treturn weather and niceWeather[weather.index] or false -- local fix: nil right after in-game new game\n"
+     "end", KB11),
+    ("KB11", "Nocturnal Moths", "nocturnal moths/effectmanager.lua",
+     "\tself.__index = self\n"
+     "\treturn t\n"
+     "end\n\n\n"
+     "-- Sets appCulled state of moths node on given reference.",
+     "\tself.__index = self\n"
+     "\treturn t\n"
+     "end\n\n"
+     "function EffectManager:reset()\n"
+     "\tself.activeEffects = {}\n"
+     "\tself.nextUpdateTimestamp = -1\n"
+     "\tself.lastUpdateState = {}\n"
+     "end\n\n"
+     "-- Sets appCulled state of moths node on given reference.", KB11),
+    ("KB11", "Nocturnal Moths", "nocturnal moths/main.lua",
+     "event.register(tes3.event.cellChanged, onCellChanged)\n\n"
+     "event.register(tes3.event.keyDown,",
+     "event.register(tes3.event.cellChanged, onCellChanged)\n"
+     "event.register(tes3.event.load, function() effectManager:reset() end) -- local fix: drop stale refs/timestamps on load\n\n"
+     "event.register(tes3.event.keyDown,", KB11),
+]
+
+
+KB12 = ("changeStormOrigin writes `if weather and weather.index == ... or weather.index == ...` where Lua's `and` "
+        "precedence leaves the `or` branch unguarded when weather is nil, and silenceCreatures indexes "
+        "tes3.getCurrentWeather().index directly without a nil check (MWSE.log 2026-11-24)")
+KNOWN_BUGS += [
+    ("KB12", "Tamriel Data", "tamrieldata/weather.lua",
+     "\tif weather and weather.index == tes3.weather.ash or weather.index == tes3.weather.blight then",
+     "\tif weather and (weather.index == tes3.weather.ash or weather.index == tes3.weather.blight) then", KB12),
+    ("KB12", "Tamriel Data", "tamrieldata/weather.lua",
+     '\tif e.sound.id == "T_SndCrea_SeagullScream1" or e.sound.id == "T_SndCrea_SeagullScream2" or e.sound.id == "T_SndCrea_SeagullFlap" then\t-- Could also account for T_SndCrea_MastreeveMoan, T_SndCrea_MastreeveRoar, T_SndCrea_MastreeveScream?\n'
+     "\t\tif tes3.getCurrentWeather().index == tes3.weather.ash then",
+     '\tif e.sound.id == "T_SndCrea_SeagullScream1" or e.sound.id == "T_SndCrea_SeagullScream2" or e.sound.id == "T_SndCrea_SeagullFlap" then\t-- Could also account for T_SndCrea_MastreeveMoan, T_SndCrea_MastreeveRoar, T_SndCrea_MastreeveScream?\n'
+     "\t\tlocal weather = tes3.getCurrentWeather()\n"
+     "\t\tif weather and weather.index == tes3.weather.ash then", KB12),
+]
+
+
+KB13 = ("createElements registers destroy cleanup for iconFiltersBlock and buttonFiltersBlock but not for "
+        "searchBlock (or filter.iconElement / filter.buttonElement), so menuEnter calls clearFilter() on destroyed "
+        "tes3uiElement userdata after a new game or load (MWSE.log 2026-11-24)")
+KNOWN_BUGS += [
+    ("KB13", "UI Expansion", "ui expansion/common.lua",
+     "\tself.searchBlock = common.createSearchBar(searchBarParams)\n\n"
+     "\t-- Create icons for filtering.",
+     "\tself.searchBlock = common.createSearchBar(searchBarParams)\n"
+     '\tself.searchBlock.border:registerBefore("destroy", function()\n'
+     "\t\tself.searchBlock = nil\n"
+     "\tend)\n\n"
+     "\t-- Create icons for filtering.", KB13),
+    ("KB13", "UI Expansion", "ui expansion/common.lua",
+     "\t\tself.iconFiltersBlock = block\n"
+     '\t\tblock:registerBefore("destroy", function()\n'
+     "\t\t\tself.iconFiltersBlock = nil\n"
+     "\t\tend)",
+     "\t\tself.iconFiltersBlock = block\n"
+     '\t\tblock:registerBefore("destroy", function()\n'
+     "\t\t\tself.iconFiltersBlock = nil\n"
+     "\t\t\tfor _, filter in pairs(self.filtersOrdered) do\n"
+     "\t\t\t\tfilter.iconElement = nil\n"
+     "\t\t\tend\n"
+     "\t\tend)", KB13),
+    ("KB13", "UI Expansion", "ui expansion/common.lua",
+     "\t\tself.buttonFiltersBlock = block\n"
+     '\t\tblock:registerBefore("destroy", function()\n'
+     "\t\t\tself.buttonFiltersBlock = nil\n"
+     "\t\tend)",
+     "\t\tself.buttonFiltersBlock = block\n"
+     '\t\tblock:registerBefore("destroy", function()\n'
+     "\t\t\tself.buttonFiltersBlock = nil\n"
+     "\t\t\tfor _, filter in pairs(self.filtersOrdered) do\n"
+     "\t\t\t\tfilter.buttonElement = nil\n"
+     "\t\t\tend\n"
+     "\t\tend)", KB13),
 ]
 
 

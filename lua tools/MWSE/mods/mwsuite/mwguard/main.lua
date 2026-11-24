@@ -347,33 +347,66 @@ origRegister(tes3.event.initialized, function()
 end, { priority = -100000 })
 
 -- address-space readout (shown whether or not profiling is on) ----------------------------------
+local HUD_MENU_ID = tes3ui.registerID("mwguard:addressSpaceMenu")
 local HUD_ID = tes3ui.registerID("mwguard:addressSpace")
+local hudTimer
+local hudErrLogged = false
+
+local function getHudMenu()
+    return tes3ui.findHelpLayerMenu(HUD_MENU_ID)
+end
+
 local function updateHud()
-    local multi = tes3ui.findMenu("MenuMulti")
-    if not multi then return end
-    local label = multi:findChild(HUD_ID)
+    local menu = getHudMenu()
     if config.showAddressSpace == false then
-        if label then label:destroy() multi:updateLayout() end
+        if menu then menu:destroy() end
         return
     end
-    local used, total = interop.addressSpace and interop.addressSpace()
-    if not used then return end
+    if not interop.addressSpace then return end
+    local used, total = interop.addressSpace()
+    if not used or not total or total <= 0 then return end
     local text = string.format("%.0f", used / total * 100)
+    if not menu then
+        local created = tes3ui.createHelpLayerMenu({ id = HUD_MENU_ID })
+        menu = getHudMenu() or created
+        if not menu then return end
+        menu.autoWidth = true
+        menu.autoHeight = true
+        menu.absolutePosAlignX = 0.99
+        menu.absolutePosAlignY = 0.01
+        menu.consumeMouseEvents = false
+    end
+    local label = menu:findChild(HUD_ID)
     if not label then
-        label = multi:createLabel({ id = HUD_ID })
-        label.absolutePosAlignX = 0.99
-        label.absolutePosAlignY = 0.01
+        label = menu:createLabel({ id = HUD_ID })
+        label.consumeMouseEvents = false
     elseif label.text == text then
         return
     end
     label.text = text
-    multi:updateLayout()
+    menu:updateLayout()
 end
+
+local function safeUpdateHud()
+    local ok, err = pcall(updateHud)
+    if not ok and not hudErrLogged then
+        hudErrLogged = true
+        mwse.log("[mwguard] address-space HUD error: %s", tostring(err))
+    end
+end
+
 local function startHudTimer()
-    timer.start({ type = timer.real, duration = 1, iterations = -1, callback = function() pcall(updateHud) end })
+    if hudTimer then
+        pcall(function() hudTimer:cancel() end)
+        hudTimer = nil
+    end
+    hudTimer = timer.start({ type = timer.real, duration = 1, iterations = -1, callback = safeUpdateHud })
+    safeUpdateHud()
 end
+
 origRegister(tes3.event.initialized, startHudTimer)
 origRegister(tes3.event.loaded, startHudTimer)          -- MWSE cancels every timer right before `loaded`
+origRegister(tes3.event.uiActivated, safeUpdateHud, { filter = "MenuMulti" })
 
 -- Mod Config Menu --------------------------------------------------------------------------------
 event.register(tes3.event.modConfigReady, function()
