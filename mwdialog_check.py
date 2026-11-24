@@ -165,11 +165,11 @@ DOOR_OWNERS_LIST = "mwdialog_door_owners.txt"      # per --fix run: door owners 
 
 
 def cell_fixes_report_path(game_dir):
-    return os.path.join(game_dir, CELL_FIXES_REPORT)
+    return MP.state_path(game_dir, CELL_FIXES_REPORT)
 
 
 def doubled_rules_path(game_dir):
-    return os.path.join(game_dir, RULES_FILE)
+    return MP.state_path(game_dir, RULES_FILE)
 
 
 def move_doubled_plugins(_args, _off):
@@ -197,13 +197,13 @@ REPAIR_SOUND_BACKUP_FEATURE = "sound"
 
 
 def rules_sources(args, game_dir):
-    return [os.path.join(game_dir, RULES_FILE),
+    return [MP.state_path(game_dir, RULES_FILE),
             os.path.join(game_dir, "mlox", "mlox_user.txt"),
             os.path.join(game_dir, "mlox", "mlox_base.txt")]
 
 
 def dates_undo_path(game_dir):
-    return os.path.join(game_dir, DATES_UNDO_FILE)
+    return MP.state_path(game_dir, DATES_UNDO_FILE)
 
 
 def write_ghost_statics(game_dir, data_dir, plugins):
@@ -1102,7 +1102,7 @@ class World:
         if ign:
             try:
                 gd = os.path.dirname(os.path.abspath(getattr(self, "args_data_dir", ".")))
-                with open(os.path.join(gd, IGNORED_NORMALS_RECORD), "w", encoding="utf-8") as f:
+                with open(MP.state_path(gd, IGNORED_NORMALS_RECORD), "w", encoding="utf-8") as f:
                     f.write("; normal maps models name that don't exist: --fix puts a flat stand-in in place of "
                             "each (the game loads them; a missing one is a warning)\n")
                     for model, tex in ign:
@@ -2634,7 +2634,7 @@ def split_exact_groups(args):
     if getattr(args, "plugins", None) or getattr(args, "openmw_cfg", None):
         return []
     game_dir = os.path.dirname(os.path.abspath(args.data_dir))
-    rules_path = os.path.join(game_dir, RULES_FILE)
+    rules_path = MP.state_path(game_dir, RULES_FILE)
     if not os.path.exists(rules_path):
         return []
     exact = [r for r in parse_rules(rules_path)[0] if r[0] == "exact"]
@@ -2822,7 +2822,7 @@ def run_add_all_esp(args):
     added = [n for n in order if n.lower() not in active]
     missing = [n for n in current if n.lower() not in on_disk]
 
-    print(f"{os.path.join(game_dir, LOAD_ORDER_FILE)}")
+    print(f"{MP.state_path(game_dir, LOAD_ORDER_FILE)}")
     print(f"  {len(current)} plugins active now, {len(order)} .esm/.esp in Data Files")
     print(f"  {len(added)} to add, {len(missing)} listed but not in Data Files (dropped), "
           f"{len(skipped)} MGE XE grass plugins left out")
@@ -3019,7 +3019,7 @@ def run_repair_sounds(args):
         fixed.append((rel, prob, backup))
         print(f"  repaired {rel}: it {prob}\n      original kept as {backup}")
     if fixed and not args.dry_run:
-        with MT.open_log(os.path.join(game_dir, args.fix_log), "a", encoding="utf-8") as lf:
+        with MT.open_log(MP.state_path(game_dir, args.fix_log), "a", encoding="utf-8") as lf:
             for rel, prob, backup in fixed:
                 lf.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {rel}: it {prob} -> re-saved under the same name; "
                          f"original kept as {backup}\n")
@@ -4441,7 +4441,7 @@ AUTO_MERGE_BLACKLIST = "mwdialog_auto-merge.blacklist.txt"   # user-edited: one 
 def read_auto_merge_blacklist(game_dir):
     """Lowercased plugin names from the auto-merge blacklist (blank lines and ; or # comments skipped)."""
     try:
-        with open(os.path.join(game_dir, AUTO_MERGE_BLACKLIST), "r", encoding="utf-8-sig") as f:
+        with open(MP.state_path(game_dir, AUTO_MERGE_BLACKLIST), "r", encoding="utf-8-sig") as f:
             return {s.lower() for s in (ln.strip() for ln in f) if s and not s.startswith((";", "#"))}
     except OSError:
         return set()
@@ -5510,7 +5510,7 @@ def run_cell_conflicts(args, plugins, collect=False, incompatible_only=False):
     print("  (pairs where one plugin is a master of the other are left out: one was made with the other in view)")
     shown = ranked if args.conflict_all else ranked[:args.conflict_top]
     remembered = read_conflict_answers(os.path.dirname(os.path.abspath(args.data_dir)))
-    _rp = os.path.join(os.path.dirname(os.path.abspath(args.data_dir)), RULES_FILE)
+    _rp = MP.state_path(os.path.dirname(os.path.abspath(args.data_dir)), RULES_FILE)
     try:                                           # every [Order]/[Exact]/[Near*] rule in the rules file
         _rt = open(_rp, encoding="cp1252", errors="replace").read() if os.path.exists(_rp) else ""
         _rules = ordering_rules(parse_rules(_rp, _rt)[0])
@@ -5685,7 +5685,7 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
     """--cell-conflicts in a console: go through the conflicts, most serious first, and for each one
     add an [Order] rule (either way) or turn one of the two plugins off. Offers --sort at the end."""
     game_dir = os.path.dirname(os.path.abspath(args.data_dir))
-    rules_path = os.path.join(game_dir, RULES_FILE)
+    rules_path = MP.state_path(game_dir, RULES_FILE)
     needed = {m for ms in masters.values() for m in ms}            # masters of something active
     # what earlier runs of this session added is replaced, not added to: this run's answers are the ones that count
     text = open(rules_path, encoding="cp1252", errors="replace").read() if os.path.exists(rules_path) else ""
@@ -5998,7 +5998,7 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
     unresolved = [(a, b) for (a, b), c in ranked if c.get("incompatible") and a not in gone and b not in gone]
     if not args.dry_run:                             # what is still unanswered, for --full's last question
         try:
-            with open(os.path.join(game_dir, NEW_CONFLICTS_FILE), "w", encoding="utf-8") as _nf:
+            with open(MP.state_path(game_dir, NEW_CONFLICTS_FILE), "w", encoding="utf-8") as _nf:
                 _nf.write("\n".join(p_ for p_ in unanswered if p_ not in answered))
         except OSError as e:
             print(f"ERROR: could not save unanswered conflicts: {e}", file=sys.stderr)
@@ -6243,7 +6243,7 @@ def fix_performers(args, plugins):
         at = next((i for i, n in enumerate(cur) if n.lower() in tail), len(cur))
         set_game_files(args.ini or os.path.join(game_dir, "Morrowind.ini"), cur[:at] + [PERFORMER_PATCH] + cur[at:],
                        "--fix (performers)")
-    with MT.open_log(os.path.join(game_dir, args.fix_log), "a", encoding="utf-8") as lf:
+    with MT.open_log(MP.state_path(game_dir, args.fix_log), "a", encoding="utf-8") as lf:
         lf.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {PERFORMER_PATCH}: removed {n_drop} doubled performer(s): "
                  + "; ".join(f"{label}: " + ", ".join(x['oid'] for x in d) for label, _k, _h, d in drops) + "\n")
     print(f"  Wrote {PERFORMER_PATCH}: {n_drop} performer(s) removed in {len(drops)} interior(s); it is in the load "
@@ -6959,7 +6959,7 @@ def fix_cell_winners(args, plugins, report=None):
         print(f"  Doubled objects (two mods put one in the same spot): {len(doubled_rows)} of the earlier mod's "
               f"deleted (listed in {DOUBLED_DELETED_FILE})")
     if not args.dry_run:
-        with open(os.path.join(game_dir, DOUBLED_DELETED_FILE), "w", encoding="utf-8") as f:
+        with open(MP.state_path(game_dir, DOUBLED_DELETED_FILE), "w", encoding="utf-8") as f:
             f.write(f"; doubled objects deleted in {CELL_WINNER_PATCH}, {time.strftime('%Y-%m-%d %H:%M:%S')}: "
                     f"cell, object, mod whose copy is deleted, mod whose copy stays, its object. Rebuilt when "
                     f"either mod leaves the load order.\n")
@@ -7003,7 +7003,7 @@ def fix_cell_winners(args, plugins, report=None):
         set_title(f"mwdialog_check - pathgrids {done}/{total}")
         print(f"  Pathgrids: checking {done}/{total} outdoor cells for paths into objects...",
               end="\n" if done == total else "\r", flush=True)
-    pg_cache_path = os.path.join(game_dir, PATHGRID_CACHE_FILE)
+    pg_cache_path = MP.state_path(game_dir, PATHGRID_CACHE_FILE)
     pg_cache = load_pathgrid_cache(pg_cache_path)
     new_pgrds, paths_fixed, paths_left, pg_reused = repair_pathgrids(
         world, ext_pathgrids, out, tag_of, model_of, shapes,
@@ -7041,7 +7041,7 @@ def fix_cell_winners(args, plugins, report=None):
                                f"{m['msg']} (an object another plugin placed; {why})")
                 else:
                     report.add(sev, CELL_WINNER_PATCH, "pathgrid", "", line)
-    pg_file = os.path.join(game_dir, PATHGRID_FIXES_FILE)
+    pg_file = MP.state_path(game_dir, PATHGRID_FIXES_FILE)
     if not args.dry_run and (paths_fixed or paths_left):
         with open(pg_file, "w", encoding="utf-8") as f:
             f.write(f"; pathgrids, {time.strftime('%Y-%m-%d %H:%M:%S')}: FIXED in {CELL_WINNER_PATCH}; REPORTED "
@@ -7114,7 +7114,7 @@ def fix_cell_winners(args, plugins, report=None):
         print(f"  Owners of containers and objects: {things_fixed} cell(s) given to the one person living there "
               f"(listed in {DOOR_OWNERS_LIST})")
     if not args.dry_run:
-        with open(os.path.join(game_dir, DOOR_OWNERS_LIST), "w", encoding="utf-8") as f:
+        with open(MP.state_path(game_dir, DOOR_OWNERS_LIST), "w", encoding="utf-8") as f:
             f.write(f"; door owners, {time.strftime('%Y-%m-%d %H:%M:%S')}: changed in {CELL_WINNER_PATCH}, then the "
                     f"questionable ones left as they are\n")
             f.writelines(f"CHANGED  {x}\n" for x in owners_fixed)
@@ -7196,7 +7196,7 @@ def fix_cell_winners(args, plugins, report=None):
         at = next((i for i, n in enumerate(cur) if n.lower() in tail), len(cur))
         set_game_files(args.ini or os.path.join(game_dir, "Morrowind.ini"), cur[:at] + [CELL_WINNER_PATCH] + cur[at:],
                        "--fix (cell winners)")
-    with MT.open_log(os.path.join(game_dir, args.fix_log), "a", encoding="utf-8") as lf:
+    with MT.open_log(MP.state_path(game_dir, args.fix_log), "a", encoding="utf-8") as lf:
         lf.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {CELL_WINNER_PATCH}: "
                  + "; ".join(f"{c}: {name_of[w]} over {name_of[l]}" for c, w, l in cells.values()) + "\n")
         for x in owners_fixed:
@@ -7274,7 +7274,7 @@ def fix_omwaddon_masters(args):
         bak = write_inplace(path, recs)
         fixed += 1
         print(f"  {name}: {what} (backup {os.path.basename(bak)})")
-        with MT.open_log(os.path.join(game_dir, args.fix_log), "a", encoding="utf-8") as lf:
+        with MT.open_log(MP.state_path(game_dir, args.fix_log), "a", encoding="utf-8") as lf:
             lf.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {name}: master renamed {what}\n")
     if fixed:
         print(f"  {fixed} plugin header(s) fixed.")
@@ -7424,7 +7424,7 @@ def fix_long_names(args, plugins, bsas):
         except OSError as e:
             print(f"  could not make Meshes\\{short}: {e}")
     if made:
-        with open(os.path.join(game_dir, SHORT_MESH_RECORD), "a", encoding="utf-8") as f:
+        with open(MP.state_path(game_dir, SHORT_MESH_RECORD), "a", encoding="utf-8") as f:
             for longp, short in made:
                 f.write(f"{short}\t{longp}\n")
     # the plugins
@@ -7491,7 +7491,7 @@ def fix_long_names(args, plugins, bsas):
             print(f"  {name}: {changed} record(s) changed (backup {os.path.basename(bak)})")
             note_own(name, f"{changed} record(s) with names longer than the game keeps (31 characters): cut to "
                            f"31, or pointed at a short copy of the mesh")
-            with MT.open_log(os.path.join(game_dir, args.fix_log), "a", encoding="utf-8") as lf:
+            with MT.open_log(MP.state_path(game_dir, args.fix_log), "a", encoding="utf-8") as lf:
                 lf.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {name}: {changed} record(s): names cut to "
                          f"31 characters (short meshes in {SHORT_MESH_RECORD})\n")
     if made:
@@ -7650,7 +7650,7 @@ def fix_ref_groups(args, plugins):
         note_own(name, f"{len(moved)} master reference(s) listed as persistent where the master keeps them "
                        f"temporary (\"missing in master file\"): moved to the master's group, e.g. "
                        + ", ".join(f"{o} in {c}" for c, o, g in moved[:3]))
-        with MT.open_log(os.path.join(game_dir, args.fix_log), "a", encoding="utf-8") as lf:
+        with MT.open_log(MP.state_path(game_dir, args.fix_log), "a", encoding="utf-8") as lf:
             lf.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {name}: {len(moved)} master reference(s) moved to "
                      f"the master's group: " + "; ".join(f"{o} in {c}" for c, o, g in moved) + "\n")
     return changed
@@ -7759,7 +7759,7 @@ def fix_cell_layouts(args, plugins):
                 note_own(name, scale_text + " (MGE XE's distant land rejects them): moved before it")
             if found:
                 note_own(name, dup_text + ": that copy removed")
-            with MT.open_log(os.path.join(game_dir, args.fix_log), "a", encoding="utf-8") as lf:
+            with MT.open_log(MP.state_path(game_dir, args.fix_log), "a", encoding="utf-8") as lf:
                 lf.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {name}: CELL references repaired: {what}\n")
             continue
         if got["s"]:
@@ -7900,7 +7900,7 @@ def release_lost_doubles(args):
     which brings back the objects whose rival is gone. Returns how many rows named a missing mod."""
     game_dir = os.path.dirname(os.path.abspath(args.data_dir))
     try:
-        with open(os.path.join(game_dir, DOUBLED_DELETED_FILE), encoding="utf-8") as f:
+        with open(MP.state_path(game_dir, DOUBLED_DELETED_FILE), encoding="utf-8") as f:
             rows = [ln.rstrip("\n").split("\t") for ln in f if ln.strip() and not ln.startswith(";")]
     except FileNotFoundError:
         return 0
@@ -8729,7 +8729,7 @@ def drop_vanished_added_masters(args):
                 print(f"  {patch}: master {mod} (added by a sort from a content rule) taken out again: {mod} {why}"
                       + (f" (backup {os.path.basename(bak)})" if bak else ""))
                 try:
-                    with MT.open_log(os.path.join(game_dir, getattr(args, "fix_log", "") or "mwdialog_fixes.log"), "a",
+                    with MT.open_log(MP.state_path(game_dir, getattr(args, "fix_log", "") or "mwdialog_fixes.log"), "a",
                               encoding="utf-8") as lf:
                         lf.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {patch}: added master {mod} removed ({why})\n")
                 except OSError:
@@ -9046,7 +9046,7 @@ def run_sort(args, plugins):
     """--sort: compute the load order and set file dates to match (one day apart from 2000-01-01)."""
     print("\n" + "=" * 70 + "\nLOAD ORDER\n" + "=" * 70)
     game_dir = os.path.dirname(os.path.abspath(args.data_dir))
-    rules_path = os.path.join(game_dir, RULES_FILE)
+    rules_path = MP.state_path(game_dir, RULES_FILE)
     if not os.path.exists(rules_path) and not args.dry_run:
         with atomic_open(rules_path, encoding="cp1252", newline="\r\n") as f:
             f.write(DEFAULT_RULES)
@@ -9241,10 +9241,10 @@ def full_reset(args, game_dir):
     (Our generated patches need nothing: --fix and --multipatch always rebuild them from scratch.)
     The auto-merge is undone as the step before this one."""
     rec = read_disabled(game_dir)
-    rules_path = os.path.join(game_dir, RULES_FILE)
+    rules_path = MP.state_path(game_dir, RULES_FILE)
     text = open(rules_path, encoding="cp1252", errors="replace").read() if os.path.exists(rules_path) else ""
     own_text, earlier = split_conflict_rules(text)
-    gen_path = os.path.join(game_dir, GENERATED_RECORD)
+    gen_path = MP.state_path(game_dir, GENERATED_RECORD)
     def has_gen_lines():
         with open(gen_path, encoding="utf-8", errors="replace") as f:
             return any(l.strip() and not l.startswith(";") for l in f)
@@ -9306,7 +9306,7 @@ def full_missing_masters(args, game_dir):
 def full_check(args, game_dir, stage):
     """The plain scan, like double-clicking the batch file: report to mwdialog_report.txt. If it has any
     ERROR, open it and say so. Returns the number of errors."""
-    report_path = os.path.join(game_dir, "mwdialog_report.txt")
+    report_path = MP.state_path(game_dir, "mwdialog_report.txt")
     print(f"\n--full: checking for errors after {stage} (report: mwdialog_report.txt)...")
     import contextlib
     with open(report_path, "w", encoding="utf-8", errors="replace") as f, contextlib.redirect_stdout(f):
@@ -9506,7 +9506,7 @@ def run_full(args):
         return 0
     print("\n--full finished with no errors.")
     try:
-        new_pairs = [l for l in open(os.path.join(game_dir, NEW_CONFLICTS_FILE), encoding="utf-8").read().split("\n") if l]
+        new_pairs = [l for l in open(MP.state_path(game_dir, NEW_CONFLICTS_FILE), encoding="utf-8").read().split("\n") if l]
     except OSError:
         new_pairs = []
     if new_pairs:

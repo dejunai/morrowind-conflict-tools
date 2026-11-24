@@ -86,15 +86,16 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mwdialog_lua as L                                   # noqa: E402
 import mwdialog_planfile as PF                             # noqa: E402
 import mwdialog_text as MT                                 # noqa: E402
+import mwdialog_paths as MP                                # noqa: E402
 print = MT.printer()                                       # noqa: A001
 
 sys.setrecursionlimit(max(sys.getrecursionlimit(), 20000))
 
 HERE = __import__("mwdialog_paths").find_game_dir() or os.path.dirname(os.path.abspath(__file__))   # the game folder
-JOURNAL = os.path.join(HERE, "mwdialog_luafix_journal.jsonl")
+JOURNAL = MP.state_path(HERE, "mwdialog_luafix_journal.jsonl")
 BACKUP_ROOT = os.path.join(__import__("mwdialog_backup").backup_root(HERE), "luafix")
-PLAN_FILE = os.path.join(__import__("mwdialog_paths").PLANS_DIR, "mwdialog_luafix_plan.txt")
-KNOWN_BUG_REPORT = os.path.join(HERE, "mwdialog_luafix_known_bugs.txt")
+PLAN_FILE = MP.state_path(__import__("mwdialog_paths").PLANS_DIR, "mwdialog_luafix_plan.txt")
+KNOWN_BUG_REPORT = MP.state_path(HERE, "mwdialog_luafix_known_bugs.txt")
 VERSION = 5
 MARK = "localpatch"            # what is written into a mod never carries this tool's name
 
@@ -236,7 +237,7 @@ def load_config(game_dir=HERE, data_dir=None):
     data_dir = data_dir or os.path.join(game_dir, "Data Files")
     guard = os.path.join(data_dir, "MWSE", "config", "mwguard.json")
     src = []
-    for path, section in ((guard, None), (guard, "luafix"), (os.path.join(game_dir, "mwdialog_luafix.json"), "")):
+    for path, section in ((guard, None), (guard, "luafix"), (MP.state_path(game_dir, "mwdialog_luafix.json"), "")):
         try:
             with open(path, encoding="utf-8") as f:
                 d = json.load(f)

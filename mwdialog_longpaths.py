@@ -37,6 +37,7 @@ import sys
 import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mwdialog_text as MT  # noqa: E402
+import mwdialog_paths as MP  # noqa: E402
 print = MT.printer()  # noqa: A001
 
 MAX_PATH_CHARS = 259                 # longest full path a non-long-path-aware Windows program can open
@@ -165,7 +166,7 @@ class Record:
     "when", "by"}]}"""
 
     def __init__(self, game_dir):
-        self.path = os.path.join(game_dir, RECORD)
+        self.path = MP.state_path(game_dir, RECORD)
         self.moves = []
         try:
             with open(self.path, encoding="utf-8") as f:

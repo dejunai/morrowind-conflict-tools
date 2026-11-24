@@ -79,8 +79,8 @@ import mwdialog_text as MT                       # noqa: E402
 print = MT.printer()                             # noqa: A001
 
 HERE = MP.find_game_dir() or os.path.dirname(os.path.abspath(__file__))   # the game folder (see mwdialog_paths)
-JOURNAL = os.path.join(HERE, "vortex_tidy_journal.jsonl")
-PLAN = os.path.join(MP.PLANS_DIR, "vortex_tidy_plan.txt")
+JOURNAL = MP.state_path(HERE, "vortex_tidy_journal.jsonl")
+PLAN = MP.state_path(MP.PLANS_DIR, "vortex_tidy_plan.txt")
 AUDIT_ROOT = os.path.join(MB.backup_root(HERE), "tidy")     # a copy of each enacted plan, per --apply run
 LUA_HEAD = "LUA CHECK"
 ASSET_HEAD = "ASSET CHECK"
@@ -133,7 +133,7 @@ GAME_ROOT_EXT = {".exe", ".dll", ".asi"}          # the mod installs into the ga
 # mods never touched: the defaults below plus one pattern per line in vortex_tidy_blacklist.txt
 # (in the game folder; wildcards allowed, matched against the mod's folder name, case doesn't matter)
 BLACKLIST = ["Morrowind Code Patch*", "MCP beta*", "NIFZER0EDIT*"]
-BLACKLIST_FILE = os.path.join(HERE, "vortex_tidy_blacklist.txt")
+BLACKLIST_FILE = MP.state_path(HERE, "vortex_tidy_blacklist.txt")
 
 
 def blacklist(create=True):

@@ -34,6 +34,7 @@ from mwdialog_redundant import (  # noqa: E402
     OUR_PATCHES, lua_named_plugins, plugin_profile)
 from mwdialog_state import read_merge_record  # noqa: E402
 from mwdialog_tes3 import FormatError, cell_key, cstr, first_sub, iter_records, iter_subs  # noqa: E402
+import mwdialog_paths as MP  # noqa: E402
 
 PLAN_TXT = "mwdialog_merge_plan.txt"
 PLAN_JSON = "mwdialog_merge_plan.json"
@@ -275,8 +276,8 @@ def write_plan(plan, game_dir, active):
         lines.append(f"  {why}: " + ", ".join(names))
     for name, text in ((PLAN_TXT, "\n".join(lines) + "\n"),
                        (PLAN_JSON, json.dumps(dict(plan, generated=stamp, active=active), indent=1) + "\n")):
-        path = os.path.join(game_dir, name)
+        path = MP.state_path(game_dir, name)
         with open(path + ".tmp", "w", encoding="utf-8") as f:
             f.write(text)
         os.replace(path + ".tmp", path)
-    return os.path.join(game_dir, PLAN_TXT)
+    return MP.state_path(game_dir, PLAN_TXT)

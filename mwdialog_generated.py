@@ -143,7 +143,7 @@ def reduce_textures(data_dir, game_dir, items, log):
     file (a hard link) is replaced by a new file, so the staging folder keeps the full-size one; any
     other file is moved to mwdialog_fullsize_textures first. Recorded for --restore-textures."""
     done, saved = [], 0
-    rec_path = os.path.join(game_dir, REDUCED_RECORD)
+    rec_path = MP.state_path(game_dir, REDUCED_RECORD)
     for full, _rel, _w, _h, size in items:
         rel = os.path.relpath(full, data_dir)        # under Data Files (Textures\\...), as the record keeps it
         try:
@@ -190,7 +190,7 @@ def reduce_textures(data_dir, game_dir, items, log):
 def run_restore_textures(args):
     """--restore-textures: put back the full-size textures --fix reduced (re-linking Vortex's copy)."""
     data_dir = os.path.abspath(args.data_dir)
-    rec_path = os.path.join(os.path.dirname(data_dir), REDUCED_RECORD)
+    rec_path = MP.state_path(os.path.dirname(data_dir), REDUCED_RECORD)
     try:
         with open(rec_path, "r", encoding="utf-8") as f:
             rows = [l.rstrip("\r\n").split("\t") for l in f if l.strip() and not l.startswith(";")]
@@ -305,7 +305,7 @@ FULLSIZE_DIR = "mwdialog_fullsize_textures"
 
 def write_generated(data_dir, game_dir, items, log):
     """Create the silent stand-in files (never over an existing file); record them for --remove-generated."""
-    rec_path = os.path.join(game_dir, GENERATED_RECORD)
+    rec_path = MP.state_path(game_dir, GENERATED_RECORD)
     made = []
     owner = {}
     for item in items:
@@ -349,7 +349,7 @@ def write_generated(data_dir, game_dir, items, log):
 def run_remove_generated(args):
     """--remove-generated: delete the silent stand-in files --fix created."""
     data_dir = os.path.abspath(args.data_dir)
-    rec_path = os.path.join(os.path.dirname(data_dir), GENERATED_RECORD)
+    rec_path = MP.state_path(os.path.dirname(data_dir), GENERATED_RECORD)
     try:
         with open(rec_path, "r", encoding="utf-8") as f:
             rels = [l.rstrip("\r\n").split("\t") for l in f if l.strip() and not l.startswith((";", "["))]

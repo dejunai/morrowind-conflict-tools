@@ -71,7 +71,7 @@ def read_merge_record(game_dir):
     """{merged plugin: [input plugins]} from mwdialog_merged.txt."""
     rec, cur = OrderedDict(), None
     try:
-        with open(os.path.join(game_dir, MERGE_RECORD), "r", encoding="utf-8") as f:
+        with open(MP.state_path(game_dir, MERGE_RECORD), "r", encoding="utf-8") as f:
             for line in f:
                 s = line.strip()
                 if not s or s.startswith(";"):
@@ -93,7 +93,7 @@ def write_merge_record(game_dir, rec):
         lines.append(f"[{out}]")
         lines += ins
         lines.append("")
-    path = os.path.join(game_dir, MERGE_RECORD)
+    path = MP.state_path(game_dir, MERGE_RECORD)
     if not rec:
         if os.path.exists(path):
             os.remove(path)
@@ -109,7 +109,7 @@ def read_disabled(game_dir):
     """{plugin: reason} for plugins --fix turned off (doubled with another plugin)."""
     out = OrderedDict()
     try:
-        with open(os.path.join(game_dir, DISABLED_RECORD), "r", encoding="utf-8") as f:
+        with open(MP.state_path(game_dir, DISABLED_RECORD), "r", encoding="utf-8") as f:
             for line in f:
                 s = line.rstrip("\r\n")
                 if not s.strip() or s.lstrip().startswith(";"):
@@ -122,7 +122,7 @@ def read_disabled(game_dir):
 
 
 def write_disabled(game_dir, rec):
-    path = os.path.join(game_dir, DISABLED_RECORD)
+    path = MP.state_path(game_dir, DISABLED_RECORD)
     if not rec:
         if os.path.exists(path):
             os.remove(path)
@@ -158,7 +158,7 @@ OAAB_Saplings.esm
 
 def read_conflict_blacklist(game_dir, create=True):
     """Lowercase patterns from mwdialog_check.conflict.blacklist.txt (made with the defaults the first time)."""
-    path = os.path.join(game_dir, CONFLICT_BLACKLIST_FILE)
+    path = MP.state_path(game_dir, CONFLICT_BLACKLIST_FILE)
     if not os.path.exists(path):
         if not create:
             return []
@@ -219,7 +219,7 @@ def read_conflict_answers(game_dir):
     """{"a.esp|b.esp" (sorted, lower): {"do": "order"|"cell"|"off"|"skip", "plugin": winner or the one
     turned off, "when": ...}}: what you answered for each pair in earlier --cell-conflicts sessions."""
     try:
-        with open(os.path.join(game_dir, CONFLICT_ANSWERS_FILE), encoding="utf-8") as f:
+        with open(MP.state_path(game_dir, CONFLICT_ANSWERS_FILE), encoding="utf-8") as f:
             d = json.load(f)
     except (OSError, ValueError):
         return {}
@@ -231,7 +231,7 @@ def read_conflict_answers(game_dir):
 
 
 def write_conflict_answers(game_dir, answers):
-    path = os.path.join(game_dir, CONFLICT_ANSWERS_FILE)
+    path = MP.state_path(game_dir, CONFLICT_ANSWERS_FILE)
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump({"about": "your answers in mwdialog_check --cell-conflicts, offered as the default next time "
@@ -245,7 +245,7 @@ CELL_WINNERS_FILE = "mwdialog_cell_winners.txt"
 
 def read_cell_winners(game_dir):
     """{interior name lower: (name, winner, loser)} chosen in --cell-conflicts."""
-    path = os.path.join(game_dir, CELL_WINNERS_FILE)
+    path = MP.state_path(game_dir, CELL_WINNERS_FILE)
     out = {}
     if os.path.exists(path):
         for line in open(path, encoding="utf-8", errors="replace"):
@@ -257,7 +257,7 @@ def read_cell_winners(game_dir):
 
 
 def write_cell_winners(game_dir, entries):
-    path = os.path.join(game_dir, CELL_WINNERS_FILE)
+    path = MP.state_path(game_dir, CELL_WINNERS_FILE)
     if not entries:
         if os.path.exists(path):
             os.replace(path, backup_path(path))
@@ -277,7 +277,7 @@ def read_redundant(game_dir):
     """(OrderedDict {plugin turned off: (kept plugin, why)}, {frozenset(a, b) you chose to keep both of})."""
     off, both = OrderedDict(), set()
     try:
-        with open(os.path.join(game_dir, REDUNDANT_RECORD), "r", encoding="utf-8") as f:
+        with open(MP.state_path(game_dir, REDUNDANT_RECORD), "r", encoding="utf-8") as f:
             for line in f:
                 s = line.rstrip("\r\n")
                 if not s.strip() or s.lstrip().startswith(";"):
@@ -293,7 +293,7 @@ def read_redundant(game_dir):
 
 
 def write_redundant(game_dir, off, both, names=None):
-    path = os.path.join(game_dir, REDUNDANT_RECORD)
+    path = MP.state_path(game_dir, REDUNDANT_RECORD)
     if not off and not both:
         if os.path.exists(path):
             os.remove(path)
@@ -319,7 +319,7 @@ def read_merge_rebuild(game_dir):
     """{merged plugin: [inputs turned off by --redundant]} for merges that must be rebuilt without them."""
     out = OrderedDict()
     try:
-        with open(os.path.join(game_dir, MERGE_REBUILD_RECORD), encoding="utf-8") as f:
+        with open(MP.state_path(game_dir, MERGE_REBUILD_RECORD), encoding="utf-8") as f:
             for line in f:
                 s_ = line.rstrip("\r\n")
                 if s_.strip() and not s_.startswith(";"):
@@ -339,7 +339,7 @@ def mark_merge_rebuild(game_dir, add):
 
 
 def write_merge_rebuild(game_dir, rec):
-    path = os.path.join(game_dir, MERGE_REBUILD_RECORD)
+    path = MP.state_path(game_dir, MERGE_REBUILD_RECORD)
     if not rec:
         if os.path.exists(path):
             os.remove(path)
@@ -359,7 +359,7 @@ ADDED_MASTERS_RECORD = "mwdialog_added_masters.json"
 def read_added_masters(game_dir):
     """{patch: {mod: when}} for masters --sort added to patches."""
     try:
-        with open(os.path.join(game_dir, ADDED_MASTERS_RECORD), encoding="utf-8") as f:
+        with open(MP.state_path(game_dir, ADDED_MASTERS_RECORD), encoding="utf-8") as f:
             return json.load(f)
     except (OSError, ValueError):
         return {}
@@ -385,7 +385,7 @@ def write_added_masters(game_dir, rec):
     bases = record_bases(game_dir)
     if bases:
         rec = MP.convert_added_masters(rec, bases)
-    with _T.atomic_open(os.path.join(game_dir, ADDED_MASTERS_RECORD), encoding="utf-8") as f:
+    with _T.atomic_open(MP.state_path(game_dir, ADDED_MASTERS_RECORD), encoding="utf-8") as f:
         json.dump({k: v for k, v in rec.items() if v}, f, indent=1, sort_keys=True)
     try:
         note_promoted_rules(game_dir, rec)
@@ -397,7 +397,7 @@ def note_promoted_rules(game_dir, rec):
     """Keep a comment block at the end of the rules file listing each content rule that became a master
     (patch, the mod it now lists, when, why, where its original went). Comments only: the sort ignores them;
     the block is rewritten each time, and a master taken out again drops off it."""
-    path = os.path.join(game_dir, RULES_FILE)
+    path = MP.state_path(game_dir, RULES_FILE)
     try:
         with open(path, "rb") as f:
             raw = f.read()

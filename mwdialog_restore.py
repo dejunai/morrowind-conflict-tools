@@ -19,6 +19,7 @@ from mwdialog_redundant import (  # noqa: E402
     OUR_PATCHES)
 from mwdialog_tes3 import (  # noqa: E402
     safe_write_bytes)
+import mwdialog_paths as MP  # noqa: E402
 
 
 def restore_backups(names, data_dir):
@@ -167,7 +168,7 @@ DATES_UNDO_FILE = "mwdialog_loadorder_undo.txt"
 
 def restore_dates(args):
     game_dir = os.path.dirname(os.path.abspath(args.data_dir))
-    undo = os.path.join(game_dir, DATES_UNDO_FILE)
+    undo = MP.state_path(game_dir, DATES_UNDO_FILE)
     try:
         with open(undo, "r", encoding="utf-8") as f:
             blocks = f.read().split("==== ")

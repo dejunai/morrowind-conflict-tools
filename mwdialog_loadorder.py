@@ -16,6 +16,7 @@ from mwdialog_backup import (  # noqa: E402
     BACKUP_DIR, bak_home, game_dir_of, index_dir)
 from mwdialog_tes3 import (  # noqa: E402
     MW_ERRORS, safe_write_bytes)
+import mwdialog_paths as MP  # noqa: E402
 print = MT.printer()  # noqa: A001
 
 
@@ -74,7 +75,7 @@ def default_ini(args):
 def read_load_order(args):
     """The active plugins, from mwdialog_load_order.txt. The first time, it is made from Morrowind.ini."""
     game_dir = os.path.dirname(os.path.abspath(args.data_dir))
-    path = os.path.join(game_dir, LOAD_ORDER_FILE)
+    path = MP.state_path(game_dir, LOAD_ORDER_FILE)
     for source in (path, bak_home(path) + ".bak"):
         if not os.path.isfile(source):
             continue
@@ -109,7 +110,7 @@ LOAD_ORDER_WRITTEN = set()          # game folders whose load order file this ru
 def write_load_order(game_dir, order, note=""):
     """Save the plugin list (the previous one is kept as .bak). Returns the backup's name."""
     LOAD_ORDER_WRITTEN.add(os.path.abspath(game_dir))
-    path = os.path.join(game_dir, LOAD_ORDER_FILE)
+    path = MP.state_path(game_dir, LOAD_ORDER_FILE)
     bak = bak_home(path) + ".bak"
     if os.path.isfile(path):
         shutil.copy2(path, bak)
@@ -127,7 +128,7 @@ def truncated_game_files(args):
     (last listed name, the plugin file it was cut from or None, number of entries); otherwise None."""
     if getattr(args, "plugins", None) or getattr(args, "openmw_cfg", None):
         return None
-    if os.path.isfile(os.path.join(os.path.dirname(os.path.abspath(args.data_dir)), LOAD_ORDER_FILE)):
+    if os.path.isfile(MP.state_path(os.path.dirname(os.path.abspath(args.data_dir)), LOAD_ORDER_FILE)):
         return None                              # our own list is the load order now, not Morrowind.ini
     ini = default_ini(args)
     if not os.path.isfile(ini):

@@ -17,6 +17,7 @@ from mwdialog_state import (  # noqa: E402
     read_generated_record)
 from mwdialog_tes3 import (  # noqa: E402
     FormatError)
+import mwdialog_paths as MP  # noqa: E402
 print = MT.printer()  # noqa: A001
 
 GENERATED_RECORD = "mwdialog_generated_files.txt"
@@ -137,7 +138,7 @@ def generated_rels(game_dir):
     """The stand-ins this tool made (GENERATED_RECORD), as cache keys: lowercase paths under Data Files with
     backslashes. They are always checked in full, so a real file put in place of one is noticed."""
     try:
-        return {k.replace("/", "\\").lower() for k in read_generated_record(os.path.join(game_dir, GENERATED_RECORD))}
+        return {k.replace("/", "\\").lower() for k in read_generated_record(MP.state_path(game_dir, GENERATED_RECORD))}
     except (OSError, UnicodeError, ValueError):
         return set()
 

@@ -158,11 +158,12 @@ exit /b %RC%
 :doubleclick
 title mwdialog_check (scan, report to mwdialog_report.txt)
 echo Scanning Data Files for dialogue errors...
-%PY% "%~dp0mwdialog_check.py" "%GAME%Data Files" > "%GAME%mwdialog_report.txt"
+if not exist "%~dp0generated" mkdir "%~dp0generated"
+%PY% "%~dp0mwdialog_check.py" "%GAME%Data Files" > "%~dp0generated\mwdialog_report.txt"
 set "RC=%ERRORLEVEL%"
 title mwdialog_check (scan) - finished (exit code %RC%)
 echo.
 echo ==== scan finished: exit code %RC% ====
-echo Report saved to mwdialog_report.txt
-start "" notepad "%GAME%mwdialog_report.txt"
+echo Report saved to generated\mwdialog_report.txt
+start "" notepad "%~dp0generated\mwdialog_report.txt"
 exit /b %RC%

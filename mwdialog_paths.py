@@ -48,6 +48,23 @@ GAME_LOCK_DIR = os.path.join(tempfile.gettempdir(), "mwmanager-locks")
 
 TOOL_DIR = os.path.dirname(os.path.abspath(__file__))
 PLANS_DIR = os.path.join(TOOL_DIR, "plans")                # vortex_tidy's and luafix's plans (written, then applied)
+
+
+GENERATED_DIR = os.path.join(TOOL_DIR, "generated")       # the tools' own files, when installed in the game
+
+
+def state_path(base, name):
+    """Where the tools keep `name` (a record, cache, journal, log, report or rules file). Installed in the game
+    (<game>\\conflict-tools\\) and asked for the game folder: conflict-tools\\generated\\<name>; a copy still in the
+    game folder from before is moved there the first time. Any other folder (the tools run from elsewhere,
+    MWManager, a test's game) is used as given."""
+    if os.path.isabs(name) or os.path.normcase(os.path.abspath(base)) != os.path.normcase(os.path.dirname(TOOL_DIR)):
+        return os.path.join(base, name)
+    new, old = os.path.join(GENERATED_DIR, name), os.path.join(base, name)
+    os.makedirs(GENERATED_DIR, exist_ok=True)
+    if not os.path.exists(new) and os.path.exists(old):
+        os.replace(old, new)
+    return new
 LUA_TOOLS_DIR = os.path.join(TOOL_DIR, "lua tools")        # the suite's MWSE Lua mods, laid out as in Data Files
 
 

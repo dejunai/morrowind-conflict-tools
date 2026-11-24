@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mwdialog_text as MT  # noqa: E402
 from mwdialog_backup import (  # noqa: E402
     backup_root, game_dir_of)
+import mwdialog_paths as MP  # noqa: E402
 print = MT.printer()  # noqa: A001
 
 
@@ -60,7 +61,7 @@ def ask(prompt):
 def fix_log_line(args, game_dir, text):
     """One dated line in the fix log (mwdialog_fixes.log next to the game, unless --fix-log says otherwise)."""
     try:
-        with MT.open_log(os.path.join(game_dir, getattr(args, "fix_log", "") or "mwdialog_fixes.log"), "a",
+        with MT.open_log(MP.state_path(game_dir, getattr(args, "fix_log", "") or "mwdialog_fixes.log"), "a",
                   encoding="utf-8") as lf:
             lf.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {text}\n")
     except OSError:
@@ -87,7 +88,7 @@ def cap_fix_log(args):
     if args is None:
         return
     for path in {os.path.abspath(getattr(args, "fix_log", "") or "mwdialog_fixes.log"),
-                 os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(args.data_dir)),
+                 os.path.abspath(MP.state_path(os.path.dirname(os.path.abspath(args.data_dir)),
                                               getattr(args, "fix_log", "") or "mwdialog_fixes.log"))}:
         if not os.path.isfile(path) or os.path.getsize(path) <= FIX_LOG_CAP:
             continue

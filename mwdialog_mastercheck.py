@@ -228,7 +228,7 @@ def _stamp(path):
 
 def _load_facts(game_dir):
     global _FACTS
-    disk = _load_json(os.path.join(game_dir, FACTS_FILE)) or {}
+    disk = _load_json(MP.state_path(game_dir, FACTS_FILE)) or {}
     ok = isinstance(disk, dict) and disk.get("version") == FACTS_VERSION
     _FACTS = {"facts": disk.get("facts", {}) if ok else {}, "profiles": disk.get("profiles", {}) if ok else {},
               "used": set(), "root": os.path.normcase(os.path.abspath(game_dir))}
@@ -244,7 +244,7 @@ def _save_facts(game_dir):
            "facts": {k: v for k, v in _FACTS["facts"].items() if k in keep},
            "profiles": {k: v for k, v in _FACTS["profiles"].items() if k in keep}}
     try:
-        with T.atomic_open(os.path.join(game_dir, FACTS_FILE), encoding="utf-8") as f:
+        with T.atomic_open(MP.state_path(game_dir, FACTS_FILE), encoding="utf-8") as f:
             json.dump(out, f, separators=(",", ":"))
     except OSError as e:
         print(f"  ({FACTS_FILE} not saved: {e})", file=sys.stderr)
@@ -385,7 +385,7 @@ def save_cache(path, cache, bases):
 
 
 def read_sizes_record(game_dir):
-    return _load_json(os.path.join(game_dir, SIZES_RECORD))
+    return _load_json(MP.state_path(game_dir, SIZES_RECORD))
 
 
 def note_original_sizes(game_dir, size_mismatch):
@@ -393,7 +393,7 @@ def note_original_sizes(game_dir, size_mismatch):
     master - before --fix syncs it, so the original value survives the rewrite."""
     if not size_mismatch:
         return
-    path = os.path.join(game_dir, SIZES_RECORD)
+    path = MP.state_path(game_dir, SIZES_RECORD)
     rec = _load_json(path)
     changed = False
     for plugin, master, expected, actual in size_mismatch:
@@ -756,11 +756,11 @@ def check(world, mw, args=None, only_plugins=None):
     vortex_root = getattr(getattr(world, "vortex", None), "root", None) or getattr(args, "vortex_dir", None)
     dl = None if getattr(args, "no_archive_lookup", False) else downloads_dir(args, required=False)
     bases = MP.path_bases(game_dir, staging=vortex_root, downloads=dl or getattr(args, "vortex_downloads", None))
-    cache_path = os.path.join(game_dir, CACHE_FILE)
+    cache_path = MP.state_path(game_dir, CACHE_FILE)
     cache = load_cache(cache_path, bases)
     _load_facts(game_dir)
     fix_log = getattr(args, "fix_log", None)
-    extra = [fix_log] if fix_log and os.path.isabs(fix_log) else ([os.path.join(game_dir, fix_log)]
+    extra = [fix_log] if fix_log and os.path.isabs(fix_log) else ([MP.state_path(game_dir, fix_log)]
                                                                      if fix_log else [])
     logs = log_facts(game_dir, cache, [e for e in extra if os.path.basename(e) != FIX_LOGS[0]
                                        or os.path.dirname(os.path.abspath(e)) != game_dir])
@@ -932,7 +932,7 @@ def disable(game_dir, order, plugins, mw, fix_log=None):
                         "made for a different master: " + ", ".join(gone))
     if fix_log:
         try:
-            with open(fix_log if os.path.isabs(fix_log) else os.path.join(game_dir, fix_log), "a",
+            with open(fix_log if os.path.isabs(fix_log) else MP.state_path(game_dir, fix_log), "a",
                       encoding="utf-8") as lf:
                 for n in gone:
                     lf.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {n}: taken out of the load order "

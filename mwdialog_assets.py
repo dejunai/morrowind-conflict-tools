@@ -108,7 +108,7 @@ class AssetCache:
 
     def __init__(self, game_dir):
         self.game_dir = game_dir
-        self.path = os.path.join(game_dir, CACHE_DB)
+        self.path = MP.state_path(game_dir, CACHE_DB)
         self.d = {}                  # key -> [stamp, result as JSON text]
         self._dec = {}               # key -> result, decoded on first use
         self._dirty = {}             # key -> (stamp, text), or None for a deleted key, not yet written
@@ -154,7 +154,7 @@ class AssetCache:
     def _migrate(self):
         """The old JSON cache, once: its entries are converted, then the file is renamed .json.migrated."""
         import json
-        old = os.path.join(self.game_dir, CACHE_FILE)
+        old = MP.state_path(self.game_dir, CACHE_FILE)
         if not os.path.exists(old):
             return
         done = self.db.execute("SELECT v FROM meta WHERE k='migrated'").fetchone()
@@ -500,7 +500,7 @@ def mip_rules(game_dir=None):
     rules = {k: list(v) for k, v in MIP_EXEMPT_DEFAULTS.items()}
     if game_dir:
         try:
-            with open(os.path.join(game_dir, MIP_EXEMPT_RECORD), encoding="utf-8", errors="replace") as f:
+            with open(MP.state_path(game_dir, MIP_EXEMPT_RECORD), encoding="utf-8", errors="replace") as f:
                 lines = f.read().splitlines()
         except OSError:
             lines = []
@@ -1491,7 +1491,7 @@ def apply(fixes, data_dir, game_dir, m, log, dry=False):
         except OSError as e:
             skipped.append(f"{rel} ({e})")
     if moves:
-        with open(os.path.join(game_dir, UNUSED_RECORD), "a", encoding="utf-8") as f:
+        with open(MP.state_path(game_dir, UNUSED_RECORD), "a", encoding="utf-8") as f:
             for rel, dest, why in moves:
                 f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}\t{rel}\t{dest}\t{why}\n")
     shutil.rmtree(tmp, ignore_errors=True)
@@ -1510,7 +1510,7 @@ OFF_MARKER_RE = re.compile(r"[\\/]off[\\/](?:unused|orphaned|broken)[\\/]", re.I
 def restore_unused(game_dir, data_dir):
     """--restore-unused: put back every file listed in mwdialog_unused_assets.txt (staging copy back into the
     mod folder; Vortex redeploys it, or it is copied into Data Files when it wasn't Vortex's)."""
-    path = os.path.join(game_dir, UNUSED_RECORD)
+    path = MP.state_path(game_dir, UNUSED_RECORD)
     if not os.path.exists(path):
         print("Nothing to restore.")
         return 0

@@ -17,6 +17,7 @@ import mwdialog_text as MT  # noqa: E402
 from mwdialog_tes3 import (  # noqa: E402
     FormatError, ITEM_TAGS, cstr, first_sub, iter_records, read_plugin_bytes)
 from mwdialog_records import height_at, land_heights  # noqa: E402
+import mwdialog_paths as MP  # noqa: E402
 print = MT.printer()  # noqa: A001
 
 COLLIDE_DATA = "mwcollide_data.json"           # Data Files\MWSE\config\, read by the mwcollide MWSE mod
@@ -290,7 +291,7 @@ def object_info(order):
     key = tuple(parts)
     if key in _OBJECT_INFO:
         return _OBJECT_INFO[key]
-    cache_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(order[0][1]))),
+    cache_path = MP.state_path(os.path.dirname(os.path.dirname(os.path.abspath(order[0][1]))),
                               OBJECT_CACHE_FILE) if order else None
     version, cached = _parser_version(), {}
     if cache_path:
