@@ -224,6 +224,9 @@ def refuse_mismatch(path, fresh_text, added, removed, tool, log=print):
     (to review), say what changed. Nothing is enacted."""
     prev = prev_path(path)
     if os.path.exists(path):
+        if os.path.exists(prev):                 # one previous plan beside it; older ones go to backups, dated
+            import mwdialog_backup
+            mwdialog_backup.retire_dated(prev, os.path.basename(prev))
         shutil.copyfile(path, prev)
     write_atomic(path, fresh_text)
     log(f"\nREFUSED: the plan {tool} --apply works out now is not the one in the plan file you reviewed. "

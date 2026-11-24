@@ -75,6 +75,7 @@ tools/source/build/
 mwdialog_added_masters.json
 mwdialog_cell_fixes.txt
 mwdialog_cell_winners.txt
+mwdialog_check.rules.txt
 mwdialog_conflict_answers.json
 mwdialog_disabled.txt
 mwdialog_generated_files.txt

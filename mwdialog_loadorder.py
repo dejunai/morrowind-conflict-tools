@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mwdialog_text as MT  # noqa: E402
 import mwdialog_tes3 as _T  # noqa: E402
 from mwdialog_backup import (  # noqa: E402
-    BACKUP_DIR, bak_home, game_dir_of, index_dir)
+    BACKUP_DIR, backup_path, bak_home, game_dir_of, index_dir)
 from mwdialog_tes3 import (  # noqa: E402
     MW_ERRORS, safe_write_bytes)
 import mwdialog_paths as MP  # noqa: E402
@@ -113,6 +113,7 @@ def write_load_order(game_dir, order, note=""):
     path = MP.state_path(game_dir, LOAD_ORDER_FILE)
     bak = bak_home(path) + ".bak"
     if os.path.isfile(path):
+        bak = backup_path(path)                 # the older backup moves on (legacy), this one takes its place
         shutil.copy2(path, bak)
     lines = [f"; {LOAD_ORDER_FILE}: the active plugins, in load order (mwdialog_check.py keeps this list;",
              "; Morrowind.ini's [Game Files] is written from it when a run that changed it ends, and by --play).",

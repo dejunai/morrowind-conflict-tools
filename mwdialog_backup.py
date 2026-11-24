@@ -55,9 +55,39 @@ def _rel(path):
     return game, (os.path.basename(path) if rel.startswith("..") else rel)
 
 
+BESIDE_DIRS = ("generated", "plans")            # conflict-tools\\these: one backup next to the file, the rest dated
+
+
+def beside(path):
+    """True for the tools' own files (conflict-tools\\generated, \\plans): their one backup is <file>.bak next
+    to the file; every older one goes to <backups>\\legacy\\<file>.<YYYYmmdd-HHMMSS>.bak."""
+    d = os.path.normcase(os.path.dirname(os.path.abspath(path)))
+    return any(d == os.path.normcase(os.path.join(TOOL_DIR, x)) for x in BESIDE_DIRS)
+
+
+def retire_dated(src, stem):
+    """Move the backup `src` to <backups>\\legacy\\<stem>.<its date>.bak (a -2, -3... when that is taken)."""
+    legacy = os.path.join(backup_root(game_dir_of(src)), LEGACY_DIR)
+    os.makedirs(legacy, exist_ok=True)
+    stamp = time.strftime("%Y%m%d-%H%M%S", time.localtime(os.path.getmtime(src)))
+    dest, n = os.path.join(legacy, f"{stem}.{stamp}.bak"), 1
+    while os.path.exists(dest):
+        n += 1
+        dest = os.path.join(legacy, f"{stem}.{stamp}-{n}.bak")
+    os.replace(src, dest)
+    return dest
+
+
 def bak_home(path, legacy=False):
     """Where a backup of `path` goes: <backups>\\<its path under the game folder> (Data Files\\X.esp ->
-    <backups>\\Data Files\\X.esp), or under <backups>\\legacy; the folder is made. Add the suffix."""
+    <backups>\\Data Files\\X.esp), or under <backups>\\legacy; the folder is made. Add the suffix. The tools'
+    own files (beside()) keep theirs next to the file: `path` itself, or <backups>\\legacy\\<name>."""
+    if beside(path):
+        if not legacy:
+            return path
+        home = os.path.join(backup_root(game_dir_of(path)), LEGACY_DIR, os.path.basename(path))
+        os.makedirs(os.path.dirname(home), exist_ok=True)
+        return home
     game, rel = _rel(path)
     home = os.path.join(backup_root(game), *([LEGACY_DIR] if legacy else []), rel)
     os.makedirs(os.path.dirname(home), exist_ok=True)
@@ -66,7 +96,15 @@ def bak_home(path, legacy=False):
 
 def retire_backups(path):
     """Move every backup of `path` at the top of the backups folder into legacy, so the next one made is
-    the only one there. Returns the base name for that next backup."""
+    the only one there. Returns the base name for that next backup. The tools' own files: every backup next
+    to the file goes to legacy, dated."""
+    if beside(path):
+        folder, stem = os.path.split(os.path.abspath(path))
+        pat = re.compile(re.escape(stem) + OWN_BAK.pattern, re.IGNORECASE)
+        for fn in sorted(os.listdir(folder)):
+            if pat.match(fn):
+                retire_dated(os.path.join(folder, fn), stem)
+        return path
     home = bak_home(path)
     folder, stem = os.path.split(home)
     pat = re.compile(re.escape(stem) + OWN_BAK.pattern, re.IGNORECASE)
@@ -86,7 +124,10 @@ def retire_backups(path):
 
 
 def stamped_backup(path):
-    """A new dated backup name for `path` (<name>.mwdialog-YYYYmmdd-HHMMSS.bak), the only one at the top."""
+    """A new dated backup name for `path` (<name>.mwdialog-YYYYmmdd-HHMMSS.bak), the only one at the top.
+    The tools' own files: <name>.bak next to it (the older one moved to legacy, dated)."""
+    if beside(path):
+        return retire_backups(path) + ".bak"
     return f"{retire_backups(path)}.mwdialog-{time.strftime('%Y%m%d-%H%M%S')}.bak"
 
 
@@ -120,7 +161,9 @@ def backup_candidates(path):
 
 def backup_path(path):
     """A new backup name for `path`, the only one at the top of the backups folder (older ones go to
-    legacy): .bak, then .bak2, .bak3... (highest = newest)."""
+    legacy): .bak, then .bak2, .bak3... (highest = newest). The tools' own files: <name>.bak next to it."""
+    if beside(path):
+        return retire_backups(path) + ".bak"
     taken = backup_candidates(path)
     base = retire_backups(path)
     n = 1 + max([1] + [int(re.search(r"\.bak(\d*)$", c, re.IGNORECASE).group(1) or 1) for c in taken]) if taken else 1

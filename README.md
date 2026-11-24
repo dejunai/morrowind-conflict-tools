@@ -96,7 +96,7 @@ These live in the game folder, except as noted.
 
 **Rules and lists you edit:**
 
-- `mwdialog_check.rules.txt` — mlox-style load-order rules for `--sort` (these win over mlox's own files); a `[NearStart]` / `[NearEnd]` block there also orders its own plugins (`[NearEnd]`: first listed loads last), so they need no extra `[Order]` entry
+- `mwdialog_check.rules.txt` — your mlox-style load-order rules for `--sort` (these win over mlox's own files). None ship with the tools: `--sort` makes the file with only its instruction header when it is missing, then keeps its `[Context]` section and the rules `--cell-conflicts` adds there. The ESM fixes patch's place (early) and the end of the order (XE Sky Variations when installed, then the auto-merge and our patches) are built into the sorter; a `[NearStart]` / `[NearEnd]` block there also orders its own plugins (`[NearEnd]`: first listed loads last), so they need no extra `[Order]` entry
 - mlox rules are not included; the tool reads `mlox\mlox_user.txt` and `mlox_base.txt` from your own mlox install if they exist, and `mwdialog_check.rules.txt` is the place for your own rules
 - `mwdialog_check.conflict.blacklist.txt` — plugins left out of `--cell-conflicts` and loaded early so others win
 - `vortex_tidy_blacklist.txt` — Vortex staging folders tidy should never touch

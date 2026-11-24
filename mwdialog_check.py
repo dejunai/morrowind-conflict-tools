@@ -151,7 +151,7 @@ OFFICIAL_MASTERS = ("morrowind.esm", "tribunal.esm", "bloodmoon.esm")
 TEXT_TYPOS = {"affresh.esm": (("his fried,", "his friend,"), ("He is true friend of", "He is a true friend of"))}
 REMAP_RADIUS = 64       # a renumbered master reference is the same object within this many units
 
-ORDER_TAIL_EXTRA = ()
+ORDER_TAIL_EXTRA = ("XE Sky Variations.esp",)   # MGE XE's plugin, when installed: last, before our patches
 CELL_FIXES_REPORT = "mwdialog_cell_fixes.txt"
 CELL_PATCH_AUTHOR = "mwdialog_check"
 CELL_PATCH_DESCRIPTION = "Rebuilt interiors: the chosen mod's version wins (rebuilt by mwdialog_check --fix)"
@@ -8399,13 +8399,17 @@ DEFAULT_RULES = f"""; {RULES_FILE}: load order rules for mwdialog_check.py --sor
 ; One plugin per line; ";" starts a comment. Names are not case-sensitive and may use
 ; the wildcards * and ? and mlox's <VER> (a version number). A plugin always loads after its
 ; masters, and every .esm before every .esp, whatever the rules say.
-; The sorter pins the auto-merge, the performers patch, the placeholder patch and the
-; Multipatch at the very end, in that order. Leave them out of this file: a [NearEnd]
-; block here would also order them, the other way around.
-
-[NearStart]
-{PATCH_NAME}
+; Built into the sorter, so not needed here: {PATCH_NAME} loads as early as its
+; masters allow; XE Sky Variations.esp (MGE XE's, when installed), the auto-merge, the
+; performers patch, the placeholder patch and the Multipatch load at the very end, in that
+; order. Leave them out of this file: a [NearEnd] block here would also order them, the
+; other way around.
+; --sort keeps two sections here itself: [Context] (the patch-after-mod rules it works out,
+; for reading) and the rules --cell-conflicts adds. Your own rules go below this header.
 """
+BUILTIN_RULES = f"""[NearStart]
+{PATCH_NAME}
+"""                                              # applied after every rules file (yours win), never written to one
 
 
 def compute_order(plugins, rule_sets, current_order):
@@ -8929,6 +8933,7 @@ def sort_rule_sources(args, plugins, quiet=False):
         if not quiet:
             print("  Reading plugins to find patches that must follow the mods they change...", file=sys.stderr)
         rule_sets.insert(1, content_rules(plugins))
+    rule_sets.append(parse_rules("built-in", BUILTIN_RULES)[0])
     return rule_sets, files
 
 
@@ -9050,7 +9055,7 @@ def run_sort(args, plugins):
     if not os.path.exists(rules_path) and not args.dry_run:
         with atomic_open(rules_path, encoding="cp1252", newline="\r\n") as f:
             f.write(DEFAULT_RULES)
-        print(f"  Created {RULES_FILE} with the default rules (edit it to add your own).")
+        print(f"  Created {RULES_FILE}: no rules yet; its header says how to add your own.")
     sources = rules_sources(args, game_dir)
     if args.no_mlox_rules:
         sources = sources[:1]
@@ -9068,6 +9073,7 @@ def run_sort(args, plugins):
                   + (f", {sum(ign.values())} other rule(s) ignored" if ign else ""))
         rule_sets.append(rules)
         ignored += ign
+    rule_sets.append(parse_rules("built-in", BUILTIN_RULES)[0])
     mine = [b for b in BAD_RULE_ENTRIES if os.path.normcase(b[0]) == os.path.normcase(rules_path)]
     for src, no, entry in BAD_RULE_ENTRIES:
         if (src, no, entry) not in mine:
