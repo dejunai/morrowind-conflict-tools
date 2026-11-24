@@ -35,6 +35,15 @@ mwse = { loadConfig = function(_, d) d.enabled = true; d.audio = true; d.soundLi
 lfs = { mkdir = function() end }
 timer = { real = 1, start = function() return { cancel = function() end } end }
 tes3 = { event = setmetatable({}, { __index = function(_, k) return k end }) }
+-- MWSE include: require, or nil when the module is missing; other load errors still raise.
+include = function(name)
+  local ok, result = pcall(require, name)
+  if ok then return result end
+  if type(result) == "string" and result:find("module '" .. name .. "' not found", 1, true) then
+    return nil
+  end
+  error(result)
+end
 require("mwhangwatch.main")
 handlers.initialized()
 local reads = 0

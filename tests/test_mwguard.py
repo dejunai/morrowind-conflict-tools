@@ -29,7 +29,24 @@ mwse = {
 lfs = { mkdir = function() end, fileexists = function() return true end }
 timer = { real = 1, start = function() return { cancel = function() end } end }
 tes3 = { event = { loaded = "loaded", initialized = "initialized", modConfigReady = "modConfigReady" } }
-include = function() return nil end
+-- tes3ui.registerID is called at load time for the address-space HUD; findMenu is the only other
+-- tes3ui call on the load/test path (updateHud returns immediately when the menu is absent).
+do
+  local nextId = 1000
+  tes3ui = {
+    registerID = function(_name) nextId = nextId + 1; return nextId end,
+    findMenu = function() return nil end,
+  }
+end
+-- MWSE include: require, or nil when the module is missing; other load errors still raise.
+include = function(name)
+  local ok, result = pcall(require, name)
+  if ok then return result end
+  if type(result) == "string" and result:find("module '" .. name .. "' not found", 1, true) then
+    return nil
+  end
+  error(result)
+end
 package.path = MODS .. "/?.lua;" .. package.path
 require("mwguard.main")
 
