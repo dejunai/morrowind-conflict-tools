@@ -168,3 +168,20 @@ def test_check_folder_survives_a_non_ascii_name_that_is_not_utf8_in_cp1252(tmp_p
     (tmp_path / "Textures" / "x" / "café.tga").write_bytes(b"\0" * 12 + struct.pack("<HH", 64, 64) + b"\x20\0px")
     issues, _fixes = ah.check_folder(str(tmp_path), m, str(tmp_path / "Data Files"))
     assert any("non-ASCII" in i[2] for i in issues)
+
+
+# ---------------------------------------------------------------- broken models: a link past the header's count
+def _nif(count, child):
+    """A header claiming `count` blocks, then one NiNode with one child link and one NiTriShape."""
+    def s(b):
+        return struct.pack("<I", len(b)) + b
+    node = s(b"NiNode") + s(b"Root") + b"\0" * 8 + b"\0" * (2 + 52 + 12) + struct.pack("<II", 0, 0) + struct.pack("<Ii", 1, child)
+    shape = s(b"NiTriShape") + s(b"Mesh") + b"\0" * 8 + b"\0" * (2 + 52 + 12) + struct.pack("<II", 0, 0) + struct.pack("<i", -1)
+    return ah.NIF_HEAD + b"\n" + struct.pack("<II", 0x04000002, count) + node + shape
+
+
+def test_nif_links_past_end():
+    assert ah.nif_links_past_end(_nif(2, 1)) is None                 # the child is block 1 of 2: fine
+    assert ah.nif_links_past_end(_nif(2, 7)) == [2, 7]                # the child is past the end: the game crashes
+    assert ah.nif_links_past_end(_nif(2, -5)) is None                 # a mislaid block's bytes: not a link
+    assert ah.nif_links_past_end(b"not a model") is None

@@ -169,7 +169,7 @@ def test_generated_model_ignores_cache_and_tidy(tmp_path):
     c = ah.shared_cache(str(g))
     key = ah.norm_rel(os.path.join("Meshes", "m", "a.nif"))
     c.put("nif:" + key, ah.stamp_of(st), {"tn": ["cached.dds"]})
-    c.put(ah.TIDY_KEY + "mod|" + key, ah.stamp_of(st), {"c": True, "f": {"tn": ["tidy.dds"]}})
+    c.put(ah.TIDY_KEY + "mod|" + key, ah.stamp_of(st), {"c": True, "f": {"tn": ["tidy.dds"], "past": None}})
     assert ah.model_facts_cached(c, key, full, st, m)["tn"] == ["tidy.dds"]
     assert ah.model_facts_cached(c, key, full, st, m, {key})["tn"] == ["tx_a.dds", "tx_missing.dds"]
 

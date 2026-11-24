@@ -61,6 +61,56 @@ def nif_without_shapes(data):
     return data.startswith(NIF_HEAD) and not any(t in data for t in SHAPE_TAGS + NOT_EMPTY_TAGS)
 
 
+def nif_links_past_end(data):
+    """[header's block count, block a node points at] when a node points at a block number at or past the count in
+    the header, else None. The game builds only that many blocks and crashes following the link (a model cut down
+    from another without renumbering its links). Checked on every model of an 840-plugin install, BSAs included:
+    it flags only models broken that way."""
+    if not data.startswith(NIF_HEAD):
+        return None
+    from mwdialog_footing import BLOCK_RE, NODE_TYPES, SHAPE
+
+    def u32(p):
+        return struct.unpack_from("<I", data, p)[0]
+    try:
+        count = u32(data.index(b"\n") + 5)
+    except (ValueError, struct.error):
+        return None
+    blocks, after = [], None
+    for found in BLOCK_RE.finditer(data):
+        size, word = u32(found.start()), found.group(2)
+        if size > len(word) or found.start() == after:
+            continue                             # a name spelt like a type, inside the block just found
+        after = found.start() + 4 + size
+        blocks.append((word[:size], after))
+    top = -1
+    for kind, p in blocks[:count]:
+        if kind not in NODE_TYPES:
+            continue
+        try:
+            p += 4 + u32(p) + 8                  # name, extra data, controller
+            p += 2 + 52 + 12                     # flags, transform, velocity
+            n = u32(p)
+            links = list(struct.unpack_from(f"<{n}i", data, p + 4)) if n < 64 else []     # properties
+            p += 4 + 4 * n
+            p += 4 + (64 if u32(p) else 0)       # bounding box
+            if kind == SHAPE:
+                links += struct.unpack_from("<i", data, p)                                  # its data
+            else:
+                n = u32(p)
+                links += struct.unpack_from(f"<{n}i", data, p + 4) if n < 4096 else ()       # children
+        except (struct.error, IndexError):
+            continue
+        # a link under -1 means this scan mislaid the block (a string ending in a type name, read as the type), so
+        # its "links" are other bytes; a real node's links are -1 (none) or block numbers
+        if any(x < -1 for x in links):
+            continue
+        # a link far past the end (over 1024 past the count) is text read as a number, not a real link: a cut-down
+        # model's links stay near its original block count
+        top = max([top] + [x for x in links if 0 <= x < count + 1024])
+    return [count, top] if top >= count else None
+
+
 CACHE_FILE = "mwdialog_asset_cache.json"           # the old format: converted once, then renamed
 CACHE_DB = "mwdialog_asset_cache.sqlite"
 MIGRATED_SUFFIX = ".migrated"
@@ -376,6 +426,7 @@ def model_facts(b, m):
     bad_keys = m.nif_text_keys_lf(b)[0] if m.TEXT_KEY_TAG in b else 0
     return {"tex": sorted({n for n, e in names_by_ext(b, (b"dds", b"tga", b"bmp"))}),
             "abs": bool(nif_absolute_textures(b)), "noshape": nif_without_shapes(b), "keys": bad_keys,
+            "past": nif_links_past_end(b),
             "tn": m.nif_texture_refs(b)}
 
 
@@ -387,11 +438,12 @@ def model_facts_cached(cache, key, full, st, m, generated=(), need_tn=False):
     stamp = stamp_of(st)
     if key not in generated and cache is not None:
         t = cache.tidy_lookup(key, stamp)
-        if t is not None and isinstance(t.get("f"), dict) and "tn" in t["f"]:
+        if t is not None and isinstance(t.get("f"), dict) and "tn" in t["f"] and "past" in t["f"]:
             return t["f"]
         f = cache.get("nif:" + key, stamp)
-        # an old entry without "tn" whose noshape came from an older, stricter test: read it again
-        if f is not None and ("tn" in f or not (need_tn or f.get("noshape"))):
+        # an old entry without "tn" whose noshape came from an older, stricter test, or from before the
+        # links-past-the-end check ("past"): read it again
+        if f is not None and "past" in f and ("tn" in f or not (need_tn or f.get("noshape"))):
             return f
     try:
         with open(full, "rb") as fh:
@@ -1180,6 +1232,11 @@ def check(world, m):
             fixes.append(("broken", full, rel, "not a Morrowind file"))
             continue
         used.update(facts.get("tex", ()))
+        if facts.get("past"):
+            count, top = facts["past"]
+            r.add("ERROR", "Data Files", "", "", f"{rel}: broken model: a node in it points at block {top}, but its "
+                                                 f"header says it has only {count}; the game crashes loading it. "
+                                                 f"Let another mod's copy of this file win (Vortex), or remove it")
         if rel.lower().endswith(".nif") and facts.get("noshape") and "marker" not in rel.lower():
             r.add("WARN", "Data Files", "", "", f"{rel}: model has no polygons (draws nothing); fine if the mod "
                                                 f"hides something on purpose")
@@ -1859,6 +1916,11 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None, stats=None):
                                              " -> kept in Off\\...\\broken\\, a stand-in put there"))
                 fixes.append(("broken", full, rel, "not a Morrowind file"))
                 continue
+            past = nif_links_past_end(b) if low.endswith(".nif") else None
+            if past:
+                issues.append(("ERROR", rel, f"broken model: a node in it points at block {past[1]}, but its header "
+                                             f"says it has only {past[0]}; the game crashes loading it. Let another "
+                                             f"mod's copy win, or remove it"))
             if low.endswith(".nif") and nif_without_shapes(b) and "marker" not in low:
                 issues.append(("WARN", rel, "model has no polygons (draws nothing); fine if it hides something on "
                                             "purpose"))
