@@ -511,6 +511,7 @@ class World:
         self.generated = []                # (path under Data Files, why[, source]): files --fix puts in Data Files
         self.vortex = None                 # VortexRepo: undeployed files in Vortex mod folders
         self.missing_by_plugin = defaultdict(int)   # plugin -> files it needs that exist nowhere
+        self.missing_files = []            # (path under Data Files, why, plugin): needed, exist nowhere, no stand-in
         self.lev_win = {}                  # (LEVI|LEVC, id lower) -> (plugin, id, [entry ids]) of the winning list
         self.obj_used_at = defaultdict(set)  # object id lower -> load indexes of plugins that place/hold/list it
         self.assets = None                 # ModelAssets, when model files are checked
@@ -1441,6 +1442,9 @@ class World:
                             self.r.add("WARN", plugin, f"script {sname}", "",
                                        f"{m.group(1)}: {prob} (--fix copies it from Vortex mod '{hit[1]}')")
                         else:
+                            self.missing_files.append((os.path.join("Video", self.assets.rel(path, "video")),
+                                                       f"script {sname}", plugin))
+                            self.missing_by_plugin[plugin] += 1
                             self.r.add("INFO", plugin, f"script {sname}", "",
                                        f"{m.group(1)}: {prob} (the game skips the video)")
                     else:

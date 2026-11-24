@@ -4,6 +4,7 @@ names, text keys, empty models) and sound files (MP3/WAV sanity, silent stand-in
 import os
 import re
 import struct
+import sys
 
 
 SOUND_ROOTS = []                                 # the Data Files folders the sound index came from
@@ -344,7 +345,10 @@ def dummy_path(name, game_dir=None):
         return path
     import mwdialog_paths as MP
     from mwdialog_bsa import bsa_index
-    bsa = os.path.join(game_dir or MP.find_game_dir() or "", "Data Files", "Morrowind.bsa")
+    if not game_dir:                       # the running check's Data Files (MWManager runs outside the game)
+        data = getattr(getattr(sys.modules.get("mwdialog_check"), "TOP_ARGS", None), "data_dir", None)
+        game_dir = os.path.dirname(os.path.abspath(data)) if data else MP.find_game_dir()
+    bsa = os.path.join(game_dir or "", "Data Files", "Morrowind.bsa")
     entry = bsa_index(bsa).get(DUMMY_SOURCES[name]) if os.path.isfile(bsa) else None
     if entry is None:
         raise FileNotFoundError(f"{path}: missing, and no Morrowind.bsa with {DUMMY_SOURCES[name]} to copy it from")

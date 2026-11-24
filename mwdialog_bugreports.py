@@ -82,6 +82,9 @@ def collect(m, plugins, report, world):
         plugin = item[3] if len(item) > 3 else ""
         if plugin and plugin.lower() in names and not m.is_our_patch(plugin) and not (len(item) > 2 and item[2]):
             per[plugin.lower()]["missing"].append(f"  - {rel} (needed by {why}); a stand-in was put in its place")
+    for rel, why, plugin in getattr(world, "missing_files", ()):
+        if plugin and plugin.lower() in names and not m.is_our_patch(plugin):
+            per[plugin.lower()]["missing"].append(f"  - {rel} (needed by {why}); the game skips it")
     for plugin, verdicts in summaries.items():
         details = []
         for master, verdict in sorted(verdicts.items()):

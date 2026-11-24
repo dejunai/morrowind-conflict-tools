@@ -478,3 +478,14 @@ def test_a_missing_stand_in_is_copied_out_of_morrowind_bsa_and_kept(tmp_path, mo
     assert m.dummy_path(m.DUMMY_NIF, str(game)) == path                  # kept: no BSA needed the next time
     with pytest.raises(OSError):
         m.dummy_path(m.DUMMY_KF, str(game))                                # none kept and no BSA: an error
+
+
+def test_a_missing_video_gets_a_line_in_the_bug_report():
+    # the game skips a missing video, so no stand-in is made: the plugin's bug report still lists the file
+    import types
+    import mwdialog_bugreports as BR
+    mm = types.SimpleNamespace(OUR_PATCHES=(), is_our_patch=lambda n: False, OWN_FIXES={})
+    report = types.SimpleNamespace(issues=[], fixes=[])
+    world = types.SimpleNamespace(masters={}, generated=[], missing_files=[(r"Video\intro.bik", "script s", "A.esp")])
+    per = BR.collect(mm, [("A.esp", "A.esp")], report, world)
+    assert per["a.esp"]["missing"] == [r"  - Video\intro.bik (needed by script s); the game skips it"]
