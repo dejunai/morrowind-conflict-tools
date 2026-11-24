@@ -75,6 +75,9 @@ yesNo(locks, "interiorExit", "Never locked inside",
 yesNo(locks, "sneakToPick", "Must sneak to pick locks",
     "A locked door or container without its key plays the locked sound unless you sneak; sneaking opens the lockpicking (Modern Lockpicking). "
         .. "A matching key, including one in a supported keyring, lets you use the door while standing, even if it is owned.")
+yesNo(locks, "noLoadDoorOnPick", "Picking a loading door only unlocks it",
+    "Modern Lockpicking opens a door as soon as its lock is picked. With this on, a door that leads to another cell is "
+        .. "only unlocked: you go through when you choose. Other doors and containers open as before.")
 yesNo(locks, "lockedNotification", "Show a notice for locked things", "For players who play without sound.")
 yesNo(locks, "lockedCrosshair", "Tint the crosshair on locked things",
     "With Essential Indicators installed, the crosshair turns orange on a locked door or container you have no key for.")

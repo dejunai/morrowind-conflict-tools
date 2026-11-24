@@ -270,6 +270,19 @@ event.register(tes3.event.initialized, function()
         -- a lock picked or opened in a menu (Modern Lockpicking) leaves the same target in view
         event.register(tes3.event.menuExit, function() onTargetChanged({ current = tes3.getPlayerTarget() }) end)
     end
+    -- Modern Lockpicking opens a door as soon as its lock is picked: a loading door then loads the next cell. It asks
+    -- its own shouldOpen() first, after the unlock, so answering no there leaves the door unlocked and shut.
+    local okLock, lockController = pcall(require, "tauer.modern-lockpicking.services.locks.lockController")
+    if okLock and type(lockController) == "table" and type(lockController.shouldOpen) == "function" then
+        local shouldOpen = lockController.shouldOpen
+        lockController.shouldOpen = function(ref, ...)
+            if config.enabled and config.noLoadDoorOnPick and ref and ref.object
+                and ref.object.objectType == tes3.objectType.door and ref.destination then
+                return false
+            end
+            return shouldOpen(ref, ...)
+        end
+    end
     if config.enabled then warnOverlaps() end
 end)
 event.register("keyDown", onInspectorKeyDown)

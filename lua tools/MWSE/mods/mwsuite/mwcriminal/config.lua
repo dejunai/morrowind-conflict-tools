@@ -21,6 +21,7 @@ local defaults = {
     debugMode = false,
     interiorExit = false,       -- doors out to an exterior are never locked
     sneakToPick = false,        -- locked doors/containers need sneaking to pick
+    noLoadDoorOnPick = false,   -- a picked loading door is only unlocked (Modern Lockpicking would open it)
     lockedNotification = false, -- "Locked" notice next to the locked sound
     lockedCrosshair = false,    -- Essential Indicators crosshair tinted on locked targets without a key
     eveningLocks = false,       -- owned/occupied homes lock in the evening (abot Door Locks)
