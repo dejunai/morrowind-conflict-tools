@@ -697,6 +697,9 @@ def _luafix():
         return None
 
 
+CORE_KEY = "MWSE core (Data Files\\MWSE\\core)"   # lua_check()'s entry for MWSE's own core files
+
+
 def lua_check(args):
     """mwdialog_luafix on each mod's MWSE Lua files (nothing written): {"reps", "merged", "body" (the plan's Lua
     section), "n_ok", "checker"}, or None when mwdialog_luafix.py is missing."""
@@ -735,6 +738,26 @@ def lua_check(args):
             out.append(f"\n{d}")
             out += lines
         reps.append((d, rep))
+    # MWSE's own core files a Known Bugs rule names (KB3, KB4: the MCM's ExclusionsPage). MWSE's updater puts
+    # them straight into Data Files, so they are checked there and patched in place, unless a staged mod ships
+    # MWSE itself (then that mod's copy was checked above and Data Files holds a link to it).
+    staged_core = {os.path.relpath(p, os.path.join(args.staging, d, "MWSE")).replace("\\", "/").lower()
+                   for d in mods for p in lf.known_core_files(os.path.join(args.staging, d, "MWSE"))}
+    core = [p for p in lf.known_core_files(os.path.join(data_dir, "MWSE"))
+            if os.path.relpath(p, os.path.join(data_dir, "MWSE")).replace("\\", "/").lower() not in staged_core]
+    if core:
+        try:
+            rep = lf.check_paths(core, cfg, False, checker, getattr(args, "lua_level", "high"), data_dir,
+                                 True, False, game_dir, log_scope=getattr(args, "lua_log", None))
+            lines, counts = lf.format_report(rep, indent="    ")
+            for k, v in counts.items():
+                total[k] = total.get(k, 0) + v
+            if lines:
+                out.append("\n" + CORE_KEY)
+                out += lines
+            reps.append((CORE_KEY, rep))
+        except Exception as e:
+            print(f"  MWSE core: Lua check failed ({e})")
     n_ok = sum(1 for _d, r in reps for e in r.files.values() if e.get("patch") and e["patch"]["ok"])
     print("\n".join(out[:300]))
     if len(out) > 300:
@@ -788,6 +811,9 @@ def lua_apply(args, lres):
     for d, rep in lres["reps"]:
         lines = lf.known_bug_report_lines(rep, lres["done"], refused_map)
         if not lines:
+            continue
+        if d == CORE_KEY:                             # MWSE's own files: no mod folder to hold a bug report
+            print("\n".join("    " + x for x in lines))
             continue
         root = os.path.join(args.staging, d)
         head = [f"Bug report for {mod_name(d)}", f"Mod: {mod_name(d)}",

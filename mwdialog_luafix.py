@@ -760,17 +760,33 @@ class FileAnalysis:
     def r_known(self):
         """KB<n>: documented bugs that cannot be repaired from a separate Lua mod."""
         rel = self.rel.lower()
+        parts = {}
         for rule, plugin, path, old, new, what in KNOWN_BUGS:
             if rel != path:
                 continue
             if "\r\n" in self.src:
                 old, new = old.replace("\n", "\r\n"), new.replace("\n", "\r\n")
+            found = []
             start = 0
             while (i := self.src.find(old, start)) >= 0:
-                self.findings.append(Finding(rule=rule, line=self.src.count("\n", 0, i) + 1,
-                                             what=f"{plugin}: {what}", fix=new, conf="high",
-                                             edits=[(i, i + len(old), new)], needs=set()))
+                found.append(Finding(rule=rule, line=self.src.count("\n", 0, i) + 1,
+                                     what=f"{plugin}: {what}", fix=new, conf="high",
+                                     edits=[(i, i + len(old), new)], needs=set()))
                 start = i + len(old)
+            if rule in KNOWN_BUGS_WHOLE:
+                parts.setdefault(rule, []).append((plugin, what, found))
+            else:
+                self.findings += found
+        for rule, got in parts.items():                  # a rule in parts applies whole or not at all
+            n = sum(1 for _p, _w, f in got if f)
+            if n == len(got):
+                self.findings += [x for _p, _w, f in got for x in f]
+            elif n:
+                plugin, what = got[0][:2]
+                self.findings.append(Finding(
+                    rule=rule, line=1, what=f"{plugin}: {what}. Only {n} of its {len(got)} parts match: this file "
+                    "is neither the version the fix was written for nor the fixed one, so it is left as it is",
+                    fix="", conf="report", edits=[], needs=set()))
 
     def r_sound_query(self):
         """S1: tes3.getSoundPlaying asked about a reference that is not the player. For a loop on a non-actor
@@ -1846,142 +1862,362 @@ KNOWN_BUGS = [
      "ExclusionsPage destroys outerContainer and then dereferences that destroyed element's parent"),
 ]
 
-KB4 = "ExclusionsPage builds an unbounded native object list; strict 100-item pages preserve every match"
+KNOWN_BUGS_WHOLE = {"KB4"}    # rules whose parts depend on each other: every part matches, or none is applied
+KB4 = ("ExclusionsPage builds one UI element per item, unbounded (thousands with Tamriel Data); pages of 100 "
+       "per column keep every match. Exact text of MWSE's ExclusionsPage.lua as shipped since 2024-07-19; all of "
+       "KB4 applies or none of it")
 KNOWN_BUGS += [
-    ("KB4", "MWSE Core", "core/mcm/components/pages/exclusionspage.lua", "local MAX_DISPLAY_ITEMS = 200",
-     '''local PAGE_SIZE = 100
+    ("KB4", "MWSE Core", "core/mcm/components/pages/exclusionspage.lua",
+     'local placeholderText = mwse.mcm.i18n("Search...")\n\n--- Constructor',
+     '''local placeholderText = mwse.mcm.i18n("Search...")
+local PAGE_SIZE = 100
 
 local function addPager(self, content, listName, total)
-\tlocal pages = math.max(1, math.ceil(total / PAGE_SIZE))
-\tself.pages = self.pages or {}
-\tlocal page = math.min(math.max(self.pages[listName] or 1, 1), pages)
-\tself.pages[listName] = page
-\tlocal first, last = (page - 1) * PAGE_SIZE + 1, page * PAGE_SIZE
-\tif pages == 1 then
-\t\treturn first, last
-\tend
+	local pages = math.max(1, math.ceil(total / PAGE_SIZE))
+	self.pages = self.pages or {}
+	local page = math.min(math.max(self.pages[listName] or 1, 1), pages)
+	self.pages[listName] = page
+	local first, last = (page - 1) * PAGE_SIZE + 1, page * PAGE_SIZE
+	if pages == 1 then
+		return first, last
+	end
 
-\tlocal row = content:createBlock()
-\trow.flowDirection = tes3.flowDirection.leftToRight
-\trow.autoHeight = true
-\trow.widthProportional = 1.0
-\trow.childAlignX = 0.5
-\tlocal function changePage(delta)
-\t\tself.pages[listName] = page + delta
-\t\tif listName == "leftList" then
-\t\t\tself:distributeLeft(self.currentItems)
-\t\telse
-\t\t\tself:distributeRight(self.currentItems)
-\t\tend
-\t\tlocal menu = self.elements.outerContainer and self.elements.outerContainer:getTopLevelMenu()
-\t\tif menu then menu:updateLayout() end
-\tend
-\tif page > 1 then
-\t\trow:createButton{ text = "< Previous" }:register(tes3.uiEvent.mouseClick, function() changePage(-1) end)
-\tend
-\tlocal label = row:createLabel{ text = string.format("Page %d / %d (%d items)", page, pages, total) }
-\tlabel.borderLeft, label.borderRight = 8, 8
-\tif page < pages then
-\t\trow:createButton{ text = "Next >" }:register(tes3.uiEvent.mouseClick, function() changePage(1) end)
-\tend
-\treturn first, last
-end''', KB4),
-    ("KB4", "MWSE Core", "core/mcm/components/pages/exclusionspage.lua",
-     "function ExclusionsPage:updateSearch(listName)\n\tlocal items = self.currentItems or {}\n\tif listName == \"leftList\" then",
-     "function ExclusionsPage:updateSearch(listName)\n\tlocal items = self.currentItems or {}\n\tself.pages = self.pages or {}\n\tself.pages[listName] = 1\n\tif listName == \"leftList\" then", KB4),
-    ("KB4", "MWSE Core", "core/mcm/components/pages/exclusionspage.lua",
-     "\tlocal count = 0\n\tlocal totalMatches = 0\n\tlocal sourceList = {}",
-     "\tlocal totalMatches = 0\n\tlocal sourceList = {}", KB4),
-    ("KB4", "MWSE Core", "core/mcm/components/pages/exclusionspage.lua",
-     '''\tfor _, name in ipairs(sourceList) do
-\t\tif searchString == "" or name:lower():find(searchString, 1, true) then
-\t\t\ttotalMatches = totalMatches + 1
-\t\t\tif count < MAX_DISPLAY_ITEMS then
-\t\t\t\tcount = count + 1
-\t\t\t\tcontent:createTextSelect{ id = itemID, text = name }:register(tes3.uiEvent.mouseClick, function(e)
-\t\t\t\t\tself:toggle(e)
-\t\t\t\tend)
-\t\t\tend
-\t\tend
-\tend
+	local row = content:createBlock()
+	row.flowDirection = tes3.flowDirection.leftToRight
+	row.autoHeight = true
+	row.widthProportional = 1.0
+	row.childAlignX = 0.5
+	local function changePage(delta)
+		self.pages[listName] = page + delta
+		if listName == "leftList" then
+			self:distributeLeft(self.currentItems)
+		else
+			self:distributeRight(self.currentItems)
+		end
+		local menu = self.elements.outerContainer and self.elements.outerContainer:getTopLevelMenu()
+		if menu then menu:updateLayout() end
+	end
+	if page > 1 then
+		row:createButton{ text = "< Previous" }:register(tes3.uiEvent.mouseClick, function() changePage(-1) end)
+	end
+	local label = row:createLabel{ text = string.format("Page %d / %d (%d items)", page, pages, total) }
+	label.borderLeft, label.borderRight = 8, 8
+	if page < pages then
+		row:createButton{ text = "Next >" }:register(tes3.uiEvent.mouseClick, function() changePage(1) end)
+	end
+	return first, last
+end
 
-\tif totalMatches > count then
-\t\tlocal excess = totalMatches - count
-\t\tlocal moreLabel = content:createLabel{
-\t\t\ttext = string.format("... and %d more items (type in Search to filter)", excess)
-\t\t}
-\t\tmoreLabel.color = tes3ui.getPalette(tes3.palette.disabledColor)
-\t\tmoreLabel.borderTop = 4
-\t\tmoreLabel.borderBottom = 4
-\tend''',
-     '''\tfor _, name in ipairs(sourceList) do
-\t\tif searchString == "" or name:lower():find(searchString, 1, true) then
-\t\t\ttotalMatches = totalMatches + 1
-\t\tend
-\tend
-\tlocal first, last = addPager(self, content, "leftList", totalMatches)
-\tlocal match = 0
-\tfor _, name in ipairs(sourceList) do
-\t\tif searchString == "" or name:lower():find(searchString, 1, true) then
-\t\t\tmatch = match + 1
-\t\t\tif match >= first and match <= last then
-\t\t\t\tcontent:createTextSelect{ id = itemID, text = name }:register(tes3.uiEvent.mouseClick, function(e)
-\t\t\t\t\tself:toggle(e)
-\t\t\t\tend)
-\t\t\tend
-\t\tend
-\tend''', KB4),
+--- Constructor''', KB4),
     ("KB4", "MWSE Core", "core/mcm/components/pages/exclusionspage.lua",
-     '''\tlocal count = 0
-\tlocal totalMatches = 0
-\tfor _, name in ipairs(self.currentItems) do
-\t\tif not self.variable.value[name] then
-\t\t\tif searchString == "" or name:lower():find(searchString, 1, true) then
-\t\t\t\ttotalMatches = totalMatches + 1
-\t\t\t\tif count < MAX_DISPLAY_ITEMS then
-\t\t\t\t\tcount = count + 1
-\t\t\t\t\tcontent:createTextSelect{ id = itemID, text = name }:register(tes3.uiEvent.mouseClick, function(e)
-\t\t\t\t\t\tself:toggle(e)
-\t\t\t\t\tend)
-\t\t\t\tend
-\t\t\tend
-\t\tend
-\tend
+     '''function ExclusionsPage:toggle(e)
+	-- toggle an item between blocked / allowed
 
-\tif totalMatches > count then
-\t\tlocal excess = totalMatches - count
-\t\tlocal moreLabel = content:createLabel{
-\t\t\ttext = string.format("... and %d more items (type in Search to filter)", excess)
-\t\t}
-\t\tmoreLabel.color = tes3ui.getPalette(tes3.palette.disabledColor)
-\t\tmoreLabel.borderTop = 4
-\t\tmoreLabel.borderBottom = 4
-\tend''',
-     '''\tlocal totalMatches = 0
-\tfor _, name in ipairs(self.currentItems) do
-\t\tif not self.variable.value[name] then
-\t\t\tif searchString == "" or name:lower():find(searchString, 1, true) then
-\t\t\t\ttotalMatches = totalMatches + 1
-\t\t\tend
-\t\tend
-\tend
-\tlocal first, last = addPager(self, content, "rightList", totalMatches)
-\tlocal match = 0
-\tfor _, name in ipairs(self.currentItems) do
-\t\tif not self.variable.value[name] then
-\t\t\tif searchString == "" or name:lower():find(searchString, 1, true) then
-\t\t\t\tmatch = match + 1
-\t\t\t\tif match >= first and match <= last then
-\t\t\t\t\tcontent:createTextSelect{ id = itemID, text = name }:register(tes3.uiEvent.mouseClick, function(e)
-\t\t\t\t\t\tself:toggle(e)
-\t\t\t\t\tend)
-\t\t\t\tend
-\t\t\tend
-\t\tend
-\tend''', KB4),
+	-- delete element
+	local list = e.source.parent.parent.parent
+	local text = e.source.text
+	e.source:destroy()
+
+	-- toggle blocked
+	if list == self.elements.leftList then
+		list = self.elements.rightList
+		local var = self.variable.value
+		var[text] = false
+		self.variable.value = var
+	else
+		list = self.elements.leftList
+		local var = self.variable.value
+		var[text] = true
+		self.variable.value = var
+	end
+	--- @cast list tes3uiElement
+
+	-- create element
+	list:createTextSelect{ id = itemID, text = text }:register(tes3.uiEvent.mouseClick, function(e)
+		self:toggle(e)
+	end)
+
+	-- update sorting
+	local container = list:getContentElement()
+	container:sortChildren(function(a, b)
+			return a.text < b.text
+	end)
+
+	-- update display
+	self.elements.outerContainer:getTopLevelMenu():updateLayout()
+end
+
+--- @param listName mwseMCMExclusionsPageListId
+function ExclusionsPage:updateSearch(listName)
+
+	local searchString = self.elements.searchBarInput[listName].text:lower() --[[@as string]]
+	local thisList = self.elements[listName] --[[@as tes3uiElement]]
+	local child = thisList:findChild(itemID)
+
+	if child then
+		local itemList = child.parent.children
+		for _, item in ipairs(itemList) do
+			if item.text:lower():find(searchString, 1, true) then
+				item.visible = true
+			else
+				item.visible = false
+			end
+		end
+	end
+
+	self.elements[listName].widget:contentsChanged()
+	self.elements.outerContainer:getTopLevelMenu():updateLayout()
+end
+
+--- @param items string[]
+function ExclusionsPage:distributeLeft(items)
+	-- distribute items between blocked / allowed
+
+	self.elements.leftList:getContentElement():destroyChildren()
+
+	if self.showAllBlocked then
+		-- show all items
+		for name, blocked in pairs(self.variable.value) do
+			if blocked then
+				self.elements.leftList:createTextSelect{ id = itemID, text = name }:register(tes3.uiEvent.mouseClick, function(e)
+					self:toggle(e)
+				end)
+			end
+		end
+	else
+		for i, name in pairs(items) do
+			if self.variable.value[name] then
+				self.elements.leftList:createTextSelect{ id = itemID, text = name }:register(tes3.uiEvent.mouseClick, function(e)
+					self:toggle(e)
+				end)
+			end
+		end
+	end
+end
+
+--- @param items string[]
+function ExclusionsPage:distributeRight(items)
+	-- distribute items between blocked / allowed
+
+	self.elements.rightList:getContentElement():destroyChildren()
+	for i, name in pairs(items) do
+		if not self.variable.value[name] then
+			self.elements.rightList:createTextSelect{ id = itemID, text = name }:register(tes3.uiEvent.mouseClick, function(e)
+				self:toggle(e)
+			end)
+		end
+	end
+end
+
+--- @param listName mwseMCMExclusionsPageListId
+function ExclusionsPage:toggleFiltered(listName)
+	-- Move all items currently filtered to opposite list
+
+	local thisList = self.elements[listName] --[[@as tes3uiElement]]
+	local child = thisList:findChild(itemID)
+
+	if child then
+		local itemList = child.parent.children
+		for _, item in ipairs(itemList) do
+			if item.visible then
+				local list = item.parent.parent.parent
+				if list == self.elements.leftList then
+					list = self.elements.rightList
+					local var = self.variable.value
+					var[item.text] = false
+					self.variable.value = var
+				else
+					list = self.elements.leftList
+					local var = self.variable.value
+					var[item.text] = true
+					self.variable.value = var
+				end
+			end
+		end
+	end
+	--destroy and recreate page
+	self.elements.outerContainer.parent:destroyChildren()
+	self:create(self.elements.outerContainer.parent)
+end
+
+''',
+     '''function ExclusionsPage:toggle(e)
+	-- toggle an item between blocked / allowed
+	local text = e.source.text
+	local list = e.source.parent.parent.parent
+	local isLeft = (list == self.elements.leftList)
+
+	local var = self.variable.value
+	var[text] = not isLeft
+	self.variable.value = var
+
+	local items = self.currentItems or {}
+	self:distributeLeft(items)
+	self:distributeRight(items)
+
+	-- update display
+	local topMenu = self.elements.outerContainer and self.elements.outerContainer:getTopLevelMenu()
+	if topMenu then
+		topMenu:updateLayout()
+	elseif self.elements.outerContainer then
+		self.elements.outerContainer:updateLayout()
+	end
+end
+
+--- @param listName mwseMCMExclusionsPageListId
+function ExclusionsPage:updateSearch(listName)
+	local items = self.currentItems or {}
+	self.pages = self.pages or {}
+	self.pages[listName] = 1
+	if listName == "leftList" then
+		self:distributeLeft(items)
+	else
+		self:distributeRight(items)
+	end
+
+	local topMenu = self.elements.outerContainer and self.elements.outerContainer:getTopLevelMenu()
+	if topMenu then
+		topMenu:updateLayout()
+	elseif self.elements.outerContainer then
+		self.elements.outerContainer:updateLayout()
+	end
+end
+
+--- @param items string[]
+function ExclusionsPage:distributeLeft(items)
+	-- distribute items between blocked / allowed
+	self.currentItems = items or self.currentItems or {}
+	local content = self.elements.leftList:getContentElement()
+	content:destroyChildren()
+
+	local searchString = ""
+	if self.elements.searchBarInput and self.elements.searchBarInput.leftList then
+		local txt = self.elements.searchBarInput.leftList.text
+		if txt and txt ~= placeholderText then
+			searchString = txt:lower()
+		end
+	end
+
+	local totalMatches = 0
+	local sourceList = {}
+	if self.showAllBlocked then
+		for name, blocked in pairs(self.variable.value) do
+			if blocked then
+				sourceList[#sourceList + 1] = name
+			end
+		end
+		table.sort(sourceList)
+	else
+		for _, name in ipairs(self.currentItems) do
+			if self.variable.value[name] then
+				sourceList[#sourceList + 1] = name
+			end
+		end
+	end
+
+	for _, name in ipairs(sourceList) do
+		if searchString == "" or name:lower():find(searchString, 1, true) then
+			totalMatches = totalMatches + 1
+		end
+	end
+	local first, last = addPager(self, content, "leftList", totalMatches)
+	local match = 0
+	for _, name in ipairs(sourceList) do
+		if searchString == "" or name:lower():find(searchString, 1, true) then
+			match = match + 1
+			if match >= first and match <= last then
+				content:createTextSelect{ id = itemID, text = name }:register(tes3.uiEvent.mouseClick, function(e)
+					self:toggle(e)
+				end)
+			end
+		end
+	end
+	self.elements.leftList.widget:contentsChanged()
+end
+
+--- @param items string[]
+function ExclusionsPage:distributeRight(items)
+	-- distribute items between blocked / allowed
+	self.currentItems = items or self.currentItems or {}
+	local content = self.elements.rightList:getContentElement()
+	content:destroyChildren()
+
+	local searchString = ""
+	if self.elements.searchBarInput and self.elements.searchBarInput.rightList then
+		local txt = self.elements.searchBarInput.rightList.text
+		if txt and txt ~= placeholderText then
+			searchString = txt:lower()
+		end
+	end
+
+	local totalMatches = 0
+	for _, name in ipairs(self.currentItems) do
+		if not self.variable.value[name] then
+			if searchString == "" or name:lower():find(searchString, 1, true) then
+				totalMatches = totalMatches + 1
+			end
+		end
+	end
+	local first, last = addPager(self, content, "rightList", totalMatches)
+	local match = 0
+	for _, name in ipairs(self.currentItems) do
+		if not self.variable.value[name] then
+			if searchString == "" or name:lower():find(searchString, 1, true) then
+				match = match + 1
+				if match >= first and match <= last then
+					content:createTextSelect{ id = itemID, text = name }:register(tes3.uiEvent.mouseClick, function(e)
+						self:toggle(e)
+					end)
+				end
+			end
+		end
+	end
+	self.elements.rightList.widget:contentsChanged()
+end
+
+--- @param listName mwseMCMExclusionsPageListId
+function ExclusionsPage:toggleFiltered(listName)
+	-- Move all items currently filtered to opposite list
+	local searchString = ""
+	if self.elements.searchBarInput and self.elements.searchBarInput[listName] then
+		local txt = self.elements.searchBarInput[listName].text
+		if txt and txt ~= placeholderText then
+			searchString = txt:lower()
+		end
+	end
+
+	local var = self.variable.value
+	local items = self.currentItems or {}
+	if listName == "leftList" then
+		for _, name in ipairs(items) do
+			if var[name] and (searchString == "" or name:lower():find(searchString, 1, true)) then
+				var[name] = false
+			end
+		end
+	else
+		for _, name in ipairs(items) do
+			if not var[name] and (searchString == "" or name:lower():find(searchString, 1, true)) then
+				var[name] = true
+			end
+		end
+	end
+	self.variable.value = var
+
+	self:distributeLeft(items)
+	self:distributeRight(items)
+
+	local topMenu = self.elements.outerContainer and self.elements.outerContainer:getTopLevelMenu()
+	if topMenu then
+		topMenu:updateLayout()
+	elseif self.elements.outerContainer then
+		self.elements.outerContainer:updateLayout()
+	end
+end
+
+''', KB4),
     ("KB4", "MWSE Core", "core/mcm/components/pages/exclusionspage.lua",
-     "\t\t\tself:clickFilter(button)\n\t\t\tself:distributeLeft(items)",
-     "\t\t\tself:clickFilter(button)\n\t\t\tself.pages = {}\n\t\t\tself:distributeLeft(items)", KB4),
+     '\t\t\tself:clickFilter(button)\n\t\t\tself:distributeLeft(items)',
+     '\t\t\tself:clickFilter(button)\n\t\t\tself.pages = {}\n\t\t\tself:distributeLeft(items)', KB4),
 ]
 
 KNOWN_BUGS += [
@@ -2095,6 +2331,28 @@ KNOWN_BUGS += [
      "\t\t\tupdateSun()\n\t\t\tlocal sunPosition",
      "\t\t\tif not updateSun() then return end\n\t\t\tlocal sunPosition", KB9),
 ]
+
+
+def known_core_files(mwse_dir):
+    """The MWSE core files a Known Bugs rule names that exist under mwse_dir (a Data Files\\MWSE folder, or a
+    mod's MWSE folder)."""
+    rels = sorted({rel for _rule, _plugin, rel, _old, _new, _what in KNOWN_BUGS if rel.startswith("core/")})
+    out = []
+    for rel in rels:
+        p = os.path.join(mwse_dir, *rel.split("/"))
+        if os.path.isfile(p):
+            out.append(p)
+        else:                                       # the folder names on disk need not match the rule's case
+            d, found = mwse_dir, True
+            for part in rel.split("/"):
+                hit = next((n for n in (os.listdir(d) if os.path.isdir(d) else []) if n.lower() == part), None)
+                if hit is None:
+                    found = False
+                    break
+                d = os.path.join(d, hit)
+            if found and os.path.isfile(d):
+                out.append(d)
+    return out
 
 
 def known_core_context(path):
@@ -3083,10 +3341,7 @@ def main(argv=None):
         print(PF.no_plan_message(PLAN_FILE, "mwdialog_luafix.py"))
         return 2
     data_dir = os.path.join(HERE, "Data Files")
-    paths = args.paths or [os.path.join(data_dir, "MWSE", "mods")] + sorted({
-        os.path.join(data_dir, "MWSE", *rel.split("/"))
-        for _rule, _plugin, rel, _old, _new, _what in KNOWN_BUGS if rel.startswith("core/")
-    })
+    paths = args.paths or [os.path.join(data_dir, "MWSE", "mods")] + known_core_files(os.path.join(data_dir, "MWSE"))
     cfg = load_config(HERE, data_dir)
     checker = None if args.no_syntax_check else find_checker(args.luajit, HERE)
     print(f"mwdialog_luafix {VERSION}: syntax check {checker.name if checker else 'NONE'}; priority limit "

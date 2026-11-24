@@ -1,3 +1,14 @@
+# Lua deployment follows lua tools; MWSE core fixed by KB patch only (2026-11-24)
+
+- `--play` replaces a deployed suite file that is older than, and different from, its `lua tools` copy (the old one
+  goes to `backups\lua deploy\<date>\`). A deployed copy newer than `lua tools`' is left alone and listed, since
+  edits belong in `lua tools`; files left in `MWSE\mods\mwsuite` that `lua tools` no longer has are listed.
+  `MWSE\config\` still only gets missing files.
+- `lua tools\MWSE\core\` is gone: MWSE's `ExclusionsPage.lua` is no longer deployed. KB4 is rewritten against
+  MWSE's own file (its old fingerprints matched an earlier local edit, not MWSE), applies whole or not at all, and
+  together with KB3 turns the stock file into the paged one exactly. `vortex_tidy.py` now also checks the KB-named
+  core files in `Data Files\MWSE\core` and patches them in place.
+
 # Install subfolders and Lua deployment (2026-11-23)
 
 - Inside the install: `tools\` holds `texconv.exe` (still also found in the game folder or on PATH), `plans\`
