@@ -88,6 +88,8 @@ def test_patch_built_gated_slotted_and_undone(game):
     assert m.read_load_order(args_for(game)) == ["Morrowind.esm", SF.SOUNDFIX_NAME, "mwdialog_check Multipatch.esp"]
     data = json.loads((game / "Data Files" / "MWSE" / "config" / SF.DATA_JSON).read_text(encoding="utf-8"))
     assert data["scripts"]["loopscript"]["loopFlags"] == ["mwsfOn1"] and data["scripts"]["shotscript"]["loopFlags"] == []
+    assert data["scripts"]["loopscript"]["repairs"] == ["loop: hum"]               # shown in its MCM page
+    assert data["scripts"]["shotscript"]["repairs"] == ["one-shot: bell"]
     # a second build reads the originals, not its own patch, and gives the same scripts
     assert SF.run_soundfix(args_for(game), plugins_of(game) + [(SF.SOUNDFIX_NAME, str(patch))], []) == 0
     assert scripts_in(patch) == got

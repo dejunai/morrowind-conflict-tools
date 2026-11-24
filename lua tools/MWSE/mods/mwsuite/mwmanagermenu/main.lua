@@ -16,7 +16,7 @@ local PER_ROW = 4
 local SUITE = {
     "mwsaveguard", "mwteleportguard", "mwmouseguard", "mwwarnsuppression", "mwpersonaleffects",
     "mweffectinspector", "mwpluginpatches", "mwfloatfix", "mwcollide", "mwstranded",
-    "mwperformers", "mwinfoloop", "mwsoundguard", "mwhangwatch", "mwguard",
+    "mwperformers", "mwinfoloop", "mwsoundguard", "mwsoundfix", "mwhangwatch", "mwguard",
     "mwexitguard", "mwquicktoggle", "mwcustomclasspersistence",
     "mwcriminal", "mwcompanions",
 }

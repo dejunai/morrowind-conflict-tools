@@ -562,8 +562,10 @@ def run_soundfix(args, plugins, bsas, standalone=True):
             os.utime(path, (when, when))
     os.makedirs(os.path.dirname(data_path), exist_ok=True)
     data = {"version": 1, "plugin": SOUNDFIX_NAME, "loopMode": mode, "built": time.strftime("%Y-%m-%dT%H:%M:%S"),
-            "scripts": {sid: {"owner": i["owner"], "loopFlags": [g["var"] for g in i["groups"] if g["kind"] == "loop"]}
-                        for sid, i in sorted(patched.items())}}
+            "scripts": {sid: {"owner": i["owner"], "loopFlags": [g["var"] for g in i["groups"] if g["kind"] == "loop"],
+                              "repairs": [("loop: " if g["kind"] == "loop" else "one-shot: ") + ", ".join(g["sounds"])
+                                          + (f" (on {g['ref']})" if g["ref"] else "") for g in i["groups"]]}
+                        for sid, i in sorted(patched.items())}}       # repairs: shown in its MCM page
     tmp = data_path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=1)

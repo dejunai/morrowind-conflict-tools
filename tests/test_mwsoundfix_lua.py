@@ -13,13 +13,25 @@ pytestmark = pytest.mark.skipif(not os.path.isfile(LUAJIT), reason="LuaJIT not a
 SCRIPT = r"""
 local handlers, logs = {}, {}
 event = { register = function(name, fn) handlers[name] = fn end }
+local infos, cats = {}, {}
+local page = { createInfo = function(_, o) infos[#infos + 1] = o.text end,
+               createCategory = function(_, label)
+                   cats[#cats + 1] = label
+                   return { createInfo = function(_, o) infos[#infos + 1] = label .. "|" .. o.text end } end }
 mwse = { log = function(f, ...) logs[#logs + 1] = string.format(f, ...) end,
-         loadConfig = function() return { version = 1, loopMode = "flag",
-                      scripts = { loopscript = { loopFlags = { "mwsfOn1" } }, shotscript = { loopFlags = {} } } } end }
+         mcm = { createTemplate = function() return { createPage = function() return page end, register = function() end } end },
+         loadConfig = function() return { version = 1, loopMode = "flag", built = "2026-11-24T03:00:00",
+                      scripts = { loopscript = { owner = "B.esp", loopFlags = { "mwsfOn1" }, repairs = { "loop: hum" } },
+                                  shotscript = { owner = "A.esp", loopFlags = {}, repairs = { "one-shot: bell" } },
+                                  another = { owner = "B.esp", loopFlags = {}, repairs = { "one-shot: drip" } } } } end }
 local epoch = PATCHED and { value = 31999 } or nil
 tes3 = { event = setmetatable({}, { __index = function(_, k) return k end }),
          findGlobal = function(id) assert(id == "MWSF_Epoch") return epoch end }
 assert(loadfile("MAIN"))()
+handlers.modConfigReady()
+assert(infos[1]:find("3 script%(s%) in 2 plugin%(s%)"), infos[1])
+assert(cats[1] == "A.esp (1)" and cats[2] == "B.esp (2)", table.concat(cats, ","))
+assert(infos[3] == "B.esp (2)|another  -  one-shot: drip\nloopscript  -  loop: hum", infos[3])
 handlers.initialized()
 if not PATCHED then
   assert(handlers.loaded == nil and handlers.referenceActivated == nil, "idle registers nothing")

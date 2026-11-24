@@ -70,4 +70,37 @@ end
 
 event.register(tes3.event.initialized, start)
 
+-- a read-only MCM page: the scripts the patch repaired, by plugin (nothing to set)
+local function registerMcm()
+    local template = mwse.mcm.createTemplate({ name = "mwsoundfix" })
+    local page = template:createPage({ label = "Repaired sound scripts" })
+    local ok, data = pcall(mwse.loadConfig, "mwsoundfix_data")
+    if not (ok and type(data) == "table" and type(data.scripts) == "table") then
+        page:createInfo({ text = "No sound scripts are repaired yet. mwdialog_check --soundfix (or --fix) builds "
+            .. PATCH .. ", and this page lists what it repaired." })
+        template:register()
+        return
+    end
+    local byPlugin, plugins, total = {}, {}, 0
+    for id, info in pairs(data.scripts) do
+        local owner = type(info) == "table" and info.owner or "?"
+        if not byPlugin[owner] then byPlugin[owner] = {}; plugins[#plugins + 1] = owner end
+        local repairs = type(info) == "table" and type(info.repairs) == "table" and table.concat(info.repairs, "; ") or ""
+        table.insert(byPlugin[owner], id .. (repairs ~= "" and ("  -  " .. repairs) or ""))
+        total = total + 1
+    end
+    table.sort(plugins, function(a, b) return a:lower() < b:lower() end)
+    page:createInfo({ text = string.format("%d script(s) in %d plugin(s), built %s. These scripts used to restart "
+        .. "their sound every frame; %s keeps their own state instead. %s", total, #plugins, tostring(data.built or "?"),
+        PATCH, tes3.findGlobal("MWSF_Epoch") and "The patch is active." or "The patch is NOT active in this game.") })
+    for _, owner in ipairs(plugins) do
+        table.sort(byPlugin[owner])
+        local cat = page:createCategory(string.format("%s (%d)", owner, #byPlugin[owner]))
+        cat:createInfo({ text = table.concat(byPlugin[owner], "\n") })
+    end
+    template:register()
+end
+
+event.register(tes3.event.modConfigReady, registerMcm)
+
 return { onLoaded = onLoaded, onReferenceActivated = onReferenceActivated, flagsByScript = flagsByScript }
