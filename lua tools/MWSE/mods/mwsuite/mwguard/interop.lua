@@ -58,4 +58,31 @@ function this.isLogExempt(modKey)
     return top ~= nil and this.logExemptMods[top] == true
 end
 
+-- Address space: what a 32-bit Morrowind runs out of (the figure MWSE's crash report gives as "Virtual Memory
+-- Usage"). mwse.getVirtualMemoryUsage is private bytes only, which leaves out DLLs, mapped files and DXVK's
+-- mappings, so it stays far below this. Returns used MB, total MB; nil if Windows can't be asked.
+local okFfi, ffi = pcall(require, "ffi")
+local memStatus
+if okFfi then
+    pcall(ffi.cdef, [[
+        typedef struct { uint32_t dwLength; uint32_t dwMemoryLoad; uint64_t ullTotalPhys; uint64_t ullAvailPhys;
+            uint64_t ullTotalPageFile; uint64_t ullAvailPageFile; uint64_t ullTotalVirtual; uint64_t ullAvailVirtual;
+            uint64_t ullAvailExtendedVirtual; } mwguard_MEMORYSTATUSEX;
+        int GlobalMemoryStatusEx(mwguard_MEMORYSTATUSEX *lpBuffer);
+    ]])
+    local ok, buf = pcall(ffi.new, "mwguard_MEMORYSTATUSEX")
+    if ok then
+        buf.dwLength = ffi.sizeof(buf)
+        memStatus = buf
+    end
+end
+
+function this.addressSpace()
+    if not memStatus then return nil end
+    local ok, r = pcall(ffi.C.GlobalMemoryStatusEx, memStatus)
+    if not ok or r == 0 then return nil end
+    local total = tonumber(memStatus.ullTotalVirtual) / 1048576
+    return total - tonumber(memStatus.ullAvailVirtual) / 1048576, total
+end
+
 return this

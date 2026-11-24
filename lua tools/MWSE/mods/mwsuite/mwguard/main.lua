@@ -29,6 +29,7 @@ local defaults = {
     reportTop = 10,              -- top N consumers written to mwguard.log
     costMs = 0.75,               -- average ms per call to flag as a bottleneck
     logNoticeToMWSE = true,      -- output summary notices of costly handlers to MWSE.log
+    showAddressSpace = true,     -- on-screen address-space percentage, profiling on or off
     exemptMods = {
         "mwguard", "mwcriminal", "mwcompanions", "mwhangwatch", "mwfloatfix", "mwstranded", "mwcollide",
         "mwperformers", "mwinfoloop", "mwsoundguard", "mwsoundfix", "mwsaveguard", "mwwarnsuppression",
@@ -345,6 +346,35 @@ origRegister(tes3.event.initialized, function()
     end
 end, { priority = -100000 })
 
+-- address-space readout (shown whether or not profiling is on) ----------------------------------
+local HUD_ID = tes3ui.registerID("mwguard:addressSpace")
+local function updateHud()
+    local multi = tes3ui.findMenu("MenuMulti")
+    if not multi then return end
+    local label = multi:findChild(HUD_ID)
+    if config.showAddressSpace == false then
+        if label then label:destroy() multi:updateLayout() end
+        return
+    end
+    local used, total = interop.addressSpace and interop.addressSpace()
+    if not used then return end
+    local text = string.format("%.0f", used / total * 100)
+    if not label then
+        label = multi:createLabel({ id = HUD_ID })
+        label.absolutePosAlignX = 0.99
+        label.absolutePosAlignY = 0.01
+    elseif label.text == text then
+        return
+    end
+    label.text = text
+    multi:updateLayout()
+end
+local function startHudTimer()
+    timer.start({ type = timer.real, duration = 1, iterations = -1, callback = function() pcall(updateHud) end })
+end
+origRegister(tes3.event.initialized, startHudTimer)
+origRegister(tes3.event.loaded, startHudTimer)          -- MWSE cancels every timer right before `loaded`
+
 -- Mod Config Menu --------------------------------------------------------------------------------
 event.register(tes3.event.modConfigReady, function()
     local template = mwse.mcm.createTemplate({ name = "mwguard" })
@@ -358,6 +388,12 @@ event.register(tes3.event.modConfigReady, function()
         description = "Turns performance monitoring on or off. Turning it on takes effect after restarting the game; "
             .. "while it is off at start-up, mwguard wraps nothing.",
         variable = mwse.mcm.createTableVariable({ id = "enabled", table = config }),
+    })
+    page:createOnOffButton({
+        label = "Show address space on screen",
+        description = "Shows how much of Morrowind's 4 GB address space is in use (two digits, top right), whether or not the "
+            .. "profiler is on. A 32-bit Morrowind crashes when it reaches 100%.",
+        variable = mwse.mcm.createTableVariable({ id = "showAddressSpace", table = config }),
     })
     page:createSlider({
         label = "Flag handlers taking more than (ms)",

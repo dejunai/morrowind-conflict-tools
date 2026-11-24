@@ -73,7 +73,11 @@ local function log(fmt, ...)
     f:flush()
 end
 
+local guard = include("mwguard.interop")
 local function memMB()
+    -- address space, as the crash report counts it: getVirtualMemoryUsage (private bytes) never reached 95%
+    local used = guard and guard.addressSpace and guard.addressSpace()
+    if used then return used end
     if mwse.getVirtualMemoryUsage then
         local ok, v = pcall(mwse.getVirtualMemoryUsage)
         if ok and type(v) == "number" then return v / 1048576 end
