@@ -489,7 +489,7 @@ def test_nested_suite_mods_are_excluded_and_never_receive_log_shims(tmp_path):
 
 
 def test_own_mod_sources_do_not_embed_generic_log_shims():
-    mods = os.path.join(lf.HERE, "Data Files", "MWSE", "mods", "mwsuite")
+    mods = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "lua tools", "MWSE", "mods", "mwsuite")
     for mod in lf.OWN_MODS:
         root = os.path.join(mods, mod)
         if not os.path.isdir(root):
@@ -889,7 +889,7 @@ assert(calls == 1 and seen == "sun", "updated once there is weather")
 
 
 def test_KB4_restores_strict_exclusions_pages():
-    path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Data Files", "MWSE", "core", "mcm",
+    path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "lua tools", "MWSE", "core", "mcm",
                         "components", "pages", "ExclusionsPage.lua")
     fixed = open(path, encoding="latin-1").read()
     vulnerable = fixed
@@ -915,7 +915,7 @@ def test_own_mods_do_not_get_shims_when_included(tmp_path):
 
 
 def test_mwhangwatch_log_is_under_mwse_logs():
-    path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Data Files", "MWSE", "mods", "mwsuite", "mwhangwatch",
+    path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "lua tools", "MWSE", "mods", "mwsuite", "mwhangwatch",
                         "main.lua")
     text = open(path, encoding="utf-8").read()
     assert 'local LOG_DIR      = "Data Files\\\\MWSE\\\\logs"' in text
@@ -1050,7 +1050,7 @@ def test_tidy_plan_lists_lua_and_apply_undo_round_trip(tmp_path, monkeypatch, ca
     monkeypatch.setattr(vt, "JOURNAL", str(tmp_path / "tidy_journal.jsonl"))
     monkeypatch.setattr(vt, "PLAN", str(tmp_path / "plan.txt"))
     monkeypatch.setattr(vt, "BLACKLIST_FILE", str(tmp_path / "bl.txt"))
-    monkeypatch.setattr(vt, "__file__", str(tmp_path / "vortex_tidy.py"))
+    monkeypatch.setattr(vt, "HERE", str(tmp_path))
     monkeypatch.setattr(lf, "find_checker", lambda *a, **k: OkChecker())
     monkeypatch.setattr(lf, "BACKUP_ROOT", str(tmp_path / "bk"))
     monkeypatch.setattr(lf.apply_report, "__defaults__", (lf.JOURNAL, str(tmp_path / "bk"), None, print, None, None))

@@ -4,7 +4,7 @@ import os
 import re
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MODS = os.path.join(ROOT, "Data Files", "MWSE", "mods", "mwsuite")
+MODS = os.path.join(ROOT, "lua tools", "MWSE", "mods", "mwsuite")
 
 
 def test_no_mw_mod_defaults_to_enabled():

@@ -121,7 +121,10 @@ rem      today's date)                          -> runs --sort --yes
 rem    With --dry-run it only reports these.
 rem ------------------------------------------------------------------
 setlocal
-cd /d "%~dp0"
+rem the Morrowind folder: this folder's parent when it holds Morrowind.ini (Morrowind\conflict-tools\), else this one
+set "GAME=%~dp0"
+if exist "%~dp0..\Morrowind.ini" for %%I in ("%~dp0..") do set "GAME=%%~fI\"
+cd /d "%GAME%"
 
 set "PY="
 where py >nul 2>nul && set "PY=py -3"
@@ -141,7 +144,7 @@ rem window stays open - but only when its output is on screen, not redirected to
 set "MWDIALOG_PAUSE="
 echo %CMDCMDLINE% | find /i "/c" >nul && set "MWDIALOG_PAUSE=1"
 
-%PY% "%~dp0mwdialog_check.py" "%~dp0Data Files" %*
+%PY% "%~dp0mwdialog_check.py" "%GAME%Data Files" %*
 set "RC=%ERRORLEVEL%"
 rem cmd puts its own title back when a batch file ends, so the result is also printed (and stays)
 set "WHAT=failed"
@@ -155,11 +158,11 @@ exit /b %RC%
 :doubleclick
 title mwdialog_check (scan, report to mwdialog_report.txt)
 echo Scanning Data Files for dialogue errors...
-%PY% "%~dp0mwdialog_check.py" "%~dp0Data Files" > "%~dp0mwdialog_report.txt"
+%PY% "%~dp0mwdialog_check.py" "%GAME%Data Files" > "%GAME%mwdialog_report.txt"
 set "RC=%ERRORLEVEL%"
 title mwdialog_check (scan) - finished (exit code %RC%)
 echo.
 echo ==== scan finished: exit code %RC% ====
 echo Report saved to mwdialog_report.txt
-start "" notepad "%~dp0mwdialog_report.txt"
+start "" notepad "%GAME%mwdialog_report.txt"
 exit /b %RC%

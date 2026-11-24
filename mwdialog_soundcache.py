@@ -2,11 +2,11 @@
 import json
 import math
 import os
-import shutil
 import subprocess
 import sys
 import wave
 
+import mwdialog_paths as MP
 from mwdialog_tes3 import atomic_open, cstr, first_sub, iter_records, read_plugin_bytes
 
 CACHE_NAME = "mwsoundguard_data.json"
@@ -60,14 +60,7 @@ def sound_duration(path, ffprobe):
 
 
 def find_ffprobe():
-    probe = shutil.which("ffprobe")
-    if probe:
-        return probe
-    root = os.path.dirname(os.path.abspath(__file__))
-    for candidate in (os.path.join(root, "ffprobe.exe"), os.path.join(root, "tools", "ffprobe.exe")):
-        if os.path.isfile(candidate):
-            return candidate
-    return None
+    return MP.find_program("ffprobe", MP.find_game_dir())
 
 
 def write_sound_cache(data_dir, plugins):

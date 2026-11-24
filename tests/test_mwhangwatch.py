@@ -6,7 +6,7 @@ import subprocess
 import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SRC = open(os.path.join(ROOT, "Data Files", "MWSE", "mods", "mwsuite", "mwhangwatch", "main.lua"), encoding="utf-8").read()
+SRC = open(os.path.join(ROOT, "lua tools", "MWSE", "mods", "mwsuite", "mwhangwatch", "main.lua"), encoding="utf-8").read()
 
 
 def test_memory_level_is_the_same_in_the_header_default_and_fallback():
@@ -26,7 +26,7 @@ def test_audio_watch_skips_details_beyond_line_limit(tmp_path):
     if not os.path.isfile(luajit):
         pytest.skip("LuaJIT not available")
     (tmp_path / "Data Files" / "MWSE" / "logs").mkdir(parents=True)
-    mods = os.path.join(ROOT, "Data Files", "MWSE", "mods", "mwsuite").replace("\\", "/")
+    mods = os.path.join(ROOT, "lua tools", "MWSE", "mods", "mwsuite").replace("\\", "/")
     script = r'''
 package.path = MODS .. "/?.lua;" .. package.path
 local handlers = {}

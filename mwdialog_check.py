@@ -84,12 +84,12 @@ from mwdialog_tes3 import (  # noqa: E402,F401
 from mwdialog_bsa import (  # noqa: E402,F401
     _bsa_directory, _bsa_file_names, bsa_file_names, _bsa_index, bsa_index, _BSA_MEMO, _bsa_memo)
 from mwdialog_media import (  # noqa: E402,F401
-    DDS_BLOCK_FOURCC, DDS_DXGI_BLOCK, DDS_DXGI_BPP, dds_info, dds_level_size, dds_reduce, DUMMY_KF,
+    DDS_BLOCK_FOURCC, DDS_DXGI_BLOCK, DDS_DXGI_BPP, dds_info, dds_level_size, dds_reduce, DUMMY_DIR, DUMMY_KF,
     DUMMY_NIF, mp3_first_frame, _NIF_EXT_RE, nif_is_empty, _NIF_TEX_CHARS, _NIF_TEX_OK, nif_text_keys_lf,
     nif_texture_names, nif_texture_refs, placeholder_dds, placeholder_icon, silent_audio, sound_file_problem, _SOUND_PROBLEMS,
     SOUND_ROOTS, stand_in_bytes, TEXT_KEY_TAG, TEXTURE_MAX_EDGE)
 from mwdialog_backup import (  # noqa: E402,F401
-    backup_candidates, BACKUP_DIR, backup_path, bak_home, chain_tail, game_dir_of,
+    backup_candidates, BACKUP_DIR, backup_path, bak_home, chain_tail, game_dir_of, stamped_backup,
     index_dir)
 from mwdialog_loadorder import (  # noqa: E402,F401
     BAD_RULE_ENTRIES, default_ini, game_files_overflow, ini_game_files, INI_SECTION_LIMIT, LOAD_ORDER_FILE, LOAD_ORDER_WRITTEN,
@@ -182,7 +182,7 @@ def doubled_turnoff_message(count, moved, backup):
 
 
 def repair_sound_ffmpeg():
-    return shutil.which("ffmpeg")
+    return MP.find_program("ffmpeg", MP.find_game_dir())
 
 
 def repair_sound_temp_path(game_dir, rel):
@@ -190,7 +190,7 @@ def repair_sound_temp_path(game_dir, rel):
 
 
 def repair_sound_missing_message():
-    return "  ffmpeg isn't installed (or not on PATH): install it (winget install ffmpeg) and run this again."
+    return "  ffmpeg wasn't found (tools\\ffmpeg.exe or PATH): put it there (winget install ffmpeg) and run this again."
 
 
 REPAIR_SOUND_BACKUP_FEATURE = "sound"
@@ -309,12 +309,13 @@ class Info:
 
 
 class Topic:
-    __slots__ = ("name", "key", "dtype", "source", "deleted", "infos", "file_links", "defined_by")
+    __slots__ = ("name", "key", "dtype", "source", "deleted", "deleted_by", "infos", "file_links", "defined_by")
 
     def __init__(self, name, dtype, source):
         self.name, self.dtype, self.source = name, dtype, source
         self.key = name.lower()
         self.deleted = False
+        self.deleted_by = None
         self.infos = OrderedDict()   # lowercase info id -> Info
         self.file_links = defaultdict(dict)   # plugin lower -> {info id lower: (prev lower, Info)}
         self.defined_by = defaultdict(list)   # info id lower -> plugin names (lower) that contain it, in load order
@@ -330,11 +331,17 @@ class Report:
     def __init__(self):
         self.issues = []
         self.fixes = []    # (plugin, offset, op, description, issue message)
+        self.bug_context = {}
 
-    def add(self, sev, plugin, topic, info, msg, fix=None):
+    def add(self, sev, plugin, topic, info, msg, fix=None, *, related_plugins=(), master=None):
+        """Track diagnostic dependencies; None marks findings based on an unisolated world heuristic."""
         if fix is not None and sev != "ERROR":
             raise ValueError("only ERROR issues can carry fixes")
-        self.issues.append((sev, plugin or "", topic or "", info or "", msg))
+        issue = (sev, plugin or "", topic or "", info or "", msg)
+        self.issues.append(issue)
+        self.bug_context[issue] = (None if related_plugins is None else
+                                  frozenset(name.lower() for name in related_plugins if name),
+                                  master.lower() if master else None)
         if fix is not None:
             off, op, desc = fix
             self.fixes.append((plugin, off, op, desc, issue_label(topic, info, msg), topic, info))
@@ -944,7 +951,7 @@ class World:
             for key in by_name.get(n, ()):
                 before = [h for h in ext_hist[key] if h[0] <= idx]
                 if before and before[-1][2].lower() == n:
-                    return key
+                    return key, before[-1][1]
             return None
 
         done = set()
@@ -963,17 +970,19 @@ class World:
                 if (i_plugin.lower(), n) in done:
                     continue
                 done.add((i_plugin.lower(), n))
-                x, y = ext[1], ext[2]
+                ext_key, ext_plugin = ext
+                x, y = ext_key[1], ext_key[2]
                 msg = (f"Interior Cell '{i_nm}' trying to become Exterior Cell ({x}, {y}): this plugin has an "
                        f"interior named like that exterior cell")
                 reach = sorted(self.door_dest.get(n, ())) + (["a script"] if n in self.script_cells else [])
                 if not i_plugin.lower().endswith(FIXABLE_EXT) or is_our_patch(i_plugin):
-                    self.r.add("ERROR", i_plugin, "", "", msg + " (in a master; not changed)")
+                    self.r.add("ERROR", i_plugin, "", "", msg + " (in a master; not changed)",
+                               related_plugins=(ext_plugin,))
                     continue
                 if i_refs and reach:
                     self.r.add("ERROR", i_plugin, "", "", msg + f"; its {i_refs} object(s) are reached from "
                                f"{', '.join(reach[:3])}, so it isn't removed automatically: rename it in the "
-                               f"Construction Set (and the doors that lead to it)")
+                               f"Construction Set (and the doors that lead to it)", related_plugins=(ext_plugin,))
                     continue
                 if i_refs:
                     action = (f"remove the interior record and its {i_refs} object(s): no door or script "
@@ -981,7 +990,7 @@ class World:
                 else:
                     action = ("remove the interior record: it holds no objects, only lighting or settings for "
                               "an interior that no longer exists by that name")
-                self.r.add("ERROR", i_plugin, "", "", msg)
+                self.r.add("ERROR", i_plugin, "", "", msg, related_plugins=(ext_plugin,))
                 if any(f.get("drop_record") and f.get("key") == ("i", n) and f["plugin"] == i_plugin
                        for f in self.item_fixes):
                     continue
@@ -1143,7 +1152,7 @@ class World:
                              f"{', '.join(sorted(gone)[:4])}" + (" ..." if len(gone) > 4 else ""),
                              "drop those entries from the list"))
             for msg, _action in msgs:
-                self.r.add("ERROR", plugin, "", oid, msg)
+                self.r.add("ERROR", plugin, "", oid, msg, related_plugins=self._bug_sources(*gone, *rename))
             self.item_fixes.append({"plugin": plugin, "tag": tag, "id": oid, "set": {}, "npco": set(),
                                     "lev_drop": gone, "rename": rename, "msgs": msgs})
 
@@ -1233,7 +1242,6 @@ class World:
             if real and kind in ("mesh", "icon"):
                 # 2. a stand-in FILE at the exact path the record names; the plugin is not changed, so the
                 # real file (a mod installed later) simply replaces it
-                here = os.path.dirname(os.path.abspath(__file__))
                 if kind == "icon":
                     rel = os.path.join("Icons", os.path.splitext(A.rel(v, "icons"))[0] + ".dds")
                     src, what = None, "a placeholder icon"
@@ -1241,7 +1249,7 @@ class World:
                     rel = os.path.join("Meshes", A.rel(v, "meshes"))
                     dummy = (DUMMY_MARKER_NIF if tag in ("STAT", "ACTI", "LIGH") else
                              DUMMY_ANIM_NIF if tag in ("NPC_", "CREA") and sub == "MODL" and tag == "NPC_" else DUMMY_NIF)
-                    src = os.path.join(here, dummy)
+                    src = os.path.join(DUMMY_DIR, dummy)
                     what = {DUMMY_MARKER_NIF: "the invisible editor marker", DUMMY_ANIM_NIF: "the default skeleton",
                             DUMMY_NIF: "a small coin"}[dummy]
                 else:
@@ -1546,6 +1554,10 @@ class World:
         new = self.td_rename(obj) if o not in self.all_ids else None
         return bool(new) and master_obj == new.lower()
 
+    def _bug_sources(self, *ids):
+        return tuple(self.deleted_by_obj.get(oid.lower()) or
+                     self.last_def_obj.get(oid.lower(), (None,))[0] for oid in ids if oid)
+
     def script_acts_on(self, oid):
         """Does a script or dialogue result act on this id ("X->")? Compiled, it finds only a copy placed under it."""
         if self._script_targets is None:
@@ -1567,11 +1579,13 @@ class World:
             plugin, tag, oid, refs = defs[-1]
             if refs is None or rid not in self.all_ids:
                 continue
-            setf, drop, msgs = {}, [], []
+            setf, drop, msgs, related = {}, [], [], {}
             for field, (ttag, what) in targets.items():
                 val = refs.get(field)
                 if not val or val.lower() in self.ids[ttag]:
                     continue
+                msg = f"{tag} '{oid}': {what} '{val}' doesn't exist"
+                related[msg] = self._bug_sources(val)
                 renamed = self.td_rename(val, ttag)
                 if renamed:
                     setf[field] = renamed
@@ -1600,6 +1614,7 @@ class World:
             rename = {}
             for item in refs.get("NPCO", ()):
                 if item.lower() not in self.all_ids and item.lower() not in drop and item.lower() not in rename:
+                    related[f"{tag} '{oid}': inventory item '{item}' doesn't exist"] = self._bug_sources(item)
                     renamed = self.td_rename(item)
                     if renamed:
                         rename[item.lower()] = renamed
@@ -1611,7 +1626,7 @@ class World:
             if not msgs:
                 continue
             for msg, action in msgs:
-                r.add("ERROR", plugin, "", "", msg)
+                r.add("ERROR", plugin, "", "", msg, related_plugins=related.get(msg, ()))
             self.item_fixes.append({"plugin": plugin, "tag": tag, "id": oid, "set": setf,
                                     "npco": set(drop), "rename": rename, "msgs": msgs})
 
@@ -1668,7 +1683,8 @@ class World:
                         miss["arrow"] |= arrow
                         miss["used_by"].append((plugin, sname))
                     r.add("WARN", plugin, f"script {sname}", obj,
-                          f"script names object '{obj}', which doesn't exist: {why}")
+                          f"script names object '{obj}', which doesn't exist: {why}",
+                          related_plugins=self._bug_sources(obj))
 
     PLACEABLE = ITEM_TAGS | ACTOR_TAGS | {"ACTI", "CONT", "DOOR", "STAT", "LEVC"}
 
@@ -1739,11 +1755,13 @@ class World:
         else:
             what = f"names '{obj}', which isn't defined yet when this script loads: '{d_by}' defines it and loads later"
         msg = what + "; the game logs 'Unable to find referenced object'"
+        related = (t_by,) if only_temp else (p_by,) if late_place else (d_by,)
         if not esp:
             r.add("WARN", plugin, f"script {sname}", obj, msg + " (this script is in a master; a patch loads too "
-                                                             "late to help, only load order can)")
+                                                             "late to help, only load order can)",
+                  related_plugins=related)
             return
-        r.add("WARN", plugin, f"script {sname}", obj, msg)
+        r.add("WARN", plugin, f"script {sname}", obj, msg, related_plugins=related)
         if late_def or (self.first_def_at.get(o, (0,))[0] >= self.first_esp_at()):
             last, tag = self.last_def_obj.get(o, (d_by, self.all_ids[o]))
             need = self.early_needed.setdefault(o, (last, tag, []))
@@ -1776,7 +1794,8 @@ class World:
             self.unplaced[o] = dict(v, tag=self.all_ids[o], why=why)
             for plugin, sname in v["used_by"]:
                 r.add("WARN", plugin, f"script {sname}", v["id"],
-                      f"script acts on '{v['id']}', but no copy of it is placed in the world: {why}")
+                      f"script acts on '{v['id']}', but no copy of it is placed in the world: {why}",
+                      related_plugins=(gone or self.defined_by_obj.get(o),))
 
     def _check_missing_placed(self):
         """The game resolves a placed reference when its plugin loads: the object must exist by then
@@ -1916,21 +1935,21 @@ class World:
                 continue
             msg = f"master '{master}' has changed size since this plugin was saved; the game warns at startup"
             if not plugin.lower().endswith(FIXABLE_EXT):
-                r.add("INFO", plugin, "", "", msg + " (a master; not changed)")
+                r.add("INFO", plugin, "", "", msg + " (a master; not changed)", master=master)
             elif getattr(self, "master_verdicts", {}).get((plugin.lower(), master.lower()), {}).get("kind") == "different mod":
                 v = self.master_verdicts[(plugin.lower(), master.lower())]
                 r.add("WARN", plugin, "", "", msg + f"; not synced: it looks made for a different '{master}' "
                                                    f"(confidence {int(round(v['confidence'] * 100))}%), so the size "
-                                                   f"is the evidence, not the error")
+                                                   f"is the evidence, not the error", master=master)
             elif (plugin.lower(), master.lower()) in self.ref_error_masters:
                 # the mismatch may be the only hint that this plugin no longer lines up with its master
                 r.add("WARN", plugin, "", "", msg + "; not synced, because some of its references don't line up "
-                                                   "with that master (fix those first)")
+                                                   "with that master (fix those first)", master=master)
             else:
                 r.add("ERROR", plugin, "", "", msg,
                       fix=(0, ("sync_master", master, actual),
                            f"synced the size recorded for '{master}' ({expected} -> {actual}); its references all "
-                           f"line up with the current master"))
+                           f"line up with the current master"), master=master)
 
     def _track_multipatch_cell(self, body, name, key):
         """tes3cmd multipatch: fog-bugged interiors and reverted exterior cell names."""
@@ -1978,7 +1997,8 @@ class World:
         for (plugin, label, obj), msg, action in door_owner_verdicts(
                 doors, [(key, npc) for (key, _ref), npc in self.npc_at.items()], self.npc_class, self.npc_name,
                 self.door_dest):
-            self.r.add("WARN" if action is not None else "INFO", plugin, f"cell {label}", obj, msg)
+            self.r.add("WARN" if action is not None else "INFO", plugin, f"cell {label}", obj, msg,
+                       related_plugins=None)
         # containers and other objects (item_owner_verdicts), one line per cell and owner
         items, label_of = [], {}
         for (key, ref), (plugin, label, obj, owner, _faction, dest) in self.owned.items():
@@ -1993,7 +2013,7 @@ class World:
             for plugin in sorted({p for p, _o in members}):
                 objs = sorted({o for p, o in members if p == plugin})
                 self.r.add("WARN" if action is not None else "INFO", plugin, f"cell {label_of[key]}", owner,
-                           f"{msg} (e.g. {', '.join(objs[:3])})")
+                           f"{msg} (e.g. {', '.join(objs[:3])})", related_plugins=None)
 
     def _check_refs(self):
         """Every master reference a plugin edits must exist in that master (the game warns otherwise)."""
@@ -2080,7 +2100,7 @@ class World:
                       f"edits {len(rows)} reference(s) of '{master_name}' in cell '{rows[0][3]}', which that master "
                       f"now calls '{new_name}'",
                       fix=(off, ("rename_cell", new_name.encode(ENC, MW_ERRORS) + b"\0"),
-                           f"renamed the cell to '{new_name}', the master's current name for it"))
+                           f"renamed the cell to '{new_name}', the master's current name for it"), master=master_name)
         for plugin, off, key, label, v, obj, m, temp, pos, deleted in resolved:
             if (m, key) not in present and m not in self.paths:
                 continue
@@ -2098,7 +2118,7 @@ class World:
                 self.persist_mismatch[plugin] += 1
                 r.add("INFO", plugin, f"cell {label}", obj,
                       f"edits reference #{v & 0xFFFFFF} from '{master_name}' as {'temporary' if temp else 'persistent'}, "
-                      f"but the master has it as {want} (left as the mod made it)")
+                      f"but the master has it as {want} (left as the mod made it)", master=master_name)
                 continue
             if there is None:
                 # the master renumbered it: the same object (by its current name too, if Tamriel Data renamed it),
@@ -2118,13 +2138,14 @@ class World:
                           f"changes reference #{v & 0xFFFFFF} in master '{master_name}', which no longer exists in that "
                           f"cell; the same object is there now as #{new}",
                           fix=(off, ("remap_ref", v, (v & 0xFF000000) | new),
-                               f"pointed the edit at the master's current reference #{new} to the same object"))
+                               f"pointed the edit at the master's current reference #{new} to the same object"),
+                          master=master_name)
                 else:
                     self.ref_dropped.add((plugin, off, v))
                     r.add("ERROR", plugin, f"cell {label}", obj,
                           f"changes reference #{v & 0xFFFFFF} in master '{master_name}', which no longer exists in that "
                           f"cell", fix=(off, ("drop_ref", v), "removed the edit to a reference the master no longer "
-                                                             "has (the game already ignores it)"))
+                                                             "has (the game already ignores it)"), master=master_name)
             elif not self.same_object(there, obj):
                 # replacer mods swap the object at an existing reference on purpose; the game accepts it
                 r.add("INFO", plugin, f"cell {label}", obj,
@@ -2170,6 +2191,7 @@ class World:
                   f"changes topic type from {DIAL_TYPES.get(topic.dtype, topic.dtype)} "
                   f"(set by {topic.source}) to {DIAL_TYPES.get(dtype, dtype)}")
         topic.deleted = deleted
+        topic.deleted_by = name if deleted else None
         return topic
 
     def _load_info(self, body, flags, name, off, topic, seen):
@@ -2344,7 +2366,7 @@ class World:
                     r.add("ERROR", info.source, t.name, info.id,
                           f"{field} link points to '{val}', which has been deleted (a later plugin deleted it): "
                           f"the game's list of responses can end up in a circle, freezing it in an endless loop "
-                          f"when it picks a response from this topic", fix=fix)
+                          f"when it picks a response from this topic", fix=fix, related_plugins=(target.source,))
         # Loops in the PNAM chain. The game places each response as it loads,
         # file by file, so links from different plugins can never deadlock;
         # a plugin that re-orders master responses is normal. Only a circle
@@ -2387,7 +2409,7 @@ class World:
 
         shared = len(set(t.defined_by.get((info.id or "").lower(), []))) > 1
 
-        def add(sev, msg, op=None, desc=None):
+        def add(sev, msg, op=None, desc=None, *, related_plugins=()):
             if op is not None and op[0] == "delete" and op != ("delete", "local") and shared:
                 # other plugins have this response too: deleting it takes a link out of the middle of the
                 # game's response chain, and a plugin still pointing at it can freeze the game in a loop.
@@ -2397,7 +2419,8 @@ class World:
                 msg += " (left in place: other plugins have this response too, and deleting it can freeze " \
                        "the game's list of responses; it still never plays)"
                 op = desc = None
-            r.add(sev, info.source, t.name, info.id, msg, fix=(info.off, op, desc) if op else None)
+            r.add(sev, info.source, t.name, info.id, msg, fix=(info.off, op, desc) if op else None,
+                  related_plugins=related_plugins)
 
         DELETE = ("delete",)
         never = "deleted response: its filter names something that doesn't exist, so it can never play"
@@ -2414,15 +2437,20 @@ class World:
 
         # speaker filters
         if info.actor and not self._exists(ACTOR_TAGS, info.actor):
-            add("ERROR", f"speaker ID (ONAM) '{info.actor}' is not an NPC or creature", DELETE, never)
+            add("ERROR", f"speaker ID (ONAM) '{info.actor}' is not an NPC or creature", DELETE, never,
+                related_plugins=self._bug_sources(info.actor))
         if info.race and not self._exists({"RACE"}, info.race):
-            add("ERROR", f"race filter '{info.race}' does not exist", DELETE, never)
+            add("ERROR", f"race filter '{info.race}' does not exist", DELETE, never,
+                related_plugins=self._bug_sources(info.race))
         if info.cls and not self._exists({"CLAS"}, info.cls):
-            add("ERROR", f"class filter '{info.cls}' does not exist", DELETE, never)
+            add("ERROR", f"class filter '{info.cls}' does not exist", DELETE, never,
+                related_plugins=self._bug_sources(info.cls))
         if info.faction and info.faction.upper() != "FFFF" and not self._exists({"FACT"}, info.faction):
-            add("ERROR", f"faction filter '{info.faction}' does not exist", DELETE, never)
+            add("ERROR", f"faction filter '{info.faction}' does not exist", DELETE, never,
+                related_plugins=self._bug_sources(info.faction))
         if info.pcfaction and info.pcfaction.upper() != "FFFF" and not self._exists({"FACT"}, info.pcfaction):
-            add("ERROR", f"PC faction filter '{info.pcfaction}' does not exist", DELETE, never)
+            add("ERROR", f"PC faction filter '{info.pcfaction}' does not exist", DELETE, never,
+                related_plugins=self._bug_sources(info.pcfaction))
         if info.cell and info.cell.lower() not in self.cell_names:
             if info.cell.lower() in self.region_names:
                 add("INFO", f"cell filter '{info.cell}' is a region name, not a cell; "
@@ -2501,36 +2529,45 @@ class World:
             return
         n = cname.lower()
 
-        def zero_based(msg, what):
+        def zero_based(msg, what, related_plugins=()):
             # Counts of a missing item/actor, or the index of a missing quest, are always 0.
             if self._zero_passes(op, value):
-                add("ERROR", msg, drop, f"removed the condition: {what} is always 0, so it always passes")
+                add("ERROR", msg, drop, f"removed the condition: {what} is always 0, so it always passes",
+                    related_plugins=related_plugins)
             else:
-                add("ERROR", msg, ("delete",), f"deleted response: {what} is always 0, so the condition can never pass")
+                add("ERROR", msg, ("delete",), f"deleted response: {what} is always 0, so the condition can never pass",
+                    related_plugins=related_plugins)
 
         if ctype == "2" and n not in self.ids["GLOB"]:
             add("ERROR", f"condition uses global '{cname}', which does not exist", ("delete",),
-                "deleted response: it depends on a global variable that doesn't exist")
+                "deleted response: it depends on a global variable that doesn't exist",
+                related_plugins=self._bug_sources(cname))
         elif ctype == "4":
             jt = self.topics.get(n)
             if jt is None or jt.deleted:
-                zero_based(f"condition checks journal '{cname}', which does not exist", f"the index of missing quest '{cname}'")
+                zero_based(f"condition checks journal '{cname}', which does not exist", f"the index of missing quest '{cname}'",
+                           (jt.deleted_by,) if jt else ())
             elif jt.dtype != JOURNAL:
-                add("ERROR", f"condition checks journal '{cname}', but that topic is a {DIAL_TYPES.get(jt.dtype)}")
+                add("ERROR", f"condition checks journal '{cname}', but that topic is a {DIAL_TYPES.get(jt.dtype)}",
+                    related_plugins=(jt.source,))
         elif ctype == "5":
             if not self._exists(ITEM_TAGS, cname):
                 if n in self.all_ids:
-                    add("WARN", f"item condition names '{cname}', which is a {self.all_ids[n]} rather than an item")
+                    add("WARN", f"item condition names '{cname}', which is a {self.all_ids[n]} rather than an item",
+                        related_plugins=self._bug_sources(cname))
                 else:
-                    zero_based(f"item condition names '{cname}', which does not exist", f"the count of missing item '{cname}'")
+                    zero_based(f"item condition names '{cname}', which does not exist", f"the count of missing item '{cname}'",
+                               self._bug_sources(cname))
         elif ctype == "6":
             if not self._exists(ACTOR_TAGS, cname):
-                zero_based(f"Dead condition names '{cname}', which is not an NPC or creature", f"the death count of missing actor '{cname}'")
+                zero_based(f"Dead condition names '{cname}', which is not an NPC or creature", f"the death count of missing actor '{cname}'",
+                           self._bug_sources(cname))
         elif ctype in "789A":
             table = {"7": ACTOR_TAGS, "8": {"FACT"}, "9": {"CLAS"}, "A": {"RACE"}}[ctype]
             if not self._exists(table, cname):
                 add("ERROR", f"{label} condition names '{cname}', which does not exist",
-                    drop, f"removed the condition: nothing can be '{cname}', so '{label}' always passes")
+                    drop, f"removed the condition: nothing can be '{cname}', so '{label}' always passes",
+                    related_plugins=self._bug_sources(cname))
         elif ctype == "B" and not self._cell_exists(cname):
             add("WARN", f"Not Cell condition names '{cname}', which matches no cell or region")
         elif ctype in "3C" and info.actor:
@@ -2539,13 +2576,15 @@ class World:
                 # "Not Local" on a missing variable always passes (vanilla NoLore pattern); "Local" can never pass
                 if ctype == "3":
                     add("ERROR", f"Local condition on '{cname}', but speaker '{info.actor}' has no script",
-                        ("delete",), "deleted response: the speaker has no script, so this Local condition can never pass")
+                        ("delete",), "deleted response: the speaker has no script, so this Local condition can never pass",
+                        related_plugins=self._bug_sources(info.actor))
                 else:
                     add("INFO", f"{label} condition on '{cname}', but speaker '{info.actor}' has no script")
             elif script in self.script_locals and n not in self.script_locals[script]:
                 if ctype == "3":
                     add("ERROR", f"Local condition on '{cname}', which is not declared in speaker's script '{script}'",
-                        ("delete",), f"deleted response: '{script}' has no variable '{cname}', so this Local condition can never pass")
+                        ("delete",), f"deleted response: '{script}' has no variable '{cname}', so this Local condition can never pass",
+                        related_plugins=self._bug_sources(info.actor, script))
                 else:
                     add("INFO", f"{label} condition on '{cname}', which is not declared in speaker's script '{script}'")
 
@@ -2561,17 +2600,21 @@ class World:
                 name = (m.group(1) or m.group(2)).strip()
                 t = self.topics.get(name.lower())
                 if t is None or t.deleted:
-                    add("ERROR", f"result script adds topic '{name}', which does not exist", comment, cdesc)
+                    add("ERROR", f"result script adds topic '{name}', which does not exist", comment, cdesc,
+                        related_plugins=(t.deleted_by,) if t else ())
                 elif t.dtype != 0:
-                    add("ERROR", f"result script adds topic '{name}', which is a {DIAL_TYPES.get(t.dtype)}, not a Topic", comment, cdesc)
+                    add("ERROR", f"result script adds topic '{name}', which is a {DIAL_TYPES.get(t.dtype)}, not a Topic", comment, cdesc,
+                        related_plugins=(t.source,))
             for m in self.RE_JOURNAL.finditer(line):
                 name = (m.group(1) or m.group(2)).strip()
                 stage = int(m.group(3))
                 t = self.topics.get(name.lower())
                 if t is None or t.deleted:
-                    add("ERROR", f"result script sets journal '{name}', which does not exist", comment, cdesc)
+                    add("ERROR", f"result script sets journal '{name}', which does not exist", comment, cdesc,
+                        related_plugins=(t.deleted_by,) if t else ())
                 elif t.dtype != JOURNAL:
-                    add("ERROR", f"result script sets journal '{name}', which is a {DIAL_TYPES.get(t.dtype)}", comment, cdesc)
+                    add("ERROR", f"result script sets journal '{name}', which is a {DIAL_TYPES.get(t.dtype)}", comment, cdesc,
+                        related_plugins=(t.source,))
                 elif stage not in quest_stages.get(name.lower(), ()):
                     add("INFO", f"result script sets journal '{name}' to index {stage}, which has no entry")
 
@@ -2873,6 +2916,14 @@ def launch_game(args):
                   f"--play (Play Morrowind.bat), which writes the whole list each time.")
     env = dict(os.environ)
     env["SteamAppId"] = env["SteamGameId"] = str(args.steam_appid)
+    try:
+        deployed = MP.deploy_lua_tools(os.path.abspath(args.data_dir))
+    except OSError as e:
+        deployed = []
+        print(f"--play: could not deploy the suite's Lua mods from {MP.LUA_TOOLS_DIR}: {e}", file=sys.stderr)
+    if deployed:
+        print(f"--play: {len(deployed)} file(s) of the suite's Lua mods weren't in Data Files; copied them in from "
+              f"{MP.LUA_TOOLS_DIR}.")
     kwargs = {"cwd": game_dir, "env": env, "close_fds": True}
     if os.name == "nt":
         try:
@@ -5591,7 +5642,7 @@ POSTPONED = []                                       # pairs postponed ([s]) in 
 
 
 def conflict_rule_backup_path(rules_path):
-    return f"{bak_home(rules_path)}.mwdialog-{time.strftime('%Y%m%d-%H%M%S')}.bak"
+    return stamped_backup(rules_path)
 
 
 def conflict_choice(index, total, kind, a, b, conflict, labels, options, default,
@@ -8982,7 +9033,7 @@ def run_update_rules(args):
             if all(len(s) < 2 for s in segs):
                 lines[tag_line - 1] = "; " + lines[tag_line - 1]
             lines.insert(tag_line - 1, f";; mwdialog_check --update-rules {stamp}: {why}"[:400] + nl)
-        backup = f"{bak_home(path)}.mwdialog-{stamp}.bak"
+        backup = stamped_backup(path)
         with open(backup, "wb") as f:
             f.write(raw)
         safe_write_bytes(path, "".join(lines).encode("latin-1"))
@@ -9516,7 +9567,9 @@ def _ensure_vortex_paths(args):
 def _main(argv=None):
     global ENC
     ap = MT.parser(description="Scan a Morrowind Data Files folder for dialogue errors.")
-    ap.add_argument("data_dir", help='path to the "Data Files" folder')
+    ap.add_argument("data_dir", nargs="?", help='path to the "Data Files" folder (default: Data Files of the Morrowind '
+                                                 'folder holding Morrowind.ini: the working folder or its parent, or '
+                                                 'the parent of this script\'s folder)')
     ap.add_argument("--plugins", nargs="+", metavar="FILE", help="explicit load order (file names in Data Files)")
     ap.add_argument("--ini", help=f"Morrowind.ini (its [Archives]; the plugin list is {LOAD_ORDER_FILE}, made from "
                                   f"this ini the first time, and written back into it whenever a run changes it, and by --play)")
@@ -9726,6 +9779,11 @@ def _main(argv=None):
                          "(use --dry-run to preview)")
     fx.add_argument("--fix-log", default="mwdialog_fixes.log", help="where to append a record of fixes (default mwdialog_fixes.log)")
     args = ap.parse_args(argv)
+    if args.data_dir is None:
+        args.data_dir = MP.default_data_dir()
+        if args.data_dir is None:
+            ap.error('no "Data Files" given and no Morrowind.ini found in the working folder, its parent, or the '
+                     "parent of this script's folder")
     if os.path.isdir(args.data_dir) and not MP.acquire_game_lock(os.path.dirname(os.path.abspath(args.data_dir))):
         print(MP.RUN_LOCKED_MESSAGE, file=sys.stderr)
         return 1
@@ -10104,40 +10162,15 @@ def _main(argv=None):
     return 1 if counts["ERROR"] else 0
 
 
-# messages about a plugin's dealings with OTHER plugins: not the author's own bug
-NOT_OWN_BUG = re.compile(r"later plugin|another plugin|other plugin|loads (?:after|before|between)|deleted by|"
-                         r"replaces it|conflict|load order|is a master of|lists it as a master|both change|"
-                         r"winner|loses to|overrid|already fixed by|carried over|not active", re.I)
+def write_bug_reports(args, plugins, report, world, *, section="mwdialog_check"):
+    """Write only plugin-intrinsic and declared-master findings, not unrelated mod interactions."""
+    import mwdialog_bugreports
 
-
-def write_bug_reports(args, plugins, report, world):
-    """<plugin>.bugreport.txt for every plugin with problems of its own (section "mwdialog_check"): its
-    errors and warnings, files it needs that no mod has, and what --fix repairs for it."""
     ah = asset_health_module()
     data_dir = os.path.abspath(args.data_dir)
     game_dir = os.path.dirname(data_dir)
     names = {n.lower(): (n, p) for n, p in plugins}
-    per = defaultdict(lambda: {"ERROR": [], "WARN": [], "repaired": [], "missing": []})
-    for sev, plugin, topic, info, msg in report.issues:
-        if sev == "INFO" and msg.endswith("(a master; not changed)"):
-            sev = "WARN"                    # a master's own fault (its header, its masters): the author's to fix
-        if sev not in ("ERROR", "WARN") or is_our_patch(plugin) or plugin.lower() not in names \
-                or NOT_OWN_BUG.search(msg):
-            continue
-        where = " / ".join(x for x in (f"[{topic}]" if topic else "", info) if x)
-        per[plugin.lower()][sev].append(f"  - {where + ': ' if where else ''}{msg}")
-    for plugin, off, op, desc, label, topic, info in report.fixes:
-        if plugin and plugin.lower() in names and not is_our_patch(plugin):
-            per[plugin.lower()]["repaired"].append(f"  - {label}: {desc}")
-    for plugin, items in OWN_FIXES.items():           # found by --fix's steps before the scan
-        if plugin.lower() in names and not is_our_patch(plugin):
-            for repaired, text in items:
-                per[plugin.lower()]["repaired" if repaired else "WARN"].append(f"  - {text}")
-    for item in getattr(world, "generated", []):
-        rel, why = item[0], item[1]
-        pl = item[3] if len(item) > 3 else ""
-        if pl and pl.lower() in names and not is_our_patch(pl) and not (len(item) > 2 and item[2]):
-            per[pl.lower()]["missing"].append(f"  - {rel} (needed by {why}); a stand-in was put in its place")
+    per = mwdialog_bugreports.collect(sys.modules[__name__], plugins, report, world)
     # the scan saw every plugin: one that is clean now loses an old section
     written = cleared = 0
     for low, (name, path) in names.items():
@@ -10149,16 +10182,17 @@ def write_bug_reports(args, plugins, report, world):
             for title, key in (("Errors (the game reports these, or the content breaks)", "ERROR"),
                                ("Warnings", "WARN"),
                                ("Files the plugin needs that no mod provides", "missing"),
-                               ("Repaired by mwdialog_check --fix (the author may want to fix these in the plugin)",
+                               (f"Repaired by {section} --fix (the author may want to fix these in the plugin)",
                                 "repaired")):
                 if d[key]:
-                    lines.append(f"{title}: {len(d[key])}")
-                    lines += sorted(set(d[key]))[:300]
+                    unique = sorted(set(d[key]))
+                    lines.append(f"{title}: {len(unique)}")
+                    lines += unique[:300]
                     lines.append("")
         out = ah.bug_report_path(data_dir, game_dir, name, sys.modules[__name__])
         if not lines and not os.path.exists(out):
             continue
-        ah.update_bug_report(out, "mwdialog_check", ah.bug_report_header(path, sys.modules[__name__]), lines)
+        ah.update_bug_report(out, section, ah.bug_report_header(path, sys.modules[__name__]), lines)
         written += bool(lines)
         cleared += not lines
     if written or cleared:

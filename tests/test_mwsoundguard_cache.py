@@ -11,7 +11,7 @@ import mwdialog_soundcache as cache
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LUAJIT = os.environ.get("MWMANAGER_LUAJIT", os.path.join(ROOT, "tools", "luajit", "luajit.exe"))
-GUARD = os.path.join(ROOT, "Data Files", "MWSE", "mods", "mwsuite", "mwsoundguard", "main.lua")
+GUARD = os.path.join(ROOT, "lua tools", "MWSE", "mods", "mwsuite", "mwsoundguard", "main.lua")
 
 
 def sound(name, filename=None, deleted=False):
@@ -86,19 +86,20 @@ def test_invalid_audio_is_reported_not_cached(tmp_path, capsys):
     assert "truncated WAV data" in capsys.readouterr().err
 
 
-def test_ffprobe_discovery_supports_tools_and_existing_locations(tmp_path, monkeypatch):
-    monkeypatch.setattr(cache, "__file__", str(tmp_path / "mwdialog_soundcache.py"))
-    monkeypatch.setattr(cache.shutil, "which", lambda name: None)
-    tools = tmp_path / "tools"
-    tools.mkdir()
-    bundled = tools / "ffprobe.exe"
-    bundled.touch()
-    assert cache.find_ffprobe() == str(bundled)
+def test_ffprobe_discovery_prefers_the_bundled_tools_copy(tmp_path, monkeypatch):
+    monkeypatch.setattr(cache.MP, "TOOL_DIR", str(tmp_path))
+    monkeypatch.setattr(cache.MP, "find_game_dir", lambda *a: None)
+    monkeypatch.setattr(cache.MP.shutil, "which", lambda name: None)
+    assert cache.find_ffprobe() is None
     sibling = tmp_path / "ffprobe.exe"
     sibling.touch()
     assert cache.find_ffprobe() == str(sibling)
-    monkeypatch.setattr(cache.shutil, "which", lambda name: "path-ffprobe")
-    assert cache.find_ffprobe() == "path-ffprobe"
+    (tmp_path / "tools").mkdir()
+    bundled = tmp_path / "tools" / "ffprobe.exe"
+    bundled.touch()
+    assert cache.find_ffprobe() == str(bundled)
+    monkeypatch.setattr(cache.MP.shutil, "which", lambda name: "path-ffprobe")
+    assert cache.find_ffprobe() == str(bundled)                     # tools\ wins over PATH
 
 
 @pytest.mark.skipif(not shutil.which("ffmpeg") or not os.path.isfile(os.path.join(ROOT, "tools", "ffprobe.exe")),
@@ -111,7 +112,7 @@ def test_cache_builds_mp3_with_bundled_ffprobe_without_path(tmp_path, monkeypatc
                     "sine=frequency=440:duration=2", "-q:a", "3", str(sound_dir / "sample.mp3")], check=True)
     p = df / "base.esm"
     plugin(p, [], [sound("sample", "sample.mp3")])
-    monkeypatch.setattr(cache.shutil, "which", lambda name: None)
+    monkeypatch.setattr(cache.MP.shutil, "which", lambda name: None)
     assert cache.write_sound_cache(str(df), [(p.name, str(p))]) == 1
     assert read_cache(df)["sample"]["length"] == pytest.approx(2, abs=0.1)
 

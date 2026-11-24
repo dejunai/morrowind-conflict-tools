@@ -100,7 +100,7 @@ def test_I8_damaged_bsa_does_not_stop_the_asset_check(tmp_path, monkeypatch, cap
     (game / "Data Files" / "bad.bsa").write_bytes(struct.pack("<III", 0x100, 16, 100000) + b"\0" * 16)
     staging = tmp_path / "staging"
     staging.mkdir()
-    monkeypatch.setattr(vt, "__file__", str(game / "vortex_tidy.py"))
+    monkeypatch.setattr(vt, "HERE", str(game))
     monkeypatch.setattr(vt, "_tool_modules", lambda: (m, ah))
     monkeypatch.setattr(vt, "BLACKLIST_FILE", str(tmp_path / "bl.txt"))
 
@@ -187,6 +187,9 @@ def test_repairs_found_after_the_moves_are_queued_and_made(tmp_path, monkeypatch
     class Ah:
         nexus_id = staticmethod(lambda r: None)
         update_bug_report = staticmethod(lambda *a: None)
+        package_bug_report_subject = staticmethod(ah.package_bug_report_subject)
+        package_bug_report_path = staticmethod(ah.package_bug_report_path)
+        package_asset_bug_lines = staticmethod(ah.package_asset_bug_lines)
 
         @staticmethod
         def apply_folder(r, fixes, m, game_dir, plug):

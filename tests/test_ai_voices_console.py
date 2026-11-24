@@ -8,7 +8,7 @@ import mwdialog_luafix as L
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LUAJIT = os.environ.get("MWMANAGER_LUAJIT", os.path.join(ROOT, "tools", "luajit", "luajit.exe"))
-MOD = os.path.join(ROOT, "Data Files", "MWSE", "mods", "mwsuite", "mwpluginpatches").replace("\\", "/")
+MOD = os.path.join(ROOT, "lua tools", "MWSE", "mods", "mwsuite", "mwpluginpatches").replace("\\", "/")
 
 
 def test_it_is_not_a_known_bug():

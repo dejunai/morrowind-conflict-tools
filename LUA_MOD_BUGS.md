@@ -407,7 +407,7 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
   - [bsapack.cpp](file:///k:/Downloads/Browser/bsapack%20source/bsapack.cpp)
   - [bsapack.h](file:///k:/Downloads/Browser/bsapack%20source/bsapack.h)
   - [bsapack.dej.exe (build directory)](file:///k:/Downloads/Browser/bsapack%20source/bsapack.dej.exe)
-  - [bsapack.dej.exe (Morrowind root)](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/bsapack.dej.exe)
+  - [bsapack.dej.exe (conflict-tools tools)](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/conflict-tools/tools/bsapack.dej.exe)
 * **Feature & Fix**:
   1. **Exclusion List Support (`-exclude <file>`)**:
      - Added `-exclude <file>` / `--exclude <file>` / `-exclude=<file>` flag (with `-except` maintained as an alias):

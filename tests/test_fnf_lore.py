@@ -8,7 +8,7 @@ from conftest import plugin, rec, sub, z
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LUAJIT = os.environ.get("MWMANAGER_LUAJIT", os.path.join(ROOT, "tools", "luajit", "luajit.exe"))
-MOD = os.path.join(ROOT, "Data Files", "MWSE", "mods", "mwsuite", "mwpluginpatches").replace("\\", "/")
+MOD = os.path.join(ROOT, "lua tools", "MWSE", "mods", "mwsuite", "mwpluginpatches").replace("\\", "/")
 pytestmark = pytest.mark.skipif(not os.path.isfile(LUAJIT), reason="LuaJIT not available")
 
 SCRIPT = r"""

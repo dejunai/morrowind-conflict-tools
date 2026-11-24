@@ -211,3 +211,15 @@ def test_per_pair_results_come_from_the_cache_on_run_2(tmp_path, monkeypatch):
         return real_open(p, *a, **k)
     monkeypatch.setattr(ah, "open", no_read, raising=False)
     assert _pairs(g, df, [v]) == first
+
+
+def test_texture_cached_clean_without_the_size_cap_is_reduced_once_the_cap_is_back(tmp_path, monkeypatch):
+    g, df = game(tmp_path)
+    mod = g / "staging" / "Big"
+    put(mod, "Textures/tx_big.dds", dds(4096, 16, mips=13))
+    monkeypatch.setattr(m, "TEXTURE_MAX_EDGE", 1 << 30)
+    _issues, fixes = ah.check_folder(str(mod), m, str(df), set())
+    assert not fixes
+    monkeypatch.setattr(m, "TEXTURE_MAX_EDGE", 2048)
+    _issues, fixes = ah.check_folder(str(mod), m, str(df), set())
+    assert [f[2].replace("\\", "/") for f in fixes] == ["Textures/tx_big.dds"]

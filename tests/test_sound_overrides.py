@@ -7,7 +7,7 @@ import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LUAJIT = os.path.join(ROOT, "tools", "luajit", "luajit.exe")
-PATCHES = os.path.join(ROOT, "Data Files", "MWSE", "mods", "mwsuite", "mwpluginpatches", "patches")
+PATCHES = os.path.join(ROOT, "lua tools", "MWSE", "mods", "mwsuite", "mwpluginpatches", "patches")
 pytestmark = pytest.mark.skipif(not os.path.isfile(LUAJIT), reason="LuaJIT not available")
 
 STUBS = r"""
@@ -113,7 +113,7 @@ check(#plays == 6, "water loop restarts after the source reloads")
 
 def test_vanilla_float_is_left_alone_without_expanded_sounds():
     """init() replaces Float, so a vanilla script's presence must never switch that patch on."""
-    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Data Files", "MWSE", "mods",
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "lua tools", "MWSE", "mods",
                         "mwsuite", "mwpluginpatches", "config.lua")
     with open(path, encoding="utf-8") as f:
         text = f.read()

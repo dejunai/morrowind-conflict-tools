@@ -286,10 +286,10 @@ def placeholder_dds(name):
 def stand_in_bytes(rel):
     ext = os.path.splitext(rel)[1].lower()
     if ext == ".kf":                        # an animation: the game's smallest one (a few frames, harmless)
-        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), DUMMY_KF), "rb") as f:
+        with open(os.path.join(DUMMY_DIR, DUMMY_KF), "rb") as f:
             return f.read()
     if ext == ".nif":                       # a missing model: a small coin, not the engine's huge "!" marker
-        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), DUMMY_NIF), "rb") as f:
+        with open(os.path.join(DUMMY_DIR, DUMMY_NIF), "rb") as f:
             return f.read()
     if ext == ".dds" and rel.replace("/", "\\").lower().startswith("icons\\"):
         return placeholder_icon()
@@ -326,7 +326,8 @@ def silent_audio(ext):
             struct.pack("<IHHIIHH", 16, 1, 1, rate, rate * 2, 2, 16) + b"data" + struct.pack("<I", len(data)) + data)
 
 
-DUMMY_NIF = "mwdialog_dummy.nif"       # next to this file: a small vanilla Dwemer coin, for missing models
+DUMMY_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dummy assets")   # the stand-in files
+DUMMY_NIF = "mwdialog_dummy.nif"       # a small vanilla Dwemer coin, for missing models
 
 DUMMY_KF = "mwdialog_dummy.kf"                   # the game's xin_dagoth_bridge00.kf (510 bytes): broken animations
 

@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mwdialog_text as MT  # noqa: E402
 import mwdialog_tes3 as _T  # noqa: E402
 from mwdialog_backup import (  # noqa: E402
-    bak_home, index_dir)
+    BACKUP_DIR, bak_home, game_dir_of, index_dir)
 from mwdialog_tes3 import (  # noqa: E402
     MW_ERRORS, safe_write_bytes)
 print = MT.printer()  # noqa: A001
@@ -148,7 +148,8 @@ def truncated_game_files(args):
     if total < INI_SECTION_LIMIT - 300:
         return None
     baks = sorted(glob.glob(glob.escape(ini) + ".mwdialog-*.bak") + glob.glob(glob.escape(bak_home(ini))
-                  + ".mwdialog-*.bak"), key=os.path.getmtime, reverse=True)
+                  + ".mwdialog-*.bak") + glob.glob(glob.escape(bak_home(ini, legacy=True)) + ".mwdialog-*.bak"),
+                  key=os.path.getmtime, reverse=True)
     low = [n.lower() for n in names]
     for b in baks[:5]:
         try:
@@ -202,15 +203,17 @@ def write_ini_game_files(ini, order):
         new_lines = lines + ["", "[Game Files]"] + body
     else:
         new_lines = lines[:start + 1] + body + ([""] if end < len(lines) else []) + lines[end:]
-    base = bak_home(ini)
-    original = base + ".mwdialog-original.bak"        # the ini as it was before these tools first changed it
-    if not os.path.exists(original):
+    base, legacy = bak_home(ini), bak_home(ini, legacy=True)
+    original = legacy + ".mwdialog-original.bak"      # the ini as it was before these tools first changed it
+    earlier = (base + ".mwdialog-original.bak",
+               os.path.join(game_dir_of(ini), BACKUP_DIR, os.path.basename(ini) + ".mwdialog-original.bak"))
+    if not any(os.path.exists(p) for p in (original,) + earlier):
         with open(original, "wb") as f:
             f.write(raw)
-    backup = base + ".mwdialog-play.bak"              # the latest previous version (same name as before)
+    backup = base + ".mwdialog-play.bak"              # the latest previous version: the one at the top
     with open(backup, "wb") as f:
         f.write(raw)
-    stamped = f"{base}.mwdialog-{time.strftime('%Y%m%d-%H%M%S')}.bak"   # and a dated one, never replaced
+    stamped = f"{legacy}.mwdialog-{time.strftime('%Y%m%d-%H%M%S')}.bak"   # and a dated one in legacy, never replaced
     if not os.path.exists(stamped):
         with open(stamped, "wb") as f:
             f.write(raw)

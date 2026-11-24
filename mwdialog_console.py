@@ -8,7 +8,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mwdialog_text as MT  # noqa: E402
 from mwdialog_backup import (  # noqa: E402
-    BACKUP_DIR, game_dir_of)
+    backup_root, game_dir_of)
 print = MT.printer()  # noqa: A001
 
 
@@ -78,12 +78,12 @@ def set_title(text):
 
 FIX_LOG_CAP = 20 * 1024 * 1024
 
-FIX_LOG_ARCHIVE = "fixes.archive.txt"            # in mwdialog_backup\\
+FIX_LOG_ARCHIVE = "fixes.archive.txt"            # in the backups folder
 
 
 def cap_fix_log(args):
     """Keep the fix log at 20 MB or less: its oldest runs (whole "==== date ====" sections) are moved, in
-    order, to the end of mwdialog_backup\\fixes.archive.txt."""
+    order, to the end of fixes.archive.txt in the backups folder."""
     if args is None:
         return
     for path in {os.path.abspath(getattr(args, "fix_log", "") or "mwdialog_fixes.log"),
@@ -98,7 +98,7 @@ def cap_fix_log(args):
         k = k + 1 if k >= 0 else data.find(b"\n", cut) + 1
         if k <= 0:
             continue
-        arch = os.path.join(game_dir_of(path), BACKUP_DIR, FIX_LOG_ARCHIVE)
+        arch = os.path.join(backup_root(game_dir_of(path)), FIX_LOG_ARCHIVE)
         os.makedirs(os.path.dirname(arch), exist_ok=True)
         with open(arch, "ab") as f:
             f.write(data[:k])
@@ -106,4 +106,4 @@ def cap_fix_log(args):
             f.write(data[k:])
         os.replace(path + ".tmp", path)
         print(f"Fix log trimmed to {(len(data) - k) / 1048576:.1f} MB; {k / 1048576:.1f} MB of older runs moved to "
-              f"{BACKUP_DIR}\\{FIX_LOG_ARCHIVE}")
+                      f"{arch}")

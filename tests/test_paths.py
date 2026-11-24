@@ -16,7 +16,8 @@ import mwdialog_paths as P                       # noqa: E402
 
 # Production code and docs (not tests, not git, not tool binaries).
 SCAN_ROOT = Path(__file__).resolve().parents[1]
-SKIP_DIRS = {".git", "__pycache__", ".pytest_cache", ".ruff_cache", "tests", "tools", "Data Files", "mwdialog_backup"}
+SKIP_DIRS = {".git", "__pycache__", ".pytest_cache", ".ruff_cache", "tests", "tools", "Data Files", "lua tools",
+             "plans", "dummy assets", "mwdialog_backup", "backups"}
 # Data records are linted separately after migration; code/docs must stay clean.
 CODE_SUFFIXES = {".py", ".bat", ".md", ".gitignore"}
 DRIVE_LIT = re.compile(r"(?<![A-Za-z0-9_])[A-Za-z]:\\(?![dDsSnNtTwWbBaAzZrfvxuk0-9])")
@@ -212,7 +213,8 @@ def test_convert_added_masters_and_reduced_row():
 
 # ------------------------------------------------------------------------------------ 7-Zip / LuaJIT search
 
-def test_find_7z_path_then_tools_no_program_files(tmp_path, monkeypatch):
+def test_find_7z_tools_then_path_no_program_files(tmp_path, monkeypatch):
+    monkeypatch.setattr(P, "TOOL_DIR", str(tmp_path / "conflict-tools"))
     # PATH hit
     fake = tmp_path / "bin"
     fake.mkdir()
@@ -231,6 +233,9 @@ def test_find_7z_path_then_tools_no_program_files(tmp_path, monkeypatch):
     tool.write_text("x")
     found = P.find_7z(game_dir=str(game))
     assert found == str(tool)
+    # tools\\7z wins over PATH
+    monkeypatch.setattr(P.shutil, "which", lambda n: str(exe) if n == "7z" else None)
+    assert P.find_7z(game_dir=str(game)) == str(tool)
 
     # nothing: not required -> None; required -> clear error, no Program Files, no registry
     monkeypatch.setattr(P.shutil, "which", lambda n: None)
@@ -247,7 +252,7 @@ def test_find_7z_path_then_tools_no_program_files(tmp_path, monkeypatch):
     assert "registry" not in msg.lower() or "No registry" in msg or "PATH" in msg
     # the error must not recommend a drive-letter path (the folder it looked in is this test's temp folder,
     # which on Windows has a drive letter of its own)
-    assert DRIVE_LIT.search(msg.replace(str(empty), "<game>")) is None
+    assert DRIVE_LIT.search(msg.replace(str(empty), "<game>").replace(P.TOOL_DIR, "<tools>")) is None
 
 
 def test_luajit_candidates_are_relative_to_game(tmp_path):
@@ -255,7 +260,7 @@ def test_luajit_candidates_are_relative_to_game(tmp_path):
     cands = P.luajit_candidates(str(game), explicit=None)
     assert any(p.endswith(os.path.join("tools", "luajit", "luajit.exe")) or
                p.endswith(os.path.join("tools", "luajit", "luajit")) for p in cands)
-    assert all(not P.DRIVE_RE.match(p) or p.startswith(str(game)) for p in cands)
+    assert all(not P.DRIVE_RE.match(p) or p.startswith((str(game), P.TOOL_DIR)) for p in cands)
     desc = P.describe_luajit_search(str(game))
     assert "tools" in desc and "luajit" in desc
     assert "--luajit PATH" in desc
@@ -275,3 +280,60 @@ def test_no_absolute_paths_in_data_records():
             if DRIVE_LIT.search(line):
                 hits.append(f"{p.name}:{i}:{line.strip()[:160]}")
     assert hits == [], "drive-letter literals in data records:\n" + "\n".join(hits)
+
+
+# ------------------------------------------------------------------------------------ the game folder
+
+def test_game_folder_found_from_working_folder_or_the_tools_parent(tmp_path, monkeypatch):
+    game = tmp_path / "Morrowind"
+    tools = game / "conflict-tools"
+    tools.mkdir(parents=True)
+    (game / "MORROWIND.INI").write_text("[Game Files]\n")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.setattr(P, "TOOL_DIR", str(tools))
+    assert P.find_game_dir(str(elsewhere)) == str(game)              # the scripts' parent
+    assert P.find_game_dir(str(game)) == str(game)                   # run from the game folder
+    other = tmp_path / "Other"
+    (other / "sub").mkdir(parents=True)
+    (other / "Morrowind.ini").write_text("")
+    assert P.find_game_dir(str(other / "sub")) == str(other)         # the working folder's parent wins
+    monkeypatch.setattr(P, "TOOL_DIR", str(elsewhere))
+    assert P.find_game_dir(str(elsewhere)) is None
+    monkeypatch.chdir(other)
+    assert P.default_data_dir() == str(other / "Data Files")
+
+
+def test_bundled_programs_found_next_to_the_scripts(tmp_path, monkeypatch):
+    tools = tmp_path / "conflict-tools"
+    (tools / "tools" / "7z").mkdir(parents=True)
+    (tools / "tools" / "texconv.exe").write_text("x")
+    (tools / "tools" / "7z" / "7z.exe").write_text("x")
+    monkeypatch.setattr(P, "TOOL_DIR", str(tools))
+    monkeypatch.setattr(P.shutil, "which", lambda n: None)
+    game = tmp_path / "Morrowind"
+    game.mkdir()
+    assert P.find_texconv(str(game)) == str(tools / "tools" / "texconv.exe")
+    assert P.find_7z(str(game)) == str(tools / "tools" / "7z" / "7z.exe")
+    (game / "texconv.exe").write_text("x")
+    assert P.find_texconv(str(game)) == str(tools / "tools" / "texconv.exe")   # tools\ first
+    (tools / "tools" / "texconv.exe").unlink()
+    assert P.find_texconv(str(game)) == str(game / "texconv.exe")
+    monkeypatch.setattr(P.shutil, "which", lambda n: "path-texconv")
+    assert P.find_texconv(str(game)) == str(game / "texconv.exe")
+    assert str(tools / "tools" / "luajit" / "luajit.exe") in P.luajit_candidates(str(game))
+
+
+def test_play_deploys_only_the_lua_files_data_files_lacks(tmp_path):
+    src = tmp_path / "lua tools"
+    (src / "MWSE" / "mods" / "mwsuite" / "a").mkdir(parents=True)
+    (src / "MWSE" / "mods" / "mwsuite" / "a" / "main.lua").write_text("new")
+    (src / "MWSE" / "config").mkdir(parents=True)
+    (src / "MWSE" / "config" / "a.json").write_text("default")
+    data = tmp_path / "Data Files"
+    (data / "MWSE" / "config").mkdir(parents=True)
+    (data / "MWSE" / "config" / "a.json").write_text("edited")
+    assert P.deploy_lua_tools(str(data), str(src)) == [os.path.join("MWSE", "mods", "mwsuite", "a", "main.lua")]
+    assert (data / "MWSE" / "mods" / "mwsuite" / "a" / "main.lua").read_text() == "new"
+    assert (data / "MWSE" / "config" / "a.json").read_text() == "edited"     # already there: left alone
+    assert P.deploy_lua_tools(str(data), str(src)) == []

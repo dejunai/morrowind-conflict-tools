@@ -1,34 +1,44 @@
-# Tools next to the scripts
+# Bundled tools
 
-These utilities look for optional binaries under this folder, then on PATH. Nothing here is hardcoded to a drive letter.
+The scripts look for these programs in this folder first, then beside the scripts, then the game folder, then on
+PATH. Nothing here is hardcoded to a drive letter. Everything in this folder is redistributable and committed, each
+with its license; the only exception is `Translation.txt` (below).
 
-## LuaJIT (`tools/luajit/`)
+| Tool | Files | License | Source |
+| --- | --- | --- | --- |
+| texconv (DirectXTex) | `texconv.exe` | MIT (`TEXCONV_LICENSE.txt`) | https://github.com/microsoft/DirectXTex |
+| FFmpeg 9.0.2, LGPL shared build | `ffmpeg.exe`, `ffprobe.exe`, `av*.dll`, `sw*.dll` | LGPL v3 (`FFMPEG_LICENSE.txt`) | https://ffmpeg.org/, https://github.com/BtbN/FFmpeg-Builds |
+| 7-Zip 26.02 | `7z/7z.exe`, `7z/7z.dll` | GNU LGPL + unRAR restriction (`7z/License.txt`) | https://www.7-zip.org/ |
+| LuaJIT 2.1 | `luajit/` | MIT (`luajit/COPYRIGHT`) | https://luajit.org/ |
 
-`mwdialog_luafix.py` and `vortex_tidy.py` syntax-check Lua patches with LuaJIT before writing them.
+Keep each license file beside its binaries when redistributing.
 
-Copy a LuaJIT 2.1 Windows build into `tools/luajit/` (this folder). You need at least:
+## texconv
 
-- `luajit.exe`
-- `lua51.dll`
-- the `jit/` folder (the `.lua` modules that ship with LuaJIT)
-- `COPYRIGHT` (LuaJIT's MIT license; keep it next to the binary)
+DDS conversion, mipmaps and compression in the asset fixer.
 
-A ready-made copy can be taken from an existing MWSE or MWManager `tools/luajit` folder (copy, don't move). Official sources: https://luajit.org/
+## FFmpeg
 
-If LuaJIT is not found, the tools say so clearly and do not patch (`--luajit PATH` to point at a binary, or `--no-syntax-check` to rely on the parser alone). This directory is gitignored; do not commit the binaries.
+`mwdialog_check.py --fix` repairs broken sounds with `ffmpeg`; the sound-length cache reads MP3 durations with
+`ffprobe`. This is the shared (DLL) LGPL build, so both programs use the same DLLs and every file stays under
+GitHub's 100 MB limit (`winget install BtbN.FFmpeg.LGPL.Shared.9.0`; copy `bin\` without `ffplay.exe`, plus
+`LICENSE.txt` as `FFMPEG_LICENSE.txt`).
 
-## Tamriel Data's rename map (`tools/Translation.txt`, optional)
+## 7-Zip (`7z/`)
+
+Reads `.7z` and `.rar` Vortex download archives for the master-mismatch check. `7z.dll` is needed for `.rar` (the
+standalone `7za.exe` cannot read RAR). The unRAR restriction means the RAR code may not be used to create RAR
+archives.
+
+## LuaJIT (`luajit/`)
+
+`mwdialog_luafix.py` and `vortex_tidy.py` syntax-check Lua patches with LuaJIT before writing them, and the tests run
+the Lua suite with it. If LuaJIT is missing the tools say so and do not patch (`--luajit PATH` to point at a
+binary, or `--no-syntax-check` to rely on the parser alone).
+
+## Tamriel Data's rename map (`Translation.txt`, not included)
 
 `mwdialog_check.py --fix` uses it to give objects in older plugins their current Tamriel Data IDs instead of removing
 them. It ships with Tamriel Data in its `Docs` folder: copy it here as `Translation.txt`, and again when Tamriel Data
 updates. This is the only place `--fix` looks; without it `--fix` carries on as usual. The file is Tamriel Data's:
-it is gitignored, do not commit it.
-
-## 7-Zip (`tools/7z/`)
-
-Used to read `.7z` and `.rar` Vortex download archives for the master-mismatch check. Looked up in this order:
-
-1. `7z` on PATH
-2. `tools/7z/7z.exe` (or `tools/7z.exe`)
-
-If a `.7z`/`.rar` archive needs to be opened and 7-Zip is not found, the tool exits with a message telling you to install 7-Zip and add it to PATH, or to place `7z.exe` here.
+it is gitignored until redistribution is permitted.

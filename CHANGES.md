@@ -1,3 +1,26 @@
+# Install subfolders and Lua deployment (2026-11-23)
+
+- Inside the install: `tools\` holds `texconv.exe` (still also found in the game folder or on PATH), `plans\`
+  holds the Tidy and luafix plans, `dummy assets\` the stand-in models and animation, and `lua tools\` the MWSE
+  Lua suite (formerly the repo's `Data Files\`). `--play` copies any `lua tools` file missing from `Data Files`
+  before starting the game; files already there are left alone.
+- Bundled programs (`texconv`, `ffmpeg`, `ffprobe`) are looked up in `tools\` first, then beside the scripts, the
+  game folder, and PATH. `--fix` sound repair now finds `tools\ffmpeg.exe`; recommended build is FFmpeg LGPL.
+- 7-Zip is looked up in `tools\7z\` before PATH.
+- `tools\` now ships in the repo with its licenses: texconv (MIT), FFmpeg 9.0.2 LGPL shared build, 7-Zip (LGPL +
+  unRAR), LuaJIT (MIT). Only Tamriel Data's `Translation.txt` stays gitignored.
+
+# Install folder and backups (2026-11-23)
+
+- The tools install to a subfolder of the game folder (`Morrowind\conflict-tools\`). Without a `Data Files`
+  argument, `mwdialog_check.py` (and the `.bat` files, Tidy and luafix) find the game by `Morrowind.ini` in the
+  working folder, the folder above it, or above the scripts. Records, plans and journals stay in the game folder;
+  bundled programs (`texconv.exe`, `tools\`) are found beside the scripts too.
+- Backups go to `conflict-tools\backups\` when the tools are installed in the game folder, else
+  `<game folder>\mwdialog_backup\`. The top keeps one backup per file (the newest); making a new one moves the
+  older ones to `backups\legacy\`. Morrowind.ini's original and dated copies go to legacy; backups where older
+  versions put them are still found by `--restore`, `--restore-all` and `--clean-up`.
+
 # Incompatible plugins and safer rebuilds (2026-11-23)
 
 - Moved-land terrain, winning pathgrids and matching literal script coordinates can require choosing one

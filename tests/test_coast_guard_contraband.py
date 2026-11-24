@@ -8,7 +8,7 @@ import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LUAJIT = os.path.join(ROOT, "tools", "luajit", "luajit.exe")
-MODS = os.path.join(ROOT, "Data Files", "MWSE", "mods", "mwsuite")
+MODS = os.path.join(ROOT, "lua tools", "MWSE", "mods", "mwsuite")
 pytestmark = pytest.mark.skipif(not os.path.isfile(LUAJIT), reason="LuaJIT not available")
 
 STUBS = r"""

@@ -55,6 +55,6 @@ end
 for _, page in ipairs(registered.template.pages) do visit(page) end
 assert(found and found.variable.id == "hotkey" and found.variable.table == config)
 '''
-    mod = ROOT / "Data Files" / "MWSE" / "mods" / "mwsuite" / "mweffectinspector" / "mcm.lua"
+    mod = ROOT / "lua tools" / "MWSE" / "mods" / "mwsuite" / "mweffectinspector" / "mcm.lua"
     result = subprocess.run([str(LUAJIT), "-", str(mod)], input=script, capture_output=True, text=True, cwd=ROOT)
     assert result.returncode == 0, result.stderr

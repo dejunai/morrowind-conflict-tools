@@ -1,6 +1,8 @@
 """Shared path helpers: no hardcoded absolute paths.
 
-The game root is the folder this script (or the calling tool) lives in. Vortex's Morrowind staging
+The game root is the parent of the "Data Files" folder given on the command line; without one, the first folder
+holding Morrowind.ini among: the working folder, its parent, this script's parent (Morrowind\\conflict-tools\\)
+and this script's folder (an older install at the game root). Vortex's Morrowind staging
 and download folders come from Vortex's own settings (%APPDATA%\\Vortex). CLI flags override.
 Recorded paths are stored relative to one of those bases, with a tag (staging:/downloads:/game:).
 Readers still accept an older absolute path and convert it the next time the record is written.
@@ -42,6 +44,76 @@ _DELEGATED_LOCKS = set()                 # locks inherited from an MWManager par
 # MWManager's workflow_safety.mutation_lock folder and naming: the tools and the GUI shut each other out, and no
 # lock file lands in the game folder (its rollback check counts extra files)
 GAME_LOCK_DIR = os.path.join(tempfile.gettempdir(), "mwmanager-locks")
+
+
+TOOL_DIR = os.path.dirname(os.path.abspath(__file__))
+PLANS_DIR = os.path.join(TOOL_DIR, "plans")                # vortex_tidy's and luafix's plans (written, then applied)
+LUA_TOOLS_DIR = os.path.join(TOOL_DIR, "lua tools")        # the suite's MWSE Lua mods, laid out as in Data Files
+
+
+def is_game_dir(folder):
+    """A Morrowind folder: it holds Morrowind.ini (any case)."""
+    try:
+        return any(n.lower() == "morrowind.ini" for n in os.listdir(folder))
+    except OSError:
+        return False
+
+
+def find_game_dir(cwd=None):
+    """The Morrowind folder when no "Data Files" was given (see the module docstring), or None."""
+    cwd = os.path.abspath(cwd or os.getcwd())
+    for folder in (cwd, os.path.dirname(cwd), os.path.dirname(TOOL_DIR), TOOL_DIR):
+        if is_game_dir(folder):
+            return folder
+    return None
+
+
+def default_data_dir():
+    """<game>\\Data Files of find_game_dir(), or None."""
+    game = find_game_dir()
+    return os.path.join(game, "Data Files") if game else None
+
+
+def tool_dirs(game_dir=None):
+    """Where bundled programs (texconv, tools\\7z, tools\\luajit) are looked for: the game folder, then this
+    script's folder."""
+    out = []
+    for d in (game_dir, TOOL_DIR):
+        if d and os.path.normcase(os.path.abspath(d)) not in {os.path.normcase(os.path.abspath(o)) for o in out}:
+            out.append(d)
+    return out
+
+
+def find_program(name, game_dir=None):
+    """<name>.exe bundled in these scripts' tools\\ (checked first), beside the scripts, or in the game folder
+    (or its tools\\), else on PATH; None if missing."""
+    for d in [TOOL_DIR] + [d for d in tool_dirs(game_dir) if d != TOOL_DIR]:
+        for p in (os.path.join(d, "tools", name + ".exe"), os.path.join(d, name + ".exe")):
+            if os.path.isfile(p):
+                return p
+    return shutil.which(name)
+
+
+def find_texconv(game_dir=None):
+    return find_program("texconv", game_dir)
+
+
+def deploy_lua_tools(data_dir, src=None):
+    """Copy every file of the suite's Lua mods (lua tools\\, laid out like Data Files) that Data Files doesn't
+    have yet; files already there (deployed by Vortex, edited, or repaired by luafix) are left alone.
+    Returns the copied paths, relative to Data Files."""
+    src = src or LUA_TOOLS_DIR
+    copied = []
+    for root, dirs, files in os.walk(src):
+        dirs[:] = [d for d in dirs if d != "__pycache__"]
+        for fn in files:
+            rel = os.path.relpath(os.path.join(root, fn), src)
+            dest = os.path.join(data_dir, rel)
+            if not os.path.exists(dest):
+                os.makedirs(os.path.dirname(dest), exist_ok=True)
+                shutil.copy2(os.path.join(root, fn), dest)
+                copied.append(rel)
+    return copied
 
 
 def _tool_lock_file():
@@ -526,36 +598,34 @@ def convert_reduced_row(rel, kind, keep, bases):
 
 
 def find_7z(game_dir=None, required=False):
-    """7-Zip: PATH first (shutil.which('7z')), then <game>\\tools\\7z\\ (optional).
+    """7-Zip: tools\\7z\\ (next to these scripts, then <game>), then PATH (shutil.which('7z')).
 
     No registry lookup and no hardcoded Program Files paths. When `required` and nothing is
     found, raises ToolNotFoundError with a clear message.
     """
-    found = shutil.which("7z")
-    if found and os.path.isfile(found):
-        return found
     tried_tools = []
-    if game_dir:
+    for base in tool_dirs(game_dir):
         for rel in (os.path.join("tools", "7z", "7z.exe"),
                     os.path.join("tools", "7z", "7z"),
                     os.path.join("tools", "7z.exe"),
                     os.path.join("tools", "7z")):
-            p = os.path.join(game_dir, rel)
+            p = os.path.join(base, rel)
             tried_tools.append(p)
             if os.path.isfile(p):
                 return p
+    found = shutil.which("7z")
+    if found and os.path.isfile(found):
+        return found
     if not required:
         return None
     lines = [
         "Could not find 7-Zip (7z).",
-        "Looked on PATH (shutil.which('7z'))",
     ]
     if tried_tools:
-        lines.append("and in:")
+        lines.append("Looked in:")
         lines.extend(f"  {p}" for p in tried_tools)
-    else:
-        lines.append("and did not have a game folder to check for tools\\7z.")
-    lines.append("Install 7-Zip and add it to PATH, or place 7z.exe in <game>\\tools\\7z\\.")
+    lines.append("and on PATH (shutil.which('7z')).")
+    lines.append("Place 7z.exe and 7z.dll in tools\\7z\\, or install 7-Zip and add it to PATH.")
     raise ToolNotFoundError("\n".join(lines))
 
 
@@ -570,6 +640,8 @@ def luajit_candidates(game_dir, explicit=None):
         if os.name == "nt":
             cands.append(os.path.join(game_dir, "tools", "luajit", "luajit"))
         cands.append(os.path.join(game_dir, exe))
+    if not game_dir or os.path.normcase(os.path.abspath(game_dir)) != os.path.normcase(TOOL_DIR):
+        cands.append(os.path.join(TOOL_DIR, "tools", "luajit", exe))
     return cands
 
 

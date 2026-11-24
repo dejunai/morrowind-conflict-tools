@@ -5,7 +5,7 @@ import mwdialog_lua
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MODS = ROOT / "Data Files" / "MWSE" / "mods" / "mwsuite"
+MODS = ROOT / "lua tools" / "MWSE" / "mods" / "mwsuite"
 CONTROLS = {
     "createYesNoButton", "createOnOffButton", "createSlider", "createDropdown",
     "createKeyBinder", "createMouseBinder", "createButton", "createExclusionsPage",

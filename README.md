@@ -1,6 +1,6 @@
 # Morrowind Conflict Tools
 
-Python utilities for Morrowind plugin conflict resolution, load-order sorting, asset health, and MWSE Lua hardening. They are meant to live in the Morrowind game folder (the Steam install root), next to `Morrowind.ini` and `Data Files`.
+Python utilities for Morrowind plugin conflict resolution, load-order sorting, asset health, and MWSE Lua hardening. Install them in a subfolder of the Morrowind game folder, e.g. `Morrowind\conflict-tools\`. Run from there (or from the game folder) they find the game by its `Morrowind.ini` in the working folder or the one above, so `Data Files` need not be given; from anywhere else pass the `Data Files` folder. Rules, records and journals are kept in the game folder, plans in `conflict-tools\plans\`; backups go to `conflict-tools\backups\`, which holds one backup per file (the newest), with every older one in `backups\legacy\`. Scripts run from outside the game folder keep backups in `<game folder>\mwdialog_backup\` the same way.
 
 This repository also includes the rule files and run records from one real install, used as a messy testbed load order.
 
@@ -8,9 +8,10 @@ This repository also includes the rule files and run records from one real insta
 
 - **Python 3** (the tools use the standard library only)
 - **Windows** is the intended environment (Vortex staging paths, `MAX_PATH` checks, Win32 process checks)
-- Optional: **LuaJIT** (or `luac`) so Lua patches can be syntax-checked before they are written. Place a copy in `tools/luajit/` (see `tools/README.md`); otherwise `luajit` on `PATH`, then the `lupa` package, is used.
-- Optional: **7-Zip** (`7z` on PATH, or `tools/7z/`) to read `.7z`/`.rar` download archives in the master check
-- Optional: **texconv** for DDS conversion, mipmaps, and compression in the asset fixer
+- Optional: **LuaJIT** (or `luac`) so Lua patches can be syntax-checked before they are written. Bundled in `tools/luajit/` (see `tools/README.md`); otherwise `luajit` on `PATH`, then the `lupa` package, is used.
+- Optional: **7-Zip** (bundled in `tools/7z/`, else `7z` on PATH) to read `.7z`/`.rar` download archives in the master check
+- Optional: **texconv** for DDS conversion, mipmaps, and compression in the asset fixer (bundled `tools\texconv.exe`, else the game folder or PATH)
+- Optional: **ffmpeg** / **ffprobe** (bundled LGPL build in `tools\`, else PATH) for sound repair and MP3 lengths
 
 On Windows you can also use the included `mwdialog_check.bat` and `vortex_tidy.bat` wrappers.
 
@@ -48,7 +49,7 @@ On Windows you can also use the included `mwdialog_check.bat` and `vortex_tidy.b
    python mwdialog_luafix.py
    ```
 
-   The plan is written to `vortex_tidy_plan.txt` or `mwdialog_luafix_plan.txt`.
+   The plan is written to `plans\vortex_tidy_plan.txt` or `plans\mwdialog_luafix_plan.txt` beside the scripts.
 
 2. **Review** the plan.
 
@@ -89,7 +90,7 @@ An unattended run stops instead of guessing. Large-scale relocation and script r
 
 ## Config files in this repository
 
-These live next to the scripts in the game folder, except as noted.
+These live in the game folder, except as noted.
 
 **Rules and lists you edit:**
 
@@ -97,7 +98,7 @@ These live next to the scripts in the game folder, except as noted.
 - mlox rules are not included; the tool reads `mlox\mlox_user.txt` and `mlox_base.txt` from your own mlox install if they exist, and `mwdialog_check.rules.txt` is the place for your own rules
 - `mwdialog_check.conflict.blacklist.txt` — plugins left out of `--cell-conflicts` and loaded early so others win
 - `vortex_tidy_blacklist.txt` — Vortex staging folders tidy should never touch
-- `Data Files/MWSE/config/mwguard.json` — thresholds shared with `mwdialog_luafix.py` (copy this to `Data Files\MWSE\config\` in the game folder)
+- `lua tools/MWSE/config/mwguard.json` — thresholds shared with `mwdialog_luafix.py` (deployed to `Data Files\MWSE\config\` like the rest of `lua tools`)
 
 **Records the tools read and update** (this install's current state; file paths in them are stored as `staging:` / `downloads:` / `game:` plus a relative path):
 
@@ -108,6 +109,8 @@ These live next to the scripts in the game folder, except as noted.
 - `mwdialog_disabled.txt`, `mwdialog_redundant.txt` — plugins turned off, or marked redundant / keep-both
 - `mwdialog_merged.txt` — AutoMerge inputs
 - `mwdialog_generated_files.txt`, `mwdialog_ignored_normal_maps.txt`, `mwdialog_reduced_textures.txt`, `mwdialog_short_meshes.txt`, `mwdialog_master_sizes.json`
+
+`dummy assets\` holds the stand-in model and animation (`mwdialog_dummy*.nif`, `.kf`) used for missing or broken ones.
 
 A default `mwdialog_mip_exempt.txt` can be added beside the scripts if you want to override the built-in mipmap exemptions; this install did not have one.
 
@@ -121,7 +124,7 @@ The "deleted by vortex_tidy" folder is derived from the resolved staging folder 
 
 ## MWSE mods
 
-`Data Files/MWSE/mods/` holds the mw* Lua suite these tools work with (`mwsuite`), among them `mwguard` (a passive profiler: it times per-frame handlers and logs extreme priorities to `MWSE\logs\mwguard.log`, without throttling or changing other mods), `mwsoundguard` and `mwhangwatch`.
+`lua tools/MWSE/mods/` holds the mw* Lua suite these tools work with (`mwsuite`); `--play` copies any of its files missing from `Data Files` (existing files are never overwritten). Among them are `mwguard` (a passive profiler: it times per-frame handlers and logs extreme priorities to `MWSE\logs\mwguard.log`, without throttling or changing other mods), `mwsoundguard` and `mwhangwatch`.
 
 ## Output wrapping
 
@@ -131,10 +134,10 @@ Plan files (`vortex_tidy_plan.txt`, `mwdialog_luafix_plan.txt`) are written unwr
 
 ## Usage notes
 
-- Put the scripts in the Morrowind game folder, or pass paths (`--staging` for tidy, folder arguments for luafix).
+- Put the scripts in `Morrowind\conflict-tools\` (any subfolder of the game folder works), or pass paths (`Data Files` for the checker, `--staging` for tidy, folder arguments for luafix).
 - For tidy, Purge in Vortex first, `--apply`, then Deploy.
 - Do not run `--full`, `--fix`, or `--apply` against live mods until you have reviewed the plan.
-- Tests live in `tests/`. From a clone, or from the game folder with `tests\` copied beside the scripts: `pytest`. They only use temp folders.
+- Tests live in `tests/`. From a clone, or from the install folder with `tests\` copied beside the scripts: `pytest`. They only use temp folders.
 
 ## License
 

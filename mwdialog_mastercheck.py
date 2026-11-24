@@ -10,7 +10,7 @@ without complaint; its edits just point at records that aren't there. The signal
      back from the fix logs, so cleaning doesn't erase the evidence.
   2. the master size the plugin was saved against - only when it is the ORIGINAL header value: recorded in
      mwdialog_master_sizes.json the first time a mismatch is seen (before --fix syncs it), read from the
-     "synced the size recorded for ..." lines in mwdialog_fixes.log / mwdialog_backup\\fixes.archive.txt, or
+     "synced the size recorded for ..." lines in mwdialog_fixes.log / fixes.archive.txt (backups folder), or
      taken from the plugin as downloaded (Vortex download archive), when the header has been rewritten.
 
 Verdicts per (plugin, master): "matches", "other version" (most of it lines up; a few references the master no
@@ -33,6 +33,7 @@ import time
 import zipfile
 from collections import Counter
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import mwdialog_backup as MB  # noqa: E402
 import mwdialog_paths as MP  # noqa: E402
 import mwdialog_tes3 as T  # noqa: E402
 import mwdialog_text as MT  # noqa: E402
@@ -46,7 +47,8 @@ SIZES_RECORD = "mwdialog_master_sizes.json"
 CACHE_FILE = "mwdialog_mastercheck_cache.json"
 FACTS_FILE = "mwdialog_mastercheck_facts.json"    # parsed plugin facts and master profiles, by file stamp
 FACTS_VERSION = 1                       # raise when plugin_facts() or master_profile() change what they find
-FIX_LOGS = ("mwdialog_fixes.log", os.path.join("mwdialog_backup", "fixes.archive.txt"))
+FIX_LOGS = ("mwdialog_fixes.log",)
+FIX_LOG_ARCHIVE = "fixes.archive.txt"    # in the backups folder (older tools: <game folder>\\mwdialog_backup)
 BASE_GAME = {"morrowind.esm", "tribunal.esm", "bloodmoon.esm"}
 ARCHIVE_EXT = (".7z", ".zip", ".rar")
 NOT_IDS = {"player", "", "self"}
@@ -513,7 +515,9 @@ def log_facts(game_dir, cache, extra_logs=()):
     """Everything the fix logs say, merged: oldest sync per (plugin, master), removed references, ..."""
     logs = cache.setdefault("logs", {})
     out = _empty_log_facts()
-    for rel in list(FIX_LOGS) + list(extra_logs):
+    archives = [os.path.join(game_dir, MB.BACKUP_DIR, FIX_LOG_ARCHIVE),
+                os.path.join(MB.backup_root(game_dir), FIX_LOG_ARCHIVE)]
+    for rel in list(FIX_LOGS) + list(dict.fromkeys(archives)) + list(extra_logs):
         path = rel if os.path.isabs(rel) else os.path.join(game_dir, rel)
         key = os.path.normcase(os.path.abspath(path))
         res = parse_log(path, logs.get(key))
@@ -536,7 +540,7 @@ def downloads_dir(args=None, required=False):
 
 
 def find_7z(game_dir=None, required=False):
-    """7-Zip: PATH (shutil.which('7z')), then <game>\\tools\\7z. No registry, no Program Files paths."""
+    """7-Zip: tools\\7z, then PATH (shutil.which('7z')). No registry, no Program Files paths."""
     return MP.find_7z(game_dir=game_dir, required=required)
 
 
@@ -872,7 +876,7 @@ def _report(r, v):
     origin = f"; merged into {v['merged_into']}" if v.get("merged_into") else ""
 
     def add(severity, message):
-        r.add(severity, p, "", "", message + origin)
+        r.add(severity, p, "", "", message + origin, master=m)
 
     size = ""
     if v["original_size"] is not None and v["installed_size"] is not None:

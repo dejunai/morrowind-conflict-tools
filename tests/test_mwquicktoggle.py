@@ -6,7 +6,7 @@ import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LUAJIT = os.environ.get("MWMANAGER_LUAJIT", os.path.join(ROOT, "tools", "luajit", "luajit.exe"))
-MOD = os.path.join(ROOT, "Data Files", "MWSE", "mods", "mwsuite", "mwquicktoggle")
+MOD = os.path.join(ROOT, "lua tools", "MWSE", "mods", "mwsuite", "mwquicktoggle")
 pytestmark = pytest.mark.skipif(not os.path.isfile(LUAJIT), reason="LuaJIT not available")
 
 

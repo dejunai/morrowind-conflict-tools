@@ -155,6 +155,13 @@ def test_stand_in_is_always_rechecked_and_a_replacement_noticed(tmp_path, capsys
     assert "tx_b.dds: DX10" not in run(df, capsys)
 
 
+def test_no_data_files_argument_uses_the_game_folder_above_the_working_folder(tmp_path, capsys, monkeypatch):
+    g, df = install(tmp_path)
+    monkeypatch.chdir(df)
+    m.main(["--plugins", "Base.esm", "--asset-check", "--no-vortex", "--min-severity", "INFO"])
+    assert "tx_missing" in capsys.readouterr().out
+
+
 def test_generated_model_ignores_cache_and_tidy(tmp_path):
     g, df = install(tmp_path)
     full = str(df / "Meshes/m/a.nif")

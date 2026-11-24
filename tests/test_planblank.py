@@ -67,7 +67,7 @@ def tidy(tmp_path, monkeypatch):
     monkeypatch.setattr(vt, "JOURNAL", str(tmp_path / "journal.jsonl"))
     monkeypatch.setattr(vt, "PLAN", str(tmp_path / "vortex_tidy_plan.txt"))
     monkeypatch.setattr(vt, "BLACKLIST_FILE", str(tmp_path / "bl.txt"))
-    monkeypatch.setattr(vt, "__file__", str(tmp_path / "vortex_tidy.py"))
+    monkeypatch.setattr(vt, "HERE", str(tmp_path))
 
     def run(*extra):
         monkeypatch.setattr(sys, "argv", ["vortex_tidy.py", "--staging", str(staging), "--no-lua", "--no-assets",

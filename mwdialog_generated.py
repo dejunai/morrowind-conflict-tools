@@ -13,7 +13,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mwdialog_paths as MP  # noqa: E402
 from mwdialog_backup import (  # noqa: E402
-    BACKUP_DIR)
+    backup_root)
 from mwdialog_console import (  # noqa: E402
     print)
 from mwdialog_datatree import (  # noqa: E402
@@ -41,7 +41,7 @@ def off_dest(mod, feature, plugin, rel):
 
 def backup_asset_original(data_dir, rel, plugin=None, feature="converted", track_new=True):
     """Before an asset file is replaced: keep the original in <its Vortex mod folder>\\Off\\<feature>\\<plugin
-    name>\\<rel> (Off is never deployed). Not from Vortex: <game folder>\\asset_originals\\<feature>\\<rel>.
+    name>\\<rel> (Off is never deployed). Not from Vortex: <backups folder>\\asset_originals\\<feature>\\<rel>.
     An original kept already (here, or where earlier versions put it: Off\\<plugin name>\\<rel>) is never
     replaced. But when the file now there is neither that original nor a repair these tools made of it (a mod
     update put a new file there), it is kept too, next to the first one with a date added
@@ -61,7 +61,7 @@ def backup_asset_original(data_dir, rel, plugin=None, feature="converted", track
                 if os.path.exists(os.path.join(off, f, d, rel)) and f.lower() not in ("broken", "orphaned", "unused"):
                     return keep(os.path.join(off, f, d, rel), current)
     else:
-        dest = os.path.join(os.path.dirname(os.path.abspath(data_dir)), BACKUP_DIR, "asset_originals", feature, rel)
+        dest = os.path.join(backup_root(os.path.dirname(os.path.abspath(data_dir))), "asset_originals", feature, rel)
     if not os.path.exists(dest):
         os.makedirs(os.path.dirname(dest), exist_ok=True)
         shutil.copy2(current, dest)

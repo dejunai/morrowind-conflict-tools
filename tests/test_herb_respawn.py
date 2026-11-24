@@ -9,7 +9,7 @@ import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LUAJIT = os.path.join(ROOT, "tools", "luajit", "luajit.exe")
-PATCHES = os.path.join(ROOT, "Data Files", "MWSE", "mods", "mwsuite", "mwpluginpatches", "patches")
+PATCHES = os.path.join(ROOT, "lua tools", "MWSE", "mods", "mwsuite", "mwpluginpatches", "patches")
 pytestmark = pytest.mark.skipif(not os.path.isfile(LUAJIT), reason="LuaJIT not available")
 
 SCRIPT = r"""
@@ -66,9 +66,9 @@ def test_a_picked_herb_stays_picked_for_its_days_then_grows_back():
 
 
 def test_graphic_herbalism_mcm_defaults_and_bounds():
-    mcm = open(os.path.join(ROOT, "Data Files", "MWSE", "mods", "mwsuite", "mwpluginpatches", "mcm.lua"),
+    mcm = open(os.path.join(ROOT, "lua tools", "MWSE", "mods", "mwsuite", "mwpluginpatches", "mcm.lua"),
                encoding="utf-8").read()
-    config = open(os.path.join(ROOT, "Data Files", "MWSE", "mods", "mwsuite", "mwpluginpatches", "config.lua"),
+    config = open(os.path.join(ROOT, "lua tools", "MWSE", "mods", "mwsuite", "mwpluginpatches", "config.lua"),
                   encoding="utf-8").read()
     assert 'label = "Harvested Flora Respawn Delay (Days)"' in mcm
     assert "min = 1" in mcm and "max = 90" in mcm
@@ -76,7 +76,7 @@ def test_graphic_herbalism_mcm_defaults_and_bounds():
 
 
 def test_graphic_herbalism_active_detection_is_plugin_based():
-    config = open(os.path.join(ROOT, "Data Files", "MWSE", "mods", "mwsuite", "mwpluginpatches", "config.lua"),
+    config = open(os.path.join(ROOT, "lua tools", "MWSE", "mods", "mwsuite", "mwpluginpatches", "config.lua"),
                   encoding="utf-8").read()
     start = config.index("function config.isGraphicHerbalismActive()")
     end = config.index("\nend", start) + len("\nend")

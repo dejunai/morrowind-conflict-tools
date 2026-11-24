@@ -9,6 +9,7 @@ venv/
 
 # Plans written by vortex_tidy / mwdialog_luafix (enacted plans are blanked;
 # a leftover plan should not be committed or re-applied by accident)
+plans/
 vortex_tidy_plan.txt
 mwdialog_luafix_plan.txt
 *.prev.txt
@@ -56,16 +57,15 @@ csse.toml
 vortex.deployment.dinput.json
 mlox/
 
-# Local LuaJIT copy (place luajit.exe, lua51.dll, jit\ and COPYRIGHT here; see tools/README.md)
-tools/luajit/
-tools/ffprobe.exe
 
 # personal load-order patches: not part of the published suite
-Data Files/MWSE/mods/dejespreplacements/
-Data Files/dejespreplacements-metadata.toml
+lua tools/MWSE/mods/dejespreplacements/
+lua tools/dejespreplacements-metadata.toml
 
 # Run lock held by mwdialog_check.py / vortex_tidy.py
 mwdialog.lock
 
 # Tamriel Data's rename map: kept locally, not redistributed
 tools/Translation.txt
+
+texconv.exe

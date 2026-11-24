@@ -303,7 +303,7 @@ def test_a_lock_file_without_a_token_delegates_to_nobody(df, monkeypatch):
 # -------------------------------------------------------------------------------------------------------- Lua
 
 LUAJIT = os.environ.get("MWMANAGER_LUAJIT", os.path.join(SRC, "tools", "luajit", "luajit.exe"))
-MODS = (Path(SRC) / "Data Files" / "MWSE" / "mods" / "mwsuite").as_posix()
+MODS = (Path(SRC) / "lua tools" / "MWSE" / "mods" / "mwsuite").as_posix()
 needs_lua = pytest.mark.skipif(not os.path.isfile(LUAJIT), reason="LuaJIT not available")
 
 STUB = r"""

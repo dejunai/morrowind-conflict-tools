@@ -161,5 +161,5 @@ def test_report_warns_of_fixed_pathgrids_and_notes_the_rest(tmp_path):
     run(tmp_path / "a", [(1000, 2000), (3000, 2000)], [(0, 1)], (2000, 2000), dry_run=True, report=fixed)
     run(tmp_path / "b", [(1000, 2000), (3000, 2000)], [(0, 1)], (2000, 2000), dry_run=True, report=left, mesh=False)
     assert [i[:3] for i in fixed.issues] == [("WARN", "Master.esm", "pathgrid #0,0")]
-    assert "goes round it" in fixed.issues[0][4] and m.NOT_OWN_BUG.search(fixed.issues[0][4])
+    assert "goes round it" in fixed.issues[0][4] and __import__("mwdialog_bugreports").INTERACTION_TEXT.search(fixed.issues[0][4])
     assert [i[:3] for i in left.issues] == [("INFO", "Master.esm", "pathgrid #0,0")]

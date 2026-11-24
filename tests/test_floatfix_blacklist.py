@@ -8,7 +8,7 @@ import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LUAJIT = os.path.join(ROOT, "tools", "luajit", "luajit.exe")
-SUITE = os.path.join(ROOT, "Data Files", "MWSE", "mods", "mwsuite")
+SUITE = os.path.join(ROOT, "lua tools", "MWSE", "mods", "mwsuite")
 
 SCRIPT = r"""
 local handlers, saved, prompt, shown = {}, nil, nil, nil

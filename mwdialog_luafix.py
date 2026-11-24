@@ -55,7 +55,7 @@ mwstranded, MWManager) unless --include-own.
 
 Edits are made in place (the file is rewritten through the same handle, so Vortex's hard links between
 staging and Data Files keep sharing it). The file as it was is copied first to
-mwdialog_backup\\luafix\\<run>\\..., every write is journaled, and --undo puts the last run back. A file is
+<backups folder>\\luafix\\<run>\\..., every write is journaled, and --undo puts the last run back. A file is
 only written when LuaJIT (or luac) compiles the patched text; an original that does not compile is left alone
 unless an exact Known Bugs repair makes it compile. Known Bugs fingerprints are part of the analysis cache key,
 so adding a repair causes existing files to be rechecked.
@@ -64,10 +64,10 @@ so adding a repair causes existing files to be rechecked.
     python mwdialog_luafix.py "<staging>\\Some Mod"   (one folder)
     python mwdialog_luafix.py --apply                (patch the high-confidence findings)
     python mwdialog_luafix.py --undo                 (put back the files of the last --apply)
---apply patches only when the plan it works out lists the same actions as mwdialog_luafix_plan.txt (else it
+--apply patches only when the plan it works out lists the same actions as plans/mwdialog_luafix_plan.txt (else it
 refuses, writes the new plan and keeps the old as mwdialog_luafix_plan.prev.txt; no plan: run plan mode first).
 After --apply, mwdialog_luafix_plan.txt is blanked (a second --apply does nothing until plan mode runs again) or
-cut down to the patches not written; a copy of it is kept in that run's mwdialog_backup\\luafix\\<run>\\.
+cut down to the patches not written; a copy of it is kept in that run's <backups folder>\\luafix\\<run>\\.
 vortex_tidy.py runs the same check on every staging mod (its plan shows it, --apply patches, --undo reverts;
 --no-lua skips it, --lua-only does nothing else).
 """
@@ -90,10 +90,10 @@ print = MT.printer()                                       # noqa: A001
 
 sys.setrecursionlimit(max(sys.getrecursionlimit(), 20000))
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = __import__("mwdialog_paths").find_game_dir() or os.path.dirname(os.path.abspath(__file__))   # the game folder
 JOURNAL = os.path.join(HERE, "mwdialog_luafix_journal.jsonl")
-BACKUP_ROOT = os.path.join(HERE, "mwdialog_backup", "luafix")
-PLAN_FILE = os.path.join(HERE, "mwdialog_luafix_plan.txt")
+BACKUP_ROOT = os.path.join(__import__("mwdialog_backup").backup_root(HERE), "luafix")
+PLAN_FILE = os.path.join(__import__("mwdialog_paths").PLANS_DIR, "mwdialog_luafix_plan.txt")
 KNOWN_BUG_REPORT = os.path.join(HERE, "mwdialog_luafix_known_bugs.txt")
 VERSION = 5
 MARK = "localpatch"            # what is written into a mod never carries this tool's name
@@ -230,7 +230,7 @@ LEGACY_LOG = {"logBudgetInit": "budgetInit", "logBudget": "budget", "logKeepPatt
 
 def load_config(game_dir=HERE, data_dir=None):
     """DEFAULTS, then MWSE\\config\\mwguard.json (mwguard's own file: one place for the thresholds both use),
-    its "luafix" section, then mwdialog_luafix.json next to this script."""
+    its "luafix" section, then mwdialog_luafix.json in the game folder."""
     cfg = dict(DEFAULTS)
     cfg["log"] = dict(DEFAULTS["log"])
     data_dir = data_dir or os.path.join(game_dir, "Data Files")
@@ -3052,7 +3052,7 @@ def write_known_bug_report(rep, done=None, refused=None, path=None):
 def main(argv=None):
     MT.install()
     ap = MT.parser(description="Check MWSE Lua mods for bad habits and patch the safe ones.")
-    ap.add_argument("paths", nargs="*", help="folders or files (default: Data Files\\MWSE\\mods next to this script)")
+    ap.add_argument("paths", nargs="*", help="folders or files (default: Data Files\\MWSE\\mods of the Morrowind folder)")
     ap.add_argument("--apply", action="store_true", help="patch (without it, only the plan is shown)")
     ap.add_argument("--yes", action="store_true", help="with --apply: don't ask first")
     ap.add_argument("--undo", action="store_true", help="put back the files the last --apply patched")

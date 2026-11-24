@@ -3,7 +3,7 @@ violation can't be caught from Lua, so the suite never calls it."""
 import re
 from pathlib import Path
 
-MODS = Path(__file__).resolve().parents[1] / "Data Files" / "MWSE" / "mods" / "mwsuite"
+MODS = Path(__file__).resolve().parents[1] / "lua tools" / "MWSE" / "mods" / "mwsuite"
 
 
 def test_no_suite_mod_recompiles_a_script():

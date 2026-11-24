@@ -23,6 +23,8 @@ Not checked: mesh vertex counts (the 4.0.0.2 format can't exceed 65535) and fold
 (the same folder on Windows)."""
 import os, re, struct, shutil, subprocess, sys, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import mwdialog_backup as MB  # noqa: E402
+import mwdialog_paths as MP  # noqa: E402
 import mwdialog_text as MT  # noqa: E402
 print = MT.printer()  # noqa: A001
 
@@ -414,6 +416,11 @@ def texture_facts(head, m):
     return ["dds", list(info), struct.unpack_from("<I", head, 80)[0] & 0x1 if len(head) >= 84 else 0]
 
 
+def _over_texture_cap(facts, m):
+    """A texture cached clean while the edge cap was off (or larger) that the current cap would reduce."""
+    return bool(facts) and facts[0] == "dds" and max(facts[1][0], facts[1][1]) > m.TEXTURE_MAX_EDGE
+
+
 def prune_tidy(cache, checked, present=None):
     """After vortex_tidy's asset check: drop the records of files a checked mod no longer has, and (present:
     every mod folder in staging, when all were checked) of mods that are gone."""
@@ -802,13 +809,18 @@ SPLASH_RULE = 3                       # in the asset cache: a splash checked und
 SPLASH_IMAGE_EXTS = (".tga", ".dds", ".bmp", ".png", ".jpg", ".jpeg")
 
 
-def _tga_width(path):
+def _tga_head(path):
+    """(width, bits per pixel) of a TGA, (0, 0) when unreadable."""
     try:
         with open(path, "rb") as f:
             head = f.read(18)
-        return struct.unpack_from("<H", head, 12)[0] if len(head) == 18 else 0
+        return (struct.unpack_from("<H", head, 12)[0], head[16]) if len(head) == 18 else (0, 0)
     except OSError:
-        return 0
+        return 0, 0
+
+
+def _tga_width(path):
+    return _tga_head(path)[0]
 
 
 def _tga_read(data):
@@ -890,9 +902,23 @@ def _texconv_tga(path, texconv, tmp, width=None, height=None):
     return result
 
 
+def splash_too_wide(width):
+    """SPLASH_MAX_WIDTH None: splashes keep their width (MWManager's reduce_splash_2048 = false)."""
+    return SPLASH_MAX_WIDTH is not None and width > SPLASH_MAX_WIDTH
+
+
+def splash_rule():
+    """The asset-cache rule a splash was checked under: changes with the width cap, so a toggle rechecks them."""
+    return SPLASH_RULE if SPLASH_MAX_WIDTH is not None else -SPLASH_RULE
+
+
+def splash_target():
+    return "RLE TGA" + (f", at most {SPLASH_MAX_WIDTH} wide" if SPLASH_MAX_WIDTH is not None else "")
+
+
 def splash_needs_texconv(path):
     """A splash that has to be resized or converted (not only re-encoded)."""
-    return not path.lower().endswith(".tga") or _tga_width(path) > SPLASH_MAX_WIDTH
+    return not path.lower().endswith(".tga") or splash_too_wide(_tga_width(path))
 
 
 def splash_tga(path, texconv, tmp):
@@ -905,7 +931,7 @@ def splash_tga(path, texconv, tmp):
             rows = [b"".join(row[i:i + 3] for i in range(0, len(row), 4)) for row in rows]
         return _tga_write(w, h, 3, rows)
     w, h, bpp, rows = _texconv_tga(path, texconv, tmp)
-    if w > SPLASH_MAX_WIDTH:
+    if splash_too_wide(w):
         w, h, bpp, rows = _texconv_tga(path, texconv, tmp, SPLASH_MAX_WIDTH, max(1, round(h * SPLASH_MAX_WIDTH / w)))
     rows = [b"".join(row[i:i + 3] for i in range(0, len(row), 4)) for row in rows]      # 24-bit
     return _tga_write(w, h, 3, rows)
@@ -1345,8 +1371,7 @@ def check(world, m):
 
 def apply(fixes, data_dir, game_dir, m, log, dry=False):
     """--fix: repair what check() found. Returns a summary string."""
-    texconv = next((p for p in (os.path.join(game_dir, "texconv.exe"), shutil.which("texconv")) if p and
-                    os.path.exists(p)), None)
+    texconv = MP.find_texconv(game_dir)
     ff = find_ffmpeg()
     done = {"tex": 0, "abs": 0, "snd": 0, "unused": 0, "broken": 0, "orphan": 0}
     skipped = []
@@ -1410,7 +1435,7 @@ def apply(fixes, data_dir, game_dir, m, log, dry=False):
                     if os.path.exists(full):
                         os.remove(full)
                 else:
-                    dest = os.path.join(game_dir, "mwdialog_backup", "asset_originals", "orphaned", rel)
+                    dest = os.path.join(MB.backup_root(game_dir), "asset_originals", "orphaned", rel)
                     os.makedirs(os.path.dirname(dest), exist_ok=True)
                     os.replace(full, dest)
                 moves.append((rel, dest, job))
@@ -1420,7 +1445,7 @@ def apply(fixes, data_dir, game_dir, m, log, dry=False):
             elif kind == "broken":                     # keep the broken file in Off, a stand-in in its place
                 mod, _pl = m.asset_owner_folder(data_dir, rel)
                 dest = broken_dest(mod, rel, "broken", _pl) if mod else \
-                    os.path.join(game_dir, "mwdialog_backup", "asset_originals", "broken", rel)
+                    os.path.join(MB.backup_root(game_dir), "asset_originals", "broken", rel)
                 os.makedirs(os.path.dirname(dest), exist_ok=True)
                 if not os.path.exists(dest):
                     shutil.copy2(full, dest)
@@ -1442,7 +1467,7 @@ def apply(fixes, data_dir, game_dir, m, log, dry=False):
                     if os.path.exists(full):
                         os.remove(full)                # the Data Files hard link
                 else:
-                    dest = os.path.join(game_dir, "mwdialog_backup", "asset_originals", "unused", rel)
+                    dest = os.path.join(MB.backup_root(game_dir), "asset_originals", "unused", rel)
                     os.makedirs(os.path.dirname(dest), exist_ok=True)
                     os.replace(full, dest)
                 moves.append((rel, dest, job))
@@ -1668,7 +1693,7 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None, stats=None):
     "mips_skipped": textures without mipmaps that were left alone."""
     issues, fixes = [], []
     world_tex = set()                  # stems under Textures the mod's own world models draw
-    game_dir = os.path.dirname(data_dir) if data_dir else os.path.dirname(os.path.abspath(__file__))
+    game_dir = os.path.dirname(data_dir) if data_dir else (MP.find_game_dir() or MP.TOOL_DIR)
     rules = mip_rules(game_dir)
 
     def note_model(rel, tn):
@@ -1699,7 +1724,7 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None, stats=None):
     tops = ASSET_DIRS
     # files already found clean (here or by an earlier tidy / check run) aren't read again: keyed by the
     # Data Files path + size + date, which a Vortex hard link shares with the deployed copy
-    cache = shared_cache(os.path.dirname(data_dir) if data_dir else os.path.dirname(os.path.abspath(__file__)))
+    cache = shared_cache(os.path.dirname(data_dir) if data_dir else (MP.find_game_dir() or MP.TOOL_DIR))
     mod_key = TIDY_KEY + os.path.basename(os.path.normpath(root)).lower() + "|"
     pending = None
 
@@ -1726,7 +1751,8 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None, stats=None):
         stamp = stamp_of(st)
         key = mod_key + norm_rel(rel)
         got = cache.get(key, stamp)
-        if got is not None and got.get("c") and (top != "splash" or got.get("sr") == SPLASH_RULE):
+        if got is not None and got.get("c") and (top != "splash" or got.get("sr") == splash_rule()) \
+                and not (top in TEX_DIRS and _over_texture_cap(got.get("t"), m)):
             if top == "meshes":
                 tn = (got.get("f") or {}).get("tn")
                 if tn is None and low.endswith(".nif"):        # an older record: the model is read once
@@ -1767,11 +1793,14 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None, stats=None):
             continue
         if top == "splash" and low.endswith(SPLASH_IMAGE_EXTS):
             # the game shows only TGA splashes; one at most SPLASH_MAX_WIDTH wide is left as it is
-            pending[5]["sr"] = SPLASH_RULE
+            pending[5]["sr"] = splash_rule()
             if low.endswith(".tga"):
-                if _tga_width(full) > SPLASH_MAX_WIDTH:
-                    issues.append(("WARN", rel, f"splash screen wider than {SPLASH_MAX_WIDTH} -> {SPLASH_MAX_WIDTH} wide, "
-                                                f"RLE TGA (the original kept in Off)"))
+                width, depth = _tga_head(full)
+                alpha = "an alpha channel a loading screen has no use for" if depth == 32 else ""
+                if splash_too_wide(width):
+                    issues.append(("WARN", rel, (f"splash screen with {alpha}; " if alpha else "splash screen ")
+                                   + f"wider than {SPLASH_MAX_WIDTH} -> {SPLASH_MAX_WIDTH} wide, 24-bit RLE TGA "
+                                     f"(the original kept in Off)"))
                     fixes.append(("splash", full, rel, None))
                 else:
                     try:
@@ -1779,9 +1808,10 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None, stats=None):
                     except (OSError, ValueError, struct.error):
                         smaller = 0
                     if smaller >= SPLASH_MIN_GAIN:
-                        issues.append(("WARN", rel, f"splash screen stored {round(smaller * 100)}% larger than it needs "
-                                                    f"(an alpha channel a loading screen has no use for, or no RLE) -> "
-                                                    f"24-bit RLE TGA, same pixels (the original kept in Off)"))
+                        issues.append(("WARN", rel, (f"splash screen with {alpha}" if alpha else
+                                                     f"splash screen stored {round(smaller * 100)}% larger than it "
+                                                     f"needs (no RLE)")
+                                       + " -> 24-bit RLE TGA, same pixels (the original kept in Off)"))
                         fixes.append(("splash", full, rel, None))
             elif rel.replace("/", "\\").count("\\") > 1:
                 pass                                 # Splash\<folder>\: the game never picks it; only a mod's code does
@@ -1791,7 +1821,7 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None, stats=None):
                                             "this mod's MWSE code may load it by name, so it is left as it is"))
             else:
                 issues.append(("ERROR", rel, "splash screen that is not a TGA (the game shows only TGA splashes) -> "
-                                             f"RLE TGA, at most {SPLASH_MAX_WIDTH} wide (the original kept in Off)"))
+                                             f"{splash_target()} (the original kept in Off)"))
                 fixes.append(("splash", full, rel, None))
             continue
         if top in TEX_DIRS and low.endswith(".dds"):
@@ -1923,9 +1953,7 @@ def _backup_in_mod(root, rel, full, plugin_name, feature="converted"):
 
 
 def find_ffmpeg():
-    """ffmpeg on PATH, or ffmpeg.exe next to these scripts (the game folder)."""
-    here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ffmpeg.exe")
-    return shutil.which("ffmpeg") or (here if os.path.exists(here) else None)
+    return MP.find_program("ffmpeg", MP.find_game_dir())
 
 
 LOOKALIKES = dict(zip("аеорсхуікмтнвАЕОРСХУІКМТНВЅјѕԁԛԝοαρτνιΑΒΕΗΙΚΜΝΟΡΤΧΥΖ",
@@ -2054,8 +2082,7 @@ def plugin_path_rename(data, pairs):
 
 def apply_folder(root, fixes, m, game_dir, plugin_name):
     """Repair what check_folder() found, in place. Returns (done count, [skipped notes])."""
-    texconv = next((p for p in (os.path.join(game_dir, "texconv.exe"), shutil.which("texconv")) if p and
-                    os.path.exists(p)), None)
+    texconv = MP.find_texconv(game_dir)
     ff = find_ffmpeg()
     tmp = os.path.join(game_dir, "mwdialog_tmp_assets")
     shutil.rmtree(tmp, ignore_errors=True)            # left over from a run that stopped early
@@ -2276,7 +2303,7 @@ def bug_report_header(plugin_path, m, mod_folder=None):
         ([f"Mod page: https://www.nexusmods.com/morrowind/mods/{nid}"] if nid else []) + [
             "Masters: " + (", ".join(masters) if masters else "none"),
             f"Generated {time.strftime('%Y-%m-%d %H:%M')} by mwdialog_check / vortex_tidy (Morrowind + MWSE + MGE XE).",
-            "Only problems the plugin has on its own are listed (not conflicts with other mods).",
+            "Only this plugin's own defects and declared-master compatibility issues are listed, not unrelated mod interactions.",
             "Paths are relative to Data Files."]
 
 
@@ -2299,6 +2326,44 @@ def package_bug_report_path(folder, plugin_name, report_kind=None):
     base = os.path.splitext(plugin_name)[0] + (f" [Nexus {nid}]" if nid else "")
     base += (f".{report_kind}" if report_kind else "") + ".bugreport.txt"
     return os.path.join(folder, "bugreports", base)
+
+
+def package_bug_report_subject(folder, m, owner, tool="vortex_tidy"):
+    """Package-wide files belong to a plugin only when the package contains exactly one."""
+    plugins = [name for name in sorted(os.listdir(folder), key=str.lower)
+               if name.lower().endswith((".esp", ".esm")) and os.path.isfile(os.path.join(folder, name))]
+    if len(plugins) == 1:
+        return plugins[0], bug_report_header(os.path.join(folder, plugins[0]), m, mod_folder=folder)
+    return owner, [f"Bug report for {owner}", f"Mod: {owner} (package-wide files, not an individual plugin)",
+                   f"Generated {time.strftime('%Y-%m-%d %H:%M')} by {tool}.",
+                   "Paths are relative to the mod's folder (Data Files)."]
+
+
+TEXTURE_REDUCTION = re.compile(r"^\d+x\d+ \(over \d+\)$")
+
+
+def asset_bug_message(message):
+    """The author-facing part of an asset finding, or None: shrinking an oversized texture or splash, or
+    re-encoding a splash smaller, is our optimisation, not the author's bug (a splash's alpha channel is)."""
+    if message.startswith("non-ASCII file name, named so by "):
+        return "non-ASCII file name"
+    if message.startswith(("splash screen wider than ", "splash screen stored ")):
+        return None
+    head, arrow, tail = message.partition(" -> ")
+    if arrow and tail == "converted":
+        parts = [part for part in head.split(", ") if not TEXTURE_REDUCTION.match(part)]
+        return ", ".join(parts) + arrow + tail if parts else None
+    return message
+
+
+def package_asset_bug_lines(issues):
+    """Bug-report lines for a package's own asset findings; [] when none is the author's bug."""
+    found = [(severity, relative, text) for severity, relative, message in issues
+             if (text := asset_bug_message(message))]
+    if not found:
+        return []
+    return [f"Problems in the mod's files: {len(found)}"] + \
+        [f"  - {severity} {relative}: {text}" for severity, relative, text in found]
 
 
 def bug_report_path(data_dir, game_dir, plugin_name, m):

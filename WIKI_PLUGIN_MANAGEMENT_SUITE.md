@@ -64,7 +64,7 @@ Following major refactoring passes, the core monolith `mwdialog_check.py` delega
 * `--yes`: Skips interactive terminal confirmation prompts and executes planned changes immediately.
 * `--patch-esm`: Alias for `--fix` (maintained for backwards compatibility with legacy batch scripts).
 * `--no-placeholders`: Disables the generation of stand-in gold/marker objects for missing object IDs referenced in scripts.
-* `--bug-reports`: Writes individual `<plugin>.bugreport.txt` files for plugins containing fatal syntax or structural issues.
+* `--bug-reports`: Writes individual `<plugin>.bugreport.txt` files containing only the plugin's own defects and issues involving its declared master chain. Unrelated mod interactions and their repairs remain in the main diagnostic report, not author-facing bugreports. Master-mismatch warnings and related stale-reference repair details are condensed into one compatibility summary line per plugin; independent defects remain detailed. Re-running replaces stale scanner findings while preserving other tools' sections. Package-wide Lua, packing and asset findings are not attributed to an arbitrary plugin when a package contains several. Asset repairs are reported, except size-only optimisations (textures or splash screens over 2048 shrunk, splashes re-encoded smaller); missing mipmaps and splash alpha channels are bugs.
 * `--no-bug-reports`: Disables `<plugin>.bugreport.txt` generation.
 
 ### 3.3. Master Integrity Guard (`mwdialog_mastercheck`)

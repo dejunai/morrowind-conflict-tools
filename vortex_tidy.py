@@ -46,17 +46,17 @@ NIFZER0EDIT built in, plus the folder names in vortex_tidy_blacklist.txt (one pe
     check (absurd priorities, polling every frame, one-shot handlers that never unregister, unguarded ref.data,
     infoFilter reading text, re-registering on every load, log spam...). The plan lists them; --apply patches
     the safe ones in place (hard links stay; the LuaJIT checker must compile the result; originals kept in
-    mwdialog_backup\\luafix), --undo puts them back. --no-lua skips this, --lua-only does only this.
+    <backups folder>\\luafix), --undo puts them back. --no-lua skips this, --lua-only does only this.
 
 It only shows the plan unless you pass --apply. Every move is written to a journal, and --undo puts
 everything back. Purge in Vortex before applying, and Deploy afterwards, so the game folder matches.
 --apply enacts only the plan you reviewed: it works the plan out again (moves, Lua patches, asset repairs -
-all listed in vortex_tidy_plan.txt; --lua-only: its Lua section) and refuses, changing nothing, when the
+all listed in plans/vortex_tidy_plan.txt; --lua-only: its Lua section) and refuses, changing nothing, when the
 actions differ from the plan file: the new plan is written for review and the old one kept as
 vortex_tidy_plan.prev.txt. No plan file (or a blank one) also refuses: run plan mode first.
 Afterwards vortex_tidy_plan.txt is blanked (only a "# applied
 ..." line: a second --apply does nothing until plan mode is run again), or cut down to what was NOT applied.
-Copies of the plan as reviewed and as enacted go to mwdialog_backup\\tidy\\<run>\\. --undo uses the journal only.
+Copies of the plan as reviewed and as enacted go to <backups folder>\\tidy\\<run>\\. --undo uses the journal only.
 
     python vortex_tidy.py                      (plan for every mod; nothing is changed)
     python vortex_tidy.py --only "MUSE*"       (plan for some mods; wildcards allowed)
@@ -72,15 +72,16 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import mwdialog_backup as MB                     # noqa: E402
 import mwdialog_planfile as PF                   # noqa: E402
 import mwdialog_paths as MP                      # noqa: E402
 import mwdialog_text as MT                       # noqa: E402
 print = MT.printer()                             # noqa: A001
 
-HERE = os.path.dirname(os.path.abspath(__file__))
+HERE = MP.find_game_dir() or os.path.dirname(os.path.abspath(__file__))   # the game folder (see mwdialog_paths)
 JOURNAL = os.path.join(HERE, "vortex_tidy_journal.jsonl")
-PLAN = os.path.join(HERE, "vortex_tidy_plan.txt")
-AUDIT_ROOT = os.path.join(HERE, "mwdialog_backup", "tidy")     # a copy of each enacted plan, per --apply run
+PLAN = os.path.join(MP.PLANS_DIR, "vortex_tidy_plan.txt")
+AUDIT_ROOT = os.path.join(MB.backup_root(HERE), "tidy")     # a copy of each enacted plan, per --apply run
 LUA_HEAD = "LUA CHECK"
 ASSET_HEAD = "ASSET CHECK"
 
@@ -130,7 +131,7 @@ DOC_EXT = {".txt", ".md", ".pdf", ".rtf", ".doc", ".docx", ".odt", ".html", ".ht
 DOC_DIR_NAMES = {"doc", "docs", "documentation", "readme", "readmes", "manual", "manuals", "info"}
 GAME_ROOT_EXT = {".exe", ".dll", ".asi"}          # the mod installs into the game folder: leave it alone
 # mods never touched: the defaults below plus one pattern per line in vortex_tidy_blacklist.txt
-# (next to this script; wildcards allowed, matched against the mod's folder name, case doesn't matter)
+# (in the game folder; wildcards allowed, matched against the mod's folder name, case doesn't matter)
 BLACKLIST = ["Morrowind Code Patch*", "MCP beta*", "NIFZER0EDIT*"]
 BLACKLIST_FILE = os.path.join(HERE, "vortex_tidy_blacklist.txt")
 
@@ -228,7 +229,7 @@ def _tex_key(rel):
 
 def texture_index(staging):
     """Every diffuse-capable texture there is: in each mod in the staging folder (not Off\\), loose in Data Files
-    and in its BSAs (Data Files next to this script). Built once per staging folder."""
+    and in its BSAs (the game folder's Data Files). Built once per staging folder."""
     key = os.path.abspath(staging)
     if key in _TEX_INDEX:
         return _TEX_INDEX[key]
@@ -702,7 +703,7 @@ def lua_check(args):
     lf = _luafix()
     if lf is None:
         return None
-    game_dir = os.path.dirname(os.path.abspath(__file__))
+    game_dir = HERE
     data_dir = os.path.join(game_dir, "Data Files")
     mods = sorted(d for d in os.listdir(args.staging) if os.path.isdir(os.path.join(args.staging, d))
                   and d.lower() != "off")
@@ -767,7 +768,7 @@ def lua_pending(lres):
 
 def lua_apply(args, lres):
     """Write the verified Lua patches lua_check() found (the reviewed ones), in place; originals in
-    mwdialog_backup\\luafix, journaled here so --undo puts them back. A file changed since the check is refused."""
+    <backups folder>\\luafix, journaled here so --undo puts them back. A file changed since the check is refused."""
     if not lres or not lres["n_ok"]:
         return
     if lres["checker"] is None:
@@ -873,7 +874,7 @@ def assets_check(args):
     if m is None:
         print("\n(asset check skipped: mwdialog_check.py / mwdialog_assets.py not found next to vortex_tidy.py)")
         return None
-    game_dir = os.path.dirname(os.path.abspath(__file__))
+    game_dir = HERE
     mods = sorted(d for d in os.listdir(args.staging) if os.path.isdir(os.path.join(args.staging, d))
                   and d.lower() != "off")
     if args.only:
@@ -1000,16 +1001,11 @@ def assets_apply(args, ares, moved_mods=()):
         plug_file = next((e for e in sorted(os.listdir(root))
                           if os.path.splitext(e)[1].lower() in (".esp", ".esm")), None)
         plug = os.path.splitext(plug_file)[0] if plug_file else mod_name(d)
-        nid = ah.nexus_id(root)
-        head = (ah.bug_report_header(os.path.join(root, plug_file), m, mod_folder=root) if plug_file else
-                [f"Bug report for {mod_name(d)}", f"Mod: {mod_name(d)} (no plugin)",
-                 f"Generated {time.strftime('%Y-%m-%d %H:%M')} by vortex_tidy.",
-                 "Paths are relative to the mod's folder (Data Files)."])
-        lines = [f"Problems in the mod's files: {len(issues)}"]
-        lines += [f"  - {sev} {rel}: {msg}" for sev, rel, msg in issues]
-        lines += ["", "(The mod's copy was repaired on this PC; originals kept in Off\\.)"]
-        ah.update_bug_report(os.path.join(root, "bugreports", plug + (f" [Nexus {nid}]" if nid else "")
-                                          + ".bugreport.txt"), "vortex_tidy (files)", head, lines)
+        subject, head = ah.package_bug_report_subject(root, m, mod_name(d))
+        lines = ah.package_asset_bug_lines(issues)
+        if lines:
+            lines += ["", "(The mod's copy was repaired on this PC; originals kept in Off\\.)"]
+        ah.update_bug_report(ah.package_bug_report_path(root, subject), "vortex_tidy (files)", head, lines)
         _repair(ares, d, root, fixes, lp_plan, plug)
     if queue:
         print(f"\nQueue: {sum(len(q[3]) for q in queue)} repair(s) found after the moves")
@@ -1133,7 +1129,7 @@ def apply_main(args):
     same actions as the plan file (moves, Lua patches, asset repairs; --lua-only: the Lua section only), or
     nothing is done - the new plan is written for review and the old one kept as vortex_tidy_plan.prev.txt.
     Afterwards the plan file is blanked, or cut down to what was not applied, atomically, with copies of the
-    plan as reviewed and as enacted in mwdialog_backup\\tidy\\<run>\\."""
+    plan as reviewed and as enacted in <backups folder>\\tidy\\<run>\\."""
     reviewed = PF.read(PLAN)
     parts = [LUA_HEAD] if args.lua_only else \
         ["moves"] + ([] if args.no_lua else [LUA_HEAD]) + ([] if args.no_assets else [ASSET_HEAD])

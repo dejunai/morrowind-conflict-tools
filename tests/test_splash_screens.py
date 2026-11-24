@@ -16,7 +16,7 @@ from conftest import m
 import mwdialog_assets as ah
 
 GAME = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TEXCONV = os.path.join(GAME, "texconv.exe")
+TEXCONV = os.path.join(GAME, "tools", "texconv.exe")
 pytestmark = pytest.mark.skipif(not os.path.isfile(TEXCONV), reason="texconv.exe not available")
 
 
@@ -78,6 +78,18 @@ def test_splashes_are_capped_at_2048_made_24_bit_and_kept_in_off(game):
     assert kept == ["alpha.tga", "huge.tga", "pic.dds"]
     _issues, again = ah.check_folder(str(mod), m, str(game / "Data Files"))
     assert not [f for f in again if f[0] == "splash"]                       # nothing left to do
+
+
+def test_uncapped_splash_keeps_its_width_but_loses_alpha_and_cache_follows_the_rule(game, monkeypatch):
+    mod = game / "staging" / "Wide Splash"
+    tga(mod / "Splash" / "huge.tga", 4096, 8, noisy=True)
+    tga(mod / "Splash" / "alpha.tga", 1024, 8, bpp=4, noisy=True)
+    monkeypatch.setattr(ah, "SPLASH_MAX_WIDTH", None)
+    _issues, fixes = ah.check_folder(str(mod), m, str(game / "Data Files"))
+    assert sorted(rel.replace("\\", "/") for kind, _f, rel, _j in fixes if kind == "splash") == ["Splash/alpha.tga"]
+    monkeypatch.setattr(ah, "SPLASH_MAX_WIDTH", 2048)
+    _issues, fixes = ah.check_folder(str(mod), m, str(game / "Data Files"))
+    assert "Splash/huge.tga" in [rel.replace("\\", "/") for kind, _f, rel, _j in fixes if kind == "splash"]
 
 
 def test_a_mod_with_mwse_code_keeps_its_dds_splash(game):
