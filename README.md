@@ -126,7 +126,7 @@ The "deleted by vortex_tidy" folder is derived from the resolved staging folder 
 
 ## MWSE mods
 
-`lua tools/MWSE/mods/` holds the mw* Lua suite these tools work with (`mwsuite`); `--play` copies any of its files missing from `Data Files` (existing files are never overwritten). Among them are `mwguard` (a passive profiler: it times per-frame handlers and logs extreme priorities to `MWSE\logs\mwguard.log`, without throttling or changing other mods), `mwsoundguard` and `mwhangwatch`.
+`lua tools/MWSE/mods/` holds the mw* Lua suite these tools work with (`mwsuite`); `--play` brings `Data Files` up to date from it: a missing file is copied in, and a deployed file older than its `lua tools` copy is replaced (the old one is kept under `backups\lua deploy\`). A deployed file newer than `lua tools`' copy is left alone and listed, since edits belong in `lua tools`; `MWSE\config\` (the player's settings) only ever gets missing files. MWSE's own core files are not shipped: the fixes to them are Known Bugs patches (`KB3`, `KB4`) that `vortex_tidy.py` and `mwdialog_luafix.py` write into the player's copy, marked `localpatch`. Among them are `mwguard` (a passive profiler: it times per-frame handlers and logs extreme priorities to `MWSE\logs\mwguard.log`, without throttling or changing other mods), `mwsoundguard` and `mwhangwatch`.
 
 ## Sound scripts (`--soundfix`)
 

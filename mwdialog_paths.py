@@ -13,6 +13,7 @@ import os
 import re
 import shutil
 import tempfile
+import time
 from pathlib import Path
 
 GAME_ID = "morrowind"
@@ -128,22 +129,63 @@ def find_mwrecompile(game_dir=None, explicit=None):
     return find_program("MWRecompile", game_dir)
 
 
-def deploy_lua_tools(data_dir, src=None):
-    """Copy every file of the suite's Lua mods (lua tools\\, laid out like Data Files) that Data Files doesn't
-    have yet; files already there (deployed by Vortex, edited, or repaired by luafix) are left alone.
-    Returns the copied paths, relative to Data Files."""
+def deploy_lua_tools(data_dir, src=None, backup_dir=None):
+    """Bring Data Files up to date with the suite's Lua mods in lua tools\\ (laid out like Data Files), where
+    every edit to them is made. A file Data Files lacks is copied in. A deployed file that differs from its
+    lua tools copy is replaced when lua tools' copy is the newer one; the deployed one goes to backup_dir
+    first (default <backups>\\lua deploy\\<date>). A deployed copy newer than lua tools' is left alone and
+    listed: an edit made there belongs in lua tools. MWSE\\config\\ holds the player's settings: only a
+    missing file is copied there. Returns {"copied", "updated", "newer", "retired", "backup"}: paths relative
+    to Data Files ("retired": files in Data Files\\MWSE\\mods\\mwsuite that lua tools no longer has, only
+    listed)."""
     src = src or LUA_TOOLS_DIR
-    copied = []
+    res = {"copied": [], "updated": [], "newer": [], "retired": [], "backup": None}
+    have = set()
     for root, dirs, files in os.walk(src):
-        dirs[:] = [d for d in dirs if d != "__pycache__"]
-        for fn in files:
-            rel = os.path.relpath(os.path.join(root, fn), src)
+        dirs[:] = sorted(d for d in dirs if d != "__pycache__")
+        for fn in sorted(files):
+            s = os.path.join(root, fn)
+            rel = os.path.relpath(s, src)
+            have.add(os.path.normcase(rel))
             dest = os.path.join(data_dir, rel)
             if not os.path.exists(dest):
                 os.makedirs(os.path.dirname(dest), exist_ok=True)
-                shutil.copy2(os.path.join(root, fn), dest)
-                copied.append(rel)
-    return copied
+                shutil.copy2(s, dest)
+                res["copied"].append(rel)
+                continue
+            if os.path.normcase(rel).startswith(os.path.normcase(os.path.join("MWSE", "config")) + os.sep):
+                continue                                  # the player's settings
+            if _same_bytes(s, dest):
+                continue
+            if os.path.getmtime(s) <= os.path.getmtime(dest):
+                res["newer"].append(rel)
+                continue
+            if res["backup"] is None:
+                import mwdialog_backup
+                res["backup"] = backup_dir or os.path.join(
+                    mwdialog_backup.backup_root(os.path.dirname(os.path.abspath(data_dir))), "lua deploy",
+                    time.strftime("%Y%m%d-%H%M%S"))
+            bak = os.path.join(res["backup"], rel)
+            os.makedirs(os.path.dirname(bak), exist_ok=True)
+            shutil.copy2(dest, bak)
+            tmp = dest + ".mwdeploy.tmp"
+            shutil.copy2(s, tmp)
+            os.replace(tmp, dest)                         # a new file: a Vortex hardlink is not written through
+            res["updated"].append(rel)
+    suite = os.path.join(data_dir, "MWSE", "mods", "mwsuite")
+    for root, dirs, files in os.walk(suite):
+        for fn in sorted(files):
+            rel = os.path.relpath(os.path.join(root, fn), data_dir)
+            if os.path.normcase(rel) not in have:
+                res["retired"].append(rel)
+    return res
+
+
+def _same_bytes(a, b):
+    if os.path.getsize(a) != os.path.getsize(b):
+        return False
+    with open(a, "rb") as fa, open(b, "rb") as fb:
+        return fa.read() == fb.read()
 
 
 def _tool_lock_file():

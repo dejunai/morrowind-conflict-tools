@@ -547,8 +547,13 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
   2. Add Previous/Next controls with current page, total pages, and matching-item count.
   3. Clamp pages after moves and reset to page 1 when the search text or object/plugin filter changes.
   4. Keep filtering and bulk-toggle semantics over the complete logical list; only native UI construction is paged.
-* **Luafix grade**: `(Known Bugs) KB4: MWSE Core: ExclusionsPage builds an unbounded native object list`.
+* **Luafix grade**: `(Known Bugs) KB4: MWSE Core: ExclusionsPage builds one UI element per item, unbounded`.
   This requires editing MWSE Core's local page implementation and cannot be repaired safely by a separate Lua mod.
+  Its three fingerprints are exact text of MWSE's own file (unchanged upstream since 2024-07-19; a copy is in
+  `tests\fixtures\mwse\`), and KB4 applies whole or not at all. `vortex_tidy.py` checks the file in
+  `Data Files\MWSE\core` (or in a staged mod that ships MWSE) and writes the patch in place, journaled and marked
+  `localpatch`; nothing deploys a replacement file. (The fingerprints before 2026-11-24 targeted the earlier local
+  200-item edit, which MWSE never shipped, so on a stock file only one of their six parts matched.)
 * **Related audit**:
   Core MCM `main.lua` also builds one entry per registered mod and `Dropdown.lua` builds one entry per supplied option.
   They are not classified as this confirmed bug: registered-mod and ordinary dropdown counts are much smaller, and

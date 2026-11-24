@@ -324,16 +324,36 @@ def test_bundled_programs_found_next_to_the_scripts(tmp_path, monkeypatch):
     assert str(tools / "tools" / "luajit" / "luajit.exe") in P.luajit_candidates(str(game))
 
 
-def test_play_deploys_only_the_lua_files_data_files_lacks(tmp_path):
+def test_play_deploys_missing_and_newer_lua_and_keeps_settings(tmp_path):
     src = tmp_path / "lua tools"
-    (src / "MWSE" / "mods" / "mwsuite" / "a").mkdir(parents=True)
-    (src / "MWSE" / "mods" / "mwsuite" / "a" / "main.lua").write_text("new")
+    mod = src / "MWSE" / "mods" / "mwsuite" / "a"
+    mod.mkdir(parents=True)
+    (mod / "main.lua").write_text("new")
+    (mod / "old.lua").write_text("from lua tools")
+    (mod / "edited.lua").write_text("lua tools")
     (src / "MWSE" / "config").mkdir(parents=True)
     (src / "MWSE" / "config" / "a.json").write_text("default")
     data = tmp_path / "Data Files"
+    dmod = data / "MWSE" / "mods" / "mwsuite" / "a"
+    dmod.mkdir(parents=True)
+    (dmod / "old.lua").write_text("stale")
+    (dmod / "edited.lua").write_text("edited in place")
+    (dmod / "gone.lua").write_text("retired")
     (data / "MWSE" / "config").mkdir(parents=True)
     (data / "MWSE" / "config" / "a.json").write_text("edited")
-    assert P.deploy_lua_tools(str(data), str(src)) == [os.path.join("MWSE", "mods", "mwsuite", "a", "main.lua")]
-    assert (data / "MWSE" / "mods" / "mwsuite" / "a" / "main.lua").read_text() == "new"
-    assert (data / "MWSE" / "config" / "a.json").read_text() == "edited"     # already there: left alone
-    assert P.deploy_lua_tools(str(data), str(src)) == []
+    os.utime(dmod / "old.lua", (1_000_000, 1_000_000))                     # older than lua tools' copy
+    os.utime(mod / "edited.lua", (1_000_000, 1_000_000))                   # lua tools' copy is the older one
+    os.utime(data / "MWSE" / "config" / "a.json", (1_000_000, 1_000_000))
+    bak = tmp_path / "bak"
+    res = P.deploy_lua_tools(str(data), str(src), str(bak))
+    rel = lambda n: os.path.join("MWSE", "mods", "mwsuite", "a", n)
+    assert res["copied"] == [rel("main.lua")]
+    assert res["updated"] == [rel("old.lua")] and res["newer"] == [rel("edited.lua")]
+    assert res["retired"] == [rel("gone.lua")]
+    assert (dmod / "main.lua").read_text() == "new"
+    assert (dmod / "old.lua").read_text() == "from lua tools"
+    assert (bak / rel("old.lua")).read_text() == "stale"
+    assert (dmod / "edited.lua").read_text() == "edited in place"              # newer: left alone, listed
+    assert (data / "MWSE" / "config" / "a.json").read_text() == "edited"     # the player's settings
+    again = P.deploy_lua_tools(str(data), str(src), str(bak))
+    assert again["copied"] == again["updated"] == [] and again["newer"] == [rel("edited.lua")]

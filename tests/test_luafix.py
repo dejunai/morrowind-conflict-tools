@@ -888,21 +888,33 @@ assert(calls == 1 and seen == "sun", "updated once there is weather")
     assert result.returncode == 0, result.stderr
 
 
-def test_KB4_restores_strict_exclusions_pages():
-    path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "lua tools", "MWSE", "core", "mcm",
-                        "components", "pages", "ExclusionsPage.lua")
-    fixed = open(path, encoding="latin-1").read()
-    vulnerable = fixed
-    fixes = [(old, new) for rule, _plugin, _rel, old, new, _what in lf.KNOWN_BUGS if rule == "KB4"]
-    assert fixes and all(new in vulnerable for old, new in fixes)
-    for old, new in reversed(fixes):
-        vulnerable = vulnerable.replace(new, old, 1)
-    a = lf.FileAnalysis(vulnerable, "MWSE Core", "core/mcm/components/pages/exclusionspage.lua", CFG)
-    findings = [f for f in a.run() if f["rule"] == "KB4"]
-    assert len(findings) == len(fixes)
-    repaired, rules = lf.build_patch(vulnerable, findings, "MWSE Core", CFG)
-    assert rules == ["KB4"] and "local PAGE_SIZE = 100" in repaired
-    assert 'text = "Next >"' in repaired and "MAX_DISPLAY_ITEMS" not in repaired
+MWSE_FIX = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "mwse")
+
+
+def test_KB3_KB4_page_stock_mwse_exclusions_page_exactly_once():
+    stock = open(os.path.join(MWSE_FIX, "ExclusionsPage.lua"), encoding="latin-1").read()
+    paged = open(os.path.join(MWSE_FIX, "ExclusionsPage.paged.lua"), encoding="latin-1").read()
+    rel = "core/mcm/components/pages/exclusionspage.lua"
+    for eol in ("\n", "\r\n"):
+        src = stock.replace("\n", eol)
+        findings = [f for f in lf.FileAnalysis(src, "MWSE Core", rel, CFG).run() if f["rule"].startswith("KB")]
+        repaired, rules = lf.build_patch(src, findings, "MWSE Core", CFG)
+        assert rules == ["KB3", "KB4"] and repaired.startswith("--[[localpatch ")
+        assert repaired.split("]] ", 1)[1] == paged.replace("\n", eol)
+        again = [f for f in lf.FileAnalysis(repaired, "MWSE Core", rel, CFG).run() if f["rule"].startswith("KB")]
+        assert again == []                                              # patched once, never twice
+    assert [f for f in lf.FileAnalysis(paged, "MWSE Core", rel, CFG).run() if f["rule"].startswith("KB")] == []
+
+
+def test_KB4_applies_whole_or_not_at_all():
+    stock = open(os.path.join(MWSE_FIX, "ExclusionsPage.lua"), encoding="latin-1").read()
+    changed = stock.replace("\n\n--- Constructor", "\n-- changed upstream\n--- Constructor")
+    findings = lf.FileAnalysis(changed, "MWSE Core", "core/mcm/components/pages/exclusionspage.lua", CFG).run()
+    kb4 = [f for f in findings if f["rule"] == "KB4"]
+    assert len(kb4) == 1 and kb4[0]["conf"] == "report" and not kb4[0]["edits"]
+    assert "2 of its 3 parts" in kb4[0]["what"]
+    _repaired, rules = lf.build_patch(changed, findings, "MWSE Core", CFG)
+    assert rules == ["KB3"]
 
 
 def test_own_mods_do_not_get_shims_when_included(tmp_path):

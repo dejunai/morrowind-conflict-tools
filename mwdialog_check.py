@@ -3008,13 +3008,29 @@ def launch_game(args):
     env = dict(os.environ)
     env["SteamAppId"] = env["SteamGameId"] = str(args.steam_appid)
     try:
-        deployed = MP.deploy_lua_tools(os.path.abspath(args.data_dir))
+        dep = MP.deploy_lua_tools(os.path.abspath(args.data_dir))
     except OSError as e:
-        deployed = []
+        dep = None
         print(f"--play: could not deploy the suite's Lua mods from {MP.LUA_TOOLS_DIR}: {e}", file=sys.stderr)
-    if deployed:
-        print(f"--play: {len(deployed)} file(s) of the suite's Lua mods weren't in Data Files; copied them in from "
-              f"{MP.LUA_TOOLS_DIR}.")
+    if dep and dep["copied"]:
+        print(f"--play: {len(dep['copied'])} file(s) of the suite's Lua mods weren't in Data Files; copied them in "
+              f"from {MP.LUA_TOOLS_DIR}.")
+    if dep and dep["updated"]:
+        print(f"--play: {len(dep['updated'])} deployed Lua file(s) were older than lua tools'; replaced them "
+              f"(the old ones are in {dep['backup']}):")
+        for rel in dep["updated"]:
+            print("    " + rel)
+    if dep and dep["newer"]:
+        print(f"--play: {len(dep['newer'])} deployed Lua file(s) are newer than lua tools' copy and were left "
+              f"alone. Edits belong in {MP.LUA_TOOLS_DIR}; copy them there, or delete the deployed file:",
+              file=sys.stderr)
+        for rel in dep["newer"]:
+            print("    " + rel, file=sys.stderr)
+    if dep and dep["retired"]:
+        print(f"--play: {len(dep['retired'])} file(s) in the suite's folder aren't in lua tools any more (retired, "
+              f"or left by an old install); the game still loads any .lua among them. Delete them if unwanted:")
+        for rel in dep["retired"]:
+            print("    " + rel)
     kwargs = {"cwd": game_dir, "env": env, "close_fds": True}
     if os.name == "nt":
         try:
