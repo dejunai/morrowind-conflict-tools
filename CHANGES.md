@@ -1,3 +1,13 @@
+# luafix: frame-drain and safe-handle patches, fewer false hits (2026-11-25)
+
+- New targeted patches, applied like KB patches by `tidy --lua-only --apply`: `KP1` Attend Me wheel rays once per
+  frame, `KP2` Attend Me recruit mode one frame in three, `KP3` Keg Drip mesh names cached, `KP4` G7 Containers
+  keeps its linked container as a safe handle; `KR1`-`KR3` safe handles in AURA's fader and Attend Me's timers.
+  Report labels `(Known Perf)` / `(Ref Safety)`; `"skipKnown"` lists ids to report but not apply.
+- `G6` skips `getReference("player")`; `H2` treats custom events fired only from `loaded` as `loaded`;
+  `MWSE\backups\` and switched-off folders are skipped; files nothing names are listed as unreferenced (still
+  patched; report-only findings set aside). `RULES_REV` 3.
+
 # MWSE optimizations; Performers Patch removed, mwperformers one performer per inn (2026-11-25)
 
 - `mwperformers` lets one performer per interior perform, whichever mod added it or made it perform (base-game

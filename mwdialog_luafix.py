@@ -147,9 +147,11 @@ DEFAULTS = {
     "logSpamGuard": True,
     "enabled": True,
     "logShimWhenMwguard": False,     # also patch log spam when mwguard's runtime guard covers the mod
+    "skipKnown": [],                 # targeted patches (KB / KP / KR rule names) to report but never apply
 }
 
 PER_FRAME = {"simulate", "simulated", "enterFrame"}
+PLAYER_IDS = {"player", "playersavegame"}
 # nil guards
 KEY_FIELDS = {"keyCode", "mouseButton", "mouseWheel", "isShiftDown", "isAltDown", "isControlDown", "isSuperDown"}
 NIL_LOOKUPS = {"tes3.getObject", "tes3.getReference", "tes3.getPlayerTarget", "tes3.getEquippedItem", "tes3.getCell",
@@ -257,7 +259,7 @@ REF_FIELDS = {"reference", "target", "mobile", "attacker", "attackerReference", 
               "targetReference", "targetMobile", "actor", "current", "previous"}
 NON_ACTOR_TYPES = {"activator", "alchemy", "ammunition", "apparatus", "armor", "book", "clothing", "container",
                    "door", "ingredient", "light", "lockpick", "miscItem", "probe", "repairItem", "static", "weapon"}
-RULES_REV = 2                  # bump when a rule changes, so cached findings are worked out again
+RULES_REV = 3                  # bump when a rule changes, so cached findings are worked out again
 # console-only commands; replacement suggestions follow the guide's table where it has one
 CONSOLE_ONLY = {"togglepov": "tes3.togglePOV() (or tes3.force1stPerson() / tes3.force3rdPerson())",
                 "tcl": "console only (no script command)", "tai": "console only (no script command)",
@@ -622,6 +624,20 @@ def ident_of(n):
 
 
 # ----------------------------------------------------------------------------------------------- analysis
+def module_name(name):
+    """A require name or path the way package.path sees it: "Spammer\\G7 Containers\\renamer",
+    "mods/foo/bar.lua" and "foo.bar" all become "spammer.g7 containers.renamer" / "foo.bar"."""
+    s = name.strip().lower().replace("\\", "/").replace("/", ".")
+    if s.endswith(".lua"):
+        s = s[:-4]
+    i = s.rfind("mwse.mods.")
+    if i >= 0:
+        s = s[i + len("mwse.mods."):]
+    elif s.startswith("mods."):
+        s = s[5:]
+    return s.strip(".")
+
+
 class Finding(dict):
     """rule, line, what, fix (proposal), conf (high | medium | report-high | report | trigger | covered | info),
     edits [(start, end, text)], needs (helpers the edits use: "gate", "shim")."""
@@ -807,6 +823,7 @@ class FileAnalysis:
         """KB<n>: documented bugs that cannot be repaired from a separate Lua mod."""
         rel = self.rel.lower()
         parts = {}
+        skip = set((self.cfg or {}).get("skipKnown") or ())
         for rule, plugin, path, old, new, what in KNOWN_BUGS:
             if rel != path:
                 continue
@@ -815,9 +832,11 @@ class FileAnalysis:
             found = []
             start = 0
             while (i := self.src.find(old, start)) >= 0:
+                off = rule in skip
                 found.append(Finding(rule=rule, line=self.src.count("\n", 0, i) + 1,
-                                     what=f"{plugin}: {what}", fix=new, conf="high",
-                                     edits=[(i, i + len(old), new)], needs=set()))
+                                     what=f"{plugin}: {what}" + (" (skipKnown: not applied)" if off else ""),
+                                     fix="" if off else new, conf="report" if off else "high",
+                                     edits=[] if off else [(i, i + len(old), new)], needs=set()))
                 start = i + len(old)
             if rule in KNOWN_BUGS_WHOLE:
                 parts.setdefault(rule, []).append((plugin, what, found))
@@ -1767,9 +1786,10 @@ class FileAnalysis:
                 continue
             if set(evs) <= {"loaded", "load"}:
                 continue                     # MWSE cancels every timer (real ones too) just before loaded
-            self.add("H2", c, f"repeating {typ} started in the {'/'.join(evs)} handler and never cancelled: one "
-                     f"more runs each time it fires", "keep the handle; cancel the old timer before starting one",
-                     "report-high")
+            f = self.add("H2", c, f"repeating {typ} started in the {'/'.join(evs)} handler and never cancelled: "
+                         f"one more runs each time it fires", "keep the handle; cancel the old timer before starting "
+                         "one", "report-high")
+            f["events"] = list(evs)          # dropped later when each is a custom event fired only on loaded
 
     def _fast_timers(self):
         """[(timer.start call, callback Function)] for timers repeating faster than once a second."""
@@ -1801,6 +1821,9 @@ class FileAnalysis:
                     if n.kind != "Call":
                         continue
                     d = L.dotted(n.func)
+                    if d == "tes3.getReference" and n.args and n.args[0].kind == "String" and \
+                            (L.string_value(n.args[0].raw) or "").lower() in PLAYER_IDS:
+                        continue                     # MWSE answers "player" without searching (TES3Util.cpp)
                     if d == "tes3.getReference" and ev not in PER_FRAME and id(n) not in seen6:
                         seen6.add(id(n))             # per-frame handlers: G5 counts it with the other lookups
                         self.add("G6", n, f"tes3.getReference in the {ev} handler (scans every cell's references "
@@ -2036,6 +2059,61 @@ class FileAnalysis:
         for c in self.logger_creations():
             self.add("F1", c, "logger created here", "its trace/debug/info lines go through the log shim", "logger",
                      [(c.s, c.s, "localpatch_log.wrap("), (c.e, c.e, ")")], ["shim"])
+
+    LOADERS = ("require", "include", "dofile", "loadfile")
+    BARE_NAME_RE = re.compile(r"^[A-Za-z_][\w .-]{0,59}$")
+
+    def load_refs(self):
+        """(names, prefixes, literals) for the dead-file pass: names this file loads (require / include / dofile
+        / loadfile / pcall(require, ...)) anywhere in it, the leading text of each load whose name is built at
+        run time ("" when nothing is known: the whole mod may be loaded that way), and every string literal
+        that could name a module (a framework may require a name another file hands it)."""
+        names, prefixes, lits = set(), set(), set()
+        direct = set()
+        for c in self.calls:
+            f, args = c.func, c.args
+            if f.kind == "Name" and f.id in ("pcall", "xpcall") and args and args[0].kind == "Name" and \
+                    args[0].id in self.LOADERS:
+                direct.add(id(args[0]))
+                f, args = args[0], args[1:] if f.id == "pcall" else args[2:]
+            if f.kind != "Name" or f.id not in self.LOADERS:
+                continue
+            direct.add(id(f))
+            a = args[0] if args else None
+            if a is not None and a.kind == "String":
+                names.add(module_name(L.string_value(a.raw) or ""))
+            else:
+                lead = a
+                while lead is not None and lead.kind == "Binop" and lead.op == "..":
+                    lead = lead.left
+                prefixes.add(module_name(L.string_value(lead.raw) or "") if lead is not None and
+                             lead.kind == "String" else "")
+        for n in self.nodes:
+            if n.kind == "Name" and n.id in self.LOADERS and id(n) not in direct and \
+                    getattr(n, "binding", None) is None:
+                prefixes.add("")                     # require handed around or aliased: can't follow it
+            elif n.kind == "String" and len(n.raw) < 260:
+                v = L.string_value(n.raw) or ""
+                if any(ch in v for ch in "./\\") and "\n" not in v:
+                    lits.add(module_name(v))
+                elif self.BARE_NAME_RE.match(v):
+                    lits.add(v.lower())              # a bare module name a loader may join to a path
+        return sorted(names), sorted(prefixes), sorted(lits - names)
+
+    def event_triggers(self):
+        """[(custom event, [events of the handler that fires it] or None)] for event.trigger("name", ...).
+        None: fired outside a handler, or from a function the file also calls directly."""
+        out = []
+        for c in self.calls:
+            if L.dotted(c.func) != "event.trigger" or not c.args or c.args[0].kind != "String":
+                continue
+            fn = L.enclosing_function(c)
+            evs = sorted(self.events_of_function(fn)) if fn is not None else []
+            if evs and any(n.kind == "Call" and n.func.kind == "Name" and self.func_of(n.func) is fn
+                           for n in self.calls):
+                evs = []
+            out.append((L.string_value(c.args[0].raw) or "", evs or None))
+        return out
 
     def requires(self):
         out = []
@@ -2963,6 +3041,208 @@ KNOWN_BUGS += [
 ]
 
 
+# ---- Targeted frame-drain patches (KP) and timer safe handles (KR), asked for site by site (2026-11-25). Not bugs:
+# each keeps what the mod does and only does less work for it. skipKnown (mwguard.json "luafix") turns one off.
+KP1 = ("rayWorld casts the same 65536-unit eye ray up to four times in one frame while the command wheel is open "
+       "(refreshDynamicLabels every 5th frame: Move, Loot and Action each cast one; updateContextTargetHud every 3rd); "
+       "within one onSimulate pass the world does not change, so one ray per ignore set gives the same answer "
+       "(those callers read only .reference; MWSE reuses one result object per rayTest, so the frame keeps the "
+       "reference, not the result)")
+KNOWN_BUGS += [
+    ("KP1", "Attend Me MWSE", "attendmemwse/actions.lua",
+     "local function rayWorld(ignoreExtra)\n"
+     "    local ignore = { tes3.player }\n"
+     "    if ignoreExtra then table.insert(ignore, ignoreExtra) end\n"
+     "    return tes3.rayTest({\n"
+     "        position = tes3.getPlayerEyePosition(),\n"
+     "        direction = tes3.getPlayerEyeVector(),\n"
+     "        maxDistance = 8192 * 8,\n"
+     "        ignore = ignore,\n"
+     "    })\n"
+     "end",
+     "local localpatch_rays -- local fix (KP1): set while onSimulate runs: one eye ray per ignore set per frame\n"
+     "local function rayWorld(ignoreExtra)\n"
+     "    local memo, key = localpatch_rays, ignoreExtra or false\n"
+     "    if memo and memo[key] ~= nil then return memo[key] or nil end\n"
+     "    local ignore = { tes3.player }\n"
+     "    if ignoreExtra then table.insert(ignore, ignoreExtra) end\n"
+     "    local hit = tes3.rayTest({\n"
+     "        position = tes3.getPlayerEyePosition(),\n"
+     "        direction = tes3.getPlayerEyeVector(),\n"
+     "        maxDistance = 8192 * 8,\n"
+     "        ignore = ignore,\n"
+     "    })\n"
+     "    if memo then -- MWSE reuses one result object per rayTest: keep the reference, which is all onSimulate reads\n"
+     "        memo[key] = hit and { reference = hit.reference } or false\n"
+     "        return memo[key] or nil\n"
+     "    end\n"
+     "    return hit\n"
+     "end\n"
+     "local function localpatch_frameRays(fn) -- local fix (KP1): rays are shared only while fn runs\n"
+     "    return function(...)\n"
+     "        localpatch_rays = {}\n"
+     "        local ok, err = xpcall(fn, debug.traceback, ...)\n"
+     "        localpatch_rays = nil\n"
+     "        if not ok then error(err, 0) end\n"
+     "    end\n"
+     "end", KP1),
+    ("KP1", "Attend Me MWSE", "attendmemwse/actions.lua",
+     "    local hit = tes3.rayTest({\n"
+     "        position = tes3.getPlayerEyePosition(),\n"
+     "        direction = tes3.getPlayerEyeVector(),\n"
+     "        maxDistance = 8192 * 8,\n"
+     "        ignore = { tes3.player },\n"
+     "    })\n"
+     "    if hit and hit.reference == companionRef then",
+     "    local hit = rayWorld() -- local fix (KP1): the same ray (only the player ignored), shared within a frame\n"
+     "    if hit and hit.reference == companionRef then", KP1),
+    ("KP1", "Attend Me MWSE", "attendmemwse/actions.lua",
+     "    event.register(tes3.event.simulate, onSimulate)\n",
+     "    event.register(tes3.event.simulate, localpatch_frameRays(onSimulate)) -- local fix (KP1)\n", KP1),
+]
+
+KP2 = ("recruitment mode casts a 65536-unit eye ray and re-lays-out MenuMulti every frame just to label the NPC under "
+       "the crosshair; the label is refreshed every 3rd frame instead (the command wheel's own TARGET_HUD_EVERY). "
+       "The click still casts its own ray, so who is recruited or dismissed is unchanged")
+KNOWN_BUGS += [
+    ("KP2", "Attend Me MWSE", "attendmemwse/recruit.lua",
+     "local function onSimulate()\n"
+     "    if not active then return end\n"
+     "    if tes3.menuMode() then return end\n"
+     "\n"
+     "    local hit = rayTarget()\n",
+     "local localpatch_frame = 0 -- local fix (KP2): the aim label every 3rd frame, like the wheel's target HUD\n"
+     "local function onSimulate()\n"
+     "    if not active then return end\n"
+     "    if tes3.menuMode() then return end\n"
+     "    localpatch_frame = localpatch_frame + 1\n"
+     "    if localpatch_frame % 3 ~= 1 then return end\n"
+     "\n"
+     "    local hit = rayTarget()\n", KP2),
+]
+
+KP3 = ("refreshCell runs every checkInterval (3 s) over every reference of every active cell and normalises each "
+       "one's mesh path with lower() and two gsub()s; the same path always gives the same answer, so it is worked "
+       "out once per path")
+KNOWN_BUGS += [
+    ("KP3", "Keg Drip", "kegdrip/main.lua",
+     "local function normalizeMesh(mesh)\n"
+     "    return mesh and mesh:lower():gsub(\"/\", \"\\\\\"):gsub(\"^meshes\\\\\", \"\")\n"
+     "end",
+     "local localpatch_meshes = {} -- local fix (KP3): each mesh path normalised once, not per reference per refresh\n"
+     "local function normalizeMesh(mesh)\n"
+     "    if not mesh then return mesh end\n"
+     "    local n = localpatch_meshes[mesh]\n"
+     "    if not n then\n"
+     "        n = mesh:lower():gsub(\"/\", \"\\\\\"):gsub(\"^meshes\\\\\", \"\")\n"
+     "        localpatch_meshes[mesh] = n\n"
+     "    end\n"
+     "    return n\n"
+     "end", KP3),
+]
+
+KP4 = ("checkData runs tes3.getReference (a search of every cell's references) for each container item on each "
+       "inventory tile update, uiObjectTooltip and equip; the linked container is found once and kept as a safe "
+       "handle, looked up again only when that handle is no longer valid or the reference was deleted")
+KNOWN_BUGS += [
+    ("KP4", "MWSE Containers Extended", "spammer/g7 containers/main.lua",
+     "local function checkData(itemData)\n"
+     "    local data = itemData and itemData.data and itemData.data.g7containers\n"
+     "    if data then\n"
+     "        return tes3.getReference(data.linkedRef), data.baseObject\n"
+     "    end\n"
+     "end",
+     "local localpatch_linked = {} -- local fix (KP4): the linked container found once, kept as a safe handle\n"
+     "local function checkData(itemData)\n"
+     "    local data = itemData and itemData.data and itemData.data.g7containers\n"
+     "    if data then\n"
+     "        local id = data.linkedRef\n"
+     "        if type(id) ~= \"string\" then return tes3.getReference(id), data.baseObject end\n"
+     "        local h = localpatch_linked[id]\n"
+     "        local ref = h and h:valid() and h:getObject() or nil\n"
+     "        if not ref or ref.deleted then\n"
+     "            ref = tes3.getReference(id)\n"
+     "            localpatch_linked[id] = ref and tes3.makeSafeObjectHandle(ref) or nil\n"
+     "        end\n"
+     "        return ref, data.baseObject\n"
+     "    end\n"
+     "end", KP4),
+]
+
+KR1 = ("the fade timers keep the sound's reference and call tes3.getSoundPlaying / tes3.removeSound on it for the "
+       "whole fade; a reference deleted mid-fade now ends the fade as 'not playing' instead of being used")
+KNOWN_BUGS += [
+    ("KR1", "AURA", "tew/aura/fader.lua",
+     "    local iterCount = 0\n"
+     "\n"
+     "    local function fader()\n",
+     "    local iterCount = 0\n"
+     "    local localpatch_handle = ref and tes3.makeSafeObjectHandle(ref) -- local fix (KR1): ref can go mid-fade\n"
+     "\n"
+     "    local function fader()\n", KR1),
+    ("KR1", "AURA", "tew/aura/fader.lua",
+     "(ref and not tes3.getSoundPlaying { sound = track, reference = ref }) then",
+     "(ref and (not localpatch_handle:valid() or not tes3.getSoundPlaying { sound = track, reference = ref })) then",
+     KR1),
+    ("KR1", "AURA", "tew/aura/fader.lua",
+     "            if (ref) and (fadeType == \"out\") and (removeTrack == true) then",
+     "            if (ref) and localpatch_handle:valid() and (fadeType == \"out\") and (removeTrack == true) then", KR1),
+]
+
+KR2 = ("forceFollow's and travelThen's repeating timers read ref.mobile on the companion they started with every "
+       "tick; one deleted meanwhile (a summoned or scripted companion) now just ends the job")
+KNOWN_BUGS += [
+    ("KR2", "Attend Me MWSE", "attendmemwse/actions.lua",
+     "    local job = {}\n"
+     "    local function tick()\n"
+     "        ticks = ticks + 1\n"
+     "        if not ref or not ref.mobile or ref.mobile.isDead then\n",
+     "    local job = {}\n"
+     "    local localpatch_handle = ref and tes3.makeSafeObjectHandle(ref) -- local fix (KR2): ref can go between ticks\n"
+     "    local function tick()\n"
+     "        ticks = ticks + 1\n"
+     "        if not ref or not localpatch_handle:valid() or not ref.mobile or ref.mobile.isDead then\n", KR2),
+    ("KR2", "Attend Me MWSE", "attendmemwse/actions.lua",
+     "    local job = {}\n"
+     "    job.timer = timer.start({\n"
+     "        type = timer.simulate,\n"
+     "        duration = tickInterval,\n"
+     "        iterations = -1,\n"
+     "        callback = function()\n"
+     "            if not ref or not ref.mobile or ref.mobile.isDead then\n",
+     "    local job = {}\n"
+     "    local localpatch_handle = ref and tes3.makeSafeObjectHandle(ref) -- local fix (KR2): ref can go between ticks\n"
+     "    job.timer = timer.start({\n"
+     "        type = timer.simulate,\n"
+     "        duration = tickInterval,\n"
+     "        iterations = -1,\n"
+     "        callback = function()\n"
+     "            if not ref or not localpatch_handle:valid() or not ref.mobile or ref.mobile.isDead then\n", KR2),
+]
+
+KR3 = ("dismissCompanion's 3-second timer reads ref.mobile on the companion it started with (inside pcall, so a "
+       "deleted one only raised a swallowed error); it now checks a safe handle first")
+KNOWN_BUGS += [
+    ("KR3", "Attend Me MWSE", "attendmemwse/recruit.lua",
+     "    playRecallVisual(ref)\n"
+     "    timer.start({\n"
+     "        type = timer.simulate,\n"
+     "        duration = 3.0,\n"
+     "        iterations = 1,\n"
+     "        callback = function()\n"
+     "            if not ref then return end\n",
+     "    playRecallVisual(ref)\n"
+     "    local localpatch_handle = tes3.makeSafeObjectHandle(ref) -- local fix (KR3): ref can go before it fires\n"
+     "    timer.start({\n"
+     "        type = timer.simulate,\n"
+     "        duration = 3.0,\n"
+     "        iterations = 1,\n"
+     "        callback = function()\n"
+     "            if not ref or not localpatch_handle:valid() then return end\n", KR3),
+]
+KNOWN_BUGS_WHOLE |= {"KP1", "KR1", "KR2"}
+
+
 
 def known_core_files(mwse_dir):
     """The MWSE core files a Known Bugs rule names that exist under mwse_dir (a Data Files\\MWSE folder, or a
@@ -3381,6 +3661,15 @@ def mod_key_of(mods_root, rel):
 
 
 SKIP_DIRS = {"off", "extras", "docs", "bugreports", "openmw", "screenshots"}
+OFF_SUFFIXES = (".disabled", ".mohidden", "-off", "_off", " off")    # "MWSE-off", "mods_off": switched off
+
+
+def skipped_dir(parent, d):
+    """A folder MWSE never loads Lua from: switched off (MWSE-off, .disabled, ...), extras / docs, or
+    MWSE\backups (copies of mods set aside, e.g. by a suite relocation)."""
+    lo = d.lower()
+    return lo in SKIP_DIRS or lo.endswith(OFF_SUFFIXES) or (
+        lo == "backups" and os.path.basename(os.path.normpath(parent)).lower() == "mwse")
 
 
 def lua_files(root):
@@ -3388,8 +3677,7 @@ def lua_files(root):
         yield root
         return
     for base, dirs, files in os.walk(root):
-        dirs[:] = sorted(d for d in dirs if not d.lower().endswith((".disabled", ".mohidden"))
-                         and d.lower() not in SKIP_DIRS)
+        dirs[:] = sorted(d for d in dirs if not skipped_dir(base, d))
         for fn in sorted(files):
             if fn.lower().endswith(".lua"):
                 yield os.path.join(base, fn)
@@ -3397,6 +3685,13 @@ def lua_files(root):
 
 def excluded(path, include_own=False, cfg=None):
     """Why a file is never touched (None: it may be)."""
+    parts = re.split(r"[\\/]+", os.path.abspath(path))
+    for i, d in enumerate(parts[:-1]):
+        lo = d.lower()
+        if lo == "backups" and i and parts[i - 1].lower() == "mwse":
+            return "a backup copy (MWSE\\backups): MWSE never loads it"
+        if lo.endswith(OFF_SUFFIXES):
+            return f"a switched-off folder ({d}): MWSE never loads it"
     mroot, rel = mods_root_of(path)
     if mroot is None:
         return ("MWSE's own code (not under MWSE\\mods)" if "/mwse/" in path.replace("\\", "/").lower()
@@ -3482,12 +3777,11 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
                 key = mod_key_of(mroot, rel)
             by_mod.setdefault((mroot, key), []).append((p, rel))
     fix_conf = ("high",) if level == "high" else ("high", "medium")
+    analyses = {}
     for (mroot, key), files in sorted(by_mod.items()):
-        analyses = {}
-        roots = [r for r in (data_dir, os.path.dirname(os.path.dirname(mroot)) if mroot else None) if r]
         for p, rel in files:
             ent = {"rel": rel, "mod": key, "findings": [], "error": None, "patch": None, "logs": 0, "requires": [],
-                   "mcalls": [], "mfields": None, "tstart": [], "treg": []}
+                   "mcalls": [], "mfields": None, "tstart": [], "treg": [], "loads": ([], [], []), "etrig": []}
             rep.files[p] = ent
             try:
                 st = os.stat(p)
@@ -3497,8 +3791,9 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
             ckey = "luafix1:" + os.path.normcase(os.path.abspath(p))
             if cache is not None and key != "MWSE Core":     # a cached finding has no edits to patch with
                 hit = cache.get(ckey, ah.stamp_of(st))
-                if hit is not None and hit.get("cfg") == ch and "mc" in hit and "ts" in hit:
+                if hit is not None and hit.get("cfg") == ch and "mc" in hit and "ts" in hit and "ld" in hit:
                     ent.update(error=hit.get("err"), logs=hit.get("logs", 0), requires=hit.get("req", []),
+                               loads=tuple(hit["ld"]), etrig=[(n, e) for n, e in hit.get("et", [])],
                                mcalls=[tuple(x) for x in hit["mc"]],
                                tstart=[tuple(x) for x in hit["ts"]], treg=list(hit.get("tr", [])),
                                mfields=set(hit["mf"]) if hit.get("mf") is not None else None,
@@ -3515,7 +3810,8 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
                 a = analyses[p] = _analyse(src, key, rel, cfg)
                 tstart, treg = a.timer_names()
                 ent.update(findings=a.findings, logs=a.log_calls(), requires=a.requires(), old_shim=a.old_shim,
-                           mcalls=a.module_calls(), mfields=a.module_fields(), tstart=tstart, treg=sorted(treg))
+                           mcalls=a.module_calls(), mfields=a.module_fields(), tstart=tstart, treg=sorted(treg),
+                           loads=a.load_refs(), etrig=a.event_triggers())
             except L.LuaSyntaxError as e:
                 ent["error"] = f"can't be parsed ({e}); left alone"
             except RecursionError:
@@ -3525,9 +3821,12 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
                     "cfg": ch, "err": ent["error"], "logs": ent["logs"], "req": ent["requires"], "sha": ent["sha"],
                     "v1": ent.get("old_shim", False), "br": ent.get("branded", False), "mc": ent["mcalls"],
                     "mf": sorted(ent["mfields"]) if ent["mfields"] is not None else None,
-                    "ts": ent["tstart"], "tr": ent["treg"],
+                    "ts": ent["tstart"], "tr": ent["treg"], "ld": list(ent["loads"]), "et": ent["etrig"],
                     "f": [dict({k: v for k, v in f.items() if k not in ("edits", "needs")}, needs=sorted(f["needs"]),
                                fixable=bool(f["edits"])) for f in ent["findings"]]})
+    _mark_dead(rep, by_mod, paths, data_dir)
+    for (mroot, key), files in sorted(by_mod.items()):
+        roots = [r for r in (data_dir, os.path.dirname(os.path.dirname(mroot)) if mroot else None) if r]
         if key == "MWSE Core":
             for p, rel in files:
                 ent = rep.files[p]
@@ -3544,6 +3843,9 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
         _require_cycles(rep, files)
         _missing_fields(rep, files)
         _unregistered_timers(rep, files)
+        loadlike = _load_like_events(rep, files)
+        for p, _r in files:
+            rep.files[p]["findings"] = _drop_load_like(rep.files[p]["findings"], loadlike)
         # F1: does the mod need the log shim? (decided per mod, like mwguard's per-mod allowance)
         scope = log_scope or cfg["log"].get("scope") or "flagged"
         f1 = [f for p, _r in files for f in rep.files[p]["findings"] if f["rule"] == "F1"]
@@ -3610,7 +3912,8 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
                 for f in a.findings:
                     if f["rule"] == "F1":
                         f["conf"] = old.get((f["rule"], f["line"], f["what"]), f["conf"])
-                ent["findings"] = a.findings + [f for f in ent["findings"] if f["rule"] in ("H5", "H7", "T1")]
+                ent["findings"] = _drop_load_like(a.findings, loadlike) + [
+                    f for f in ent["findings"] if f["rule"] in ("H5", "H7", "T1")]
             images = image_findings(a.src, roots)
             ent["findings"] = [f for f in ent["findings"] if f["rule"] != "I1"] + images
             findings = a.findings + images
@@ -3621,7 +3924,107 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
                 new, rules = a.src, ["N1"]                # only the names left by an older version
             if new is not None:
                 ent["patch"] = verify_patch(a.src, new, rules, checker, key, rel, cfg, level, own_rules)
+    for ent in rep.files.values():                  # unreferenced files: report-only findings listed apart
+        if ent.get("dead"):
+            ent["dead_findings"] = [f for f in ent["findings"] if not (f["edits"] or f.get("fixable"))]
+            ent["findings"] = [f for f in ent["findings"] if f["edits"] or f.get("fixable")]
     return rep
+
+
+def _load_like_events(rep, files):
+    """Custom events that only ever fire from a loaded (or load) handler, directly or through another such event:
+    a timer started in their handlers runs once per load, like one started in loaded (MWSE clears timers first).
+    Bardic Inspiration's "BardicInspiration:DataLoaded" is one."""
+    sites = {}
+    for p, _r in files:
+        for name, evs in rep.files[p].get("etrig") or ():
+            sites.setdefault(name, []).append(evs)
+    like, grew = set(), True
+    while grew:
+        grew = False
+        for name, got in sites.items():
+            if name not in like and all(evs and set(evs) <= {"loaded", "load"} | like for evs in got):
+                like.add(name)
+                grew = True
+    return like
+
+
+def _drop_load_like(findings, loadlike):
+    ok = {"loaded", "load"} | set(loadlike)
+    return [f for f in findings if not (f["rule"] == "H2" and f.get("events") and set(f["events"]) <= ok)]
+
+
+ENTRY_FILES = {"main.lua", "mod_init.lua", "init.lua", "interop.lua"}
+_EXTERNAL_REFS = {}
+
+
+def _external_refs(data_dir):
+    """Module names any Lua file under Data Files\\MWSE (mods and lib) quotes (cached per process): what other
+    mods may load, when a check covers one staged mod at a time."""
+    root = os.path.join(data_dir, "MWSE") if data_dir else None
+    if not root or not os.path.isdir(root):
+        return None
+    stamp = tuple(os.stat(d).st_mtime_ns for d in (root, os.path.join(root, "mods")) if os.path.isdir(d))
+    key = (os.path.normcase(os.path.abspath(root)), stamp)    # a mod folder added or removed: read again
+    if key not in _EXTERNAL_REFS:
+        got = set()
+        for base, dirs, files in os.walk(root):
+            dirs[:] = [d for d in dirs if not skipped_dir(base, d)]
+            for fn in files:
+                if fn.lower().endswith(".lua"):
+                    try:
+                        with open(os.path.join(base, fn), encoding="latin-1") as f:
+                            text = f.read()
+                    except OSError:
+                        continue
+                    got.update(module_name(m) for m in QUOTED_RE.findall(text))
+        _EXTERNAL_REFS[key] = got
+    return _EXTERNAL_REFS[key]
+
+
+QUOTED_RE = re.compile(r"""["']([^"'\r\n]{1,200}?[./\\][^"'\r\n]{0,200}?)["']""")
+
+
+def _mark_dead(rep, by_mod, paths, data_dir):
+    """ent["dead"] for a file of a mod with a main.lua that no Lua names: no file of this check and no Lua file under
+    Data Files\\MWSE requires it or quotes its module name, its folder or (in its own mod) its bare name, and its mod
+    builds no require name at run time. Such a file is most likely never run (G7 Containers' backup.lua and
+    notmain.lua), but it can still be loaded another way (an ESP's dialogue or script, another mod's folder scan),
+    so it is checked and patched like any other; only its report-only findings are listed apart. Without a Data
+    Files\\MWSE folder to read the other mods from, nothing is called unreferenced."""
+    ext = _external_refs(data_dir)
+    if ext is None:
+        return                                        # what other mods load can't be told
+    names, lits, prefixes_by_mod, prefixes, mod_lits = set(), set(), {}, set(), {}
+    for (mroot, key), files in by_mod.items():
+        for p, _rel in files:
+            n, pre, li = rep.files[p].get("loads") or ([], [], [])
+            names.update(n)
+            lits.update(li)
+            mod_lits.setdefault((mroot, key), set()).update(li)
+            prefixes_by_mod.setdefault((mroot, key), set()).update(pre)
+            prefixes.update(x for x in pre if x)
+    refs = names | lits | ext
+    for (mroot, key), files in by_mod.items():
+        if not mroot or key == "MWSE Core" or "" in prefixes_by_mod.get((mroot, key), ()):
+            continue
+        if not any(os.path.isfile(os.path.join(mroot, *key.split("/"), e)) for e in ("main.lua", "mod_init.lua")):
+            continue                                  # a library folder: others load it by name
+        own = mod_lits.get((mroot, key), set())
+        for p, rel in files:
+            low = rel.lower()
+            if os.path.basename(low) in ENTRY_FILES or "/i18n/" in "/" + low:
+                continue
+            m = module_name(rel)
+            parts = m.split(".")
+            if m in refs or (m.endswith(".init") and m[:-5] in refs) or parts[-1] in own:
+                continue
+            if any(".".join(parts[:k]) in refs for k in range(2, len(parts))):
+                continue                              # its folder is named: scanned with lfs, most likely
+            if any(m.startswith(x) for x in prefixes):
+                continue
+            rep.files[p]["dead"] = ("no Lua file requires or names it: unused, or loaded another way (an ESP's "
+                                    "dialogue or script, another mod's folder scan)")
 
 
 def verify_patch(old, new, rules, checker, key, rel, cfg, level, only_rules=None):
@@ -3870,6 +4273,15 @@ def undo(journal=JOURNAL, force=False, log=print):
 CONF_ORDER = {"high": 0, "report-high": 1, "medium": 2, "report": 3, "trigger": 4, "covered": 5, "info": 6}
 
 
+KNOWN_LABELS = {"KB": "(Known Bugs)", "KP": "(Known Perf)", "KR": "(Ref Safety)"}
+
+
+def known_label(rule):
+    """The label of a targeted patch rule (KB: a known bug; KP: a frame-drain fix asked for site by site; KR: a
+    safe handle for a reference a timer keeps), or None for the generic rules."""
+    return KNOWN_LABELS.get(rule[:2]) if re.match(r"K[BPR]\d", rule) else None
+
+
 def finding_status(f, pt, written):
     """After --apply: PATCHED (fixed in the written file), NOT PATCHED (had a fix, the file was not written),
     UNCONFIGURED (should be fixed, no fix exists for it), REPORTED (report only)."""
@@ -3894,7 +4306,7 @@ def format_report(rep, show_info=False, indent="  ", done=None, refused=None):
         if e["error"]:
             lines.append(f"{indent}    ! {e['error']}")
         for f in sorted(fs, key=lambda f: (CONF_ORDER.get(f["conf"], 9), f["line"])):
-            label = f"(Known Bugs) {f['rule']}:" if f["rule"].startswith("KB") else f"{f['rule']} {f['conf']:<11}"
+            label = f"{known_label(f['rule'])} {f['rule']}:" if known_label(f["rule"]) else f"{f['rule']} {f['conf']:<11}"
             lines.append(f"{indent}    {label} line {f['line']}: {f['what']}"
                          + (f"  -> {f['fix']}" if f["fix"] else ""))
         pt = e.get("patch")
@@ -3902,7 +4314,19 @@ def format_report(rep, show_info=False, indent="  ", done=None, refused=None):
             lines.append(f"{indent}    => " + (f"patch ready ({', '.join(pt['rules'])}) "
                                                f"[{sha(pt['text'].encode('latin-1'))[:8]}]" if pt["ok"]
                                                else f"NOT patched: {pt['why']}"))
+    lines += dead_lines(rep, indent)
     return lines, counts
+
+
+def dead_lines(rep, indent="  "):
+    """Unreferenced files: one line each, with the report-only findings set aside from the plan and the counts."""
+    out = []
+    for e in sorted((e for e in rep.files.values() if e.get("dead")), key=lambda e: e["rel"].lower()):
+        fs = e.get("dead_findings") or []
+        rules = ", ".join(sorted({f["rule"] for f in fs}))
+        out.append(f"{indent}unreferenced {e['rel']}: {len(fs)} report-only finding(s) set aside"
+                   + (f" ({rules})" if rules else "") + f"; {e['dead']}")
+    return out
 
 
 def _format_applied(rep, show_info, indent, done, refused):
@@ -3918,13 +4342,14 @@ def _format_applied(rep, show_info, indent, done, refused):
         if e["error"]:
             lines.append(f"{indent}    ! {e['error']}")
         for f in sorted(fs, key=lambda f: (CONF_ORDER.get(f["conf"], 9), f["line"])):
-            label = f"(Known Bugs) {f['rule']}:" if f["rule"].startswith("KB") else f"{f['rule']}"
+            label = f"{known_label(f['rule'])} {f['rule']}:" if known_label(f["rule"]) else f"{f['rule']}"
             lines.append(f"{indent}    {finding_status(f, pt, p in done)}: {label} line {f['line']}: {f['what']}"
                          + (f"  -> {f['fix']}" if f["fix"] else ""))
         if pt:
             why = refused.get(p) or (None if pt["ok"] else pt["why"]) or "not written"
             lines.append(f"{indent}    => " + (f"PATCHED ({', '.join(pt['rules'])}) [{sha(pt['text'].encode('latin-1'))[:8]}]"
                                                if p in done else f"NOT PATCHED: {why}"))
+    lines += dead_lines(rep, indent)
     return lines, counts
 
 
