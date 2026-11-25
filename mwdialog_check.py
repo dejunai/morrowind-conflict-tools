@@ -137,7 +137,7 @@ from mwdialog_restore import (  # noqa: E402,F401
     BAK_RE, CLEANUP_BAK_RE, DATES_UNDO_FILE, restore_all, restore_backups, restore_dates, run_clean_up)
 from mwdialog_ownership import door_owner_verdicts, item_owner_verdicts  # noqa: E402,F401
 from mwdialog_footing import (  # noqa: E402,F401
-    find_footing, ModelShapes, Placements, RESCUE_DATA, SUNK as ACTOR_SUNK, write_rescue_data)
+    find_float_drops, find_footing, ModelShapes, Placements, RESCUE_DATA, SUNK as ACTOR_SUNK, write_rescue_data)
 from mwdialog_anthology_override import (  # noqa: E402
     absolute_script_positions, find_moves, incompatible_land_plugins)
 from mwdialog_pathgrid import (PATHGRID_CACHE_FILE, PATHGRID_FIXES_FILE, load_pathgrid_cache,  # noqa: E402
@@ -7273,6 +7273,37 @@ def fix_cell_winners(args, plugins, report=None):
             write_rescue_data(data_dir, rescue, left)
         except OSError as e:
             print(f"  (could not write {RESCUE_DATA}: {e})", file=sys.stderr)
+
+    # loose items left hanging over what a later mod took away (a bucket on a dock another mod rebuilt lower): put
+    # down on what is under them now, as mwfloatfix would in the game. Exteriors only. Runs after all that moves
+    # or deletes objects, before the pathgrids.
+    float_grids = ({g for g, recs in ext_recs.items() if len({pi for pi, _o in recs}) >= 2}
+                   | {g for g, v in land_vers.items() if len(v) >= 2}
+                   | {k[1:] for k in out if k[0] == "e"}) - old_moved_land
+    if float_grids:
+        if not tag_of:
+            print("  Floating items: reading what every plugin's objects are...", flush=True)
+            tag_of, model_of, _scripted = object_info(order)
+        print(f"  Floating items: checking {len(float_grids)} outdoor cell(s) two or more plugins change...",
+              file=sys.stderr, flush=True)
+        drops, float_left = find_float_drops(world, float_grids, out, tag_of, model_of, shapes,
+                                             CELL_WINNER_PATCH.lower(),
+                                             esm_only={n.lower() for n, _p in order if n.lower().endswith(".esm")})
+        for bk, ck, grp, blk, _line in drops:
+            put(ck, grp, bk, blk)
+            out_heads.setdefault(ck, heads.get(ck))
+        if drops:
+            print(f"  Floating items: {len(drops)} put down on what is under them now:")
+            for *_x, line in drops[:20]:
+                print(f"      {line}")
+            if len(drops) > 20:
+                print(f"      ... and {len(drops) - 20} more")
+        if float_left:
+            print(f"  Floating items: {len(float_left)} left as they are (mwfloatfix checks them in the game):")
+            for line in float_left[:10]:
+                print(f"      {line}")
+            if len(float_left) > 10:
+                print(f"      ... and {len(float_left) - 10} more")
 
     # pathgrids walking people into what a mod their plugin doesn't know built. Runs after all that moves objects.
     ext_pathgrids = {g: (pi, off) for nm, g, pi, off in all_pgrd if nm not in interiors}

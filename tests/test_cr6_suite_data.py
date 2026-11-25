@@ -10,7 +10,7 @@ import types
 import pytest
 
 from conftest import m, plugin, rec, sub, z
-from mwdialog_cellmods import float_items
+from mwdialog_cellmods import float_items, fnv1a_file
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LUAJIT = os.path.join(ROOT, "tools", "luajit", "luajit.exe")
@@ -96,7 +96,7 @@ def test_aux_only_writes_the_suite_data_with_cell_fixes_as_the_last_word(tmp_pat
     assert payload["cells"]["#0,0"] == [{"id": "bucket", "pos": [110, 100, 108], "from": "Squat.esp",
                                          "why": f"dock deleted by {FIXES.lower()}"}]
     assert payload["sources"] == {FIXES: {"size": os.path.getsize(data / FIXES),
-                                          "mtime": int(os.path.getmtime(data / FIXES))}}
+                                          "fnv1a": fnv1a_file(str(data / FIXES))}}
     assert (cfg / m.COLLIDE_DATA).exists() and (cfg / m.STRANDED_DATA).exists()
 
 
@@ -138,8 +138,10 @@ local function item(x, y, z)
 end
 local other = item(500, 500, 40)
 handlers.referenceActivated({ reference = other })
-clock = 10
-handlers.simulate()
+for i = 1, 6 do                          -- no bounding box in this stub: tried again a few times, then given up on
+  clock = clock + 10
+  handlers.simulate()
+end
 print((other.tempData.mwfloatfixChecked and "checked" or "skipped") .. " " .. #logged)
 """
 

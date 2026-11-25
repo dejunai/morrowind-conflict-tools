@@ -48,6 +48,23 @@ function this.register(config, applySettings)
         variable = mwse.mcm.createTableVariable({ id = "trace", table = config }),
     })
 
+    page:createOnOffButton({
+        label = "Name the Lua caller",
+        description = "Notes which Lua file and line called tes3.playSound or tes3.removeSound, so a runaway in "
+            .. "Data Files\\MWSE\\logs\\mwsoundguard.log names the mod code that started it.\n\n"
+            .. "Takes effect when the guard is switched on (or at the next start).\n\nDefault: On",
+        variable = mwse.mcm.createTableVariable({ id = "attributeCallers", table = config }),
+        callback = applySettings,
+    })
+
+    page:createOnOffButton({
+        label = "Watch actor loops (log only)",
+        description = "NPC and creature sounds are never blocked. With this on, a loop started again on the same "
+            .. "actor within the loop window is written to mwsoundguard.log (with the Lua caller), so a mod that "
+            .. "stacks loops on actors or corpses can be found. Nothing is blocked.\n\nDefault: Off",
+        variable = mwse.mcm.createTableVariable({ id = "watchActors", table = config }),
+    })
+
     template:register()
 end
 

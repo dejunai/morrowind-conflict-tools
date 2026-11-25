@@ -42,6 +42,9 @@ local DEFAULTS = {
     trace = false,            -- log every allowed loop start on an object (diagnostics)
     traceLimit = 300,
     exemptSounds = {},        -- sound id (lower case) -> true
+    attributeCallers = true,  -- note which Lua file:line called tes3.playSound / tes3.removeSound (for the log)
+    watchActors = false,      -- log-only: note loops restarted on NPCs and creatures (never blocks them)
+    actorLogLimit = 200,      -- lines the actor watch writes per session
 }
 
 local config = DEFAULTS
@@ -61,6 +64,7 @@ do
 end
 
 local clock = os.clock
+local watchActor                                 -- defined with the actor watch below
 local T_NPC, T_CREATURE = tes3.objectType.npc, tes3.objectType.creature
 
 local soundLengths
@@ -117,6 +121,8 @@ local gWindowStart, gCount, gBlocked = -1, 0, 0
 local stats = { dupLoops = 0, runawayBlocks = 0, oneShotBlocks = 0, capBlocks = 0, runaways = 0, errors = 0 }
 local pending = {}                             -- "object|sound" -> blocked since last summary (own log only)
 local mainLines, traceLines = 0, 0
+local currentCaller = nil                      -- "file:line" of the Lua code inside tes3.playSound right now
+local lastRemover = setmetatable({}, { __mode = "k" })    -- reference -> "file:line" of the last removeSound
 
 -- ---------------------------------------------------------------- logging
 local LOG_DIR = "Data Files\\MWSE\\logs"
@@ -145,6 +151,9 @@ local function describe(ref, snd, path)
     local d = {}
     d.ref = safe(function() return ref.id end)
     d.obj = safe(function() return ref.object.id end)
+    d.base = safe(function() return ref.baseObject.id end)
+    d.mesh = safe(function() return ref.object.mesh end)
+    d.name = safe(function() return ref.object.name end)
     d.objMod = safe(function() return ref.object.sourceMod end)
     d.objType = safe(function() return table.find(tes3.objectType, ref.object.objectType) end)
     d.cell = safe(function() local c = ref.cell return c.editorName or c.id end)
@@ -157,8 +166,17 @@ local function describe(ref, snd, path)
     return d
 end
 
+-- an object id that is only a number (or missing) names nothing: add what can be read about the object
+local function objectName(ref)
+    local id = safe(function() return ref.object.id end)
+    if id ~= "?" and not string.find(id, "^%d+$") then return id end
+    local base = safe(function() return ref.baseObject.id end)
+    return string.format("%s [mesh %s, name %s, base %s, from %s]", id, safe(function() return ref.object.mesh end),
+        safe(function() return ref.object.name end), base, safe(function() return ref.object.sourceMod end))
+end
+
 local function keyName(ref, snd, path)
-    return safe(function() return ref.object.id end) .. "|" .. (snd and safe(function() return snd.id end) or tostring(path))
+    return objectName(ref) .. "|" .. (snd and safe(function() return snd.id end) or tostring(path))
 end
 
 local function enginePlaying(snd, ref)
@@ -186,10 +204,16 @@ local function reportRunaway(ref, snd, path, rec, why)
     reportedKeys[name] = 1
     local d = describe(ref, snd, path)
     local playing = enginePlaying(snd, ref) and "yes" or "no"
+    local own = d.attached ~= "?" and d.attached == d.sound
     ownLog("RUNAWAY %s: %s (%s) on %s [object %s from %s, type %s] in cell %s; file %s (sound from %s); "
-        .. "object's script %s (from %s); object's own sound %s; engine says playing: %s; %d start(s) in %.2f s",
-        rec.loop and "loop" or "one-shot", d.sound, why, d.ref, d.obj, d.objMod, tostring(d.objType), d.cell, d.file,
-        d.soundMod, d.script, d.scriptMod, d.attached, playing, rec.total, clock() - rec.first)
+        .. "object's script %s (from %s); object's own sound %s%s; engine says playing: %s; %d start(s) in %.2f s",
+        rec.loop and "loop" or "one-shot", d.sound, why, d.ref, objectName(ref), d.objMod, tostring(d.objType), d.cell,
+        d.file, d.soundMod, d.script, d.scriptMod, d.attached,
+        own and " (this IS the object's own sound: the engine plays it, no script or mod starts it)" or "",
+        playing, rec.total, clock() - rec.first)
+    ownLog("  started by: %s%s", rec.caller and ("Lua " .. rec.caller)
+        or "no Lua caller seen (the engine, an mwscript, or a mod that calls tes3.playSound through a saved copy)",
+        lastRemover[ref] and ("; last tes3.removeSound on this object from " .. lastRemover[ref]) or "")
     ownLog("  soundfix: %s", soundfixNote(d.script))
     if playing == "no" and rec.loop then
         ownLog("  note: the engine reports this loop as not playing, so a script that checks GetSoundPlaying "
@@ -216,6 +240,32 @@ local function noteBlock(ref, snd, path, rec)
     pending[name] = (pending[name] or 0) + 1
 end
 
+-- ---------------------------------------------------------------- actor watch (log only)
+-- NPC and creature sounds are never blocked (voices, footsteps, combat). With watchActors on, a loop started
+-- again on the same actor while it was started less than loopWindow s ago is written to the own log, with the
+-- Lua caller when there is one (R-Zero's Flies stacked loops on corpses this way).
+local actorRecs = setmetatable({}, { __mode = "k" })
+local actorLines = 0
+
+watchActor = function(e, ref)
+    if e.flags ~= 1 or actorLines >= config.actorLogLimit then return end
+    local key = e.sound or e.path
+    if not key then return end
+    local per = actorRecs[ref]
+    if not per then per = {} actorRecs[ref] = per end
+    local now = clock()
+    local last = per[key]
+    per[key] = now
+    if last and now - last < config.loopWindow then
+        actorLines = actorLines + 1
+        ownLog("actor loop restarted (not blocked): %s on %s (%s) in %s after %.1f s; started by %s",
+            e.sound and safe(function() return e.sound.id end) or tostring(e.path), safe(function() return ref.id end),
+            objectName(ref), safe(function() local c = ref.cell return c.editorName or c.id end), now - last,
+            currentCaller and ("Lua " .. currentCaller) or "no Lua caller seen")
+        if actorLines == config.actorLogLimit then ownLog("actor watch: line limit reached for this session") end
+    end
+end
+
 -- ---------------------------------------------------------------- core
 local function guard(e)
     if e.block or e.isVoiceover then return end
@@ -227,11 +277,13 @@ local function guard(e)
         local ot = ref.object.objectType
         if ot == T_NPC or ot == T_CREATURE then
             refs[ref] = false
+            if config.watchActors then watchActor(e, ref) end
             return
         end
         per = {}
         refs[ref] = per
     elseif per == false then
+        if config.watchActors then watchActor(e, ref) end
         return
     end
 
@@ -257,6 +309,7 @@ local function guard(e)
         return                                        -- exempt sound
     end
     rec.total = rec.total + 1
+    if currentCaller then rec.caller = currentCaller end
 
     rec.loop = loop
     if loop then
@@ -415,7 +468,47 @@ local function startSummaryTimer()
     summaryTimer = timer.start({ type = timer.real, duration = config.summarySeconds, iterations = -1, persist = false, callback = summary })
 end
 
+-- Lua attribution: tes3.playSound / tes3.removeSound are wrapped once (at initialized, when the guard is on),
+-- so a block or a runaway can name the Lua file and line that asked for the sound. The wrapper only notes the
+-- caller and calls the original with the same arguments; any error in the note is ignored.
+local wrapped = false
+
+local function callerOf()                       -- call it straight from a wrapper (no pcall in between)
+    local info = debug.getinfo(3, "Sl")          -- 1 this, 2 the wrapper, 3 the mod's code
+    if not info then return nil end
+    local ok, src = pcall(string.gsub, info.short_src or info.source or "?", "^.-[/\\][Mm][Oo][Dd][Ss][/\\]", "")
+    return (ok and src or "?") .. ":" .. tostring(info.currentline)
+end
+
+local function finishPlay(prev, ...)
+    currentCaller = prev
+    return ...
+end
+
+local function wrapSoundCalls()
+    if wrapped or not config.attributeCallers then return end
+    local origPlay, origRemove = tes3.playSound, tes3.removeSound
+    if type(origPlay) ~= "function" then return end
+    wrapped = true
+    tes3.playSound = function(...)
+        local prev = currentCaller
+        currentCaller = callerOf()
+        return finishPlay(prev, origPlay(...))     -- the addSound event fires inside, while the caller is set
+    end
+    if type(origRemove) == "function" then
+        tes3.removeSound = function(p, ...)
+            local who = callerOf()
+            pcall(function()
+                local ref = type(p) == "table" and p.reference
+                if ref and type(ref) ~= "string" then lastRemover[ref] = who end
+            end)
+            return origRemove(p, ...)
+        end
+    end
+end
+
 local function applySettings()
+    if config.enabled then wrapSoundCalls() end
     if config.enabled and not registered then
         event.register(tes3.event.addSound, onSound, { priority = -100 })
         event.register(tes3.event.addTempSound, onSound, { priority = -100 })

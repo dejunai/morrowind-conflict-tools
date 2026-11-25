@@ -17,7 +17,11 @@
        to MWSE.log as notices. A complete ranked breakdown of all top per-frame consumers is
        written to Data Files\MWSE\logs\mwguard.log.
     4. Non-Intrusive Logging:
-       Global print is left untouched. Other mods' logs and error tracebacks remain in MWSE.log.
+       Other mods' logs and error tracebacks remain in MWSE.log.
+    5. Clock times in MWSE.log (EnableLogTimestamps, on by default):
+       MWSE 2.1 has no timestamp setting for MWSE.log, so global print and mwse.log are wrapped once, as
+       mwguard loads (before other mods), to put the wall-clock time ("[17:42:33] ") in front of each line.
+       Nothing else about a line changes. Off in mwguard.json: MWSE.log stays as MWSE writes it.
 ]]
 
 local CONFIG_NAME = "mwguard"
@@ -30,6 +34,7 @@ local defaults = {
     costMs = 0.75,               -- average ms per call to flag as a bottleneck
     logNoticeToMWSE = true,      -- output summary notices of costly handlers to MWSE.log
     showAddressSpace = true,     -- on-screen address-space percentage, profiling on or off
+    EnableLogTimestamps = true,  -- prefix every MWSE.log line written through print / mwse.log with [HH:MM:SS]
     exemptMods = {
         "mwguard", "mwcriminal", "mwcompanions", "mwhangwatch", "mwfloatfix", "mwstranded", "mwcollide",
         "mwperformers", "mwinfoloop", "mwsoundguard", "mwsoundfix", "mwsaveguard", "mwwarnsuppression",
@@ -44,6 +49,33 @@ local defaults = {
 }
 
 local config = mwse.loadConfig(CONFIG_NAME, defaults)
+
+-- clock times in MWSE.log: wrap print and mwse.log once, before other mods load (mwguard's load priority), so
+-- their lines (and the luafix log shim's, which forwards through the print it finds) carry the time too
+local function installLogTimestamps()
+    if config.EnableLogTimestamps == false or rawget(_G, "__mwsuite_log_timestamps") then return end
+    local origPrint = print
+    if type(origPrint) ~= "function" then return end
+    rawset(_G, "__mwsuite_log_timestamps", true)
+    local date, select, tostring, concat, format = os.date, select, tostring, table.concat, string.format
+    print = function(...)
+        local n = select("#", ...)
+        local body
+        if n <= 1 then
+            body = tostring((...))
+        else
+            local t = {}
+            for i = 1, n do t[i] = tostring((select(i, ...))) end
+            body = concat(t, "\t")
+        end
+        return origPrint(date("[%H:%M:%S] ") .. body)
+    end
+    mwse.log = function(fmt, ...)
+        local ok, msg = pcall(format, tostring(fmt), ...)
+        return origPrint(date("[%H:%M:%S] ") .. (ok and msg or tostring(fmt)))
+    end
+end
+pcall(installLogTimestamps)
 -- read once: off at start-up means no hooks at all (switching it on takes effect after a restart)
 local active = config.enabled == true
 if not active then

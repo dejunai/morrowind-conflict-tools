@@ -150,16 +150,41 @@ def float_items(ref_hist, land_v, deps, tag_of, tol=FLOAT_TOLERANCE, ours=frozen
     return found
 
 
+# the patch whose contents the MWSE side hashes too: the last word on what is where (mwdialog_state.CELL_WINNER_PATCH)
+HASHED_SOURCES = frozenset({"mwdialog_check cell fixes.esp"})
+
+
+def fnv1a_file(path):
+    """FNV-1a (32 bit) of a file as eight hex digits: the sum mwfloatfix (LuaJIT, no hashlib) works out the same way."""
+    h = 0x811C9DC5
+    with open(path, "rb") as f:
+        while True:
+            chunk = f.read(1 << 20)
+            if not chunk:
+                break
+            for b in chunk:
+                h = ((h ^ b) * 0x01000193) & 0xFFFFFFFF
+    return f"{h:08x}"
+
+
 def patch_sources(data_dir, names):
-    """{file name: {"size", "mtime"}} of the generated patches the data was built against, so the MWSE side can tell
-    when one was rebuilt (or removed) after the data was written and stop trusting the list."""
+    """{file name: {"size"[, "fnv1a"]}} of the generated patches the data was built against, so the MWSE side can tell
+    when one was rebuilt (or removed) after the data was written and stop trusting the list. Not the file time:
+    --fix sets its plugins' dates to fix the load order, so a date never says which build a file is. Cell Fixes (the
+    last word on what is where) also gets a content hash: a rebuild can come out the same size."""
     out = {}
     for n in names:
+        path = os.path.join(data_dir, n)
         try:
-            st = os.stat(os.path.join(data_dir, n))
+            st = os.stat(path)
         except OSError:
             continue
-        out[n] = {"size": st.st_size, "mtime": int(st.st_mtime)}
+        out[n] = {"size": st.st_size}
+        if n.lower() in HASHED_SOURCES:
+            try:
+                out[n]["fnv1a"] = fnv1a_file(path)
+            except OSError:
+                pass
     return out
 
 

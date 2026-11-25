@@ -23,14 +23,16 @@
                    started, is flagged too.
 
     Memory:        a 32-bit Morrowind has 4 GB of address space in all. When
-                   it is 80% used (the level can be set), a warning comes up
-                   on screen with the biggest users that can be seen from
-                   inside the game: the textures of everything in the loaded
-                   cells (by file size, largest first, and by texture folder,
-                   which usually points at a texture pack) and the loaded
-                   cells with the most objects. The details go to the log.
-                   The warning repeats each minute while memory stays high.
-                   This works even with the rest of the watch turned off.
+                   it is 80% used (the level can be set), a short on-screen
+                   notice comes up (it never opens a menu or takes the mouse)
+                   and one line goes to MWSE.log; the biggest users that can
+                   be seen from inside the game go to the log: the textures of
+                   everything in the loaded cells (by file size, largest
+                   first, and by texture folder, which usually points at a
+                   texture pack) and the loaded cells with the most objects.
+                   The notice repeats each minute while memory stays high.
+                   Off until it is turned on in the Mod Config menu; once on,
+                   it works even with the rest of the watch turned off.
 
     Settings:      Mod Config menu -> mwhangwatch: turn the whole watch on or
                    off, turn audio watching on or off, set how many sound
@@ -55,7 +57,7 @@ local config = mwse.loadConfig(CONFIG_NAME, {
     enabled    = false,   -- the whole watch
     audio      = true,   -- sound events, music and sound-blocking mods
     soundLines = 40,     -- max sound lines per second (rest are counted)
-    memWarn    = true,   -- warn on screen when memory is nearly used up
+    memWarn    = false,  -- warn on screen when memory is nearly used up (opt-in: on only once it is saved on)
     memLimit   = 80,     -- ... at this percentage of the 4 GB address space
 })
 
@@ -507,18 +509,21 @@ local function memOffenders()
     return list, flist, cells, total, unknown
 end
 
+local MEM_TOAST_SECONDS = 8            -- how long the on-screen notice stays up
+
 local function memWarning(mb, pct)
-    -- 1. IMMEDIATELY show the modal pop-up with an OK button to pause the game and alert the player
+    -- 1. a toast, not a modal: a message box with buttons enters menu mode, and one that alt-tab hides (or
+    --    that comes back every minute) left the cursor stuck as if a menu were open. A toast has no buttons,
+    --    takes no input and goes away by itself.
     pcall(tes3.playSound, { sound = "Health Damage" })
-    pcall(tes3.messageBox, {
-        message = string.format(
-            "CRITICAL MEMORY ALERT (mwhangwatch)\n\n"
-            .. "Memory usage is at %.0f%% (%.2f GB of %.2f GB address space).\n\n"
-            .. "Save your game NOW: a 32-bit Morrowind will crash when memory is exhausted!",
-            pct, mb / 1024, ADDRESS_SPACE_MB / 1024
-        ),
-        buttons = { "OK" }
-    })
+    local text = string.format("mwhangwatch: memory at %.0f%% (%.2f of %.2f GB). Save soon: a 32-bit "
+        .. "Morrowind crashes when it runs out.", pct, mb / 1024, ADDRESS_SPACE_MB / 1024)
+    if not pcall(tes3.messageBox, { message = text, duration = MEM_TOAST_SECONDS }) then
+        pcall(tes3.messageBox, text)
+    end
+    -- the same, as one line in MWSE.log, so a late session at the limit still shows in MWSE.log
+    pcall(mwse.log, "[mwhangwatch] MEMORY WARNING: %.0f%% used (%.0f of %d MB). Details: MWSE\\logs\\mwhangwatch.log",
+        pct, mb, ADDRESS_SPACE_MB)
 
     -- 2. Safely log detailed diagnostics to mwhangwatch.log in protected call
     pcall(function()
@@ -751,9 +756,10 @@ event.register(tes3.event.initialized, applySettings)
 local memTimer = nil
 local function startMemCheck()
     if memTimer then
-        memTimer:cancel()
+        pcall(function() memTimer:cancel() end)
         memTimer = nil
     end
+    if not config.memWarn then return end        -- opt-in: nothing runs until the warning is turned on
     memTimer = timer.start({
         type = timer.real,
         duration = 1.0,
@@ -783,7 +789,8 @@ local function registerModConfig()
         label = "Enable the watch",
         description = "Turns all logging on or off: frame rate, memory, objects in loaded cells, "
             .. "cell changes, menus, scripts, and (if enabled below) audio.\n\n"
-            .. "Off: the mod does nothing. If it was off when the game started, no log file is created.",
+            .. "Off: none of this is logged. The memory warning below is separate: it has its own switch and "
+            .. "works whether the watch is on or off (it writes its details to the same log).",
         variable = mwse.mcm.createTableVariable({ id = "enabled", table = config }),
         callback = applySettings,
     })
@@ -810,8 +817,10 @@ local function registerModConfig()
         description = "A 32-bit Morrowind has 4 GB of memory to work with in all, however much the "
             .. "computer has. When it is nearly used up, a warning comes up on screen so you can save "
             .. "before a crash, naming the largest textures and texture folders in the loaded cells "
-            .. "(details in the log).\n\nWorks even with the watch above turned off.",
+            .. "(details in the log). The notice is a short message that goes away by itself; it never "
+            .. "opens a menu.\n\nOff until turned on here. Works even with the watch above turned off.",
         variable = mwse.mcm.createTableVariable({ id = "memWarn", table = config }),
+        callback = startMemCheck,
     })
 
     page:createSlider({

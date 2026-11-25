@@ -1016,6 +1016,7 @@ def test_KB11_nocturnal_moths_guards_nil_weather_and_resets_on_load(eol, tmp_pat
         pytest.skip("LuaJIT executable not available for behavioral verification")
     script = r"""
 local handlers = {}
+util = { stopSound = function() end }      -- a local of EffectManager.lua in the mod
 event = { register = function(name, fn) handlers[name] = fn end }
 local wc = { currentWeather = nil }
 tes3 = {
@@ -1773,3 +1774,300 @@ def test_nothing_luafix_injects_carries_its_name():
     injected += [new for _rule, _plugin, _rel, _old, new, _what in lf.KNOWN_BUGS]
     for text in injected:
         assert "luafix" not in text.lower() and "mwdialog" not in text.lower(), text[:80]
+
+
+# ------------------------------------------------------------------------------------------------ KB14-KB17, KB19
+LUAJIT_KB = os.environ.get("MWMANAGER_LUAJIT", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                                            "tools", "luajit", "luajit.exe"))
+
+
+def kb_patch(source, rel, rule, owner, parts, eol):
+    """The rule's findings on source (with eol), patched, checked, idempotent, line 1 untouched: the new text."""
+    source = source.replace("\n", eol)
+    findings = [f for f in analyse(source, rel).findings if f["rule"] == rule]
+    assert len(findings) == parts and all(f["conf"] == "high" for f in findings), findings
+    repaired, applied = lf.build_patch(source, findings, owner, CFG, "high", False)
+    assert set(applied) == {rule} and repaired.count("\n") == repaired.count(eol)
+    assert source.split(eol, 1)[0] in repaired.split(eol, 1)[0]          # line 1 keeps its text (marker only)
+    assert not [f for f in analyse(repaired, rel).findings if f["rule"] == rule]
+    assert lf.verify_patch(source, repaired, applied, None, owner, rel, CFG, "high")["ok"]
+    return repaired
+
+
+def run_lua(script, repaired):
+    if not os.path.isfile(LUAJIT_KB):
+        pytest.skip("LuaJIT executable not available for behavioral verification")
+    for name, text in repaired.items():
+        script = script.replace(name, text.replace("\r", ""))
+    result = subprocess.run([LUAJIT_KB, "-"], input=script, text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+
+
+def test_kb14_to_kb19_never_touch_line_1_and_are_whole_where_parts_depend():
+    rules = {"KB14", "KB15", "KB16", "KB17", "KB19"}
+    entries = [e for e in lf.KNOWN_BUGS if e[0] in rules]
+    assert {e[0] for e in entries} == rules
+    for _rule, _owner, _rel, old, new, _what in entries:
+        assert old not in new                                     # applied once, never matches again
+    assert {"KB14", "KB16", "KB17", "KB19"} <= lf.KNOWN_BUGS_WHOLE and "KB15" not in lf.KNOWN_BUGS_WHOLE
+
+
+NM14_UTIL = """local config = { enableSound = true, soundVolume = 0.7 }
+local sound = "R0_moths_fluttering"
+local util = {}
+function util.playSound(reference)
+\tif not config.enableSound then return end
+\ttes3.playSound({
+\t\treference = reference,
+\t\tsound = sound,
+\t\tloop = true,
+\t\tvolume = config.soundVolume,
+\t})
+end
+function util.stopSound(reference)
+\tif not config.enableSound then return end
+\ttes3.removeSound({ reference = reference, sound = sound })
+end
+return util
+"""
+
+NM14_MANAGER = """local util = NM_UTIL
+local EffectManager = { activeEffects = {} }
+function EffectManager:reset()
+\tself.activeEffects = {}
+\tself.nextUpdateTimestamp = -1
+\tself.lastUpdateState = {}
+end
+return EffectManager
+"""
+
+
+@pytest.mark.parametrize("eol", ["\n", "\r\n"])
+def test_KB14_nocturnal_moths_does_not_stack_loops_and_stops_them_on_reset(eol):
+    util = kb_patch(NM14_UTIL, "nocturnal moths/util/init.lua", "KB14", "Nocturnal Moths", 1, eol)
+    manager = kb_patch(NM14_MANAGER, "nocturnal moths/effectmanager.lua", "KB14", "Nocturnal Moths", 1, eol)
+    run_lua(r"""
+local playing, plays, removes = {}, 0, 0
+tes3 = {
+  getSoundPlaying = function(p) return playing[p.reference] == true end,
+  playSound = function(p) plays = plays + 1 playing[p.reference] = true end,
+  removeSound = function(p) removes = removes + 1 playing[p.reference] = nil end,
+}
+NM_UTIL = assert(loadstring([==[@UTIL@]==]))()
+local mgr = assert(loadstring([==[@MANAGER@]==]))()
+local lantern = {}
+NM_UTIL.playSound(lantern) NM_UTIL.playSound(lantern) NM_UTIL.playSound(lantern)
+assert(plays == 1, "moth loop stacked: " .. plays)
+NM_UTIL.playSound({ disabled = true })
+assert(plays == 1, "played on a disabled reference")
+mgr.activeEffects[lantern] = true
+mgr:reset()
+assert(removes == 1 and next(mgr.activeEffects) == nil and mgr.nextUpdateTimestamp == -1)
+""", {"@UTIL@": util, "@MANAGER@": manager})
+
+
+AURA15 = """local this = {}
+function this.getTrackPlaying(track, ref)
+\tif track and ref and tes3.getSoundPlaying { sound = track, reference = ref } then
+\t\treturn track
+\tend
+end
+return this
+"""
+
+
+@pytest.mark.parametrize("eol", ["\n", "\r\n"])
+def test_KB15_aura_trusts_its_own_track_over_getSoundPlaying(eol):
+    common = kb_patch(AURA15, "tew/aura/common.lua", "KB15", "AURA", 1, eol)
+    run_lua(r"""
+tes3 = { getSoundPlaying = function() return false end }     -- the engine's answer for a 3D loop on a door
+local common = assert(loadstring([==[@COMMON@]==]))()
+assert(common.getTrackPlaying("IE_tav_imp_1", {}) == "IE_tav_imp_1")
+assert(common.getTrackPlaying(nil, {}) == nil and common.getTrackPlaying("x", nil) == nil)
+""", {"@COMMON@": common})
+
+
+FLIES16 = """local mod = { name = "R-Zero's Flies" }
+
+local function refDelete(cell)
+    for ref in cell:iterateReferences({ tes3.objectType.activator }) do
+        if ref and ref.data and ref.data.spa_TempFlies then ref:delete() end
+    end
+end
+
+---@param e cellChangedEventData
+event.register("cellChanged", function(e)
+    for ref in e.cell:iterateReferences({ tes3.objectType.npc, tes3.objectType.creature }) do
+        if ref
+            and ref.data
+            and ref.isDead
+            and (ref.data and ref.data.spa_fliesCountDown)
+            and (ref.data and ref.data.spa_fliesCountDown) < (tes3.getSimulationTimestamp() - 24) then
+            tes3.playSound { sound = "Flies", reference = ref, loop = true, volume = 0.5, pitch = 1.0 }
+        end
+    end
+    refDelete(e.cell)
+end)
+
+
+---@param e table|menuExitEventData
+event.register("menuExit", function(e)
+    refDelete(tes3.player.cell)
+end)
+"""
+
+
+@pytest.mark.parametrize("eol", ["\n", "\r\n"])
+def test_KB16_flies_do_not_stack_on_corpses_and_stop_when_unloaded(eol):
+    main = kb_patch(FLIES16, "spammer/flies/main.lua", "KB16", "Flies", 2, eol)
+    partial = FLIES16.replace("    refDelete(e.cell)\nend)\n\n\n", "    refDelete(e.cell)\nend)\n\n")
+    got = [f for f in analyse(partial, "spammer/flies/main.lua").findings if f["rule"] == "KB16"]
+    assert [f["conf"] for f in got] == ["report"]                 # one part of two: left alone, said why
+    run_lua(r"""
+local handlers, playing, plays, removes = {}, {}, 0, 0
+event = { register = function(name, fn) handlers[name] = fn end }
+local corpse = { isDead = true, data = { spa_fliesCountDown = 0 } }
+local cell = { iterateReferences = function(_, types)
+  local list = (types[1] == "npc") and { corpse } or {}
+  local i = 0
+  return function() i = i + 1 return list[i] end
+end }
+tes3 = {
+  objectType = { npc = "npc", creature = "creature", activator = "activator" },
+  getSimulationTimestamp = function() return 1000 end,
+  getSoundPlaying = function(p) return playing[p.reference] == true end,
+  playSound = function(p) plays = plays + 1 playing[p.reference] = true end,
+  removeSound = function(p) removes = removes + 1 playing[p.reference] = nil end,
+  player = { cell = cell },
+}
+assert(loadstring([==[@MAIN@]==]))()
+handlers.cellChanged({ cell = cell }) handlers.cellChanged({ cell = cell })
+assert(plays == 1, "fly loop stacked: " .. plays)
+handlers.referenceDeactivated({ reference = corpse })
+assert(removes == 1 and not playing[corpse])
+handlers.cellChanged({ cell = cell }) handlers.loaded()
+assert(plays == 2 and removes == 2)
+""", {"@MAIN@": main})
+
+
+LEV17 = """local levitating
+local timeEnteredPad
+local function addLevitation()
+    levitating = true
+    tes3.playSound{
+        sound = "forcefield",
+        loop = true,
+        pitch = 1.2
+    }
+end
+local function levitate(e)
+    if not levitating then addLevitation() end
+end
+event.register("simulate", levitate)
+"""
+
+
+@pytest.mark.parametrize("eol", ["\n", "\r\n"])
+def test_KB17_tel_raloran_pad_plays_one_forcefield_loop_and_clears_it_on_load(eol):
+    main = kb_patch(LEV17, "telraloran/levpad.lua", "KB17", "Tel Raloran", 2, eol)
+    run_lua(r"""
+local handlers, playing, plays = {}, false, 0
+event = { register = function(name, fn) handlers[name] = fn end }
+tes3 = {
+  getSoundPlaying = function() return playing end,
+  playSound = function() plays = plays + 1 playing = true end,
+  removeSound = function() playing = false end,
+}
+assert(loadstring([==[@MAIN@]==]))()
+handlers.simulate({})
+handlers.loaded()
+assert(playing == false, "forcefield still playing after load")
+handlers.simulate({})
+assert(plays == 2)
+""", {"@MAIN@": main})
+
+
+KEG19 = """local function samePlacement(effect, keg)
+    return effect.position:distance(keg.position) < 0.01
+        and effect.orientation:distance(keg.orientation) < 0.001
+        and math.abs(effect.scale - keg.scale) < 0.001
+end
+
+local function available(ref) return not ref.deleted end
+
+local function refreshCell(cell, kegs, effects, definition)
+    local used = {}
+    for _, keg in ipairs(kegs) do
+        do
+            do
+                local effect
+                for _, candidate in ipairs(effects) do
+                    if not used[candidate] and available(candidate) and samePlacement(candidate, keg) then
+                        effect = candidate
+                        break
+                    end
+                end
+                if not effect then
+                    effect = tes3.createReference {
+                        object = definition.id,
+                        cell = cell,
+                        position = keg.position,
+                        orientation = keg.orientation,
+                        scale = keg.scale,
+                        updateCollisionGroups = false,
+                    }
+                    effect.modified = false
+                end
+                used[effect] = true
+            end
+        end
+    end
+    for _, effect in ipairs(effects) do
+        if not used[effect] then
+            effect:delete()
+            effect.modified = false
+        end
+    end
+end
+return refreshCell
+"""
+
+
+@pytest.mark.parametrize("eol", ["\n", "\r\n"])
+def test_KB19_keg_drip_reuses_its_drip_instead_of_recreating_it(eol):
+    main = kb_patch(KEG19, "kegdrip/main.lua", "KB19", "Keg Drip", 3, eol)
+    run_lua(r"""
+local created, removed = 0, 0
+local function vec(x) return { x = x, distance = function(a, b) return math.abs(a.x - b.x) end } end
+tes3 = {
+  createReference = function(p) created = created + 1 return { object = { id = p.object }, position = p.position,
+    orientation = p.orientation, scale = p.scale, delete = function(self) self.deleted = true end } end,
+  removeSound = function() removed = removed + 1 end,
+}
+local refreshCell = assert(loadstring([==[@MAIN@]==]))()
+local def = { id = "furn_com_kegstand_dr" }
+local keg = { position = vec(100.5), orientation = vec(0), scale = 1 }
+local old = { object = { id = "furn_com_kegstand_dr" }, position = vec(100), orientation = vec(0.01), scale = 1,
+  delete = function(self) self.deleted = true end }
+refreshCell("cell", { keg }, { old }, def)
+assert(created == 0 and not old.deleted, "the drip was recreated instead of kept")
+local far = { position = vec(5000), orientation = vec(0), scale = 1 }
+refreshCell("cell", { far }, { old }, def)
+assert(created == 0 and old.position == far.position, "a free drip of the same id should be moved, not remade")
+local stray = { object = { id = "furn_de_kegstand_dr" }, position = vec(1), orientation = vec(0), scale = 1,
+  delete = function(self) self.deleted = true end }
+refreshCell("cell", {}, { stray }, def)
+assert(stray.deleted and removed == 1, "a leftover drip is deleted after its sound is stopped")
+""", {"@MAIN@": main})
+
+
+# ------------------------------------------------------------------------------------------------ G1 pairs
+def test_G1_unregister_and_isRegistered_literals_follow_the_compressed_register():
+    src = ("event.register('save', saveBlock, { priority = 300000 })\n"
+           "if event.isRegistered('save', saveBlock, { priority = 300000 }) then\n"
+           "  event.unregister('save', saveBlock, { priority = 300000 })\nend\n"
+           "event.unregister('save', other, { priority = 50 })\n")
+    q = lf.compress_priority(300000, CFG)
+    new = patch(src)
+    assert new.count(f"priority = {q} }}") == 3 and "300000" not in new and "priority = 50 }" in new
+    assert not [f for f in analyse(new).findings if f["rule"] == "G1"]

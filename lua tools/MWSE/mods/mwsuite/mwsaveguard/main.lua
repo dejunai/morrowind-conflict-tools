@@ -13,6 +13,12 @@ local defaults = {
 	cleanClones = true,
 }
 local config = mwse.loadConfig(CONFIG_NAME, defaults)
+-- an older build wrote "logToMWSE"; nothing reads it (copyNoticesToMWSELog is the switch), so it only looked
+-- enabled. Drop it from the saved file once.
+if config.logToMWSE ~= nil then
+	config.logToMWSE = nil
+	pcall(mwse.saveConfig, CONFIG_NAME, config)
+end
 
 -- Routine notices (each save requested, deferred, completed) go to their own log, one per session: in MWSE.log
 -- they buried everything else. Problems (a corrupt save blocked, a save that failed, a player clone) still go to
@@ -325,6 +331,8 @@ executeDeferredSave = function()
 	isExecutingDeferredSave = false
 end
 
+local expectSave                        -- set below: watches that a save it let through reaches the last handler
+
 --- @param e saveEventData
 local function onSave(e)
 	if not config.enabled then
@@ -358,6 +366,7 @@ local function onSave(e)
 
 	-- If our own deferred execution triggered this, allow it straight through
 	if isExecutingDeferredSave then
+		expectSave(e)
 		return
 	end
 
@@ -390,10 +399,94 @@ local function onSave(e)
 
 		return false
 	end
+	expectSave(e)
 end
 
 -- Priority 10000 ensures this intercepts before any other save handlers (like SSS or native)
 event.register("save", onSave, { priority = 10000 })
+
+-- A save another mod swallows: MWSE stops calling save handlers at the first one that returns false (or claims
+-- the event), so the engine never writes it and nothing says why. This handler runs last of all; when a save we
+-- let through never reaches it, the next frame names the save handlers that were registered.
+local SAVE_LAST_PRIORITY = -9999        -- the lowest priority mwguard calls ordinary (|p| < 10000)
+local awaitingSave = nil                -- { filename, name } of the last save onSave let through
+
+-- { {fn, priority} } of an event's callbacks, highest priority first, read from MWSE's event table (empty when it
+-- can't be read)
+local function eventHandlers(name)
+	local out = {}
+	pcall(function()
+		local function upvalue(fn, want)
+			if type(fn) ~= "function" then return nil end
+			for i = 1, 200 do
+				local n, v = debug.getupvalue(fn, i)
+				if n == nil then return nil end
+				if n == want then return v end
+			end
+		end
+		local register = event.register
+		for _ = 1, 8 do                     -- mwguard / mwhangwatch may wrap event.register: follow it back
+			if upvalue(register, "getEventTable") then break end
+			local inner = upvalue(register, "origRegister") or upvalue(register, "realRegister")
+			if type(inner) ~= "function" then break end
+			register = inner
+		end
+		local general = upvalue(upvalue(register, "getEventTable"), "generalEvents")
+		local priorities = upvalue(register, "eventPriorities") or {}
+		for _, cb in ipairs(general and general[name] or {}) do
+			out[#out + 1] = { fn = cb, priority = priorities[cb] }
+		end
+	end)
+	return out
+end
+
+local function saveHandlers()
+	local out = {}
+	for _, h in ipairs(eventHandlers("save")) do
+		local info = debug.getinfo(h.fn, "S") or {}
+		local src = (info.short_src or info.source or "?"):gsub("^.-[/\\]mods[/\\]", "")
+		out[#out + 1] = string.format("%s:%s (priority %s)", src, tostring(info.linedefined), tostring(h.priority))
+	end
+	return out
+end
+
+-- WBSR's voiceover save block, lifted for tavern bards' songs only (mwsaveguard\wbsr_bard.lua). Nothing at all
+-- without WBSR.
+local wbsrBard = nil
+do
+	local ok, mod = pcall(require, "mwsaveguard.wbsr_bard")
+	if ok and type(mod) == "table" then
+		wbsrBard = mod.setup({ config = config, log = logMsg, handlers = eventHandlers })
+	else
+		mwse.log("[mwsaveguard] wbsr_bard.lua could not be loaded: %s", tostring(mod))
+	end
+end
+
+local function onSaveLast(e)
+	if e.block then return end          -- blocked without stopping the chain: still a swallowed save
+	awaitingSave = nil
+end
+event.register("save", onSaveLast, { priority = SAVE_LAST_PRIORITY })
+
+local function checkSaveReached()
+	local missed = awaitingSave
+	awaitingSave = nil
+	if not missed then return end
+	local handlers = saveHandlers()
+	mwse.log("[mwsaveguard] Save '%s' was swallowed by another mod: a save handler blocked it before the engine "
+		.. "wrote it, and saving gave no message. Save handlers, highest priority first: %s",
+		tostring(missed.filename or missed.name or "save"),
+		#handlers > 0 and table.concat(handlers, "; ") or "(MWSE's event table could not be read)")
+	logMsg("[mwsaveguard] Save swallowed by another mod: file='%s' (handlers: %s)", tostring(missed.filename),
+		#handlers > 0 and table.concat(handlers, "; ") or "?")
+end
+
+expectSave = function(e)
+	awaitingSave = { filename = e.filename, name = e.name }
+	-- a real-time timer: a save from the options menu happens in menu mode, where simulate timers stand still
+	local ok = pcall(timer.delayOneFrame, checkSaveReached, timer.real)
+	if not ok then awaitingSave = nil end
+end
 
 local function onSaved(e)
 	logMsg(
@@ -470,6 +563,26 @@ event.register(tes3.event.modConfigReady, function()
 			.. "save blocked, a failed save, a player clone) always reach MWSE.log.",
 		variable = mwse.mcm.createTableVariable({ id = "copyNoticesToMWSELog", table = config }),
 	})
+
+	if wbsrBard then
+		wbsrBard.detect()
+		page:createOnOffButton({
+			label = "Let saves through while a bard sings (WBSR)",
+			description = "abot's Well Behaved Sound Replacers (WBSR) blocks saving while a voiceover plays. A tavern "
+				.. "bard's songs (Bards of Bardenfell: Sound\\Vo\\Bard\\) count as voiceovers and follow one "
+				.. "another, so in an inn with a bard every save was swallowed without a word. On: WBSR's save block "
+				.. "is lifted for bard songs only; a real speech still blocks saving. Works whether or not the Save "
+				.. "Guard above is enabled. On by default when WBSR is installed and loaded; without WBSR it does "
+				.. "nothing.\n\n" .. wbsrBard.status(),
+			variable = mwse.mcm.createCustom({
+				getter = function() return wbsrBard.enabled() end,
+				setter = function(_, v)
+					config.letBardSongsSave = v and true or false
+					wbsrBard.refresh()
+				end,
+			}),
+		})
+	end
 
 	template:register()
 end)

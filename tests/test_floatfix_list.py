@@ -94,8 +94,14 @@ os.clock = function() return clock end
 local types = { miscItem = 1, book = 2, ingredient = 3, alchemy = 4, weapon = 5, ammunition = 6, armor = 7,
                 clothing = 8, apparatus = 9, lockpick = 10, probe = 11, repairItem = 12, light = 13, npc = 14, creature = 15 }
 tes3 = { objectType = types, scanCode = { delete = 211 }, event = setmetatable({}, { __index = function(_, k) return k end }),
-         getActiveCells = function() return {} end }
-tes3vector3 = { new = function(x, y, z) return { x = x, y = y, z = z } end }
+         getActiveCells = function() return {} end,
+         rayTest = function() return { distance = 0 } end }    -- resting on something: checked, not moved
+local V = {}
+V.__index = V
+V.__add = function(a, b) return tes3vector3.new(a.x + b.x, a.y + b.y, a.z + b.z) end
+V.__mul = function(a, k) return tes3vector3.new(a.x * k, a.y * k, a.z * k) end
+tes3vector3 = { new = function(x, y, z) return setmetatable({ x = x, y = y, z = z }, V) end }
+local ROT = setmetatable({}, { __mul = function(_, v) return v end })
 event = { register = function(name, fn) handlers[name] = fn end }
 mwse = { loadConfig = function(name, defaults)
     if name == "mwfloatfix" then defaults.enabled = true; defaults.log = false; return defaults end
@@ -106,8 +112,10 @@ dofile([[MOD]])
 local cell = { isInterior = true, id = "Balmora, Inn" }
 local function item(x, y, z, src)
   local p = { x = x, y = y, z = z }
+  local node = { createBoundingBox = function() return { min = tes3vector3.new(-2, -2, 0), max = tes3vector3.new(2, 2, 4) } end,
+                 worldTransform = { rotation = ROT, scale = 1, translation = tes3vector3.new(x, y, z) } }
   return { object = { id = "Misc_Bottle", objectType = 1 }, cell = cell, position = p, startingPosition = p,
-           sceneNode = {}, tempData = {}, sourceMod = src }
+           sceneNode = node, tempData = {}, sourceMod = src }
 end
 local listed, other = item(111, 96, 40, "Morrowind.esm"), item(500, 500, 40, "Morrowind.esm")
 local spawned = item(110, 95, 40, nil)              -- placed by a script on the same spot: no source plugin

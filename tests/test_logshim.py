@@ -473,3 +473,42 @@ def test_nothing_of_ours_is_written_into_the_mods_output():
         assert "error: broke" in text
     shim = lf.log_shim("testmod", CFG).lower()
     assert "luafix" not in shim and "mwdialog" not in shim
+
+
+@need_lua
+def test_dialogue_started_is_not_a_lifecycle_line():
+    r = Rt(budgetInit=0)
+    r.load(
+        "print('[Mod] started') "
+        "print(\"[Animated Dialogue | services/events/eventlogger.lua:44  | INFO] "
+        "Dialogue started with 'arrille'\") "
+        "print('restarting a loop') "
+        "print('[AURA i18n]: Starting translation verification.') "
+        "print('routine')"
+    )
+    out = r.out()
+    assert "[Mod] started" in out
+    assert "[AURA i18n]: Starting translation verification." in out
+    assert not any("Dialogue started" in o for o in out)
+    assert not any("restarting" in o for o in out)
+    assert "routine" not in out
+    f = r.file()
+    assert any("Dialogue started" in l for l in f)
+    assert any("restarting" in l for l in f)
+    assert "routine" in f
+
+
+@need_lua
+def test_lifecycle_cap_writes_one_hand_off_line_naming_the_mod_log():
+    r = Rt(budgetInit=0)
+    r.load("for i = 1, 9 do print('Registered recipe ' .. i) end")
+    out = r.out()
+    assert len([o for o in out if o.startswith("Registered recipe")]) == 5
+    notes = [o for o in out if o.startswith("[log redirect]")]
+    assert len(notes) == 1 and "testmod" in notes[0] and "register" in notes[0] and "testmod.log" in notes[0]
+    assert len([o for o in r.file() if o.startswith("Registered recipe")]) == 9
+
+
+def test_bare_start_is_no_longer_a_lifecycle_pattern():
+    assert "start" not in lf.LIFECYCLE_PATTERNS and "start" not in CFG["log"]["keepPatterns"]
+    assert lf.SHIM_V == 6 and "S.v == 6" in lf.log_shim("testmod", CFG)

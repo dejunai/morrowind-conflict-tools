@@ -24,7 +24,8 @@ local function realIsRegistered(et, cb)
 end
 event = { register = realRegister, unregister = realUnregister, isRegistered = realIsRegistered }
 mwse = {
-  loadConfig = function(_, d) local c = {} for k, v in pairs(d) do c[k] = v end c.enabled = ENABLED return c end,
+  loadConfig = function(_, d) local c = {} for k, v in pairs(d) do c[k] = v end c.enabled = ENABLED
+                               c.EnableLogTimestamps = STAMPS == true return c end,
   log = function() end, mcm = {},
 }
 lfs = { mkdir = function() end, fileexists = function() return true end }
@@ -240,5 +241,35 @@ assert(calls == 2)
 local errLogs = 0
 for _, m in ipairs(mwseLogs) do if m:find("address%-space HUD error: .*boom") then errLogs = errLogs + 1 end end
 assert(errLogs == 1, "expected 1 HUD error log, got " .. errLogs)
+print("OK")
+''', enabled=False)
+
+
+def test_log_timestamps_wrap_print_and_mwse_log_once(tmp_path):
+    """EnableLogTimestamps (on by default): MWSE 2.1 has no clock-time setting for MWSE.log, so mwguard wraps print
+    and mwse.log once, as it loads first, to put [HH:MM:SS] in front of each line."""
+    run(tmp_path, "STAMPS = true\nlocal printed = {}\nlocal realPrint = print\n"
+        "print = function(s) printed[#printed + 1] = s end\n" + HARNESS + r'''
+assert(rawget(_G, "__mwsuite_log_timestamps") == true)
+print("plain", 2)
+mwse.log("[mod] %s %d", "x", 5)
+mwse.log("100% bad %d format")
+local function stamped(s) return s:match("^%[%d%d:%d%d:%d%d%] ") ~= nil end
+local seen = {}
+for _, l in ipairs(printed) do assert(stamped(l), "not stamped: " .. l) seen[l:sub(12)] = true end
+assert(seen["plain\t2"] and seen["[mod] x 5"] and seen["100% bad %d format"])
+-- a second load of the module does not stamp twice
+package.loaded["mwguard.main"] = nil
+require("mwguard.main")
+local n = #printed
+print("once")
+assert(printed[n + 1]:match("^%[%d%d:%d%d:%d%d%] once$"), printed[n + 1])
+realPrint("OK")
+''', enabled=False)
+
+
+def test_log_timestamps_off_leaves_print_alone(tmp_path):
+    run(tmp_path, "STAMPS = false\nlocal p0 = print\n" + HARNESS + r'''
+assert(rawget(_G, "__mwsuite_log_timestamps") == nil)
 print("OK")
 ''', enabled=False)

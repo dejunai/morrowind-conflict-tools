@@ -119,14 +119,19 @@ DEFAULTS = {
         "budgetInit": 0,             # routine lines never use MWSE.log; lifecycle/error lines below still do
         "budget": 0,
         "keepPatterns": ["error", "traceback", "exception", "fail", "warn", "stack", "attempt to", "assert",
-                         "invalid", "%.lua:%d+:", "^lua:", "initializ", "register", "start", "loaded", "ready",
-                         "version", "active"],  # errors and lifecycle lines always reach MWSE.log (Lua patterns)
+                         "invalid", "%.lua:%d+:", "^lua:", "initializ", "register", "loaded", "ready",
+                         "version", "active",
+                         "] started",                # "[Mod] started"; not "Dialogue started with"
+                         "%f[%w]starting%f[%W]",     # "Starting..." / "Starting translation"; not "restart"
+                         "has started", "started successfully", "successfully started", "starting up",
+                         ],  # errors and lifecycle lines always reach MWSE.log (Lua patterns)
         "perSecond": 25,             # the mod's own log takes at most this many lines a second (0: no cap)
         "maxMB": 2,                  # the mod's own log is rotated at this size ...
         "keepOld": 1,                # ... keeping the previous one as <mod>.old.log (0: none)
         "flushSeconds": 2,           # buffered lines reach the disk at least this often
         "lifecycleMax": 5,           # lifecycle lines (LIFECYCLE_PATTERNS) reach MWSE.log when the word is near
-                                     # the start of the line, at most this many per word and mod
+                                     # the start of the line, at most this many per word and mod; the next one
+                                     # writes a single hand-off line naming the mod's own log
         "errorRepeat": 0,            # errors always reach MWSE.log, including repeats
         "exemptMods": sorted(OWN_MODS),    # our mods use native logging; never inject the generic shim
     },
@@ -914,6 +919,20 @@ class FileAnalysis:
             else:
                 self.add("G1", pv, f"{ev or '?'} handler priority computed: {self.text(pv)[:60]}",
                          f"keep |priority| under {lim}")
+        # event.unregister / event.isRegistered name the same priority: rewrite their literals to the compressed
+        # value too, so the pair still reads as one registration (MWSE matches on the callback, but a reader and
+        # any mod that compares priorities should see the number event.register now uses)
+        for c in self.calls:
+            if L.dotted(c.func) not in ("event.unregister", "event.isRegistered") or len(c.args) < 3:
+                continue
+            pv = table_field(c.args[2], "priority")
+            p = num_value(pv) if pv is not None else None
+            if p is None or abs(p) < lim:
+                continue
+            q = compress_priority(p, self.cfg)
+            ev = event_name(c.args[0])
+            self.add("G1", pv, f"{ev or '?'} {L.dotted(c.func)} priority {self.text(pv)}", f"priority {q}", "high",
+                     [(pv.s, pv.e, str(q))])
 
     def _gate_edit(self, f):
         k = self._gate_next
@@ -1862,7 +1881,7 @@ KNOWN_BUGS = [
      "ExclusionsPage destroys outerContainer and then dereferences that destroyed element's parent"),
 ]
 
-KNOWN_BUGS_WHOLE = {"KB4", "KB11", "KB13"}    # rules whose parts depend on each other: every part matches, or none is applied
+KNOWN_BUGS_WHOLE = {"KB4", "KB11", "KB13", "KB14", "KB16", "KB17", "KB19"}    # rules whose parts depend on each other: every part matches, or none is applied
 KB4 = ("ExclusionsPage builds one UI element per item, unbounded (thousands with Tamriel Data); pages of 100 "
        "per column keep every match. Exact text of MWSE's ExclusionsPage.lua as shipped since 2024-07-19; all of "
        "KB4 applies or none of it")
@@ -2382,11 +2401,14 @@ KNOWN_BUGS += [
      "\treturn t\n"
      "end\n\n"
      "function EffectManager:reset()\n"
+     "\tfor reference, _ in pairs(self.activeEffects) do\n"
+     "\t\tpcall(util.stopSound, reference) -- local fix: stop moth loops before dropping refs on load\n"
+     "\tend\n"
      "\tself.activeEffects = {}\n"
      "\tself.nextUpdateTimestamp = -1\n"
      "\tself.lastUpdateState = {}\n"
      "end\n\n"
-     "-- Sets appCulled state of moths node on given reference.", KB11),
+     "-- Sets appCulled state of moths node on given reference.", KB11),   # reset() as KB14 leaves it: one pass
     ("KB11", "Nocturnal Moths", "nocturnal moths/main.lua",
      "event.register(tes3.event.cellChanged, onCellChanged)\n\n"
      "event.register(tes3.event.keyDown,",
@@ -2450,6 +2472,211 @@ KNOWN_BUGS += [
      "\t\tend)", KB13),
 ]
 
+KB14 = ("util.playSound starts a looped R0_moths_fluttering without tes3.getSoundPlaying, and EffectManager:reset() "
+        "(added by KB11) drops activeEffects without tes3.removeSound, so a load or in-game new game plus later "
+        "uncull/cellChanged stacks another copy on each lantern (mwsoundguard.log 2026-11-24: dozens of duplicate "
+        "R0_moths_fluttering starts)")
+KNOWN_BUGS += [
+    ("KB14", "Nocturnal Moths", "nocturnal moths/util/init.lua",
+     "function util.playSound(reference)\n"
+     "\tif not config.enableSound then return end\n"
+     "\ttes3.playSound({\n"
+     "\t\treference = reference,\n"
+     "\t\tsound = sound,\n"
+     "\t\tloop = true,\n"
+     "\t\tvolume = config.soundVolume,\n"
+     "\t})\n"
+     "end",
+     "function util.playSound(reference)\n"
+     "\tif not config.enableSound then return end\n"
+     "\tif not reference or reference.disabled or reference.deleted then return end\n"
+     "\tif tes3.getSoundPlaying({ reference = reference, sound = sound }) then return end -- local fix: don't stack moth loops\n"
+     "\ttes3.playSound({\n"
+     "\t\treference = reference,\n"
+     "\t\tsound = sound,\n"
+     "\t\tloop = true,\n"
+     "\t\tvolume = config.soundVolume,\n"
+     "\t})\n"
+     "end", KB14),
+    ("KB14", "Nocturnal Moths", "nocturnal moths/effectmanager.lua",
+     "function EffectManager:reset()\n"
+     "\tself.activeEffects = {}\n"
+     "\tself.nextUpdateTimestamp = -1\n"
+     "\tself.lastUpdateState = {}\n"
+     "end",
+     "function EffectManager:reset()\n"
+     "\tfor reference, _ in pairs(self.activeEffects) do\n"
+     "\t\tpcall(util.stopSound, reference) -- local fix: stop moth loops before dropping refs on load\n"
+     "\tend\n"
+     "\tself.activeEffects = {}\n"
+     "\tself.nextUpdateTimestamp = -1\n"
+     "\tself.lastUpdateState = {}\n"
+     "end", KB14),
+]
+
+
+KB15 = ("common.getTrackPlaying trusts tes3.getSoundPlaying, which the engine often answers as false for a "
+        "still-playing 3D loop; AURA's 1s windoor/exterior-door timers then call play / playImmediate again "
+        "(interiorToExterior, interiorWeather, outdoor, wind). mwsoundguard.log 2026-11-24: RUNAWAY IE_tav_imp_1 on "
+        "Seyda Neen doors, plus S_q_4 and swa_d_3 one-shot/loop restarts on doors and windows")
+KNOWN_BUGS += [
+    ("KB15", "AURA", "tew/aura/common.lua",
+     "function this.getTrackPlaying(track, ref)\n"
+     "\tif track and ref and tes3.getSoundPlaying { sound = track, reference = ref } then\n"
+     "\t\treturn track\n"
+     "\tend\n"
+     "end",
+     "function this.getTrackPlaying(track, ref)\n"
+     "\t-- local fix: tes3.getSoundPlaying often says a still-playing 3D loop is not playing,\n"
+     "\t-- which made AURA's 1s door/window timers restart IE_tav / S_q_* / swa_* loops\n"
+     "\tif track and ref then\n"
+     "\t\treturn track\n"
+     "\tend\n"
+     "end", KB15),
+]
+
+
+KB16 = ("On cellChanged, Flies plays a looped 'Flies' sound on every qualifying corpse without tes3.getSoundPlaying "
+        "or tes3.removeSound, and never stops the loop on referenceDeactivated or loaded. Re-entering the cell "
+        "stacks copies. mwsoundguard cannot see this: it skips NPCs and creatures (mwsoundguard main.lua guard()) "
+        "(found reading mwsoundguard.log 2026-11-24)")
+KNOWN_BUGS += [
+    ("KB16", "Flies", "spammer/flies/main.lua",
+     "            and (ref.data and ref.data.spa_fliesCountDown) < (tes3.getSimulationTimestamp() - 24) then\n"
+     "            tes3.playSound { sound = \"Flies\", reference = ref, loop = true, volume = 0.5, pitch = 1.0 }\n"
+     "        end",
+     "            and (ref.data and ref.data.spa_fliesCountDown) < (tes3.getSimulationTimestamp() - 24) then\n"
+     "            -- local fix: don't stack loops on re-entry; soundguard skips NPC/creature sounds\n"
+     "            if not (ref.data and ref.data.spa_Flies) and not tes3.getSoundPlaying { sound = \"Flies\", reference = ref } then\n"
+     "                tes3.playSound { sound = \"Flies\", reference = ref, loop = true, volume = 0.5, pitch = 1.0 }\n"
+     "            end\n"
+     "        end", KB16),
+    ("KB16", "Flies", "spammer/flies/main.lua",
+     "    refDelete(e.cell)\n"
+     "end)\n"
+     "\n"
+     "\n"
+     "---@param e table|menuExitEventData\n"
+     "event.register(\"menuExit\", function(e)\n"
+     "    refDelete(tes3.player.cell)\n"
+     "end)",
+     "    refDelete(e.cell)\n"
+     "end)\n"
+     "\n"
+     "event.register(\"referenceDeactivated\", function(e)\n"
+     "    if e.reference then\n"
+     "        tes3.removeSound { sound = \"Flies\", reference = e.reference } -- local fix: stop corpse fly loops when the ref unloads\n"
+     "    end\n"
+     "end)\n"
+     "event.register(\"loaded\", function()\n"
+     "    if tes3.player and tes3.player.cell then\n"
+     "        for ref in tes3.player.cell:iterateReferences({ tes3.objectType.npc, tes3.objectType.creature }) do\n"
+     "            tes3.removeSound { sound = \"Flies\", reference = ref }\n"
+     "        end\n"
+     "    end\n"
+     "end)\n"
+     "\n"
+     "---@param e table|menuExitEventData\n"
+     "event.register(\"menuExit\", function(e)\n"
+     "    refDelete(tes3.player.cell)\n"
+     "end)", KB16),
+]
+
+
+KB17 = ("addLevitation plays a looped 2D 'forcefield' without tes3.getSoundPlaying, and there is no loaded handler "
+        "to clear the loop or the levitating flag after a load or in-game new game (found reading mwsoundguard.log "
+        "2026-11-24)")
+KNOWN_BUGS += [
+    ("KB17", "Tel Raloran", "telraloran/levpad.lua",
+     "    tes3.playSound{\n"
+     "        sound = \"forcefield\",\n"
+     "        loop = true,\n"
+     "        pitch = 1.2\n"
+     "    }",
+     "    if not tes3.getSoundPlaying{ sound = \"forcefield\" } then -- local fix: don't stack the 2D loop\n"
+     "        tes3.playSound{\n"
+     "            sound = \"forcefield\",\n"
+     "            loop = true,\n"
+     "            pitch = 1.2\n"
+     "        }\n"
+     "    end", KB17),
+    ("KB17", "Tel Raloran", "telraloran/levpad.lua",
+     "event.register(\"simulate\", levitate)\n",
+     "event.register(\"simulate\", levitate) -- local fix: also cleared on loaded\n"
+     "event.register(\"loaded\", function() -- local fix: clear 2D forcefield loop and flag after load / in-game new game\n"
+     "    levitating = false\n"
+     "    timeEnteredPad = nil\n"
+     "    tes3.removeSound{ sound = \"forcefield\" }\n"
+     "end)\n", KB17),
+]
+
+
+KB19 = ("refreshCell matches an existing drip activator with a 0.01-unit position test, and on a miss it "
+        "tes3.createReference a new furn_*_kegstand_dr then deletes the old one. The drip activator's own one-shot "
+        "dripKeg sound starts again each time. cellActivated / the 3s puddle timer made mwsoundguard.log "
+        "(2026-11-24) record up to 19 blocked dripKeg restarts on furn_com_kegstand_dr in a single summary window.")
+KNOWN_BUGS += [
+    ("KB19", "Keg Drip", "kegdrip/main.lua",
+     "local function samePlacement(effect, keg)\n"
+     "    return effect.position:distance(keg.position) < 0.01\n"
+     "        and effect.orientation:distance(keg.orientation) < 0.001\n"
+     "        and math.abs(effect.scale - keg.scale) < 0.001\n"
+     "end",
+     "local function samePlacement(effect, keg)\n"
+     "    -- local fix: tight 0.01 matching was deleting and recreating the drip activator, restarting dripKeg\n"
+     "    return effect.position:distance(keg.position) < 2.0\n"
+     "        and effect.orientation:distance(keg.orientation) < 0.05\n"
+     "        and math.abs(effect.scale - keg.scale) < 0.05\n"
+     "end", KB19),
+    ("KB19", "Keg Drip", "kegdrip/main.lua",
+     "                if not effect then\n"
+     "                    effect = tes3.createReference {\n"
+     "                        object = definition.id,\n"
+     "                        cell = cell,\n"
+     "                        position = keg.position,\n"
+     "                        orientation = keg.orientation,\n"
+     "                        scale = keg.scale,\n"
+     "                        updateCollisionGroups = false,\n"
+     "                    }\n"
+     "                    effect.modified = false\n"
+     "                end",
+     "                if not effect then\n"
+     "                    -- local fix: recycle an unused drip of the same id instead of create+delete, which retriggers dripKeg\n"
+     "                    for _, candidate in ipairs(effects) do\n"
+     "                        if not used[candidate] and available(candidate)\n"
+     "                            and candidate.object.id:lower() == definition.id then\n"
+     "                            effect = candidate\n"
+     "                            effect.position = keg.position\n"
+     "                            effect.orientation = keg.orientation\n"
+     "                            effect.scale = keg.scale\n"
+     "                            break\n"
+     "                        end\n"
+     "                    end\n"
+     "                end\n"
+     "                if not effect then -- local fix: only create when no drip could be reused\n"
+     "                    effect = tes3.createReference {\n"
+     "                        object = definition.id,\n"
+     "                        cell = cell,\n"
+     "                        position = keg.position,\n"
+     "                        orientation = keg.orientation,\n"
+     "                        scale = keg.scale,\n"
+     "                        updateCollisionGroups = false,\n"
+     "                    }\n"
+     "                    effect.modified = false\n"
+     "                end", KB19),
+    ("KB19", "Keg Drip", "kegdrip/main.lua",
+     "        if not used[effect] then\n"
+     "            effect:delete()\n"
+     "            effect.modified = false\n"
+     "        end",
+     "        if not used[effect] then\n"
+     "            tes3.removeSound({ reference = effect }) -- local fix: stop dripKeg before deleting a leftover drip\n"
+     "            effect:delete()\n"
+     "            effect.modified = false\n"
+     "        end", KB19),
+]
+
+
 
 def known_core_files(mwse_dir):
     """The MWSE core files a Known Bugs rule names that exist under mwse_dir (a Data Files\\MWSE folder, or a
@@ -2496,12 +2723,17 @@ def lua_str(s):
 
 
 SHIM_END = "--[[/localpatch_logshim]]"
-# keepPatterns that mark a start-up line, not an error: "Registered recipe N" x500 must not flood MWSE.log
-LIFECYCLE_PATTERNS = frozenset({"initializ", "register", "start", "loaded", "ready", "version", "active"})
+# keepPatterns that mark a start-up line, not an error: "Registered recipe N" x500 must not flood MWSE.log.
+# Not the bare substring "start": it also matches "Dialogue started with", "restart" and "AutoStartup".
+LIFECYCLE_PATTERNS = frozenset({
+    "initializ", "register", "loaded", "ready", "version", "active",
+    "] started", "%f[%w]starting%f[%W]", "has started",
+    "started successfully", "successfully started", "starting up",
+})
 # the version-1 shim (print / mwse.log only, no cap, no logger wrap): replaced by the current one on sight
 SHIM_V1_RE = re.compile(r"local print, mwse = \(function\(_p, _m\) local fmt, find, lower, sub = string\.format, "
                         r"[^\n]*?\{ __index = _m, __newindex = _m \}\) end\)\(print, mwse\) ")
-SHIM_V = 5
+SHIM_V = 6
 SHIM_RE = re.compile(r"local print, mwse, localpatch_log = \(function\(_p, _m\).*?" +
                      re.escape(SHIM_END) + r" ")
 LOG_SHIM_LUA = r"""
@@ -2537,8 +2769,16 @@ local function isErr(t)
 local l = lower(#t > 4096 and sub(t, 1, 4096) or t)
 if matches(l, KEEP) then return true end
 local word = matches(sub(l, 1, 160), LIFE)
-if not word or (lifeN[word] or 0) >= C.lifeMax then return false end
-lifeN[word] = (lifeN[word] or 0) + 1
+if not word then return false end
+local n = lifeN[word] or 0
+if n >= C.lifeMax then
+if n == C.lifeMax then
+lifeN[word] = n + 1
+pcall(_p, fmt("[log redirect] %s: further '%s' lines only in %s", C.name, LIFE[word][1], path))
+end
+return false
+end
+lifeN[word] = n + 1
 return "life"
 end
 local function out(s)

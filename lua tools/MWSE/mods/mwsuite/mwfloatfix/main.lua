@@ -314,15 +314,48 @@ local function clearOldMarks(ref)
     end)
 end
 
+-- an item is marked checked only once the rays have given an answer: one whose model or cell wasn't ready
+-- (no bounding box, a ray test that failed) is tried again a little later, a few times
+local SKIP_LOG_MAX, RETRIES = 200, 3
+local skipLines = 0
+local retries = setmetatable({}, { __mode = "k" })
+local requeue                            -- set with the queue below
+
+local function logSkip(ref, why)
+    if skipLines >= SKIP_LOG_MAX then return end
+    skipLines = skipLines + 1
+    pcall(function()
+        log("left %s in %s: %s", ref.object.id, ref.cell and ref.cell.editorName or "?", why)
+    end)
+    if skipLines == SKIP_LOG_MAX then log("(no more skip lines this session)") end
+end
+
+local function markChecked(ref)
+    checkedThisSession[ref] = true
+    setRefData(ref, "mwfloatfixChecked", true)
+end
+
+local function tryLater(ref, why)
+    local n = (retries[ref] or 0) + 1
+    retries[ref] = n
+    if n <= RETRIES and requeue then
+        requeue(ref)
+    else
+        markChecked(ref)
+        logSkip(ref, why .. " (gave up after " .. RETRIES .. " tries)")
+    end
+end
+
 local function settle(ref)
     if not isCandidate(ref) then return end
     clearOldMarks(ref)
-    checkedThisSession[ref] = true
-    setRefData(ref, "mwfloatfixChecked", true)
     local corners = worldCorners(ref)
-    if not corners then return end
+    if not corners then return tryLater(ref, "no bounding box yet") end
     local bottom = bottomOf(corners)
-    if underWater(ref, bottom) then return end
+    if underWater(ref, bottom) then
+        markChecked(ref)
+        return logSkip(ref, "under water")
+    end
     local cx, cy, cz = 0, 0, 0
     for _, c in ipairs(corners) do cx, cy, cz = cx + c.x, cy + c.y, cz + c.z end
     cx, cy, cz = cx / 8, cy / 8, cz / 8
@@ -333,21 +366,29 @@ local function settle(ref)
             samples[#samples + 1] = { cx + (c.x - cx) * 0.7, cy + (c.y - cy) * 0.7 }
         end
     end
-    local nearest
+    local nearest, answered = nil, 0
     for _, s in ipairs(samples) do
-        local g = gapBelow(ref, s[1], s[2], bottom)
-        if g then
-            if g <= config.tolerance then return end         -- resting on something
-            if not nearest or g < nearest then nearest = g end
+        local ok, g = pcall(gapBelow, ref, s[1], s[2], bottom)
+        if ok then
+            answered = answered + 1
+            if g then
+                if g <= config.tolerance then return markChecked(ref) end      -- resting on something
+                if not nearest or g < nearest then nearest = g end
+            end
         end
     end
-    if not nearest or nearest > config.maxDrop then return end  -- nothing below within reach
+    if answered == 0 then return tryLater(ref, "the ray test failed") end
+    markChecked(ref)
+    if not nearest then return logSkip(ref, "no floor found within reach") end
+    if nearest > config.maxDrop then
+        return logSkip(ref, string.format("the floor is %.0f units down, more than %d", nearest, config.maxDrop))
+    end
     local centre = tes3vector3.new(cx, cy, cz)
     local top = -math.huge
     for _, c in ipairs(corners) do if c.z > top then top = c.z end end
 
-    if againstWall(ref, corners, centre, bottom, top) then return end
-    if supportedByMount(ref, corners, centre, bottom, top) then return end
+    if againstWall(ref, corners, centre, bottom, top) then return logSkip(ref, "up against a wall (mounted)") end
+    if supportedByMount(ref, corners, centre, bottom, top) then return logSkip(ref, "hanging from something above") end
     local drop = nearest - 0.5                               -- leave half a unit, no sinking in
     ref.position = tes3vector3.new(ref.position.x, ref.position.y, ref.position.z - drop)  -- sets modified
     local id = ref.object.id:lower()
@@ -491,6 +532,26 @@ local function undoLast()
     return e
 end
 
+-- FNV-1a (32 bit) of a file, as eight hex digits; nil when it can't be read. The same sum mwdialog_check writes.
+local function fnv1aFile(path)
+    local okBit, bit = pcall(require, "bit")
+    if not okBit then return nil end
+    local f = io.open(path, "rb")
+    if not f then return nil end
+    local bxor, lshift, byte = bit.bxor, bit.lshift, string.byte
+    local h = 2166136261
+    while true do
+        local chunk = f:read(65536)
+        if not chunk then break end
+        for i = 1, #chunk do
+            h = bxor(h, byte(chunk, i)) % 4294967296
+            h = (lshift(h, 24) % 4294967296 + h * 403) % 4294967296      -- h * 16777619, mod 2^32, exactly
+        end
+    end
+    f:close()
+    return string.format("%08x", h)
+end
+
 -- MWSE\config\mwfloatfix_data.json (mwdialog_check --cell-conflicts): the loose items that could float, by
 -- cell. When it is there only those are checked, and every other cell costs one table lookup.
 local floatList                          -- cell key -> object id -> { {x, y, z}, ... }; nil: check everything
@@ -499,19 +560,33 @@ do
     -- the list was worked out against the generated patches (Cell Fixes first: it has the last word on what is
     -- where and what is gone). If one was rebuilt or removed since, the list may miss what floats now: check
     -- every loose item instead, as without the file, until mwdialog_check --fix writes it again.
-    local stale
+    -- Not by file time: mwdialog_check sets its plugins' dates to fix the load order, so a date never says
+    -- when a patch was built. Each source's size, and for Cell Fixes a content hash (FNV-1a), say whether it
+    -- is the very file the list was made from.
+    local stale, why
     if data and type(data.sources) == "table" then
+        local root = (type(tes3.installDirectory) == "string" and tes3.installDirectory ~= "")
+            and (tes3.installDirectory .. "\\Data Files\\") or "Data Files\\"
         for name, s in pairs(data.sources) do
-            local a = lfs.attributes("Data Files\\" .. name)
-            if type(s) == "table" and (not a or a.size ~= s.size or (s.mtime and a.modification ~= s.mtime)) then
-                stale = name
-                break
+            if type(s) == "table" then
+                local path = root .. name
+                local a = lfs.attributes(path)
+                if not a then
+                    stale, why = name, "is gone"
+                elseif a.size ~= s.size then
+                    stale, why = name, "was rebuilt (its size changed)"
+                elseif type(s.fnv1a) == "string" and fnv1aFile(path) ~= s.fnv1a:lower() then
+                    stale, why = name, "was rebuilt (its contents changed)"
+                elseif s.fnv1a == nil and string.lower(name) == "mwdialog_check cell fixes.esp" then
+                    stale, why = name, "has no content stamp in the list (an older mwdialog_check wrote it)"
+                end
+                if stale then break end
             end
         end
     end
     if stale then
-        mwse.log("[mwfloatfix] mwfloatfix_data.json is older than %s: checking every loose item until "
-            .. "mwdialog_check --fix rewrites it", stale)
+        mwse.log("[mwfloatfix] mwfloatfix_data.json doesn't match %s, which %s: checking every loose item until "
+            .. "mwdialog_check --fix rewrites it", stale, why)
         data = nil
     end
     if data and type(data.cells) == "table" then
@@ -627,6 +702,7 @@ local function enqueue(ref)
     sorted = false
     settleAt = os.clock() + 1.0                     -- wait until the cell around it has loaded
 end
+requeue = enqueue                                   -- a retry of an item whose model wasn't ready
 
 event.register(tes3.event.referenceActivated, function(e)
     if applyBlacklist(e.reference) then return end
@@ -634,9 +710,10 @@ event.register(tes3.event.referenceActivated, function(e)
     enqueue(e.reference)
 end)
 
+-- a cell change keeps the queue: the cell's items were queued as they were activated, just before this
+-- (emptying it here dropped them unchecked); anything that has gone since is skipped as it comes up
 event.register(tes3.event.cellChanged, function()
-    queue, queued, qHead = {}, {}, 1
-    sorted = true
+    sorted = false
     settleAt = os.clock() + 1.0
 end)
 
@@ -666,6 +743,8 @@ event.register(tes3.event.simulate, function()
                 local p = ref.position
                 local z = (p and p.z) or 0
                 rest[#rest + 1] = { ref = ref, z = z }
+            elseif ref then
+                queued[ref] = nil               -- gone (its cell unloaded): queued again when it comes back
             end
         end
         table.sort(rest, function(a, b)

@@ -22,6 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from mwdialog_bsa import bsa_index  # noqa: E402
 from mwdialog_records import height_at, land_heights, split_cell  # noqa: E402
 from mwdialog_tes3 import FormatError, cstr, first_sub  # noqa: E402
+from mwdialog_cellmods import FLOAT_ITEM_TAGS, FLOAT_TOLERANCE, float_items  # noqa: E402
 
 RESCUE_DATA = "mwfloatfix_rescue.json"         # Data Files\MWSE\config\, read by the mwfloatfix MWSE mod
 
@@ -430,13 +431,9 @@ class Placements:
         return at
 
 
-def find_footing(world, npcs, patched, kept_dry, tag_of, model_of, shapes):
-    """(moves, rescue, left) for the living exterior NPCs in npcs (ref key -> grid):
-      moves:  (ref key, cell key, group, block) to write in the patch
-      rescue: what mwfloatfix puts right in a save made while they were under water
-      left:   what was found and not moved, as text
-    patched: what the patch already changes, cell key -> {ref key: (group, block)}. kept_dry: the references
-    kept from following land under the sea."""
+def surfaces_of(world, patched, tag_of, model_of, shapes):
+    """grid, known -> the Surfaces around that exterior cell: with the patch's versions (known None), or as a plugin
+    knowing only `known` saw them."""
     @functools.cache
     def surfaces(g, known=None):
         placed = []
@@ -455,6 +452,104 @@ def find_footing(world, npcs, patched, kept_dry, tag_of, model_of, shapes):
                 continue
             placed.append((pos, scale, model, oid, tag))
         return Surfaces(placed, world.land(known), shapes)
+    return surfaces
+
+
+FLOAT_MAX_DROP = 160.0                          # mwfloatfix's maxDrop: further down than this, it isn't the floor
+FLOAT_REST = 0.5                                # left this far over the floor, as mwfloatfix does: no sinking in
+
+
+def find_float_drops(world, grids, patched, tag_of, model_of, shapes, ours_name, esm_only=frozenset(),
+                     tol=FLOAT_TOLERANCE, max_drop=FLOAT_MAX_DROP):
+    """(drops, left) for the loose items in the exterior cells `grids` left hanging over what a plugin their own
+    plugin doesn't know took away (float_items, with the patch's versions as the last word): each is put down on
+    the highest surface under it, the land or a placed model's collision, when that is between tol and max_drop
+    below it, dry, and no model nearby that can't be read could be in the way. The same fix mwfloatfix makes in
+    the game, made once in the patch, so it holds in every save and needs no ray test.
+      drops: (ref key, cell key, group, block) to write in the patch, with the new height
+      left:  what was found and not moved, as text
+    patched: what the patch already changes, cell key -> {ref key: (group, block)}; ours_name: the patch (lower).
+    Interiors aren't looked at: Placements reads only the exterior cells."""
+    n = len(world.names)
+    ref_hist, land_v, finals = {}, {}, {}
+    for g in sorted(grids):
+        key = ("e",) + tuple(g)
+        refs, blocks = defaultdict(list), defaultdict(list)
+        for pi, bk, _cell, grp, blk in world.cell(g):
+            if blk[0][0] == "MVRF":
+                refs[bk].append(None)                     # moved between cells: left to the game
+                continue
+            pos, scale, oid, dele = _state([blk])
+            refs[bk].append((pi, world.names[pi], oid, pos[:3] if pos else None, scale, dele))
+            blocks[bk].append((grp, blk))
+        for bk, (grp, blk) in patched.get(key, {}).items():
+            pos, scale, oid, dele = _state([blk])
+            refs[bk].append((n, ours_name, oid, pos[:3] if pos else None, scale, dele))
+            blocks[bk].append((grp, blk))
+        refs = {bk: vs for bk, vs in refs.items() if None not in vs}
+        ref_hist[key] = refs
+        for bk, vs in refs.items():
+            last = vs[-1]
+            if not last[5] and last[3] and tag_of.get(last[2]) in FLOAT_ITEM_TAGS:
+                x, y, z = last[3]
+                ck = f"#{int(math.floor(x / 8192))},{int(math.floor(y / 8192))}"
+                finals[(ck, last[2], int(math.floor(x + 0.5)), int(math.floor(y + 0.5)), int(math.floor(z + 0.5)))] = \
+                    (g, bk, blocks[bk])
+        lv = world.land_vers.get(g, ())
+        if len(lv) > 1:
+            land_v[g] = [(pi, world.names[pi], first_sub(world._record(pi, off), b"VHGT")) for pi, _d, off in lv]
+    found = float_items(ref_hist, land_v, world.knows, tag_of, tol=tol, ours=frozenset({ours_name}),
+                        esm_only=frozenset(esm_only))
+    surfaces = surfaces_of(world, patched, tag_of, model_of, shapes)
+    drops, left = [], []
+    for ck, hits in sorted(found.items()):
+        for k, (author, why) in sorted(hits.items()):
+            hit = finals.get((ck,) + k)
+            if hit is None:
+                continue
+            g, bk, vers = hit
+            grp, blk = vers[-1]
+            pos, scale, oid, _dele = _state([b for _g, b in vers])
+            x, y, z = pos[:3]
+            where = f"{oid} ({ck}, from {author}; {why})"
+            box = shapes.placed(tuple(pos), scale, model_of[oid]) if model_of.get(oid) else None
+            bottom = box[1][4] if box else z
+            now = surfaces(g)
+            probes = [(x, y)]
+            if box:
+                x1, x2, y1, y2 = box[1][:4]
+                probes += [(x + (cx - x) * 0.7, y + (cy - y) * 0.7) for cx in (x1, x2) for cy in (y1, y2)]
+            h, what, _tag = max((now.floor(px, py, bottom + tol) for px, py in probes), key=lambda f: f[0])
+            gap = bottom - h
+            if gap <= tol:
+                continue                                  # resting on something after all
+            cant_tell = now.unreadable(x, y)
+            if cant_tell:
+                left.append(f"{where}: {cant_tell}'s model can't be read, so it may be resting on it")
+                continue
+            if gap > max_drop:
+                left.append(f"{where}: nothing to rest on within {max_drop:.0f} units below it")
+                continue
+            if h < 0:
+                left.append(f"{where}: what is under it ({what}) is under water")
+                continue
+            new_z = z - gap + FLOAT_REST
+            data = next(d for s_, d in blk if s_ == "DATA" and len(d) >= 24)
+            data = data[:8] + struct.pack("<f", new_z) + data[12:]
+            new = [[s_, data if s_ == "DATA" and len(d) >= 24 else d] for s_, d in blk]
+            drops.append((bk, ("e",) + tuple(g), grp, new, f"{where}: down {gap - FLOAT_REST:.0f} onto {what} "
+                                                          f"(z {z:.1f} -> {new_z:.1f})"))
+    return drops, left
+
+
+def find_footing(world, npcs, patched, kept_dry, tag_of, model_of, shapes):
+    """(moves, rescue, left) for the living exterior NPCs in npcs (ref key -> grid):
+      moves:  (ref key, cell key, group, block) to write in the patch
+      rescue: what mwfloatfix puts right in a save made while they were under water
+      left:   what was found and not moved, as text
+    patched: what the patch already changes, cell key -> {ref key: (group, block)}. kept_dry: the references
+    kept from following land under the sea."""
+    surfaces = surfaces_of(world, patched, tag_of, model_of, shapes)
 
     final_land = world.land()
     moves, rescue, left = [], [], []
