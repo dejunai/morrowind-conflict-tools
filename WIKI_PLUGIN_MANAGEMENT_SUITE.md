@@ -126,7 +126,7 @@ Following major refactoring passes, the core monolith `mwdialog_check.py` delega
 * `--no-sounds`: Skips validation of voice and sound asset paths.
 * `--restore-textures`: Restores full-resolution textures that were previously downscaled to 2048px (reads `mwdialog_reduced_textures.txt`).
 * `--remove-generated`: Deletes all generated silent audio and placeholder assets created by previous repair runs (reads `mwdialog_generated_files.txt`).
-* `--vortex-dir PATH`: Explicit path to Vortex staging directory.
+* `--vortex-dir PATH` (or `--staging PATH`): Explicit path to Vortex staging directory.
 * `--no-vortex`: Disables searching Vortex staging folders for un-deployed assets.
 
 ### 3.10. Rollback, Backups & Undo System

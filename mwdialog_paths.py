@@ -339,8 +339,225 @@ def _json_string(raw):
             return None
 
 
+# ------------------------------------------------------------------ Vortex state.v2 (LevelDB), read-only
+# A small LevelDB + Snappy reader, so no native module is needed. Files are only opened for reading; a file Vortex
+# holds open without sharing (its live .log while it runs) is skipped. Vortex compacts its write-ahead log into
+# sorted tables (.ldb) when it starts: there keys are prefix-compressed and blocks Snappy-compressed, so a raw
+# byte search for "settings###mods###installPath" finds nothing and only a real table read gets the settings.
+_LDB_MAGIC = bytes.fromhex("57fb808b247547db")
+_LDB_LOG_BLOCK = 32768
+
+
+def _varint(data, pos):
+    result = shift = 0
+    while True:
+        byte = data[pos]
+        pos += 1
+        result |= (byte & 0x7F) << shift
+        if not byte & 0x80:
+            return result, pos
+        shift += 7
+        if shift > 63:
+            raise ValueError("bad varint")
+
+
+def _snappy_decompress(data):
+    """Raw (unframed) Snappy, as LevelDB stores a compressed block."""
+    length, pos = _varint(data, 0)
+    out = bytearray()
+    n = len(data)
+    while pos < n:
+        tag = data[pos]
+        pos += 1
+        kind = tag & 3
+        if kind == 0:
+            size = tag >> 2
+            if size >= 60:
+                extra = size - 59
+                size = int.from_bytes(data[pos:pos + extra], "little")
+                pos += extra
+            size += 1
+            out += data[pos:pos + size]
+            pos += size
+            continue
+        if kind == 1:
+            size = ((tag >> 2) & 7) + 4
+            offset = ((tag >> 5) << 8) | data[pos]
+            pos += 1
+        elif kind == 2:
+            size = (tag >> 2) + 1
+            offset = int.from_bytes(data[pos:pos + 2], "little")
+            pos += 2
+        else:
+            size = (tag >> 2) + 1
+            offset = int.from_bytes(data[pos:pos + 4], "little")
+            pos += 4
+        if offset <= 0 or offset > len(out):
+            raise ValueError("bad snappy copy offset")
+        start = len(out) - offset
+        if offset >= size:
+            out += out[start:start + size]
+        else:                                           # an overlapping copy repeats its own output
+            for i in range(size):
+                out.append(out[start + i])
+    if len(out) != length:
+        raise ValueError("snappy length mismatch")
+    return bytes(out)
+
+
+def _ldb_block_entries(block):
+    if len(block) < 4:
+        return
+    restarts = int.from_bytes(block[-4:], "little")
+    end = len(block) - 4 - 4 * restarts
+    pos, key = 0, b""
+    while pos < end:
+        shared, pos = _varint(block, pos)
+        unshared, pos = _varint(block, pos)
+        vlen, pos = _varint(block, pos)
+        key = key[:shared] + block[pos:pos + unshared]
+        pos += unshared
+        yield key, block[pos:pos + vlen]
+        pos += vlen
+
+
+def _ldb_read_block(data, offset, size):
+    raw, kind = data[offset:offset + size], data[offset + size]
+    return _snappy_decompress(raw) if kind == 1 else raw
+
+
+def _ldb_table_entries(data):
+    """(user key, sequence, value or None for a deletion) from one sorted table (.ldb/.sst)."""
+    if len(data) < 48 or data[-8:] != _LDB_MAGIC:
+        return
+    footer = data[-48:]
+    _m, pos = _varint(footer, 0)
+    _m, pos = _varint(footer, pos)
+    index_off, pos = _varint(footer, pos)
+    index_size, pos = _varint(footer, pos)
+    for _last, handle in _ldb_block_entries(_ldb_read_block(data, index_off, index_size)):
+        off, hp = _varint(handle, 0)
+        size, _hp = _varint(handle, hp)
+        for ikey, value in _ldb_block_entries(_ldb_read_block(data, off, size)):
+            if len(ikey) < 8:
+                continue
+            tag = int.from_bytes(ikey[-8:], "little")
+            yield ikey[:-8], tag >> 8, (value if tag & 0xFF == 1 else None)
+
+
+def _ldb_log_entries(data):
+    """(user key, sequence, value or None) from a write-ahead log; a torn tail is skipped."""
+    records, pending, pos = [], b"", 0
+    while pos + 7 <= len(data):
+        left = _LDB_LOG_BLOCK - pos % _LDB_LOG_BLOCK
+        if left < 7:
+            pos += left
+            continue
+        length = int.from_bytes(data[pos + 4:pos + 6], "little")
+        kind = data[pos + 6]
+        chunk = data[pos + 7:pos + 7 + length]
+        pos += 7 + length
+        if len(chunk) < length:
+            break
+        if kind == 1:
+            records.append(chunk)
+        elif kind == 2:
+            pending = chunk
+        elif kind == 3:
+            pending += chunk
+        elif kind == 4:
+            records.append(pending + chunk)
+            pending = b""
+    for record in records:
+        if len(record) < 12:
+            continue
+        seq, count = int.from_bytes(record[:8], "little"), int.from_bytes(record[8:12], "little")
+        p, batch = 12, []
+        try:
+            for i in range(count):
+                kind = record[p]
+                p += 1
+                klen, p = _varint(record, p)
+                key = record[p:p + klen]
+                p += klen
+                value = None
+                if kind == 1:
+                    vlen, p = _varint(record, p)
+                    value = record[p:p + vlen]
+                    p += vlen
+                batch.append((key, seq + i, value))
+        except (IndexError, ValueError):
+            continue
+        yield from batch
+
+
+def read_leveldb_prefix(folder, prefix):
+    """{key bytes: value bytes} for every live key starting with `prefix` in a LevelDB folder; the newest
+    sequence number wins and a deletion hides the key. Read-only; unreadable or damaged files are skipped."""
+    newest = {}
+    try:
+        names = sorted(os.listdir(folder))
+    except OSError:
+        return {}
+    for n in names:
+        low = n.lower()
+        if not low.endswith((".ldb", ".sst", ".log")):
+            continue
+        try:
+            with open(os.path.join(folder, n), "rb") as f:
+                data = f.read()
+        except OSError:
+            continue
+        try:
+            entries = _ldb_log_entries(data) if low.endswith(".log") else _ldb_table_entries(data)
+            for key, seq, value in entries:
+                if key.startswith(prefix) and seq >= newest.get(key, (-1, None))[0]:
+                    newest[key] = (seq, value)
+        except (ValueError, IndexError):
+            continue
+    return {k: v for k, (_s, v) in newest.items() if v is not None}
+
+
+def _leveldb_settings(folder, game_id):
+    """(downloads, staging template) from Vortex's settings keys, read as a real LevelDB."""
+    live = read_leveldb_prefix(folder, b"settings###")
+
+    def val(key):
+        raw = live.get(key)
+        if raw is None:
+            return None
+        try:
+            return json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, ValueError):
+            return None
+
+    dl = val(_DL_KEY)
+    st = val(_INST_GAME_KEY + game_id.encode("ascii"))
+    if not st:
+        whole = val(_INST_KEY)
+        if isinstance(whole, dict):
+            st = whole.get(game_id)
+        elif isinstance(whole, str):
+            st = whole
+    return (dl if isinstance(dl, str) and dl else None), (st if isinstance(st, str) and st else None)
+
+
 def _scan_leveldb_dir(folder, game_id):
-    """Best-effort: pull downloads path and installPath from LevelDB .ldb/.log files."""
+    """Downloads path and Morrowind installPath from a Vortex LevelDB folder: a real read first, then the older
+    raw byte search for anything still missing."""
+    try:
+        dl, st = _leveldb_settings(folder, game_id)
+    except Exception:  # noqa: BLE001 - a reader bug must not stop the raw search
+        dl = st = None
+    if not (dl and st):
+        rdl, rst = _scan_leveldb_raw(folder, game_id)
+        dl, st = dl or rdl, st or rst
+    return dl, st
+
+
+def _scan_leveldb_raw(folder, game_id):
+    """Best-effort raw byte search of LevelDB .ldb/.log files (finds keys stored whole: the log, or an
+    uncompressed table's restart entries)."""
     downloads = staging_tmpl = None
     try:
         names = os.listdir(folder)
@@ -505,6 +722,97 @@ def _format_error(kind, flag, tried, reason):
     return "\n".join(lines)
 
 
+STAGING_MARKER = "__vortex_staging_folder"
+DOWNLOADS_MARKER = "__vortex_downloads_folder"
+VORTEX_PATHS_RECORD = "vortex_paths.json"     # in GENERATED_DIR: the last staging/download folders that resolved
+
+
+def _marker(folder, name):
+    """The JSON in Vortex's marker file `name` inside `folder` ({} when it holds no JSON), or None if absent."""
+    fn = os.path.join(folder, name)
+    if not os.path.isfile(fn):
+        return None
+    try:
+        with open(fn, "rb") as f:
+            data = json.loads(f.read(4096).decode("utf-8", "replace") or "{}")
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def is_vortex_staging(folder, game_id=GAME_ID):
+    """True when `folder` carries Vortex's staging marker for this game."""
+    m = _marker(folder, STAGING_MARKER) if folder else None
+    return m is not None and m.get("game", game_id) == game_id
+
+
+def is_vortex_downloads(folder):
+    """True when `folder` (a game's download folder) or its parent carries Vortex's downloads marker."""
+    if not folder:
+        return False
+    return any(_marker(f, DOWNLOADS_MARKER) is not None for f in (folder, os.path.dirname(folder)))
+
+
+def _paths_record():
+    """The remembered-folders record, or None when the tools have no generated folder (tests, a bare checkout)."""
+    return os.path.join(GENERATED_DIR, VORTEX_PATHS_RECORD) if os.path.isdir(GENERATED_DIR) else None
+
+
+def _remembered(kind):
+    fn = _paths_record()
+    if not fn:
+        return None
+    try:
+        with open(fn, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return None
+    v = data.get(kind) if isinstance(data, dict) else None
+    return v if isinstance(v, str) and v else None
+
+
+def _remember(kind, path):
+    """Keep a folder that resolved (only one Vortex's marker vouches for), so a later run finds it even when
+    Vortex's settings can't be read. Written only when it changes; never touches Vortex's files."""
+    fn = _paths_record()
+    ok = is_vortex_staging(path) if kind == "staging" else is_vortex_downloads(path)
+    if not fn or not ok:
+        return
+    try:
+        with open(fn, encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            data = {}
+    except (OSError, ValueError):
+        data = {}
+    if data.get(kind) == path:
+        return
+    data[kind] = path
+    try:
+        tmp = fn + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=1)
+        os.replace(tmp, fn)
+    except OSError:
+        pass
+
+
+def _marker_fallback(kind, game_id=GAME_ID):
+    """A folder Vortex's own marker file vouches for, when its settings can't be read: the one remembered from
+    an earlier run, then Vortex's default location (%APPDATA%\\Vortex\\<game>\\mods, ...\\downloads\\<game>)."""
+    root = vortex_appdata()
+    cands = [_remembered(kind)]
+    if root:
+        cands.append(os.path.join(root, game_id, "mods") if kind == "staging"
+                     else os.path.join(root, "downloads", game_id))
+    for c in cands:
+        if not c or not os.path.isdir(c):
+            continue
+        if (is_vortex_staging(c, game_id) if kind == "staging" else is_vortex_downloads(c)):
+            return os.path.abspath(c)
+    return None
+
+
 def resolve_staging(cli=None, required=True, game_id=GAME_ID):
     """The Morrowind staging folder. `cli` (e.g. --staging) wins when given.
 
@@ -514,6 +822,7 @@ def resolve_staging(cli=None, required=True, game_id=GAME_ID):
     if cli:
         path = os.path.abspath(cli)
         if os.path.isdir(path):
+            _remember("staging", path)
             return path
         if required:
             raise VortexPathError(
@@ -524,7 +833,12 @@ def resolve_staging(cli=None, required=True, game_id=GAME_ID):
     tmpl = info.get("staging_tmpl")
     path = as_local(_expand(tmpl, game_id)) if tmpl else None
     if path and os.path.isdir(path):
-        return os.path.abspath(path)
+        path = os.path.abspath(path)
+        _remember("staging", path)
+        return path
+    found = _marker_fallback("staging", game_id)
+    if found:
+        return found
     if not required:
         return None
     if path and not os.path.isdir(path):
@@ -541,6 +855,7 @@ def resolve_downloads(cli=None, required=True, game_id=GAME_ID):
     if cli:
         path = os.path.abspath(cli)
         if os.path.isdir(path):
+            _remember("downloads", path)
             return path
         # a path that already includes the game leaf, or its parent
         if required:
@@ -560,7 +875,12 @@ def resolve_downloads(cli=None, required=True, game_id=GAME_ID):
             cands.append(os.path.join(path, game_id))
     for c in cands:
         if c and os.path.isdir(c):
-            return os.path.abspath(c)
+            c = os.path.abspath(c)
+            _remember("downloads", c)
+            return c
+    found = _marker_fallback("downloads", game_id)
+    if found:
+        return found
     if not required:
         return None
     if path and not any(os.path.isdir(c) for c in cands if c):

@@ -1,3 +1,15 @@
+# Vortex folders found again after Vortex compacts its settings (2026-11-25)
+
+- Vortex's settings (`%APPDATA%\Vortex\state.v2`) are read as the LevelDB they are: sorted tables (`.ldb`, keys
+  prefix-compressed, blocks Snappy-compressed) and the write-ahead log, newest entry winning. The old byte search
+  only found a key while it happened to be stored whole (in the log, or on a table restart point), so after
+  Vortex re-compacted its tables on start-up the runs failed with "Could not determine Vortex's Morrowind
+  staging folder". Read-only; a file Vortex holds open is skipped.
+- When the settings still can't be read, a folder Vortex's own marker (`__vortex_staging_folder`,
+  `__vortex_downloads_folder`) vouches for is used: the one remembered from the last run that resolved
+  (`generated\vortex_paths.json`), then Vortex's default location.
+- `mwdialog_check` accepts `--staging DIR` (what its error message suggests) as well as `--vortex-dir DIR`.
+
 # luafix: frame-drain and safe-handle patches, fewer false hits (2026-11-25)
 
 - New targeted patches, applied like KB patches by `tidy --lua-only --apply`: `KP1` Attend Me wheel rays once per

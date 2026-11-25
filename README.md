@@ -143,7 +143,7 @@ The suite is engineered for massive, complex mod lists (hundreds of plugins, ten
 | `--only` | `<PLUGINS ...>` | Report (and fix) only issues coming from these plugins. Not an alias of `--plugins`. |
 | `--ini` | `<PATH>` | Path to `Morrowind.ini` (its `[Archives]`). The plugin list is `generated\mwdialog_load_order.txt`, made from this ini the first time, and written back into it whenever a run changes it, and by `--play`. |
 | `--openmw-cfg` | `<PATH>` | Reads `content=` and `data=` from `openmw.cfg`. |
-| `--vortex-dir` | `<PATH>` | Staging folder override for Vortex integration. |
+| `--vortex-dir`, `--staging` | `<PATH>` | Staging folder override for Vortex integration. |
 | `--no-vortex` | *(flag)* | Disables Vortex staging integration. |
 | `--vortex-downloads`, `--downloads` | `<PATH>` | Vortex download folder, to read a plugin's original header from its download archive when `--fix` has rewritten it (default: Vortex's own setting). |
 | `--no-archive-lookup` | *(flag)* | Don't open download archives for the master check. |

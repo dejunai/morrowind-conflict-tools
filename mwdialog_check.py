@@ -9750,7 +9750,7 @@ def _ensure_vortex_paths(args):
     if want_staging:
         cli = getattr(args, "vortex_dir", None)
         args.vortex_dir = MP.resolve_staging(cli=cli, required=True)
-        src = "--vortex-dir" if cli else "Vortex settings"
+        src = "--vortex-dir/--staging" if cli else "Vortex settings"
         print(f"Vortex staging: {args.vortex_dir}  (from {src})")
     if want_downloads:
         cli = getattr(args, "vortex_downloads", None)
@@ -9925,7 +9925,7 @@ def _main(argv=None):
     tc.add_argument("--no-interactive", action="store_true",
                     help="with --cell-conflicts: only report, don't ask what to do about each conflict "
                          "(also the case when the output goes to a file)")
-    tc.add_argument("--vortex-dir", metavar="PATH",
+    tc.add_argument("--vortex-dir", "--staging", dest="vortex_dir", metavar="PATH",
                     help="Vortex's mod staging folder, searched for files that exist there but were never deployed "
                          "(default: Vortex's own setting)")
     tc.add_argument("--no-vortex", action="store_true", help="don't search the Vortex mod folders")
