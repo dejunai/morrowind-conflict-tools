@@ -169,6 +169,7 @@ local function check()
 end
 
 local function onInfoFilter(e)
+    if not e.passes then return end          -- first: infoFilter runs for every response tried
     if e.dialogue and e.dialogue.id then
         local id = e.dialogue.id:lower()
         if id:find("%(target%)") then

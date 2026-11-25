@@ -276,6 +276,7 @@ end
 
 local WATCHED = { "addSound", "addTempSound" }
 local wrapOf, origOf, ours = {}, {}, {}
+local audioStarted = false               -- set by startAudio / stopAudio below
 local blockTally = {}
 
 local function sourceOf(fn)
@@ -315,7 +316,7 @@ local function wrapList(eventType, list)
 end
 
 local function wrapAll()
-    if not generalEvents then return end
+    if not generalEvents or not audioStarted then return end
     for _, et in ipairs(WATCHED) do
         if generalEvents[et] then wrapList(et, generalEvents[et]) end
         if filteredEvents and filteredEvents[et] then
@@ -348,6 +349,29 @@ local function listHandlers()
     end
 end
 
+-- the audio watch turned off: every handler goes back to the mod's own function, so nothing of ours is left
+-- running in a sound event
+local function unwrapAll()
+    if not generalEvents then return end
+    local function unwrapList(list)
+        for i, cb in ipairs(list) do
+            local orig = origOf[cb]
+            if orig then
+                list[i] = orig
+                eventPriorities[cb] = nil
+            end
+        end
+    end
+    for _, et in ipairs(WATCHED) do
+        if generalEvents[et] then unwrapList(generalEvents[et]) end
+        if filteredEvents and filteredEvents[et] then
+            for _, list in pairs(filteredEvents[et]) do unwrapList(list) end
+        end
+    end
+    wrapOf, origOf = {}, {}
+end
+
+local unpatchEventFunctions = function() end
 local function patchEventFunctions()   -- keep register/unregister/isRegistered working with wrapped handlers
     if not generalEvents then return end
     local realRegister, realUnregister, realIsRegistered = event.register, event.unregister, event.isRegistered
@@ -367,6 +391,15 @@ local function patchEventFunctions()   -- keep register/unregister/isRegistered 
             if et == name then wrapAll() break end
         end
         return r
+    end
+    local ourRegister, ourUnregister, ourIsRegistered = event.register, event.unregister, event.isRegistered
+    -- put MWSE's (or mwguard's) functions back, unless another mod has replaced ours since: then ours stay,
+    -- and with no wrappers left they only pass calls through
+    unpatchEventFunctions = function()
+        if event.register == ourRegister then event.register = realRegister end
+        if event.unregister == ourUnregister then event.unregister = realUnregister end
+        if event.isRegistered == ourIsRegistered then event.isRegistered = realIsRegistered end
+        unpatchEventFunctions = function() end
     end
 end
 
@@ -571,9 +604,23 @@ local function memCheck()
 end
 
 -- event hooks --------------------------------------------------------------------
-local function reg(name, fn)
+-- each group's handlers are remembered, so turning the watch or the audio watch off unregisters them
+local watchRegs, audioRegs = {}, {}
+local function reg(name, fn, group)
     local ev = tes3.event[name]
-    if ev then event.register(ev, fn) else log("(event %s not available in this MWSE)", name) end
+    if ev then
+        event.register(ev, fn)
+        if group then group[#group + 1] = { ev, fn } end
+    else
+        log("(event %s not available in this MWSE)", name)
+    end
+end
+local function unregAll(group)
+    for i = #group, 1, -1 do
+        local r = group[i]
+        if not event.isRegistered or event.isRegistered(r[1], r[2]) then event.unregister(r[1], r[2]) end
+        group[i] = nil
+    end
 end
 
 local function guarded(fn)            -- run only while the watch is on
@@ -645,7 +692,7 @@ onNowScanFrame = function()
     end
 end
 
-local watchStarted, audioStarted = false, false
+local watchStarted = false
 
 local function startWatch()
     if watchStarted then return end
@@ -658,7 +705,7 @@ local function startWatch()
         if audioStarted then wrapAll() if audioOn() then listHandlers() end end
         lastCounts = nil
         census("after load")
-    end))
+    end), watchRegs)
 
     reg("cellChanged", guarded(function(e)
         log("CELL %s -> %s", cellName(e.previousCell), cellName(e.cell))
@@ -666,36 +713,36 @@ local function startWatch()
         if audioOn() then
             timer.start({ type = timer.real, duration = 2, callback = function() startNowPlaying("cell change") end })
         end
-    end))
+    end), watchRegs)
 
     reg("referenceActivated", guarded(function(e)
         if bump("refsActivated") then
             local r = e.reference
             log("  ref active: %s (%s)", r and r.object and r.object.id or "?", r and cellName(r.cell) or "-")
         end
-    end))
+    end), watchRegs)
 
     reg("mobileActivated", guarded(function(e)
         if bump("actorsActivated") then
             local r = e.reference
             log("  actor active: %s", r and r.object and r.object.id or "?")
         end
-    end))
+    end), watchRegs)
 
     reg("uiActivated", guarded(function(e)
         if bump("menus") then
             log("  menu: %s", e.element and e.element.name or "?")
         end
-    end))
+    end), watchRegs)
 
     reg("startGlobalScript", guarded(function(e)
         if bump("startScript") then
             local s = e.script
             log("  StartScript %s", s and (s.id or tostring(s)) or "?")
         end
-    end))
+    end), watchRegs)
 
-    reg("enterFrame", onFrame)
+    reg("enterFrame", onFrame, watchRegs)
 end
 
 local function startAudio()
@@ -706,19 +753,41 @@ local function startAudio()
     patchEventFunctions()
     event.register(tes3.event.addSound, onRef, { priority = 1000000000 })      -- first: see every request
     event.register(tes3.event.addTempSound, onTemp, { priority = 1000000000 })
-    reg("soundObjectPlay", onSound("buffer"))
+    audioRegs[#audioRegs + 1] = { tes3.event.addSound, onRef }
+    audioRegs[#audioRegs + 1] = { tes3.event.addTempSound, onTemp }
+    reg("soundObjectPlay", onSound("buffer"), audioRegs)
 
     reg("musicSelectTrack", function(e)
         if not audioOn() then return end
         log("  music: selecting track (situation %s)", tostring(field(function() return e.situation end)))
-    end)
+    end, audioRegs)
 
     reg("musicChangeTrack", function(e)
         if not audioOn() then return end
         log("  music: now playing %s", tostring(field(function() return e.music end)
             or field(function() return e.path end) or "?"))
-    end)
+    end, audioRegs)
     wrapAll()
+end
+
+-- off really is off: no handler of ours stays registered, no mod's sound handler stays wrapped
+local function stopAudio()
+    if not audioStarted then return end
+    audioStarted = false
+    unregAll(audioRegs)
+    unwrapAll()
+    unpatchEventFunctions()
+    for k in pairs(ours) do ours[k] = nil end
+end
+
+local function stopWatch()
+    if not watchStarted then return end
+    watchStarted = false
+    unregAll(watchRegs)
+    nowScan = nil
+    if event.isRegistered(tes3.event.enterFrame, onNowScanFrame) then
+        event.unregister(tes3.event.enterFrame, onNowScanFrame)
+    end
 end
 
 -- apply the settings (at startup and whenever they change in the Mod Config menu)
@@ -734,6 +803,7 @@ local function applySettings()
             if tes3.player then census("watch enabled") end
         elseif appliedWatch ~= nil then
             log("watch disabled")
+            stopWatch()
         end
         appliedWatch = w
     end
@@ -743,8 +813,9 @@ local function applySettings()
             log("audio watch on (up to %d sound lines per second)", config.soundLines or 40)
             listHandlers()
             if tes3.player then startNowPlaying("audio watch turned on") end
-        elseif appliedAudio ~= nil and watchStarted then
-            log("audio watch off")
+        elseif appliedAudio ~= nil then
+            if audioStarted then log("audio watch off") end
+            stopAudio()
         end
         appliedAudio = a
     end

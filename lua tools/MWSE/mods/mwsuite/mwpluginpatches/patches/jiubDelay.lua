@@ -32,12 +32,38 @@ local function syncJiubAppearance()
     end
 end
 
-local function onSimulate(e)
-    if not config.jiubDelayEnabled or not config.isFriendsAndFrensActive() then return end
+-- globals are base objects that live as long as the game: looked up once (init runs at initialized)
+local charGenGlobal
+local function charGenState()
+    if not charGenGlobal then charGenGlobal = tes3.findGlobal("CharGenState") end
+    return charGenGlobal
+end
+
+local function requiredSeconds()
+    return math.max(0, (config.jiubDelayMinutes or 5) * 60)
+end
+
+-- the post-census clock only runs (a simulate handler) until the delay is reached; it starts again on a load
+-- whose character hasn't reached it, or when a longer delay is set in the Mod Config menu
+local counting = false
+local onSimulate
+local function startCounting()
+    if counting then return end
+    counting = true
+    event.register(tes3.event.simulate, onSimulate)
+end
+local function stopCounting()
+    if not counting then return end
+    counting = false
+    event.unregister(tes3.event.simulate, onSimulate)
+end
+
+onSimulate = function(e)
+    if not config.jiubDelayEnabled then return end
 
     -- Check if character generation is complete (journal enabled, Census Office exited)
-    local charGenState = tes3.findGlobal("CharGenState")
-    if not charGenState or charGenState.value ~= -1 then
+    local cg = charGenState()
+    if not cg or cg.value ~= -1 then
         return
     end
 
@@ -46,24 +72,26 @@ local function onSimulate(e)
 
     data.secondsSinceCensus = (data.secondsSinceCensus or 0) + e.delta
 
-    local requiredSeconds = math.max(0, (config.jiubDelayMinutes or 5) * 60)
-    if data.secondsSinceCensus >= requiredSeconds and not data.unlockedLogged then
-        data.unlockedLogged = true
-        mwse.log("[mwpluginpatches] Post-census delay of %s minutes reached. Jiub companion rumor is now eligible to appear.",
-            config.jiubDelayMinutes)
+    if data.secondsSinceCensus >= requiredSeconds() then
+        if not data.unlockedLogged then
+            data.unlockedLogged = true
+            mwse.log("[mwpluginpatches] Post-census delay of %s minutes reached. Jiub companion rumor is now eligible to appear.",
+                config.jiubDelayMinutes)
+        end
+        stopCounting()
     end
 end
 
 local function onInfoFilter(e)
-    if not config.jiubDelayEnabled or not config.isFriendsAndFrensActive() then return end
-    if not e.passes or not e.info then return end
+    if not e.passes or not e.info then return end          -- first: it runs for every response tried
+    if not config.jiubDelayEnabled then return end         -- Friends & Frens itself was checked once, in init
 
     local isJiubRumor = (tostring(e.info.id) == JIUB_RUMOR_INFO_ID)
     if not isJiubRumor then return end
 
     -- 1. Exclude while still in CharGen (before journal / release papers)
-    local charGenState = tes3.findGlobal("CharGenState")
-    if charGenState and charGenState.value ~= -1 then
+    local cg = charGenState()
+    if cg and cg.value ~= -1 then
         e.passes = false
         return
     end
@@ -89,10 +117,20 @@ local function onInfoFilter(e)
 
     -- 3. Check post-census gameplay timer
     local data = getPlayerData()
-    local requiredSeconds = math.max(0, (config.jiubDelayMinutes or 5) * 60)
-    if not data or (data.secondsSinceCensus or 0) < requiredSeconds then
+    if not data or (data.secondsSinceCensus or 0) < requiredSeconds() then
+        startCounting()                                    -- a longer delay set since it was reached
         e.passes = false
         return
+    end
+end
+
+local function onLoaded()
+    syncJiubAppearance()
+    local data = getPlayerData()
+    if data and (data.secondsSinceCensus or 0) >= requiredSeconds() then
+        stopCounting()
+    else
+        startCounting()
     end
 end
 
@@ -109,10 +147,10 @@ function jiubDelay.init()
     end
 
     syncJiubAppearance()
-    event.register(tes3.event.simulate, onSimulate)
+    startCounting()
     event.register(tes3.event.infoFilter, onInfoFilter)
     event.register(tes3.event.mobileActivated, onMobileActivated)
-    event.register(tes3.event.loaded, syncJiubAppearance)
+    event.register(tes3.event.loaded, onLoaded)
 
     mwse.log("[mwpluginpatches] Friends & Frens Jiub Companion Delayer patch active.")
 end

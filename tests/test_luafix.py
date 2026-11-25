@@ -337,11 +337,13 @@ def test_S1_sound_query_on_a_non_actor_is_reported_never_patched():
         assert "S1" not in rules(analyse(fine)), fine
 
 
-def test_H2_simulate_timer_restarted_on_load_is_fine_real_one_is_not():
-    base = "event.register('loaded', function() timer.start{{ type = {t}, duration = 1, iterations = -1, " \
+def test_H2_any_timer_restarted_on_load_is_fine():
+    # MWSE clears real, simulate and game timers just before `loaded` (LuaManager::clearTimers)
+    base = "event.register('{ev}', function() timer.start{{ type = {t}, duration = 1, iterations = -1, " \
            "callback = function() end }} end)"
-    assert not [f for f in analyse(base.format(t="timer.simulate")).findings if f["rule"] == "H2"]
-    assert [f for f in analyse(base.format(t="timer.real")).findings if f["rule"] == "H2"]
+    for t in ("timer.simulate", "timer.real", "timer.game"):
+        assert not [f for f in analyse(base.format(ev="loaded", t=t)).findings if f["rule"] == "H2"], t
+    assert [f for f in analyse(base.format(ev="cellChanged", t="timer.real")).findings if f["rule"] == "H2"]
 
 
 def test_H5_require_cycle(tmp_path):
@@ -1732,8 +1734,51 @@ def test_m1_menu_exit_only_without_ui():
 def test_v1_number_times_vector_swapped():
     src = "local up = tes3vector3.new(0, 0, 1)\nlocal d = -1 * up\nlocal n = 2 * count\nlocal k = 2 * 3\n"
     a = analyse(src)
-    assert sorted((f["line"], f["conf"]) for f in a.findings if f["rule"] == "V1") == [(2, "high"), (3, "medium")]
+    assert sorted((f["line"], f["conf"]) for f in a.findings if f["rule"] == "V1") == [(2, "high")]
     assert "local d = up * -1" in patch(src)
+
+
+def test_v1_only_flags_with_vector_evidence():
+    # the 2026-11-24 tidy plan's 355 false alarms: plain number math, including names that look like vectors
+    plain = ("local a = 2 * math.pi\nlocal b = 0.9 * vol\nlocal c = 1.5 * acrobatics\nlocal d = .75 * chameleonMagnitude\n"
+             "local e = 2 * dir\nlocal f = 3 + offset\nlocal g = 1 - pos\nlocal h = 2 * mobile.health.current\n"
+             "local i = 2 * #list\nlocal j = 1 - e.delta\nlocal k = 2 * tes3.player.object.level\n"
+             "local s = 1 + ref.position.z\nlocal t = 2 * cfg.scale\n")
+    assert "V1" not in rules(analyse(plain))
+    real = ("local function f(ref, e)\n"
+            "  local v = 2 * ref.position\n"                       # 2 high: a reference's position
+            "  local w = -1 * tes3.getCameraVector()\n"            # 3 high: documented vector function
+            "  local x = 0.5 * mob.velocity\n"                     # 4 high: documented vector field
+            "  local n = node.worldTransform.translation\n"
+            "  local y = 10 + n\n"                                 # 6 high: a local set from one
+            "  local z = 1 - tes3vector3.new(1, 2, 3)\n"           # 7 high
+            "  local q = 3 * thing.position\n"                     # 8 medium: position of something unknown
+            "  local r = 2 * ref.forwardDirection:normalized()\n"  # 9 high
+            "end\n")
+    a = analyse(real)
+    assert sorted((f["line"], f["conf"]) for f in a.findings if f["rule"] == "V1") == \
+        [(2, "high"), (3, "high"), (4, "high"), (6, "high"), (7, "high"), (8, "medium"), (9, "high")]
+    new = patch(real)
+    for line in ("local v = ref.position * 2", "local w = tes3.getCameraVector() * -1", "local y = n + 10",
+                 "local z = -tes3vector3.new(1, 2, 3) + 1", "local r = ref.forwardDirection:normalized() * 2",
+                 "local q = 3 * thing.position"):
+        assert line in new, line
+    assert patch(new) is None or "V1" not in rules(analyse(new), "high")
+
+
+@need_lua
+def test_v1_swaps_keep_the_value():
+    rt = _lj.LuaRuntime()
+    rt.execute("""V = {} V.__index = V
+      function V.new(x) return setmetatable({x = x}, V) end
+      V.__mul = function(a, b) assert(getmetatable(a) == V and type(b) == 'number') return V.new(a.x * b) end
+      V.__add = function(a, b) assert(getmetatable(a) == V and type(b) == 'number') return V.new(a.x + b) end
+      V.__unm = function(a) return V.new(-a.x) end
+      tes3vector3 = { new = V.new }""")
+    src = "local v = tes3vector3.new(4)\nreturn (2 * v).x, (3 + v).x, (10 - v).x\n"
+    with pytest.raises(LuaError):
+        rt.execute(src)
+    assert tuple(rt.execute(patch(src))) == (8, 7, 6)
 
 
 @need_lua
@@ -2071,3 +2116,87 @@ def test_G1_unregister_and_isRegistered_literals_follow_the_compressed_register(
     new = patch(src)
     assert new.count(f"priority = {q} }}") == 3 and "300000" not in new and "priority = 50 }" in new
     assert not [f for f in analyse(new).findings if f["rule"] == "G1"]
+
+
+# --- CR-22: D1 widened, G6 / G7 / R1 / T1 / P1 (report only)
+def test_D1_costly_work_before_passes_is_early_returned():
+    src = ("local function onInfo(e)\n  if e.dialogue.id:lower() == 'x' and tes3.isModActive('a.esp') then\n"
+           "    e.passes = false\n  end\nend\nevent.register(tes3.event.infoFilter, onInfo)\n")
+    a = analyse(src)
+    d1 = [f for f in a.findings if f["rule"] == "D1"]
+    assert len(d1) == 1 and d1[0]["conf"] == "high" and "string work on e.dialogue.id" in d1[0]["what"]
+    assert "local function onInfo(e) if not e.passes then return end\n" in patch(src)
+    ok = ("local function onInfo(e)\n  if not e.passes then return end\n  if e.dialogue.id:lower() == 'x' then "
+          "e.passes = false end\nend\nevent.register('infoFilter', onInfo)\n")
+    assert "D1" not in rules(analyse(ok))
+
+
+def test_D1_costly_work_with_side_effects_is_only_reported():
+    src = ("local seen = {}\nlocal function onInfo(e)\n  local id = e.info.id:lower()\n  seen[id] = true\n"
+           "  if id == 'x' then e.passes = false end\nend\nevent.register('infoFilter', onInfo)\n")
+    d1 = [f for f in analyse(src).findings if f["rule"] == "D1"]
+    assert len(d1) == 1 and d1[0]["conf"] == "report" and not d1[0]["edits"]
+    cheap = ("local function onInfo(e)\n  if e.dialogue == someDialogue then e.passes = false end\nend\n"
+             "event.register('infoFilter', onInfo)\n")
+    assert "D1" not in rules(analyse(cheap))
+
+
+def test_G6_getReference_in_frequent_handlers_and_fast_timers():
+    src = ("local function onTarget(e) local box = tes3.getReference('keyring') end\n"
+           "event.register('activationTargetChanged', onTarget)\n"
+           "timer.start{ duration = 0.2, iterations = -1, callback = function() local r = tes3.getReference('x') end }\n"
+           "event.register('loaded', function() local r = tes3.getReference('x') end)\n")
+    g6 = [f for f in analyse(src).findings if f["rule"] == "G6"]
+    assert sorted(f["line"] for f in g6) == [1, 3] and all(f["conf"] == "report" and not f["edits"] for f in g6)
+
+
+def test_G7_unrooted_or_unbounded_raytest():
+    src = ("event.register('simulate', function()\n  tes3.rayTest{ position = p, direction = d }\n"
+           "  tes3.rayTest{ position = p, direction = d, maxDistance = 100, root = tes3.game.worldObjectRoot }\n"
+           "  tes3.rayTest{ position = p, direction = d, maxDistance = 100, root = r, accurateSkinned = true }\n"
+           "end)\nevent.register('activate', function() tes3.rayTest{ position = p, direction = d, maxDistance = 9 } end)\n"
+           "event.register('loaded', function() tes3.rayTest{ position = p, direction = d } end)\n")
+    g7 = sorted((f["line"], f["conf"]) for f in analyse(src).findings if f["rule"] == "G7")
+    assert g7 == [(2, "report-high"), (4, "report"), (6, "report")]
+    assert "no root" in next(f for f in analyse(src).findings if f["rule"] == "G7" and f["line"] == 6)["what"]
+
+
+def test_R1_timer_holding_an_event_reference():
+    bad = ("local function onAct(e)\n  local ref = e.target\n  timer.start{ duration = 5, callback = function()\n"
+           "    ref:disable()\n  end }\nend\nevent.register('activate', onAct)\n"
+           "local function onDmg(e)\n  timer.start{ duration = 1, callback = function() e.reference.mobile:kill() end }\n"
+           "end\nevent.register('damaged', onDmg)\n")
+    r1 = [f for f in analyse(bad).findings if f["rule"] == "R1"]
+    assert sorted(f["line"] for f in r1) == [4, 9] and all(not f["edits"] for f in r1)
+    good = ("local function onAct(e)\n  local h = tes3.makeSafeObjectHandle(e.target)\n"
+            "  timer.start{ duration = 5, callback = function()\n    if h:valid() then h:getObject():disable() end\n"
+            "  end }\nend\nevent.register('activate', onAct)\n"
+            "local function onAct2(e)\n  local ref = e.target\n  timer.start{ duration = 5, callback = function()\n"
+            "    if ref:isValid() then ref:disable() end\n  end }\nend\nevent.register('activate', onAct2)\n"
+            "timer.start{ duration = 1, callback = function() local r = tes3.player end }\n")
+    assert "R1" not in rules(analyse(good))
+
+
+def test_T1_named_timer_never_registered(tmp_path):
+    data, root = mod_tree(tmp_path, {"main.lua": "require('testmod.t')\n"
+                                                 "timer.start{ duration = 1, callback = 'testmod:tick' }\n"
+                                                 "timer.start{ duration = 1, callback = 'testmod:other' }\n",
+                                     "t.lua": "timer.register('testmod:tick', function() end) return {}\n"})
+    rep = lf.check_paths([str(data)], CFG, checker=OkChecker(), use_cache=False)
+    t1 = [(os.path.basename(p), f["line"]) for p, ent in rep.files.items() for f in ent["findings"] if f["rule"] == "T1"]
+    assert t1 == [("main.lua", 3)]
+
+
+def test_P1_data_on_a_non_actor_without_modified():
+    bad = ("local function onAct(e)\n  if e.target.object.objectType == tes3.objectType.container then\n"
+           "    e.target.data.looted = true\n  end\nend\nevent.register('activate', onAct)\n"
+           "event.register('itemDropped', function(e) e.reference.data.dropped = true end)\n")
+    p1 = [f for f in analyse(bad).findings if f["rule"] == "P1"]
+    assert sorted(f["line"] for f in p1) == [3, 7] and all(not f["edits"] for f in p1)
+    good = ("local function onAct(e)\n  if e.target.object.objectType == tes3.objectType.container then\n"
+            "    e.target.data.looted = true\n    e.target.modified = true\n  end\nend\n"
+            "event.register('activate', onAct)\n"
+            "local function onAct2(e)\n  if e.target.object.objectType == tes3.objectType.npc then\n"
+            "    e.target.data.talked = true\n  end\nend\nevent.register('activate', onAct2)\n"
+            "event.register('loaded', function() tes3.player.data.x = 1 end)\n")
+    assert "P1" not in rules(analyse(good))

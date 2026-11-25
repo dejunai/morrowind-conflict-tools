@@ -7,6 +7,7 @@ local TOPIC, QUEST, STARTED, FINISHED = "illegible handwriting", "den_bottle", 1
 -- Never ask for the note here: An-Drazh's line hands it over after its text is read, and a topic with no passing
 -- response at that moment is never learned. Finished is 70: Nallaia still answers the topic at 60.
 local function onInfoFilter(e)
+    if not e.passes then return end          -- first: infoFilter runs for every response tried
     if e.dialogue and e.dialogue.id and e.dialogue.id:lower() == "illegible handwriting" then
         local journal = tes3.getJournalIndex({ id = "den_bottle" }) or 0
         if journal >= FINISHED then

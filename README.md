@@ -83,7 +83,7 @@ The suite is engineered for massive, complex mod lists (hundreds of plugins, ten
 5. **Automated Patch Generation**:
    - **AutoMerge (`--auto-merge`)**: Finds active `.esp` plugins with no cell, land, or pathgrid edits that can move together without changing what wins against any other plugin, merges them into `mwdialog_check AutoMerge.esp` (or `--merge-name`), and deactivates the inputs.
    - **Multipatch (`--multipatch`)**: Builds `mwdialog_check Multipatch.esp` like tes3cmd multipatch: merged leveled lists, fog-bugged cells (illegal fog density 0 is set to 0.01), and reverted cell names, plus objects several mods change, merged field by field, unless `--no-merge-objects` is passed. Load it last.
-   - **Performers Patch (`--performers-patch`)**: Detects doubled bards and entertainers placed in the same taverns by overlapping mods and resolves duplicates into `mwdialog_check Performers Patch.esp`. `--fix` without this flag drops that patch, because the `mwperformers` MWSE module decides in the game.
+   - **Doubled performers**: no plugin is built for them. The `mwperformers` MWSE module lets one performer per inn perform, in the game, and removes no one. A `mwdialog_check Performers Patch.esp` left by an earlier version is set aside (kept as a backup) and taken out of the load order by `--fix`.
    - **SoundFix**: Recompiles problematic audio scripts using `MWRecompile` into `mwdialog_check - MWSoundFix.esp`, replacing broken `GetSoundPlaying` polling loops with state variables. `--fix` rebuilds this patch unless `--no-soundfix` is passed. `--soundfix` runs that step on its own.
 6. **Load-Order Sorter (`--sort`)**:
    - Built-in mlox-compatible topological sorter (implemented in `mwdialog_check.py`; `mwdialog_loadorder.py` parses rules and stores the order).
@@ -126,7 +126,7 @@ The suite is engineered for massive, complex mod lists (hundreds of plugins, ten
 | Switch | Argument | Description |
 | :--- | :--- | :--- |
 | *(default)* | `[DATA_DIR]` | Runs non-destructive validation on active plugins and outputs conflict reports. |
-| `--full` | *(flag)* | Starts from scratch. Aborts if a plugin's master is missing from Data Files. Then: unmerge; turn back on what earlier runs turned off (and drop their conflict rules and asset stand-ins); the redundant-plugin step; a cell-conflicts report (asking only hard incompatibilities); sort; set the old Multipatch aside; `--clean --fix --asset-check` (footing and SoundFix run as part of `--fix`); sort; stop and open `mwdialog_report.txt` if any ERROR remains; otherwise AutoMerge, sort, `--all`, sort again; stop again on ERROR; then offer interactive `--cell-conflicts`. `--yes`: no questions; `--add-all-esp`: add every plugin first; `--play`: start the game at the end. Does not pass `--performers-patch`. |
+| `--full` | *(flag)* | Starts from scratch. Aborts if a plugin's master is missing from Data Files. Then: unmerge; turn back on what earlier runs turned off (and drop their conflict rules and asset stand-ins); the redundant-plugin step; a cell-conflicts report (asking only hard incompatibilities); sort; set the old Multipatch aside; `--clean --fix --asset-check` (footing and SoundFix run as part of `--fix`); sort; stop and open `mwdialog_report.txt` if any ERROR remains; otherwise AutoMerge, sort, `--all`, sort again; stop again on ERROR; then offer interactive `--cell-conflicts`. `--yes`: no questions; `--add-all-esp`: add every plugin first; `--play`: start the game at the end. |
 | `--all` | *(flag)* | `--clean`, then `--fix`, then `--multipatch`. |
 | `--fix` | *(flag)* | After the report, show a fix plan and apply it after you confirm. `.esp` files are fixed in place; masters (`.esm`) through `mwdialog_check - ESM fixes.esp`. Also rebuilds SoundFix unless `--no-soundfix`, refreshes the MWSE suite data, and runs footing / exterior float drops in `fix_cell_winners`. `.esm` files are never rewritten. |
 | `--dry-run` | *(flag)* | With `--fix` (or other writing steps): show the plan but change nothing. |
@@ -207,8 +207,6 @@ The suite is engineered for massive, complex mod lists (hundreds of plugins, ten
 | `--no-follow-up`, `--no-follow-fix` | *(flag)* | Don't run the usual follow-ups (`--fix --multipatch` after `--auto-merge` or a `--sort` that changed the order, and so on). |
 | `--multipatch` | *(flag)* | Generates `mwdialog_check Multipatch.esp` (merged leveled lists, fog, cell names, and merged objects unless `--no-merge-objects`). |
 | `--no-merge-objects` | *(flag)* | With `--multipatch`: don't merge objects several mods change. |
-| `--performers-patch` | *(flag)* | Generates `mwdialog_check Performers Patch.esp` to deduplicate doubled bards. |
-| `--no-performers` | *(flag)* | Excludes performer deduplication from the patch pipeline. |
 
 #### Sound Repair & SoundFix
 | Switch | Argument | Description |
@@ -330,6 +328,7 @@ Unlike crude regex-based matchers, `mwdialog_luafix.py` uses a pure-Python lexic
 - **Priority Compression**: Event handler priorities whose absolute value is 10,000 or more are compressed into 1000–1999, keeping their relative order (`compress_priority`).
 - **Log Shimming**: Rate-limits unthrottled `print` and `mwse.log` calls (not `tes3.log`) inside per-frame simulation events (`simulate`, `render`). The current shim is version 6.
 - **Targeted KnownBugs (KB1–KB17 and KB19)**: Hardens high-profile third-party mods against known engine crashes, memory leaks, sound-loop stacking, and unbounded UI element growth (such as MWSE Core's `ExclusionsPage` unbounded item pagination). There is no KB18: the WBSR save-block conflict is handled at runtime by `mwsaveguard.wbsr_bard`, not by a luafix patch of WBSR. See [MORE_INFO.md](MORE_INFO.md) for the catalog.
+- **MWSE performance checks (report only)**: `G6` `tes3.getReference` in a frequent handler or a fast repeating timer; `G7` `tes3.rayTest` every frame or in a frequent handler with no `maxDistance`, no `root`, or `accurateSkinned`; `R1` a timer callback that uses a reference from its event with no safe handle or `:isValid()` check; `T1` `timer.start{ callback = "name" }` with no `timer.register("name", ...)` anywhere in the mod; `P1` `ref.data` written on a non-actor reference without `ref.modified = true`. `V1` (number before a vector in `*`, `+`, `-`) now flags only operands with vector evidence (MWSE's documented vector fields and functions, `tes3vector3.new`, a reference's `.position`, or a local set from one); `H2` no longer flags a timer started in `loaded` (MWSE clears every timer just before it); `D1` also flags costly work in an `infoFilter` handler that runs before it checks `e.passes`.
 
 ---
 

@@ -1,6 +1,7 @@
 --[[mwdialog_luafix 3: A1]] --[[
     mwcriminal core: the ownership, lock and detection questions every feature asks. Everything is answered on
-    demand when the player activates something; nothing is cached, scanned per frame or kept in a growing table.
+    demand when the player activates something; nothing is scanned per frame or kept in a growing table (only
+    the keyring containers are remembered, as safe handles).
 ]]
 local config = require("mwcriminal.config")
 
@@ -84,6 +85,19 @@ function core.isEvening(hour)
     return hour < config.openHour or hour >= config.closeHour
 end
 
+-- the keyring's container, looked up once and then kept as a safe handle: hasKey runs each time the crosshair
+-- lands on a locked container, and tes3.getReference searches every cell. A handle that has gone (a load) is
+-- looked up again; a container that isn't found isn't remembered, so a keyring set up later is still seen.
+local keyringBoxes = {}
+local function keyringBox(id)
+    local h = keyringBoxes[id]
+    if h and h:valid() then return h:getObject() end
+    keyringBoxes[id] = nil
+    local box = tes3.getReference(id)
+    if box and tes3.makeSafeObjectHandle then keyringBoxes[id] = tes3.makeSafeObjectHandle(box) end
+    return box
+end
+
 function core.hasKey(ref)
     local key = ref.lockNode and ref.lockNode.key
     if not key then return false end
@@ -91,7 +105,7 @@ function core.hasKey(ref)
     if inv:contains(key.id) then return true end
     for ring, holder in pairs(KEYRINGS) do
         if inv:contains(ring) then
-            local box = tes3.getReference(holder)
+            local box = keyringBox(holder)
             if box and box.object.inventory and box.object.inventory:contains(key.id) then return true end
         end
     end
@@ -258,10 +272,7 @@ function core.isCompanion(mobile)
     if not mobile or mobile == tes3.mobilePlayer then return false end
     local ref = mobile.reference
     if not ref or mobile.isDead or ref.disabled or ref.deleted then return false end
-    if type(ref.isValid) == "function" then
-        local ok, valid = pcall(ref.isValid, ref)
-        if not ok or not valid then return false end
-    end
+    if type(ref.isValid) == "function" and not ref:isValid() then return false end   -- isValid never raises
     if actorFightsPlayer(mobile) or isGuard(ref) then return false end
     if not config.includeCreatures and isCreature(mobile, ref) then return false end
     if followsPlayer(mobile) then return true end

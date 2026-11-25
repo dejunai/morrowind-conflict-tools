@@ -54,11 +54,14 @@ local ITEM_TYPES = {
     [tes3.objectType.armor] = true, [tes3.objectType.clothing] = true, [tes3.objectType.apparatus] = true,
     [tes3.objectType.lockpick] = true, [tes3.objectType.probe] = true, [tes3.objectType.repairItem] = true,
 }
+local ITEM_TYPE_LIST = { tes3.objectType.light }     -- for iterateReferences: what this mod can move
+for t in pairs(ITEM_TYPES) do ITEM_TYPE_LIST[#ITEM_TYPE_LIST + 1] = t end
 local ACTOR_TYPES = {
     [tes3.objectType.npc] = true, [tes3.objectType.creature] = true,
 }
 
 local checkedThisSession = setmetatable({}, { __mode = "k" })
+local configDirty = false                -- the whitelist grew since the config was last written
 
 -- reviewed: marks live in ref.tempData (this session only), never in ref.data. For an item, ref.data is
 -- the item's own itemData: a mark there went into the save for every loose item ever loaded, and an item
@@ -82,6 +85,7 @@ local queue, queued, qHead = {}, {}, 1    -- reviewed: a read index instead of t
 local sorted = false
 local settleAt = 0                       -- don't start until the cell has finished loading
 local DOWN = tes3vector3.new(0, 0, -1)
+local UP = tes3vector3.new(0, 0, 1)
 local START_ABOVE = 6                    -- rays start this far above the item's bottom (inside the item)
 
 local LOG_DIR = "Data Files\\MWSE\\logs"
@@ -104,8 +108,13 @@ local function checkRefValid(r)
     return not r.disabled and not r.deleted and r.sceneNode ~= nil and r.position ~= nil
 end
 
+-- isValid() says whether the reference still exists, without the cost of a pcall on every check
 local function isRefValid(ref)
     if not ref then return false end
+    if ref.isValid then
+        if not ref:isValid() then return false end
+        return checkRefValid(ref)
+    end
     local ok, valid = pcall(checkRefValid, ref)
     return ok and valid
 end
@@ -174,14 +183,44 @@ local function isActor(hitRef)
     return hitRef and hitRef.object and ACTOR_TYPES[hitRef.object.objectType]
 end
 
+-- every ray reuses one parameter table and one ignore list (no new tables per ray). A ray is first cast at
+-- the statics only (tes3.game.worldObjectRoot: far fewer nodes than the whole world, no skinned actors); only
+-- when that can't settle the question is it cast at the whole world as before, so the answers are unchanged:
+-- a static found is always "something is there", which is all the rooted ray is ever used to conclude.
+local rayParams = { ignore = {} }
+local function castRay(ref, pos, dir, maxDistance, root)
+    rayParams.position, rayParams.direction, rayParams.maxDistance, rayParams.root = pos, dir, maxDistance, root
+    rayParams.ignore[1] = ref
+    local hit = tes3.rayTest(rayParams)
+    rayParams.ignore[1], rayParams.position, rayParams.root = nil, nil, nil     -- hold no reference or node
+    return hit
+end
+local function staticsRoot()
+    return tes3.game and tes3.game.worldObjectRoot or nil
+end
+
+-- a non-actor surface along the ray, or nil: the statics first, then the whole world
+local function solidHit(ref, pos, dir, maxDistance)
+    local root = staticsRoot()
+    if root then
+        local hit = castRay(ref, pos, dir, maxDistance, root)
+        if hit then return hit end
+    end
+    local hit = castRay(ref, pos, dir, maxDistance, nil)
+    if hit and not isActor(hit.reference) then return hit end
+    return nil
+end
+
 -- distance from the item's bottom down to the first surface under (x, y), or nil if none within reach
 local function gapBelow(ref, x, y, bottom)
-    local hit = tes3.rayTest({
-        position = tes3vector3.new(x, y, bottom + START_ABOVE),
-        direction = DOWN,
-        maxDistance = config.maxDrop + START_ABOVE + config.tolerance,
-        ignore = { ref },
-    })
+    local pos = tes3vector3.new(x, y, bottom + START_ABOVE)
+    local reach = config.maxDrop + START_ABOVE + config.tolerance
+    local root = staticsRoot()
+    if root then                                  -- resting on a static: the usual answer, from the cheap ray
+        local hit = castRay(ref, pos, DOWN, reach, root)
+        if hit and hit.distance - START_ABOVE <= config.tolerance then return hit.distance - START_ABOVE end
+    end
+    local hit = castRay(ref, pos, DOWN, reach, nil)
     if not hit or isActor(hit.reference) then return nil end
     return hit.distance - START_ABOVE
 end
@@ -212,14 +251,7 @@ local function againstWall(ref, corners, centre, bottom, top)
             local dir = tes3vector3.new(math.cos(rad), math.sin(rad), 0)
             local pos = tes3vector3.new(centre.x, centre.y, z)
 
-            local hit = tes3.rayTest({
-                position = pos,
-                direction = dir,
-                maxDistance = maxReach + wallReach,
-                ignore = { ref },
-            })
-
-            if hit and not isActor(hit.reference) then
+            if solidHit(ref, pos, dir, maxReach + wallReach) then
                 return true
             end
         end
@@ -262,12 +294,12 @@ local function supportedByMount(ref, corners, centre, bottom, top)
         end
 
         for _, pt in ipairs(checkPoints) do
-            local hit = tes3.rayTest({
-                position = tes3vector3.new(pt[1], pt[2], zStart),
-                direction = DOWN,
-                maxDistance = (zStart - bottom) + 2,
-                ignore = { ref },
-            })
+            local pos, reach = tes3vector3.new(pt[1], pt[2], zStart), (zStart - bottom) + 2
+            local root = staticsRoot()
+            local hit = root and castRay(ref, pos, DOWN, reach, root)
+            if not (hit and zStart - hit.distance > bottom + config.tolerance) then   -- else: the whole world
+                hit = castRay(ref, pos, DOWN, reach, nil)
+            end
             if hit and not isActor(hit.reference) then
                 local hitZ = zStart - hit.distance
                 -- If it hits a static surface inside the bracket/sconce higher than the bottom, it is supported!
@@ -280,13 +312,7 @@ local function supportedByMount(ref, corners, centre, bottom, top)
 
     -- 2. Hanging hook/mount check above top:
     local upReach = (top - centre.z) + math.max(config.wallGap, 20)
-    local up = tes3.rayTest({
-        position = centre,
-        direction = tes3vector3.new(0, 0, 1),
-        maxDistance = upReach,
-        ignore = { ref },
-    })
-    if up and not isActor(up.reference) then
+    if solidHit(ref, centre, UP, upReach) then
         return true
     end
 
@@ -392,7 +418,10 @@ local function settle(ref)
     local drop = nearest - 0.5                               -- leave half a unit, no sinking in
     ref.position = tes3vector3.new(ref.position.x, ref.position.y, ref.position.z - drop)  -- sets modified
     local id = ref.object.id:lower()
-    config.whitelist[id] = true
+    if not config.whitelist[id] then
+        config.whitelist[id] = true
+        configDirty = true                       -- written at the next save, only when something was added
+    end
     log("lowered %s by %.0f units in %s (at %.0f, %.0f, %.0f)", ref.object.id, drop,
         ref.cell and ref.cell.editorName or "?", ref.position.x, ref.position.y, ref.position.z)
 end
@@ -773,7 +802,7 @@ end)
 
 local function restoreBlacklistedInActiveCells()
     for _, cell in ipairs(tes3.getActiveCells()) do
-        for ref in cell:iterateReferences() do
+        for ref in cell:iterateReferences(ITEM_TYPE_LIST) do
             pcall(function()
                 if isRefValid(ref) and ref.object and ref.startingPosition then
                     local id = ref.object.id:lower()
@@ -824,7 +853,11 @@ local function getMovedItems()
     return list
 end
 
+-- the config is written when the Mod Config menu closes, and at a save only when an item was added to the
+-- whitelist since (not on every save)
 event.register(tes3.event.save, function()
+    if not configDirty then return end
+    configDirty = false
     mwse.saveConfig(CONFIG_NAME, config)
 end)
 
@@ -832,6 +865,7 @@ end)
 event.register(tes3.event.modConfigReady, function()
     local template = mwse.mcm.createTemplate({ name = "Floating Item Fix" })
     template.onClose = function()
+        configDirty = false
         mwse.saveConfig(CONFIG_NAME, config)
         recheckActiveCells()
     end

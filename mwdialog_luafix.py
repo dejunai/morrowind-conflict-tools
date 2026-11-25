@@ -26,14 +26,21 @@ Rules (thresholds come from MWSE\\config\\mwguard.json when it exists - the same
      value is there. Where none of these fits with certainty the finding stays a report, with the reason.
   B1 a UI element used after :destroy()                                                               report
   C1 an engine console command sent through tes3.runLegacyScript                                      report
-  D1 an infoFilter handler reading e.info.text for every response -> returns early unless e.passes     fix
+  D1 an infoFilter handler doing costly work (e.info.text, tes3.getDialogueInfo, getReference, string work
+     on the ids...) for every response before checking e.passes -> returns early unless e.passes      fix
   F1 log spam (logging every frame, in loops, in frequent events, debug flags on) -> the mod's lines
      past its allowance go to Data Files\\MWSE\\logs\\<mod>.log; errors still reach MWSE.log            fix
   F2 a logger created at DEBUG/TRACE level -> INFO                                                     fix
   H1 event.register inside a load/cellChanged/... handler: a named handler -> isRegistered guard     fix
      (MWSE refuses the duplicate but prints a warning and a traceback every time); an anonymous one
      stacks a new copy each time                                                                      report
-  H2 a repeating timer started in a handler that runs again (loaded, cellChanged...), never cancelled report
+  H2 a repeating timer started in a handler that runs again (cellChanged...), never cancelled        report
+     (not loaded/load: MWSE cancels every timer, real ones too, just before loaded)
+  G6 tes3.getReference (scans every cell) in a frequent handler or a fast repeating timer             report
+  G7 tes3.rayTest every frame / in a frequent handler with no maxDistance, no root, or accurateSkinned report
+  P1 ref.data written on a non-actor reference with no ref.modified = true (lost on reload)           report
+  R1 a timer callback holding a reference from its event with no safe handle / :isValid() check     report
+  T1 timer.start{ callback = "name" } with no timer.register("name", ...) anywhere in the mod         report
   H3 global variables a mod creates by accident (no local)                                            report
   H4 game data used at file load, before the initialized event                                        report
   H5 require cycles inside a mod                                                                      report
@@ -47,7 +54,9 @@ Rules (thresholds come from MWSE\\config\\mwguard.json when it exists - the same
   M1 an enterFrame handler (it also fires in menus) with no UI work -> returns in menu mode            fix
   S1 tes3.getSoundPlaying{ reference = <not the player> }: on a non-actor the engine can say "not
      playing" while a loop plays, so a restart on that answer repeats (mwsoundguard caps it)          report
-  V1 number * vector (-1 * up: no metamethod for that order, errors every call) -> vector * number     fix
+  V1 number * vector, number + vector, number - vector (MWSE binds these with the vector first, so the
+     number-first order errors every call) -> v * n, v + n, -v + n. Only flagged with vector evidence:
+     a field or function MWSE documents as returning a vector, tes3vectorN.new, or a local set from one  fix
 
 Never touched: MWSE's own code except exact KNOWN_BUGS fingerprints in named core files, and
 your own mods (mwcollide, mwfloatfix, mwguard, mwhangwatch, mwinfoloop, mwperformers, mwsoundguard,
@@ -219,6 +228,36 @@ LOOKUPS = {"tes3.getObject", "tes3.findGMST", "tes3.getReference", "tes3.getCell
 CONFIG_IO = {"mwse.loadConfig", "mwse.saveConfig", "json.loadfile", "json.savefile", "io.open", "io.lines",
              "json.decode", "json.encode", "dofile", "loadfile"}
 LOGS = {"print", "mwse.log"}
+# V1: names MWSE's docs (docs/source/types, apis) give a tes3vector2/3/4 return type and nothing else
+VECTOR_NAMES = frozenset("""
+activeVertices ambientDayColor ambientNightColor ambientSunriseColor ambientSunsetColor boundSize boundSize2D
+calculateJumpVelocity cameraOffset center collisionPoint cross cullingPlanes currentFogColor currentSkyColor
+direction fogDayColor fogNightColor fogSunriseColor fogSunsetColor forwardDirection get3rdPersonCameraOffset
+getCameraPosition getCameraVector getClosestExteriorPosition getCursorPosition getForwardVector
+getLandNormalAtPosition getLastExteriorPosition getPlayerEyePosition getPlayerEyeVector getRightVector
+getUpVector globalTranslation gravity impulseVelocity initialAxis initialNormal interpolate intersection
+lastPositionBeforeCombat listenerPosition normal normals objectPosAtCollision ones orientation planeEquation
+point port positionDeltaMovementRoot rightDirection rotationAxis skyDayColor skyNightColor skySunriseColor
+skySunsetColor startingOrientation startingPosition stormOrigin sunDayColor sunNightColor sunSunriseColor
+sunSunsetColor sundiscSunsetColor sunglareFaderColor targetPosition terminalVelocity texCoords
+thirdPersonOffset toEulerXYZ toEulerZYX toVector3 translation underwaterColor unitX unitY unitZ upDirection
+velocity walkDestination windVelocityCurrWeather windVelocityNextWeather windowPointToRay worldBoundOrigin
+worldDirection worldPointToScreenPoint worldRight worldUp xAxis yAxis zeroes""".split())
+VECTOR_CTORS = {"tes3vector2.new", "tes3vector3.new", "tes3vector4.new"}
+VECTOR_OF_SELF = {"normalized", "copy", "lerp"}           # a vector when what they're called on is one
+POSITION_HOLDER = re.compile(r"(?i)(ref|reference|mobile|player|target|actor|npc|creature|node|scenenode|"
+                             r"marker|item|door|object)s?$")
+VECTOR_SWAP = {"*": "{r} * {l}", "+": "{r} + {l}", "-": "-{r} + {l}"}
+# D1: costly work an infoFilter handler shouldn't do for responses that already failed
+D1_CALLS = {"tes3.getDialogueInfo", "tes3.getReference", "tes3.iterateObjects", "tes3.isModActive"}
+D1_METHODS = {"loadQuestName", "iterateReferences"}
+STRING_METHODS = {"lower", "upper", "find", "match", "gmatch", "gsub", "format", "sub"}
+# R1: event fields that hold a reference / mobile
+REF_FIELDS = {"reference", "target", "mobile", "attacker", "attackerReference", "activator", "caster",
+              "targetReference", "targetMobile", "actor", "current", "previous"}
+NON_ACTOR_TYPES = {"activator", "alchemy", "ammunition", "apparatus", "armor", "book", "clothing", "container",
+                   "door", "ingredient", "light", "lockpick", "miscItem", "probe", "repairItem", "static", "weapon"}
+RULES_REV = 2                  # bump when a rule changes, so cached findings are worked out again
 # console-only commands; replacement suggestions follow the guide's table where it has one
 CONSOLE_ONLY = {"togglepov": "tes3.togglePOV() (or tes3.force1stPerson() / tes3.force3rdPerson())",
                 "tcl": "console only (no script command)", "tai": "console only (no script command)",
@@ -272,6 +311,7 @@ def load_config(game_dir=HERE, data_dir=None):
 def cfg_hash(cfg):
     keep = {k: v for k, v in cfg.items() if not k.startswith("_")}
     keep["_known_bugs"] = globals().get("KNOWN_BUGS", [])
+    keep["_rules"] = RULES_REV
     return hashlib.sha1(json.dumps(keep, sort_keys=True).encode(), usedforsecurity=False).hexdigest()[:12] + f"v{VERSION}"
 
 
@@ -758,7 +798,8 @@ class FileAnalysis:
                   self.r_keycode, self.r_lookups, self.r_event_fields, self.r_object_fields, self.r_destroy, self.r_console, self.r_info_filter, self.r_reregister,
                   self.r_reload_timers, self.r_globals, self.r_toplevel, self.r_loops, self.r_logger_level,
                   self.r_log_triggers, self.r_loggers, self.r_save_safe, self.r_while_caps, self.r_menu_exit,
-                  self.r_vector_order, self.r_known, self.r_sound_query):
+                  self.r_vector_order, self.r_known, self.r_sound_query, self.r_frequent_lookups,
+                  self.r_timer_refs, self.r_ref_data_modified):
             r()
         return self.findings
 
@@ -873,21 +914,65 @@ class FileAnalysis:
                      + (f" (calls {self.text(opaque[0].func)[:30]}, which may do UI work)" if opaque else ""),
                      "return in menu mode", "medium" if opaque else "high", [(fn.params_end, fn.params_end, " if tes3.menuMode() then return end", (0, 0))])
 
+    def vector_evidence(self, n, depth=0):
+        """'high' / 'medium' when n is known to be a vector (MWSE's docs give it a vector type, or it's a local
+        set from one), else None. Names alone (pos, dir, vol...) are not evidence."""
+        if n is None or depth > 4:
+            return None
+        k = n.kind
+        if k == "Paren":
+            return self.vector_evidence(n.expr, depth + 1)
+        if k == "Unop" and n.op == "-":
+            return self.vector_evidence(n.operand, depth + 1)
+        if k == "Binop" and n.op in ("*", "/", "+", "-"):
+            left = self.vector_evidence(n.left, depth + 1)
+            if left or n.op == "/":
+                return left
+            return self.vector_evidence(n.right, depth + 1) if n.op in ("+", "-") else None
+        if k == "Call":
+            d = L.dotted(n.func) or ""
+            if d in VECTOR_CTORS:
+                return "high"
+            if n.func.kind == "Index" and n.func.field in VECTOR_NAMES:
+                return "high"
+            return None
+        if k == "Method":
+            if n.name in VECTOR_NAMES:
+                return "high"
+            if n.name in VECTOR_OF_SELF:
+                return self.vector_evidence(n.obj, depth + 1)
+            return None
+        if k == "Index":
+            if n.field in VECTOR_NAMES:
+                return "high"
+            if n.field == "position":
+                base = L.dotted(n.obj) or ""
+                return "high" if POSITION_HOLDER.search(base.split(".")[-1] or "") else "medium"
+            return None
+        if k == "Name":
+            b = getattr(n, "binding", None)
+            if b is None or b.kind != "local" or b.value is None or b.assigns:
+                return None
+            return self.vector_evidence(b.value, depth + 1)
+        return None
+
     def r_vector_order(self):
-        """V1: number * vector (-1 * up) has no metamethod for that order in MWSE and errors every call; the
-        product commutes, so the operands are swapped."""
-        vec = re.compile(r"(?i)(up|forward|right|direction|dir|vec|vector|position|pos|normal|offset|velocity)$")
+        """V1: number * vector, number + vector and number - vector have no metamethod for that order in MWSE
+        (TES3VectorsLua.cpp binds them as members, the vector first) and error every call. Only flagged when the
+        right operand is known to be a vector; the 2026-11-24 rule flagged any number on the left (355 plain
+        number products like 2 * math.pi)."""
         for n in self.nodes:
-            if n.kind != "Binop" or n.op != "*":
+            if n.kind != "Binop" or n.op not in VECTOR_SWAP:
                 continue
             lt = n.left.operand if n.left.kind == "Unop" and n.left.op == "-" else n.left
-            if lt.kind != "Number" or n.right.kind in ("Number", "Binop", "Unop"):
+            if lt.kind != "Number" or n.right.kind in ("Number", "Binop", "Unop", "String"):
                 continue
-            d = L.dotted(n.right) or ""
-            hint = vec.search(d.split(".")[-1]) or re.search(r"tes3vector[234]|:normalized\(|:cross\(", self.text(n.right))
-            self.add("V1", n, f"{self.text(n)[:40]}: a number on the left of *", "put the number on the right",
-                     "high" if hint else "medium",
-                     [(n.s, n.e, f"{self.text(n.right)} * {self.text(n.left)}")])
+            conf = self.vector_evidence(n.right)
+            if conf is None:
+                continue
+            new = VECTOR_SWAP[n.op].format(r=self.text(n.right), l=self.text(n.left))
+            self.add("V1", n, f"{self.text(n)[:40]}: a number on the left of {n.op} a vector",
+                     f"vector first: {new[:40]}", conf, [(n.s, n.e, new)])
 
     def r_priority(self):
         lim = self.cfg["priorityLimit"]
@@ -1524,16 +1609,59 @@ class FileAnalysis:
                 self.add("C1", c, f"runLegacyScript \"{v[:40]}\": {w} is a console command, not a script command "
                          f"(fails to compile at runtime)", CONSOLE_ONLY[w])
 
+    def _d1_costly(self, n, p):
+        """What n costs, if it's work an infoFilter handler shouldn't do for a response that already failed."""
+        if n.kind == "Index" and L.dotted(n) == f"{p}.info.text":
+            return "text"
+        if n.kind == "Index" and n.field == "text" and (L.dotted(n.obj) or "").endswith(".script"):
+            return "reads a script's text (file I/O)"
+        if n.kind == "Call":
+            d = L.dotted(n.func) or ""
+            if d in D1_CALLS:
+                return f"calls {d}"
+            if d in ("string.lower", "string.find", "string.format", "string.match", "string.gsub") and n.args \
+                    and (L.dotted(n.args[0]) or "") in (f"{p}.dialogue.id", f"{p}.info.id"):
+                return f"string work on {L.dotted(n.args[0])}"
+        if n.kind == "Method":
+            if n.name in D1_METHODS:
+                return f"calls :{n.name}()"
+            if n.name in STRING_METHODS and (L.dotted(n.obj) or "") in (f"{p}.dialogue.id", f"{p}.info.id"):
+                return f"string work on {L.dotted(n.obj)}"
+        return None
+
+    def _side_effects(self, fn, p):
+        """True when fn does more than block lines: writes outside its own locals, logs, or calls actions."""
+        for n in L.walk_no_funcs(fn.body):
+            if n.kind == "Assign":
+                for t in n.targets:
+                    if t.kind == "Index" and L.dotted(t) == f"{p}.passes":
+                        continue
+                    if t.kind == "Name" and getattr(t, "binding", None) is not None and t.binding.func is fn:
+                        continue
+                    return True
+            elif n.kind == "Call":
+                d = L.dotted(n.func) or ""
+                if d in ACTIONS or d in LOGS:
+                    return True
+                if n.func.kind == "Name" and self.func_of(n.func) is None and d not in QUERIES:
+                    return True
+            elif n.kind == "Method" and n.name not in SAFE_METHODS and n.name not in D1_METHODS:
+                return True
+        return False
+
     def r_info_filter(self):
         for c, ev, fn, harg, opts in self.registrations:
             if ev != "infoFilter" or fn is None or not fn.params:
                 continue
             p = fn.params[0]
-            reads, other_passes, returns = [], [], []
+            reads, costly, other_passes, returns = [], [], [], []
             for n in L.walk_no_funcs(fn.body):
-                if n.kind == "Index" and L.dotted(n) == f"{p}.info.text":
+                why = self._d1_costly(n, p)
+                if why == "text":
                     reads.append(n)
-                elif n.kind == "Index" and L.dotted(n) == f"{p}.passes":
+                elif why:
+                    costly.append((n, why))
+                if n.kind == "Index" and L.dotted(n) == f"{p}.passes":
                     par = n.parent
                     if par is not None and par.kind == "Assign" and any(t is n for t in par.targets):
                         i = [id(t) for t in par.targets].index(id(n))
@@ -1542,21 +1670,36 @@ class FileAnalysis:
                     other_passes.append(n)
                 elif n.kind == "Return" and n.exprs:
                     returns.append(n)
-            if not reads or (fn.body.stats and f"not {p}.passes" in self.text(fn.body.stats[0])):
+            if not (reads or costly) or (fn.body.stats and f"not {p}.passes" in self.text(fn.body.stats[0])):
                 continue
-            if other_passes:
-                if other_passes[0].s > reads[0].s:
-                    self.add("D1", reads[0], f"infoFilter reads {p}.info.text (a disk read) before checking "
-                             f"{p}.passes", f"check {p}.passes and the dialogue type first")
-                continue
-            if returns:
-                self.add("D1", reads[0], f"infoFilter reads {p}.info.text for every response; it returns a value, "
-                         f"so returning early could change what it blocks", f"check {p}.passes first", "medium",
+            if reads:
+                if other_passes:
+                    if other_passes[0].s > reads[0].s:
+                        self.add("D1", reads[0], f"infoFilter reads {p}.info.text (a disk read) before checking "
+                                 f"{p}.passes", f"check {p}.passes and the dialogue type first")
+                    continue
+                if returns:
+                    self.add("D1", reads[0], f"infoFilter reads {p}.info.text for every response; it returns a "
+                             f"value, so returning early could change what it blocks", f"check {p}.passes first",
+                             "medium", [(fn.params_end, fn.params_end, f" if not {p}.passes then return end")])
+                    continue
+                self.add("D1", reads[0], f"infoFilter reads {p}.info.text for every response the engine tries "
+                         f"(each one a disk read; a greeting search can freeze for minutes)",
+                         f"return early unless {p}.passes", "high",
                          [(fn.params_end, fn.params_end, f" if not {p}.passes then return end")])
                 continue
-            self.add("D1", reads[0], f"infoFilter reads {p}.info.text for every response the engine tries (each one "
-                     f"a disk read; a greeting search can freeze for minutes)", f"return early unless {p}.passes",
-                     "high", [(fn.params_end, fn.params_end, f" if not {p}.passes then return end")])
+            first, why = costly[0]
+            what = f"infoFilter {why} for every response the engine tries, before checking {p}.passes"
+            if other_passes:
+                if other_passes[0].s > first.s:
+                    self.add("D1", first, what, f"check {p}.passes first")
+                continue
+            if returns or self._side_effects(fn, p):
+                self.add("D1", first, what + " (it does more than block lines, so an early return is left to you)",
+                         f"check {p}.passes first")
+                continue
+            self.add("D1", first, what, f"return early unless {p}.passes", "high",
+                     [(fn.params_end, fn.params_end, f" if not {p}.passes then return end")])
 
     def _again_events(self, node):
         """The events (other than once-only ones) whose handler node's code is in, and that handler."""
@@ -1622,11 +1765,154 @@ class FileAnalysis:
             kept = c.parent is not None and c.parent.kind in ("Local", "Assign")
             if kept and cancels:
                 continue
-            if set(evs) <= {"loaded", "load"} and typ != "timer.real":
-                continue                     # simulate/game timers are dropped when a save loads: fine to restart
+            if set(evs) <= {"loaded", "load"}:
+                continue                     # MWSE cancels every timer (real ones too) just before loaded
             self.add("H2", c, f"repeating {typ} started in the {'/'.join(evs)} handler and never cancelled: one "
                      f"more runs each time it fires", "keep the handle; cancel the old timer before starting one",
                      "report-high")
+
+    def _fast_timers(self):
+        """[(timer.start call, callback Function)] for timers repeating faster than once a second."""
+        out = []
+        for c in self.calls:
+            if L.dotted(c.func) != "timer.start" or not c.args or c.args[0].kind != "Table":
+                continue
+            t = c.args[0]
+            dv, iv = num_value(table_field(t, "duration")), num_value(table_field(t, "iterations"))
+            fn = self.func_of(table_field(t, "callback"))
+            if fn is not None and dv is not None and dv < 1 and iv is not None and (iv < 0 or iv > 1):
+                out.append((c, fn))
+        return out
+
+    def r_frequent_lookups(self):
+        """G6: tes3.getReference in a frequent handler or a fast timer (it scans every cell's references; MWSE's
+        docs: look it up once on load and keep a safe handle). G7: tes3.rayTest every frame or in a frequent
+        handler with no maxDistance / no root, or with accurateSkinned (MWSE's rayTest performance tips)."""
+        places = []
+        for c, ev, fn, harg, _opts in self.registrations:
+            if fn is not None and ev in FREQUENT_EVENTS:
+                places.append((fn, ev, ev in PER_FRAME))
+        for c, fn in self._fast_timers():
+            places.append((fn, "fast timer", True))
+        seen6, seen7 = set(), set()
+        for fn, ev, per_frame in places:
+            for g in self.closure(fn):
+                for n in L.walk(g.body):
+                    if n.kind != "Call":
+                        continue
+                    d = L.dotted(n.func)
+                    if d == "tes3.getReference" and ev not in PER_FRAME and id(n) not in seen6:
+                        seen6.add(id(n))             # per-frame handlers: G5 counts it with the other lookups
+                        self.add("G6", n, f"tes3.getReference in the {ev} handler (scans every cell's references "
+                                 f"each call)", "look it up once on loaded and keep a tes3.makeSafeObjectHandle")
+                    elif d == "tes3.rayTest" and id(n) not in seen7 and n.args and n.args[0].kind == "Table":
+                        seen7.add(id(n))
+                        t = n.args[0]
+                        miss = [k for k in ("maxDistance", "root") if table_field(t, k) is None]
+                        skinned = table_field(t, "accurateSkinned")
+                        if skinned is not None and skinned.kind == "True":
+                            miss.append("accurateSkinned = true")
+                        if not miss:
+                            continue
+                        self.add("G7", n, f"tes3.rayTest in the {ev} handler: " + ", ".join(
+                            ("no " + m) if m in ("maxDistance", "root") else m for m in miss),
+                            "set maxDistance, pass a root (worldObjectRoot / worldPickRoot / worldLandscapeRoot), "
+                            "drop accurateSkinned", "report-high" if per_frame and "maxDistance" in miss else "report")
+
+    def _ref_source(self, n):
+        """Where an expression holding a reference comes from (e.field / tes3.getReference), or None."""
+        if n is None:
+            return None
+        if n.kind == "Index" and n.field in REF_FIELDS and n.obj.kind == "Name":
+            b = getattr(n.obj, "binding", None)
+            if b is not None and b.kind == "param":
+                return L.dotted(n)
+        if n.kind == "Call" and L.dotted(n.func) in ("tes3.getReference", "tes3.getPlayerTarget"):
+            return L.dotted(n.func) + "()"
+        return None
+
+    def r_timer_refs(self):
+        """R1: a timer callback using a reference it captured from its event (or tes3.getReference) with no safe
+        handle or :isValid() check. MWSE's object-lifetimes guide: the reference can be gone when the timer
+        fires; since MWSE 2026-05 that is a Lua error on each such call, not a crash."""
+        for c in self.calls:
+            if L.dotted(c.func) != "timer.start" or not c.args or c.args[0].kind != "Table":
+                continue
+            fn = table_field(c.args[0], "callback")
+            if fn is None or fn.kind != "Function":
+                continue
+            body = self.text(fn)
+            if re.search(r":(isValid|valid)\(|makeSafeObjectHandle|getObject\(", body):
+                continue
+            hit = None
+            for n in L.walk(fn.body):
+                if n.kind == "Name":
+                    b = getattr(n, "binding", None)
+                    if b is None or (b.func is not None and fn.s <= b.func.s and b.func.e <= fn.e):
+                        continue                             # a global, or a local of the callback itself
+                    src = self._ref_source(b.value) if b.kind == "local" and not b.assigns else None
+                    if src:
+                        hit = (n, f"{n.id} (= {src})")
+                        break
+                elif n.kind == "Index" and n.field in REF_FIELDS and n.obj.kind == "Name":
+                    b = getattr(n.obj, "binding", None)
+                    if b is not None and b.kind == "param" and b.func is not fn and not (
+                            fn.s <= b.func.s and b.func.e <= fn.e):
+                        hit = (n, L.dotted(n))
+                        break
+            if hit:
+                self.add("R1", hit[0], f"timer callback uses {hit[1]} from when the timer started, with no safe "
+                         f"handle or :isValid() check (the reference can be gone when it fires)",
+                         "tes3.makeSafeObjectHandle(ref) when starting it; :valid() / :getObject() in the callback")
+
+    def timer_names(self):
+        """([(name, line)] started by name, {names registered}) for T1."""
+        started, registered = [], set()
+        for c in self.calls:
+            d = L.dotted(c.func)
+            if d == "timer.start" and c.args and c.args[0].kind == "Table":
+                cb = table_field(c.args[0], "callback")
+                if cb is not None and cb.kind == "String":
+                    started.append((L.string_value(cb.raw) or "", self.line(c)))
+            elif d == "timer.register" and c.args and c.args[0].kind == "String":
+                registered.add(L.string_value(c.args[0].raw) or "")
+        return started, registered
+
+    def r_ref_data_modified(self):
+        """P1: ref.data written on a reference the code itself shows is not an actor (an item, door, container...)
+        with no ref.modified = true in the same function: MWSE only saves .data on modified references
+        (Storing Data guide)."""
+        for fn in [n for n in self.nodes if n.kind == "Function"]:
+            writes, modified, nonactor = [], set(), set()
+            evs = self.events_of_function(fn)
+            for n in L.walk_no_funcs(fn.body):
+                if n.kind == "Assign":
+                    for t in n.targets:
+                        d = L.dotted(t) or ""
+                        if d.endswith(".modified"):
+                            modified.add(d[:-len(".modified")])
+                        m = re.match(r"^(.+?)\.data\.", d + ".") if t.kind == "Index" else None
+                        if m and ".data." in d + "." and not d.startswith(("tes3.player", "tes3.mobilePlayer")):
+                            writes.append((t, m.group(1)))
+                elif n.kind == "Binop" and n.op in ("==", "~="):
+                    for a, b in ((n.left, n.right), (n.right, n.left)):
+                        da, db = L.dotted(a) or "", L.dotted(b) or ""
+                        if da.startswith("tes3.objectType.") and da.split(".")[-1] in NON_ACTOR_TYPES and \
+                                db.endswith(".objectType"):
+                            holder = db[:-len(".objectType")]
+                            for suffix in (".object", ".baseObject"):
+                                if holder.endswith(suffix):
+                                    holder = holder[:-len(suffix)]
+                            nonactor.add(holder)
+            if "itemDropped" in evs and fn.params:
+                nonactor.add(f"{fn.params[0]}.reference")
+            seen = set()
+            for t, holder in writes:
+                if holder in nonactor and holder not in modified and holder not in seen:
+                    seen.add(holder)
+                    self.add("P1", t, f"{holder}.data written on a non-actor reference without "
+                             f"{holder}.modified = true (MWSE doesn't save .data on an unmodified reference)",
+                             f"set {holder}.modified = true")
 
     def r_globals(self):
         known = {"tes3", "mwse", "event", "timer", "tes3ui", "mge", "json", "lfs", "include", "require", "_G"}
@@ -3201,7 +3487,7 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
         roots = [r for r in (data_dir, os.path.dirname(os.path.dirname(mroot)) if mroot else None) if r]
         for p, rel in files:
             ent = {"rel": rel, "mod": key, "findings": [], "error": None, "patch": None, "logs": 0, "requires": [],
-                   "mcalls": [], "mfields": None}
+                   "mcalls": [], "mfields": None, "tstart": [], "treg": []}
             rep.files[p] = ent
             try:
                 st = os.stat(p)
@@ -3211,9 +3497,10 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
             ckey = "luafix1:" + os.path.normcase(os.path.abspath(p))
             if cache is not None and key != "MWSE Core":     # a cached finding has no edits to patch with
                 hit = cache.get(ckey, ah.stamp_of(st))
-                if hit is not None and hit.get("cfg") == ch and "mc" in hit:
+                if hit is not None and hit.get("cfg") == ch and "mc" in hit and "ts" in hit:
                     ent.update(error=hit.get("err"), logs=hit.get("logs", 0), requires=hit.get("req", []),
                                mcalls=[tuple(x) for x in hit["mc"]],
+                               tstart=[tuple(x) for x in hit["ts"]], treg=list(hit.get("tr", [])),
                                mfields=set(hit["mf"]) if hit.get("mf") is not None else None,
                                sha=hit.get("sha"), cached=True, old_shim=hit.get("v1", False), branded=hit.get("br", False),
                                findings=[Finding(f, edits=[], needs=set(f.get("needs", []))) for f in hit["f"]])
@@ -3226,8 +3513,9 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
                 src = unbrand(raw)
                 ent["branded"] = src != raw
                 a = analyses[p] = _analyse(src, key, rel, cfg)
+                tstart, treg = a.timer_names()
                 ent.update(findings=a.findings, logs=a.log_calls(), requires=a.requires(), old_shim=a.old_shim,
-                           mcalls=a.module_calls(), mfields=a.module_fields())
+                           mcalls=a.module_calls(), mfields=a.module_fields(), tstart=tstart, treg=sorted(treg))
             except L.LuaSyntaxError as e:
                 ent["error"] = f"can't be parsed ({e}); left alone"
             except RecursionError:
@@ -3237,6 +3525,7 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
                     "cfg": ch, "err": ent["error"], "logs": ent["logs"], "req": ent["requires"], "sha": ent["sha"],
                     "v1": ent.get("old_shim", False), "br": ent.get("branded", False), "mc": ent["mcalls"],
                     "mf": sorted(ent["mfields"]) if ent["mfields"] is not None else None,
+                    "ts": ent["tstart"], "tr": ent["treg"],
                     "f": [dict({k: v for k, v in f.items() if k not in ("edits", "needs")}, needs=sorted(f["needs"]),
                                fixable=bool(f["edits"])) for f in ent["findings"]]})
         if key == "MWSE Core":
@@ -3254,6 +3543,7 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
             continue
         _require_cycles(rep, files)
         _missing_fields(rep, files)
+        _unregistered_timers(rep, files)
         # F1: does the mod need the log shim? (decided per mod, like mwguard's per-mod allowance)
         scope = log_scope or cfg["log"].get("scope") or "flagged"
         f1 = [f for p, _r in files for f in rep.files[p]["findings"] if f["rule"] == "F1"]
@@ -3320,7 +3610,7 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
                 for f in a.findings:
                     if f["rule"] == "F1":
                         f["conf"] = old.get((f["rule"], f["line"], f["what"]), f["conf"])
-                ent["findings"] = a.findings + [f for f in ent["findings"] if f["rule"] in ("H5", "H7")]
+                ent["findings"] = a.findings + [f for f in ent["findings"] if f["rule"] in ("H5", "H7", "T1")]
             images = image_findings(a.src, roots)
             ent["findings"] = [f for f in ent["findings"] if f["rule"] != "I1"] + images
             findings = a.findings + images
@@ -3387,6 +3677,23 @@ def _missing_fields(rep, files):
                     rule="H7", line=line, what=f"calls {field}() from {rep.files[q]['rel']}, which never defines it "
                                                f"(errors when this line runs)",
                     fix="put both files back from the same release (one restored, one still edited?)",
+                    conf="report", edits=[], needs=set()))
+
+
+def _unregistered_timers(rep, files):
+    """T1: timer.start{ callback = "name" } where no file of the mod calls timer.register("name", ...): the timer
+    errors when it fires (and after a load). MWSE's docs: a named callback must be timer.register'ed."""
+    registered = {n for p, _r in files for n in rep.files[p].get("treg") or ()}
+    for p, _rel in files:
+        ent = rep.files[p]
+        if ent["error"]:
+            continue
+        for name, line in ent.get("tstart") or ():
+            if name and name not in registered:
+                ent["findings"].append(Finding(
+                    rule="T1", line=line, what=f'timer.start with callback "{name}", which this mod never '
+                                               f'timer.register()s (errors when the timer fires)',
+                    fix=f'timer.register("{name}", fn) at file load, or pass the function itself',
                     conf="report", edits=[], needs=set()))
 
 

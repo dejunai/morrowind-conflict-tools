@@ -6354,184 +6354,6 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
     return 0
 
 
-PERFORMER_ANIM = re.compile(r"am_bard|luteplay|drummer|bard")
-PERFORMER_SCRIPT = re.compile(rb"vo\\bard|streammusic|am_lute|am_drum")
-
-
-def find_double_performers(plugins):
-    """Interiors where two plugins each put on a performer (an NPC with a bard/lute/drummer animation, or a
-    script that plays bard music). Returns [(cell label, cell key, head, keep [...], drop [...], left [...])]:
-    the performers of the plugin loading last stay; the others go when the same plugin both added and
-    placed them (an added bard), and are only reported when they are someone else's NPC made to perform."""
-    order = {n.lower(): i for i, (n, _p) in enumerate(plugins)}
-    npc, creator, scr = {}, {}, {}
-    cells, heads, labels = defaultdict(dict), {}, {}
-    for n, path in plugins:
-        if n.lower() == PERFORMER_PATCH.lower():
-            continue
-        try:
-            with open(path, "rb") as f:
-                data = f.read()
-            ms = [x.lower() for x in plugin_masters(data)]
-            recs = list(iter_records(data))
-        except (OSError, FormatError):
-            continue
-        for off, tag, flags, body in recs:
-            if tag == "NPC_":
-                nm = first_sub(body, b"NAME")
-                if nm is None:
-                    continue
-                rid = cstr(nm).lower()
-                creator.setdefault(rid, n)
-                npc[rid] = (cstr(first_sub(body, b"MODL") or b"").lower(), cstr(first_sub(body, b"SCRI") or b"").lower(),
-                            cstr(first_sub(body, b"FNAM") or b""), n)
-            elif tag == "SCPT":
-                hd = first_sub(body, b"SCHD")
-                if hd:
-                    scr[cstr(hd[:32]).lower()] = ((first_sub(body, b"SCTX") or b"").lower(), n)
-            elif tag == "CELL":
-                key, label = cell_key(body)
-                if not key or key[0] != "i":
-                    continue
-                head, pers, _n0, temp = split_cell(body, off)
-                heads[key], labels[key] = head, label
-                refs = cells[key]
-                for grp, blks in (("p", pers), ("t", temp)):
-                    for blk in blks:
-                        bk = block_key(blk, ms, n.lower())
-                        if not bk:
-                            continue
-                        prev = refs.get(bk)
-                        oid = next((cstr(d) for s_, d in blk if s_ == "NAME"), "") or (prev[0] if prev else "")
-                        if prev is None and oid.lower() not in npc and not any(s_ == "DELE" for s_, _d in blk):
-                            continue            # only actors matter here (an NPC defined later is caught below)
-                        refs[bk] = (oid, any(s_ == "DELE" for s_, _d in blk), grp, blk)
-
-    def performer(oid):
-        d = npc.get(oid.lower())
-        if not d:
-            return None
-        anim, sid, name, by = d
-        if PERFORMER_ANIM.search(anim):
-            return name or oid, by
-        if sid in scr and PERFORMER_SCRIPT.search(scr[sid][0]):
-            return name or oid, scr[sid][1]
-        return None
-
-    out = []
-    for key, refs in cells.items():
-        perf = []
-        for bk, (oid, dele, grp, blk) in refs.items():
-            if dele:
-                continue
-            pr = performer(oid)
-            if pr:
-                perf.append(dict(oid=oid, name=pr[0], by=pr[1], owner=bk[0], idx=bk[1], grp=grp, blk=blk,
-                                 added=bk[0] == pr[1].lower()))     # placed by the plugin that makes it perform
-        if len({x["by"].lower() for x in perf}) < 2:
-            continue
-        last = max({x["by"] for x in perf}, key=lambda b: order.get(b.lower(), -1))
-        keep = [x for x in perf if x["by"] == last]
-        drop = [x for x in perf if x["by"] != last and x["added"]]
-        left = [x for x in perf if x["by"] != last and not x["added"]]
-        out.append((labels[key], key, heads[key], keep, drop, left))
-    out.sort(key=lambda t: t[0].lower())
-    return out
-
-
-def fix_performers(args, plugins):
-    """--fix: where two plugins each put a performing bard in the same interior, keep the bards of the
-    plugin loading last and remove the earlier plugin's added bards, through PERFORMER_PATCH (rebuilt each
-    time; the plugins themselves are not changed)."""
-    data_dir = os.path.abspath(args.data_dir)
-    game_dir = os.path.dirname(data_dir)
-    print("\n" + "=" * 70 + "\nDOUBLED PERFORMERS (two plugins' bards in one inn)\n" + "=" * 70)
-    print("  Looking for interiors with performers from two plugins...", file=sys.stderr)
-    found = find_double_performers(plugins)
-    out_path = os.path.join(data_dir, PERFORMER_PATCH)
-    drops = []
-    for label, key, head, keep, drop, left in found:
-        print(f"  {label}: keeping {', '.join(x['name'] for x in keep)} ({keep[0]['by']}, loads last)")
-        for x in drop:
-            print(f"      remove {x['name']} ({x['oid']}), added by {x['by']}")
-        for x in left:
-            print(f"      left in: {x['name']} ({x['oid']}) is {x['owner']}'s NPC that {x['by']} makes perform; "
-                  f"only the bard plugin itself can change that")
-        if drop:
-            drops.append((label, key, head, drop))
-    if not found:
-        print("  None.")
-    if not drops:
-        if os.path.exists(out_path) and not args.dry_run and keeps_deletions(out_path, None, args, plugins):
-            bak = backup_path(out_path)
-            os.replace(out_path, bak)
-            cur = read_load_order(args) or []
-            set_game_files(args.ini or os.path.join(game_dir, "Morrowind.ini"),
-                           [n for n in cur if n.lower() != PERFORMER_PATCH.lower()], "--fix (performers)")
-            print(f"  {PERFORMER_PATCH} no longer needed: removed (kept as {os.path.basename(bak)}).")
-        return 0
-    n_drop = sum(len(d) for *_x, d in drops)
-    if args.dry_run:
-        print(f"  Dry run: {PERFORMER_PATCH} would remove {n_drop} performer(s) in {len(drops)} interior(s).")
-        return 0
-    if not args.yes and (not sys.stdin.isatty() or input(f"\nRemove {n_drop} doubled performer(s) through "
-                                                         f"{PERFORMER_PATCH}? [y/N] ").strip().lower() not in ("y", "yes")):
-        print("  Nothing changed.")
-        return 0
-    lookup = index_dir(data_dir)
-    order = {n.lower(): i for i, (n, _p) in enumerate(plugins)}
-    owners = sorted({x["owner"] for *_x, d in drops for x in d}, key=lambda o: order.get(o, 0))
-    masters = [os.path.basename(lookup[o]) for o in owners if o in lookup]
-    midx = {m.lower(): i + 1 for i, m in enumerate(masters)}
-    recs = b""
-    for label, key, head, drop in drops:
-        pers, temp = [], []
-        for x in drop:
-            # a deleted reference is FRMR, NAME, DELE and nothing else (the Construction Set's form): the
-            # game ends the reference at DELE, and anything after it (its DATA) makes it reload the cell
-            oid = next((d for s_, d in x["blk"] if s_ == "NAME"), x["oid"].encode(ENC, MW_ERRORS) + b"\0")
-            blk = [["FRMR", struct.pack("<I", (midx[x["owner"]] << 24) | x["idx"])], ["NAME", oid],
-                   ["DELE", struct.pack("<I", 0)]]
-            (pers if x["grp"] == "p" else temp).append(blk)
-        body = b"".join(pack_sub(s_, d) for s_, d in head)
-        for blk in pers:
-            body += b"".join(pack_sub(s_, d) for s_, d in blk)
-        if temp:
-            body += pack_sub("NAM0", struct.pack("<I", len(temp)))
-            for blk in temp:
-                body += b"".join(pack_sub(s_, d) for s_, d in blk)
-        recs += b"CELL" + struct.pack("<III", len(body), 0, 0) + body
-    desc = "Doubled bards: keeps the performers of the plugin loading last (rebuilt by mwdialog_check --fix)"
-    hedr = (struct.pack("<fI", 1.3, 0) + b"mwdialog_check".ljust(32, b"\0")
-            + desc.encode(ENC, MW_ERRORS)[:255].ljust(256, b"\0") + struct.pack("<I", len(drops)))
-    subs = [pack_sub("HEDR", hedr)]
-    for mname in masters:
-        subs += [pack_sub("MAST", mname.encode(ENC, MW_ERRORS) + b"\0"),
-                 pack_sub("DATA", struct.pack("<Q", os.path.getsize(os.path.join(data_dir, mname))))]
-    hb = b"".join(subs)
-    new_data = b"TES3" + struct.pack("<III", len(hb), 0, 0) + hb + recs
-    if not keeps_deletions(out_path, new_data, args, plugins):
-        return
-    if os.path.exists(out_path):
-        shutil.copy2(out_path, backup_path(out_path))
-    write_plugin_bytes(out_path, new_data)
-    note_patch_inputs(out_path, plugins)
-    when = max(os.path.getmtime(os.path.join(data_dir, mname)) for mname in masters) + 60
-    os.utime(out_path, (when, when))
-    cur = read_load_order(args) or []
-    if PERFORMER_PATCH.lower() not in {n.lower() for n in cur}:
-        tail = {PLACE_PATCH_NAME.lower(), MULTI_PATCH_NAME.lower()}      # after the auto-merge, before these
-        at = next((i for i, n in enumerate(cur) if n.lower() in tail), len(cur))
-        set_game_files(args.ini or os.path.join(game_dir, "Morrowind.ini"), cur[:at] + [PERFORMER_PATCH] + cur[at:],
-                       "--fix (performers)")
-    with MT.open_log(MP.state_path(game_dir, args.fix_log), "a", encoding="utf-8") as lf:
-        lf.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {PERFORMER_PATCH}: removed {n_drop} doubled performer(s): "
-                 + "; ".join(f"{label}: " + ", ".join(x['oid'] for x in d) for label, _k, _h, d in drops) + "\n")
-    print(f"  Wrote {PERFORMER_PATCH}: {n_drop} performer(s) removed in {len(drops)} interior(s); it is in the load "
-          f"order (after its masters). --fix rebuilds it; --no-performers skips this step.")
-    return 0
-
-
 def active_archives(args):
     """The BSAs the game loads: Morrowind.bsa, then Morrowind.ini's [Archives]."""
     ini = default_ini(args)
@@ -8106,9 +7928,11 @@ def fix_cell_layouts(args, plugins):
             print(line)
 
 
-def drop_performers_patch(args):
-    """Doubled bards are handled in the game by the mwperformers MWSE mod (it hides them, so they can be
-    shown again). The patch that deleted them would keep them from coming back, so it's taken out."""
+def retire_performers_patch(args):
+    """The Performers Patch (doubled bards deleted by a plugin) is gone from this tool: the mwperformers MWSE mod
+    lets one performer per inn perform, in the game, and removes no one. A patch left by an earlier version
+    would keep its bards deleted, so it is set aside (renamed to a backup beside it, never deleted) and taken
+    out of the load order. Nothing happens when there is none."""
     data_dir = os.path.abspath(args.data_dir)
     game_dir = os.path.dirname(data_dir)
     path = os.path.join(data_dir, PERFORMER_PATCH)
@@ -8121,8 +7945,8 @@ def drop_performers_patch(args):
     if PERFORMER_PATCH.lower() in {n.lower() for n in cur}:
         set_game_files(args.ini or os.path.join(game_dir, "Morrowind.ini"),
                        [n for n in cur if n.lower() != PERFORMER_PATCH.lower()], "--fix (performers now in MWSE)")
-    print(f"\n  {PERFORMER_PATCH} removed: doubled performers are now hidden in the game by the mwperformers "
-          f"MWSE mod (one band per inn, follows the load order). --fix --performers-patch builds the patch instead.")
+    print(f"\n  {PERFORMER_PATCH} (made by an earlier version) set aside and taken out of the load order: the "
+          f"mwperformers MWSE mod lets one performer per inn perform, in the game, and removes no one.")
     return 1
 
 
@@ -8741,7 +8565,7 @@ DEFAULT_RULES = f"""; {RULES_FILE}: load order rules for mwdialog_check.py --sor
 ; masters, and every .esm before every .esp, whatever the rules say.
 ; Built into the sorter, so not needed here: {PATCH_NAME} loads as early as its
 ; masters allow; XE Sky Variations.esp (MGE XE's, when installed), the auto-merge, the
-; performers patch, the placeholder patch and the Multipatch load at the very end, in that
+; performers patch (an earlier version's), the placeholder patch and the Multipatch load at the very end, in that
 ; order. Leave them out of this file: a [NearEnd] block here would also order them, the
 ; other way around.
 ; --sort keeps two sections here itself: [Context] (the patch-after-mod rules it works out,
@@ -9013,7 +8837,8 @@ def compute_order(plugins, rule_sets, current_order):
             order.insert(outside_groups(at), n)
             notes.setdefault("always_lose", []).append(n)
     # Hard rule: this tool's end patches load last, whatever the rules say: the auto-merge, the performers
-    # patch (its deletions then win over every other plugin's edits of those inns), the placeholder patch,
+    # patch (an earlier version's, until --fix sets it aside: its deletions then win over every other plugin's
+    # edits of those inns), the placeholder patch,
     # then the Multipatch (which must see, and win over, every plugin). One that is in an [Exact] group
     # takes its whole group with it.
     tail = []
@@ -9770,7 +9595,7 @@ def run_full(args):
               f"{CONFLICT_ANSWERS_FILE} (--fresh-answers to start without them)")
     common = ["--fix-log", args.fix_log, "--encoding", args.encoding, "--no-interactive"] + (["--yes"] if args.yes else [])
     for flag in ("dry_run", "no_sounds", "no_mlox_rules", "no_content_order", "no_vortex", "no_doubled",
-                 "no_performers", "no_placeholders", "no_merge_objects"):
+                 "no_placeholders", "no_merge_objects"):
         if getattr(args, flag, False):
             common.append("--" + flag.replace("_", "-"))
     if getattr(args, "collide_radius", COLLIDE_ANY_RADIUS) != COLLIDE_ANY_RADIUS:
@@ -10118,11 +9943,6 @@ def _main(argv=None):
                     help="with --asset-check: don't reduce splash screens wider than 2048 (they are still made "
                          "24-bit RLE TGA)")
     tc.add_argument("--no-models", action="store_true", help=argparse.SUPPRESS)   # the old opt-out; now the default
-    tc.add_argument("--performers-patch", action="store_true",
-                    help="with --fix: delete doubled bards with mwdialog_check Performers Patch.esp, instead of "
-                         "leaving them to the mwperformers MWSE mod (which hides them in the game)")
-    tc.add_argument("--no-performers", action="store_true",
-                    help="with --fix: don't remove doubled bards (two plugins' performers in one inn)")
     tc.add_argument("--no-doubled", action="store_true",
                     help="with --fix: don't look for (or turn off) plugins that place the same objects twice")
     tc.add_argument("--soundfix", action="store_true",
@@ -10451,10 +10271,8 @@ def _main(argv=None):
         if gone:
             plugins = [(n, p) for n, p in plugins if n.lower() not in gone]
             args._cell_ctx = None                  # winners change without them: fix_cell_winners scans again
-    if args.fix and args.performers_patch and not args.no_performers and preserve_saves(args) != "strict":
-        fix_performers(args, plugins)
-    elif args.fix and not args.dry_run and not preserve_saves(args):
-        drop_performers_patch(args)       # the mwperformers MWSE mod decides in the game now
+    if args.fix and not args.dry_run and not preserve_saves(args):
+        retire_performers_patch(args)     # an earlier version's patch: the mwperformers MWSE mod decides in the game
     if args.fix and args.sort and getattr(args, "sort_changed", False) and not args.dry_run:
         args._cell_ctx = None
         plugins, _bsas, _data_dirs = resolve(args, Report())

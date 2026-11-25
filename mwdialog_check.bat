@@ -48,9 +48,8 @@ rem    --fix also turns off a plugin when another active one places the same obj
 rem    (two versions of one mod); listed in mwdialog_disabled.txt, skipped by --add-all-esp:
 rem    mwdialog_check.bat --reenable "Some Mod.esp"   (turn it back on; no name = all of them)
 rem    mwdialog_check.bat --fix --no-doubled       (fix without that step)
-rem    --fix also removes doubled bards: where two plugins each put a performer in one inn, the
-rem    plugin loading last keeps its bard; the earlier one's added bards are deleted through
-rem    "mwdialog_check Performers Patch.esp" (rebuilt each --fix). --no-performers skips it.
+rem    Doubled bards are left to the mwperformers MWSE mod (one performer per inn, in the game);
+rem    --fix sets aside a "mwdialog_check Performers Patch.esp" an earlier version built.
 rem    --fix also drops leveled list entries naming objects that exist nowhere.
 rem    Asset check (off unless asked for; adds a few minutes):
 rem    mwdialog_check.bat --asset-check           (report missing files: models and their

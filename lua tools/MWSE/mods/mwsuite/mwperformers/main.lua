@@ -1,19 +1,18 @@
 --[[
-    mwperformers - one band per inn
+    mwperformers - one performer per inn
 
     When you enter an interior, it looks at the performers there: NPCs with a bard, lute or drummer
-    animation, or a script named for it (Animated Morrowind, Bards of Bardenfell and the like). It sorts
-    them by the mod that makes each one perform. If two or more mods put performers in the same place,
-    the mod that loads last keeps its performers; the others' are hidden.
+    animation, or a script named for it (Animated Morrowind, Bards of Bardenfell and the like), whichever mod
+    added them or made them perform - an inn's own NPC turned into a bard counts the same as a new one.
+    Where two or more perform in the same place, one is picked at random to keep performing; the pick is
+    remembered for that place on the player (so it is the same on every visit in that game). The others stop
+    performing: their song script is held (MWSE's scriptExecute event), their song is stopped, and one with a
+    performing animation stands with the normal one. Nobody is removed, hidden or disabled, and they can
+    still be talked to.
 
-    Only performers a mod added itself are hidden (placed by the same mod that makes them perform). An
-    inn's own NPC that an earlier mod turned into a bard is a person with a life there: left alone, and
-    listed in the log.
-
-    Nothing is decided in advance from a generated list, so it works for any mods in any load order: change
-    your mods and the next visit decides again. Performers it hid are remembered on the player, not on
-    each NPC. Hidden performers are only disabled, never deleted;
-    the Mod Config menu can show them all again, or hide the doubles again.
+    Nothing is decided in advance from a generated list, so it works for any mods in any load order. The
+    Mod Config menu can pick again for the place you're in. Off: everyone performs again.
+    Performers that an older version hid (disabled) are shown again when their place is next visited.
     Decisions are written to Data Files\MWSE\logs\mwperformers.log.
 
     While it is on, a bard also stops singing while you talk to them, and holds their lute (Weapon
@@ -42,16 +41,6 @@ local function log(fmt, ...)
     logFile:flush()
 end
 
--- load order --------------------------------------------------------------------------------------
-local loadIndex
-local function modIndex(name)
-    if not loadIndex then
-        loadIndex = {}
-        for i, m in ipairs(tes3.getModList() or {}) do loadIndex[m:lower()] = i end
-    end
-    return name and loadIndex[name:lower()] or -1
-end
-
 -- who performs ------------------------------------------------------------------------------------
 local function matches(text, patterns)
     if not text or text == "" then return false end
@@ -62,15 +51,24 @@ local function matches(text, patterns)
     return false
 end
 
--- the mod that makes this NPC perform, or nil if it isn't a performer
-local function performingMod(ref)
-    local obj = ref.object
-    if not obj or obj.objectType ~= tes3.objectType.npc then return nil end
-    local base = obj.baseObject or obj
-    if matches(base.mesh, ANIM_PATTERNS) or (base.script and matches(base.script.id, SCRIPT_PATTERNS)) then
-        return base.sourceMod
-    end
+local function baseOf(ref)
+    local obj = ref and ref.object
+    if not obj then return nil end
+    return obj.baseObject or obj
+end
+
+local function hasPerformingAnim(base) return matches(base.mesh, ANIM_PATTERNS) end
+local function performingScript(base)
+    local script = base.script
+    if script and matches(script.id, SCRIPT_PATTERNS) then return script end
     return nil
+end
+
+-- a performer, whoever added it or made it perform
+local function isPerformer(ref)
+    local base = baseOf(ref)
+    if not base or base.objectType ~= tes3.objectType.npc then return false end
+    return hasPerformingAnim(base) or performingScript(base) ~= nil
 end
 
 local function describe(ref)
@@ -78,10 +76,8 @@ local function describe(ref)
     return (name and name ~= "") and string.format("%s (%s)", name, ref.object.id) or ref.object.id
 end
 
--- hidden performers are remembered on the player, not on each NPC. ref.data would write a lua table
--- into the save for every performer visited, including ones that are only logged.
-local sessionLogged = {}
-
+-- remembered on the player, not on each NPC: ref.data would write a lua table into the save for every
+-- performer visited
 local function cellTag(ref)
     local cell = ref.cell
     if not cell then return "?" end
@@ -102,122 +98,168 @@ local function refKey(ref)
     return string.format("%s|%s|%s|%d", cellTag(ref), ref.object.id:lower(), tostring(ref.sourceMod or ""):lower(), form)
 end
 
--- the key a performer was saved under, by this version or an older one
-local function findKey(mine, ref)
-    if not mine then return nil end
-    local k = refKey(ref)
-    if mine[k] then return k end
-    k = oldKey(ref)
-    if mine[k] then return k end
+local function playerData(name, create)
+    if not tes3.player then return nil end
+    local data = tes3.player.data
+    local t = data[name]
+    if not t and create then
+        t = {}
+        data[name] = t
+    end
+    return t
 end
 
-local function hiddenMap(create)
-    if not tes3.player then return nil end
-    local all = tes3.player.data.mwperformers
-    if not all then
-        if not create then return nil end
-        all = {}
-        tes3.player.data.mwperformers = all
+-- older versions hid the doubles (disabled them) and kept their keys in player.data.mwperformers: each is
+-- shown again when its place is visited, and the old table goes once it is empty
+local function migrateHidden(ref)
+    local old = playerData("mwperformers", false)
+    if not old then return false end
+    local k = refKey(ref)
+    if not old[k] then
+        k = oldKey(ref)
+        if not old[k] then return false end
     end
-    return all
+    old[k] = nil
+    if ref.disabled then ref:enable() end
+    log("%s: %s shown again (an older version had hidden it)", ref.cell and ref.cell.editorName or "?", describe(ref))
+    if next(old) == nil then tes3.player.data.mwperformers = nil end
+    return true
+end
+
+-- the stopped performers ---------------------------------------------------------------------------
+-- held: reference -> true. Their song scripts are skipped through scriptExecute, registered with each
+-- script as its filter, so no other script in the game reaches this mod. Each pass over the cells in view
+-- builds these afresh; what the last pass held and this one doesn't is let go at the end of it.
+local function weak() return setmetatable({}, { __mode = "k" }) end
+local held, animStopped = weak(), weak()  -- animStopped: reference -> the scene node its animation was changed on
+local heldScripts = {}                    -- script -> true, while a scriptExecute filter is registered
+local prevAnim, prevScripts = weak(), {}  -- the last pass's, while a pass runs
+
+local function onScriptExecute(e)
+    local ref = e.reference
+    if ref and held[ref] then
+        e.block = true
+        return false
+    end
+end
+
+local function holdScript(script)
+    if heldScripts[script] or not tes3.event.scriptExecute then return end
+    heldScripts[script] = true
+    if prevScripts[script] then
+        prevScripts[script] = nil         -- registered already
+    else
+        event.register(tes3.event.scriptExecute, onScriptExecute, { filter = script })
+    end
+end
+
+local function plainAnim(base)
+    local race = base.race
+    if race and race.isBeast then return "base_animkna.nif" end
+    return base.female and "base_anim_female.nif" or "base_anim.nif"
+end
+
+local function stopPerforming(ref)
+    local base = baseOf(ref)
+    held[ref] = true
+    local script = performingScript(base)
+    if script then holdScript(script) end
+    if hasPerformingAnim(base) then
+        local node = ref.sceneNode
+        if node and prevAnim[ref] == node then
+            animStopped[ref] = node           -- still standing plainly from the last pass
+        elseif node and pcall(tes3.loadAnimation, { reference = ref, file = plainAnim(base) }) then
+            animStopped[ref] = ref.sceneNode
+        end
+    end
+    pcall(tes3.removeSound, { reference = ref })     -- a song it had started
+end
+
+local function letGo(ref)
+    if ref.isValid and not ref:isValid() then return end
+    if ref.sceneNode and prevAnim[ref] == ref.sceneNode then
+        pcall(tes3.loadAnimation, { reference = ref })   -- back to its own, performing, animation
+    end
+end
+
+local function beginPass()
+    prevAnim, prevScripts = animStopped, heldScripts
+    held, animStopped, heldScripts = weak(), weak(), {}
+end
+
+local function endPass()
+    for ref in pairs(prevAnim) do
+        if not animStopped[ref] then letGo(ref) end
+    end
+    for script in pairs(prevScripts) do
+        event.unregister(tes3.event.scriptExecute, onScriptExecute, { filter = script })
+    end
+    prevAnim, prevScripts = weak(), {}
 end
 
 -- the decision for one cell -----------------------------------------------------------------------
-local function settleCell(cell)
-    if not cell or not cell.isInterior then return end
-    local byMod, mods = {}, {}
+local sessionLogged = {}
+
+local function performersIn(cell)
+    local list = {}
     for ref in cell:iterateReferences(tes3.objectType.npc) do
-        if not ref.deleted then
-            local mod = performingMod(ref)
-            if mod then
-                local key = mod:lower()
-                if not byMod[key] then
-                    byMod[key] = {}
-                    mods[#mods + 1] = mod
-                end
-                table.insert(byMod[key], ref)
-            end
+        if not ref.deleted and isPerformer(ref) then
+            migrateHidden(ref)
+            if not ref.disabled and ref.isDead ~= true then list[#list + 1] = ref end
         end
     end
+    return list
+end
 
-    -- show everything again: switched off, or only one mod performs here now
-    local function restoreAll()
-        local mine = hiddenMap(false)
-        if not mine then return end
-        for _, refs in pairs(byMod) do
-            for _, ref in ipairs(refs) do
-                local k = findKey(mine, ref)
-                if k then
-                    mine[k] = nil
-                    ref:enable()
-                    log("%s: %s shown again", cell.editorName, describe(ref))
-                end
-            end
+local function settleCell(cell, again)
+    if not cell or not cell.isInterior then return end
+    local list = performersIn(cell)
+    if not config.enabled or #list < 2 then return end
+    local cellId = cell.id:lower()
+    local picks = playerData("mwperformers_pick", true)
+    local chosen
+    if not again then
+        for _, ref in ipairs(list) do
+            if refKey(ref) == picks[cellId] then chosen = ref break end
         end
     end
-    if not config.enabled or #mods < 2 then
-        restoreAll()
-        return
+    if not chosen then
+        chosen = list[math.random(#list)]
+        picks[cellId] = refKey(chosen)
+        log("%s: %s picked to perform, of %d performers", cell.editorName, describe(chosen), #list)
     end
-
-    table.sort(mods, function(a, b) return modIndex(a) > modIndex(b) end)
-    local keep = mods[1]
-    for i = 2, #mods do
-        local mod = mods[i]
-        for _, ref in ipairs(byMod[mod:lower()]) do
-            local placedBy = ref.sourceMod
-            if placedBy and placedBy:lower() == mod:lower() then
-                if not ref.disabled then
-                    ref:disable()
-                    local mine = hiddenMap(true)
-                    mine[refKey(ref)] = true
-                    log("%s: hid %s from %s (%s loads later and keeps its performers)",
-                        cell.editorName, describe(ref), mod, keep)
-                end
-            elseif not sessionLogged[ref] then
+    for _, ref in ipairs(list) do
+        if ref ~= chosen then
+            stopPerforming(ref)
+            if not sessionLogged[ref] then
                 sessionLogged[ref] = true
-                log("%s: left %s - %s's NPC that %s makes perform (only added performers are hidden)",
-                    cell.editorName, describe(ref), tostring(placedBy), mod)
+                log("%s: %s stops performing (%s performs here)", cell.editorName, describe(ref), describe(chosen))
             end
-        end
-    end
-    -- the keeper's performers are visible (in case an earlier decision hid them)
-    local mine = hiddenMap(false)
-    for _, ref in ipairs(byMod[keep:lower()]) do
-        local k = findKey(mine, ref)
-        if k then
-            mine[k] = nil
-            ref:enable()
-            log("%s: %s shown again (%s now loads last)", cell.editorName, describe(ref), keep)
         end
     end
 end
 
-local function settleActive()
+-- again: pick anew in the cells in view (the Mod Config menu's button)
+local function settleActive(again)
+    beginPass()
     for _, cell in ipairs(tes3.getActiveCells()) do
-        local ok, err = pcall(settleCell, cell)
+        local ok, err = pcall(settleCell, cell, again)
         if not ok then log("error in %s: %s", tostring(cell.editorName), tostring(err)) end
     end
+    endPass()
 end
 
 event.register(tes3.event.cellChanged, function()
-    timer.delayOneFrame(settleActive)          -- after the cell's references are all in place
+    timer.delayOneFrame(function() settleActive() end)     -- after the cell's references are all in place
 end)
 event.register(tes3.event.loaded, function()
-    loadIndex = nil
     sessionLogged = {}
-    timer.delayOneFrame(settleActive)
+    held, animStopped, heldScripts, prevAnim = weak(), weak(), heldScripts, weak()   -- the old references are gone
+    timer.delayOneFrame(function() settleActive() end)
 end)
 
 -- bard audio & visual fixes -----------------------------------------------------------------------
-local function isBardRef(ref)
-    if not ref or not ref.object then return false end
-    local base = ref.object.baseObject or ref.object
-    if base.objectType ~= tes3.objectType.npc then return false end
-    if matches(base.mesh, ANIM_PATTERNS) then return true end
-    if base.script and matches(base.script.id, SCRIPT_PATTERNS) then return true end
-    return false
-end
+local isBardRef = isPerformer
 
 -- AM_Lute is a shield: with "show unreadied shields on back" Weapon Sheathing hangs it on the bard's back and hides
 -- his hand's shield bone. A lute shield goes on that mod's exclusion list, which it reads each time it draws one.
@@ -277,25 +319,27 @@ event.register(tes3.event.modConfigReady, function()
     template:saveOnClose(CONFIG_NAME, config)
     local page = template:createSideBarPage({
         label = "Settings",
-        description = "Where two or more mods put performers in the same interior, the mod that loads last "
-            .. "keeps its performers and the others' are hidden (disabled, never deleted). Decided on each "
-            .. "visit, so it follows your load order. Decisions go to MWSE\\logs\\mwperformers.log."
+        description = "Where two or more performers are in the same interior, one is picked at random to keep "
+            .. "performing (the same one on every visit in this game); the others stop: their song script is "
+            .. "held, their song stops and a performing animation goes back to the normal one. Nobody is "
+            .. "hidden or removed. Decisions go to MWSE\\logs\\mwperformers.log."
             .. "\n\nAlso, while it is on, bards stop singing while you talk to them, and hold their lute instead "
             .. "of Weapon Sheathing showing it on their back (the lute part takes effect after a restart).",
     })
     page:createOnOffButton({
-        label = "Hide doubled performers",
-        description = "Off: every performer is shown again, as each place is visited.",
+        label = "One performer per place",
+        description = "Off: everyone performs again, as each place is visited.",
         variable = mwse.mcm.createTableVariable({ id = "enabled", table = config }),
         callback = function() if tes3.player then settleActive() end end,
     })
     page:createButton({
-        buttonText = "Decide again here now",
-        description = "Apply the setting above to the place you're in, without leaving it.",
+        buttonText = "Pick again here now",
+        description = "Pick another performer, at random, for the place you're in (or apply the setting above "
+            .. "here without leaving).",
         callback = function()
             if tes3.player then
-                settleActive()
-                tes3.messageBox("Performers here: " .. (config.enabled and "doubles hidden." or "all shown."))
+                settleActive(true)
+                tes3.messageBox("Performers here: " .. (config.enabled and "one picked to perform." or "all perform."))
             end
         end,
     })

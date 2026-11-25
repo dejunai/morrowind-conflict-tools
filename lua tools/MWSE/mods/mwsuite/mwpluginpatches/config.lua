@@ -40,13 +40,18 @@ function config.isYsmirActive()
         or tes3.getObject("exo_nord_ysmirshield") ~= nil
 end
 
+-- the load order can't change while the game runs, so once the game is initialized the answer is kept
+local friendsAndFrensActive
 function config.isFriendsAndFrensActive()
-    return tes3.isModActive("Friends & Frens - base.esm")
+    if friendsAndFrensActive ~= nil then return friendsAndFrensActive end
+    local active = tes3.isModActive("Friends & Frens - base.esm")
         or tes3.isModActive("Friends & Frens - Vvardenfell.ESP")
         or tes3.isModActive("Friends & Frens - TR.ESP")
         or tes3.isModActive("Friends and Frens.ESP")
         or tes3.isModActive("Friends and Frens - Jiub.esp")
         or tes3.getObject("aa_comp_jiub") ~= nil
+    if tes3.isInitialized and tes3.isInitialized() then friendsAndFrensActive = active end
+    return active
 end
 
 function config.isUIExpansionActive()

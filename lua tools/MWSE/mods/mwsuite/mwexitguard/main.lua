@@ -99,7 +99,7 @@ end
 local function onInitialized()
     event.register("uiActivated", onMenuOptionsActivated, { filter = "MenuOptions" })
     event.register("uiActivated", onMenuMessage, { filter = "MenuMessage" })
-    event.register("keyDown", onKeyDown)
+    event.register("keyDown", onKeyDown, { filter = tes3.scanCode.f4 })   -- only F4 presses reach it
 
     mwse.log("[mwexitguard] Initialized clean fast exit protection suite tool.")
 end

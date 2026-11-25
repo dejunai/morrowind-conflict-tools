@@ -473,11 +473,27 @@ end
 -- caller and calls the original with the same arguments; any error in the note is ignored.
 local wrapped = false
 
+-- one "file:line" string per call site, made once: playSound runs often, and the pattern match and the
+-- string building were done on every call. Nothing is looked up while the guard (or attribution) is off.
+local callSites = {}
 local function callerOf()                       -- call it straight from a wrapper (no pcall in between)
+    if not (config.enabled and config.attributeCallers) then return nil end
     local info = debug.getinfo(3, "Sl")          -- 1 this, 2 the wrapper, 3 the mod's code
     if not info then return nil end
-    local ok, src = pcall(string.gsub, info.short_src or info.source or "?", "^.-[/\\][Mm][Oo][Dd][Ss][/\\]", "")
-    return (ok and src or "?") .. ":" .. tostring(info.currentline)
+    local file = info.short_src or info.source or "?"
+    local site = callSites[file]
+    if not site then
+        local ok, src = pcall(string.gsub, file, "^.-[/\\][Mm][Oo][Dd][Ss][/\\]", "")
+        site = { name = (ok and src or "?") }
+        callSites[file] = site
+    end
+    local line = info.currentline or -1
+    local where = site[line]
+    if not where then
+        where = site.name .. ":" .. tostring(info.currentline)
+        site[line] = where
+    end
+    return where
 end
 
 local function finishPlay(prev, ...)

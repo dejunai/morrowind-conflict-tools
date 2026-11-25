@@ -141,7 +141,7 @@ def test_sort_rechecks_incompatibilities_before_building(tmp_path, monkeypatch, 
         sort_args.sort_changed = True
 
     monkeypatch.setattr(m, "run_sort", sort)
-    for name in ("fix_ref_groups", "fix_cell_layouts", "fix_cell_winners", "drop_performers_patch"):
+    for name in ("fix_ref_groups", "fix_cell_layouts", "fix_cell_winners", "retire_performers_patch"):
         monkeypatch.setattr(m, name, lambda *_args: pytest.fail("repair ran before the sorted-order guard"))
     monkeypatch.setattr(m, "fix_omwaddon_masters", lambda *_args: False)
     monkeypatch.setattr(m, "fix_long_names", lambda *_args: False)
@@ -173,14 +173,14 @@ def test_sort_revalidates_after_repairs_change_plugin_state(tmp_path, monkeypatc
     monkeypatch.setattr(m, "fix_long_names", lambda *_args: False)
     monkeypatch.setattr(m, "fix_ref_groups", lambda *_args: events.append("fix_ref_groups"))
     monkeypatch.setattr(m, "fix_cell_layouts", lambda *_args: events.append("fix_cell_layouts"))
-    monkeypatch.setattr(m, "drop_performers_patch", lambda *_args: events.append("drop_performers_patch"))
+    monkeypatch.setattr(m, "retire_performers_patch", lambda *_args: events.append("retire_performers_patch"))
     monkeypatch.setattr(m, "fix_cell_winners", lambda *_args: pytest.fail("patch built after post-repair conflict"))
     monkeypatch.setattr(m, "scan", lambda *_args: pytest.fail("report built after post-repair conflict"))
 
     flags = ["--sort", "--fix", "--yes", "--no-vortex", "--no-sounds", "--no-doubled", "--no-follow-up"]
     assert m.main([str(data), *flags]) == 2
     assert events == ["guard", "sort", "guard", "fix_ref_groups", "fix_cell_layouts",
-                      "drop_performers_patch", "guard"]
+                      "retire_performers_patch", "guard"]
 
 
 def test_master_repair_sort_rechecks_before_fixing(tmp_path, monkeypatch, capsys):

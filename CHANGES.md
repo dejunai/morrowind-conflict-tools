@@ -1,3 +1,22 @@
+# MWSE optimizations; Performers Patch removed, mwperformers one performer per inn (2026-11-25)
+
+- `mwperformers` lets one performer per interior perform, whichever mod added it or made it perform (base-game
+  bards and converted NPCs included). The pick is random and kept per place on the player; the others' song
+  scripts are held through `scriptExecute` (filtered by script), their song is stopped and a performing animation
+  goes back to the plain one. Nobody is disabled. Bards an older version hid are shown again on the next visit.
+- The Performers Patch is gone: `fix_performers`, `find_double_performers`, `--performers-patch` and
+  `--no-performers` (and its `--full` forwarding). `--fix` sets aside a patch an earlier version built
+  (`retire_performers_patch`, a backup beside it) and takes it out of the load order.
+- luafix: `V1` needs vector evidence and covers `+` / `-`; `H2` exempts timers started in `loaded`; `D1` also
+  flags costly work before `e.passes`; new report-only `G6`, `G7`, `R1`, `T1`, `P1`. Rule changes re-analyse cached
+  files (`RULES_REV` in the cache key; the patch header version is unchanged).
+- Suite: jiubDelay counts only until the delay is reached and caches its global and the Friends & Frens check;
+  pandsfixes / Tales handwriting fix return first when `e.passes` is false; mwfloatfix casts at
+  `worldObjectRoot` first (whole world only when that can't settle it), reuses one ray parameter table, writes its
+  config at a save only when the whitelist grew, and uses `:isValid()`; mwcriminal keeps the keyring container as a
+  safe handle; mwhangwatch really unregisters and unwraps when turned off; mwsoundguard caches call sites and
+  skips the lookup while off; mwexitguard's keyDown is filtered to F4.
+
 # Lua deployment follows lua tools; MWSE core fixed by KB patch only (2026-11-24)
 
 - `--play` replaces a deployed suite file that is older than, and different from, its `lua tools` copy (the old one
