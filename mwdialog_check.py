@@ -9961,10 +9961,11 @@ def _main(argv=None):
     tc.add_argument("--no-soundfix", action="store_true", help="with --fix: don't rebuild the sound-script patch")
     tc.add_argument("--preserve-saves", nargs="?", const="basic", choices=("basic", "strict"), metavar="strict",
                     help="keep a game in progress working: skip --soundfix (it adds script variables), the topic "
-                         "renames, and any rebuild of Cell Fixes or the Performers patch that would bring back an "
-                         "object they delete. =strict also keeps the active plugins, the auto-merge and those two "
-                         "patches exactly as they are, and skips the reference clean-ups and persistence flips "
-                         "(--full then has no reset, unmerge or redundant step); what it holds back is reported")
+                         "renames, any rebuild of Cell Fixes that would bring back an object it deletes, and setting "
+                         "aside an earlier version's Performers patch. =strict also keeps the active plugins, the "
+                         "auto-merge and those patches exactly as they are, and skips the reference clean-ups and "
+                         "persistence flips (--full then has no reset, unmerge or redundant step); what it holds "
+                         "back is reported")
     tc.add_argument("--mwrecompile", metavar="PATH",
                     help="MWRecompile.exe to use (default: tools\\MWRecompile\\, or the MWRECOMPILE variable)")
     tc.add_argument("--reenable", nargs="*", metavar="NAME",

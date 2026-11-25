@@ -4,7 +4,7 @@ A comprehensive, automated maintenance and conflict resolution suite for **The E
 
 The suite is engineered for massive, complex mod lists (hundreds of plugins, tens of thousands of assets) and provides two primary automated workflows:
 1. **`vortex_tidy.py`** — Staging-level mod directory sanitizer, file structure organizer, asset validator, and Lua patcher.
-2. **`mwdialog_check.py`** — Game-level plugin validator, dialogue fixer, cell conflict resolver, automated patch builder (AutoMerge, Multipatch, Performers Patch, SoundFix), and mlox-compatible load-order sorter.
+2. **`mwdialog_check.py`** — Game-level plugin validator, dialogue fixer, cell conflict resolver, automated patch builder (AutoMerge, Multipatch, SoundFix), and mlox-compatible load-order sorter.
 
 > [!IMPORTANT]
 > **Detailed Function Architecture & Empirical Fix Catalog**:

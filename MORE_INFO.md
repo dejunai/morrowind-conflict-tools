@@ -189,11 +189,6 @@ This is decided in the game only, by the `mwperformers` MWSE module; `mwdialog_c
 | `retire_performers_patch` | `--fix` | `mwdialog_check.py` | Sets aside a `mwdialog_check Performers Patch.esp` an earlier version built (renamed to a backup, never deleted) and takes it out of the load order; nothing happens when there is none. Skipped with `--preserve-saves`. | `mwdialog_check Performers Patch.esp (made by an earlier version) set aside and taken out of the load order` |
 | `settleCell` | in game | `mwperformers` (MWSE) | One performer per interior, picked at random and kept on the player; the rest stop through `scriptExecute`, the plain animation and a stopped song. | The Eight Plates: one of three bards plays; the others stand by and can be talked to |
 
---- | :--- | :--- | :--- | :--- |
-| `find_double_performers` | `--performers-patch` | `mwdialog_check.py` | Scans interiors for doubled bard and musician actors placed by overlapping mods. | Located overlapping bard actors across Vvardenfell cornerclubs |
-| `fix_performers` | `--performers-patch` | `mwdialog_check.py` | Writes `mwdialog_check Performers Patch.esp` resolving those duplicates. | `mwdialog_check Performers Patch.esp: removed 7 doubled performer(s): Ald-ruhn, Ald Skar Inn: AM_Bard4...` |
-| `drop_performers_patch` | `--fix` (without `--performers-patch`) | `mwdialog_check.py` | Removes the Performers Patch from the load order so `mwperformers` can decide in-game. | The patch is taken out after a `--fix` run that did not request it |
-
 ---
 
 ## 7. Audio Script Recompilation & Sound Asset Repair
