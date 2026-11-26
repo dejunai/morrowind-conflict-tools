@@ -1,0 +1,8 @@
+[package]
+name = "mwconsole"
+description = "Console commands (More Console Commands compatible), Tab completion, selected-object details and the effect inspector, in one mwsuite mod. Off until turned on in its MCM."
+authors = ["dejunai"]
+
+[tools.mwse]
+lua-mod = "mwsuite.mwconsole"
+load-priority = 4410
