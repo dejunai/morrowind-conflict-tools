@@ -1,3 +1,15 @@
+# --play hash check: core files and our patches (2026-11-26)
+
+- `mwdialog_hashes.py`: `--play` hashes (SHA-256) Morrowind/Tribunal/Bloodmoon `.esm` and `.bsa` in Data Files
+  (Tribunal and Bloodmoon optional, skipped quietly when missing) and every plugin these tools generate. Core files
+  are recorded the first time `--play` sees them; our patches are recorded by their writers once final
+  (`write_plugin_bytes` hook for plugins written into Data Files whose header author is `mwdialog_check`, or already
+  recorded; the `--merge` and `--auto-merge` outputs directly). Record: `generated\mwdialog_play_hashes.json`. A
+  changed file, a missing required core file, or a recorded patch gone from Data Files while still in the load
+  order: a loud block naming each file, no launch, exit 4. New `--play-force` (starts anyway, same warning) and
+  `--rebaseline-hashes` (accept the current files; `--dry-run` shows the changes). `--full --play` forwards
+  `--play-force`.
+
 # doc_scan clean on the repository; deploy.py's running-game check only for a game install (2026-11-26)
 
 - deploy.py: the running Morrowind/MWManager check applies only when TARGET is, or is inside, a folder holding

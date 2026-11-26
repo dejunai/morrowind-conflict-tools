@@ -64,6 +64,7 @@ import mwdialog_paths as MP  # noqa: E402
 from mwdialog_tes3 import check_unchanged, content_id  # noqa: E402
 from mwdialog_cellorder import WHY as CELL_WHY, cell_filter_rules, lost_cell_filter  # noqa: E402
 import mwdialog_text as MT  # noqa: E402
+import mwdialog_hashes as MH  # noqa: E402  (registers the patch-hash hook)
 import mwdialog_tes3  # noqa: E402
 print = MT.printer()  # noqa: A001
 
@@ -3025,6 +3026,7 @@ def launch_game(args):
         return 2
     # the load order lives in mwdialog_load_order.txt; the game reads Morrowind.ini, so it gets the list now
     order = read_load_order(args)
+    listed = list(order or [])                  # before filtering: a recorded patch still listed must be there
     if order:                                   # a listed plugin that isn't there is left out of the ini
         lookup = index_dir(os.path.abspath(args.data_dir))
         gone = [n for n in order if n.lower() not in lookup]
@@ -3108,6 +3110,13 @@ def launch_game(args):
         kwargs["creationflags"] = 0x00000008 | 0x00000200   # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
     else:
         kwargs["start_new_session"] = True
+    # last before starting: the core files and our patches against their recorded hashes (mwdialog_hashes)
+    force = getattr(args, "play_force", False)
+    res = MH.verify(args.data_dir, listed)
+    for to_err, line in MH.report(res, force):
+        print(line, file=sys.stderr if to_err else sys.stdout)
+    if MH.failed(res) and not force:
+        return MH.REFUSED
     try:
         subprocess.Popen([exe], **kwargs)
     except OSError as e:
@@ -4592,6 +4601,7 @@ def run_merge(args, plugins, bsas, data_dirs):
         if when:
             os.utime(out_path, (when, when))
         print(f"\n  Wrote {out_path}" + (" (dated after the newest plugin, so it loads last)" if when else ""))
+    MH.record_patch(out_path, args.data_dir)          # final: its hash is what --play checks
     with MT.open_log(args.fix_log, "a", encoding="utf-8") as f:
         import datetime
         f.write(f"\n==== {datetime.datetime.now():%Y-%m-%d %H:%M:%S} merge ====\n")
@@ -4959,6 +4969,7 @@ def run_auto_merge(args, plugins, bsas, data_dirs):
     if os.path.exists(out_path):
         shutil.copy2(out_path, backup_path(out_path))
     os.replace(tmp, out_path)
+    MH.record_patch(out_path, args.data_dir)          # final: its hash is what --play checks
     when = os.path.getmtime(order[P][1]) + 60     # just after the last plugin (before our end patches)
     os.utime(out_path, (when, when))
     ini_order = [n for n, _p in new_order]
@@ -9796,6 +9807,7 @@ def run_full(args):
     if args.play:
         print("\n--full: starting the game")
         return main([args.data_dir, "--play"] + (["--play-anyway"] if args.play_anyway else [])
+                    + (["--play-force"] if getattr(args, "play_force", False) else [])
                     + (["--ini", args.ini] if args.ini else []))
     return 0
 
@@ -10012,6 +10024,13 @@ def check_parser():
     gm.add_argument("--play-anyway", action="store_true",
                     help="with --play: start the game even if a plugin's master is missing or loads after it")
     gm.add_argument("--exe", default="Morrowind.exe", help="with --play: the game executable (default Morrowind.exe)")
+    gm.add_argument("--play-force", action="store_true",
+                    help="with --play: start the game even when a core file (Morrowind/Tribunal/Bloodmoon .esm/.bsa) "
+                         "or one of our patches no longer matches its recorded hash; the warning is still printed")
+    gm.add_argument("--rebaseline-hashes", action="store_true",
+                    help="accept the core files and our patches as they are now: record their current hashes as the "
+                         "baseline --play checks (then stops, or starts the game with --play). With --dry-run: "
+                         "show what would change")
     tc.add_argument("--conflict-all-places", action="store_true",
                     help="--cell-conflicts: also list the pairs that only put a few objects near each other "
                          "(left to mwcollide, not asked about)")
@@ -10183,8 +10202,16 @@ def _main(argv=None):
                       f"rebuilds without them.", file=sys.stderr)
     if args.all:
         args.clean = args.fix = args.multipatch = True
-    if args.play_anyway:
+    if args.play_anyway or getattr(args, "play_force", False):
         args.play = True
+    if getattr(args, "rebaseline_hashes", False):
+        if not os.path.isdir(args.data_dir):
+            print(f"--rebaseline-hashes: not a folder: {args.data_dir}", file=sys.stderr)
+            return 2
+        for line in MH.rebaseline(args.data_dir, dry=args.dry_run):
+            print(line)
+        if not args.play:
+            return 0
     if args.full:
         return run_full(args)
     if getattr(args, "longpaths_undo", False):

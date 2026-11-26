@@ -218,9 +218,15 @@ def content_id(data):
     return hashlib.sha1(data, usedforsecurity=False).hexdigest()
 
 
+AFTER_PLUGIN_WRITE = []    # callables (path, data) run after each plugin write_plugin_bytes finishes (mwdialog_hashes)
+
+
 def write_plugin_bytes(path, data, keep_times=None):
-    """safe_write_bytes for a plugin: refuses to write anything that isn't a whole TES3 file."""
+    """safe_write_bytes for a plugin: refuses to write anything that isn't a whole TES3 file. Then every hook in
+    AFTER_PLUGIN_WRITE is told (the --play hash record notes the plugins these tools generate)."""
     safe_write_bytes(path, data, validate=validate_plugin_bytes, keep_times=keep_times)
+    for hook in AFTER_PLUGIN_WRITE:
+        hook(path, data)
 
 
 def set_hedr_count(head, count):
