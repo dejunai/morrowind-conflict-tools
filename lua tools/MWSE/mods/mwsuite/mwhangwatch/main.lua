@@ -851,53 +851,52 @@ local function registerModConfig()
 
     local page = template:createSideBarPage({
         label = "Settings",
-        description = "mwhangwatch logs what the game is doing to Morrowind\\mwhangwatch.log, "
-            .. "so a hang, slowdown or audio problem can be tracked down.\n\n"
+        description = "mwhangwatch keeps a running log of what the game is doing in "
+            .. "Data Files\\MWSE\\logs\\mwhangwatch.log, so a freeze, slowdown or sound problem can be tracked down.\n\n"
             .. "Changes apply right away. The log starts fresh each time the game starts.",
     })
 
     page:createOnOffButton({
         label = "Enable the watch",
-        description = "Turns all logging on or off: frame rate, memory, objects in loaded cells, "
-            .. "cell changes, menus, scripts, and (if enabled below) audio.\n\n"
-            .. "Off: none of this is logged. The memory warning below is separate: it has its own switch and "
-            .. "works whether the watch is on or off (it writes its details to the same log).",
+        description = "Turns the log on: frame rate, memory, objects in nearby areas, area changes, menus, scripts "
+            .. "and (if turned on below) sounds.\n\n"
+            .. "Off: nothing is logged. The low-memory warning below has its own switch and works either way "
+            .. "(it writes its details to the same log).",
         variable = mwse.mcm.createTableVariable({ id = "enabled", table = config }),
         callback = applySettings,
     })
 
     page:createOnOffButton({
         label = "Watch audio",
-        description = "Logs every sound the engine starts, music changes, and which MWSE mods "
-            .. "block or replace sounds (\"BLOCKED by ...\").\n\n"
-            .. "This makes the log much larger. Needs the watch to be enabled.",
+        description = "Also logs every sound the game starts, music changes, and which mods block or swap sounds "
+            .. "(\"BLOCKED by ...\").\n\n"
+            .. "This makes the log much bigger. Needs the watch above to be on.",
         variable = mwse.mcm.createTableVariable({ id = "audio", table = config }),
         callback = applySettings,
     })
 
     page:createSlider({
         label = "Sound lines per second",
-        description = "The most sound lines written to the log each second. Sounds beyond this are "
-            .. "still counted in the per-second line and the 5-second summary. 0 = summaries only.",
+        description = "The most sound lines written to the log each second; any more are only counted in the "
+            .. "summaries. 0 = summaries only.",
         min = 0, max = 200, step = 5, jump = 20,
         variable = mwse.mcm.createTableVariable({ id = "soundLines", table = config }),
     })
 
     page:createOnOffButton({
         label = "Warn when memory runs low",
-        description = "A 32-bit Morrowind has 4 GB of memory to work with in all, however much the "
-            .. "computer has. When it is nearly used up, a warning comes up on screen so you can save "
-            .. "before a crash, naming the largest textures and texture folders in the loaded cells "
-            .. "(details in the log). The notice is a short message that goes away by itself; it never "
-            .. "opens a menu.\n\nOff until turned on here. Works even with the watch above turned off.",
+        description = "Morrowind can only use 4 GB of memory, however much your PC has. When it is nearly full, a "
+            .. "short message pops up so you can save before a crash, naming the biggest textures in the area "
+            .. "(details in the log). The message goes away by itself and never opens a menu.\n\n"
+            .. "Off until you turn it on here. Works even with the watch above turned off.",
         variable = mwse.mcm.createTableVariable({ id = "memWarn", table = config }),
         callback = startMemCheck,
     })
 
     page:createSlider({
         label = "Memory warning level (%)",
-        description = "How full the 4 GB has to be before the warning comes up. 95% leaves a little "
-            .. "room to save; lower it for an earlier warning.",
+        description = "How full the 4 GB has to be before the warning comes up. The default is 80%; raise it for "
+            .. "fewer warnings, lower it for an earlier one.",
         min = 70, max = 99, step = 1, jump = 5,
         variable = mwse.mcm.createTableVariable({ id = "memLimit", table = config }),
     })

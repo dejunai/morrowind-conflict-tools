@@ -580,27 +580,29 @@ event.register(tes3.event.modConfigReady, function()
     template:saveOnClose("mwinfoloop", config)
     local page = template:createSideBarPage({
         label = "Settings",
-        description = "Finds dialogue response lists that go round in a circle and keeps them from freezing the "
-            .. "game. Log: Data Files\\MWSE\\logs\\mwinfoloop.log. Version " .. VERSION .. ".",
+        description = "Some mod combinations make a conversation go round in a circle forever, which freezes the "
+            .. "game. This finds those loops and stops them. Log: Data Files\\MWSE\\logs\\mwinfoloop.log. Version "
+            .. VERSION .. ".",
     })
     page:createOnOffButton({ label = "Enabled", configKey = "enabled",
-        description = "Master switch." })
+        description = "Master switch. While it is off, none of the options below do anything." })
     page:createOnOffButton({ label = "Check all topics when the load order changes", configKey = "startupCheck",
-        description = "Checks every topic once at the main menu, with a small pop-up. Skipped while the load order, "
-            .. "file sizes and dates are unchanged." })
+        description = "Checks every dialogue topic once at the main menu (with a small progress pop-up) whenever your "
+            .. "mod list changes. Skipped when nothing has changed." })
     page:createOnOffButton({ label = "Guard conversations", configKey = "liveGuard",
-        description = "Watches the lines the game tries while you talk and ends a walk that goes round in a circle." })
+        description = "Watches conversations as they happen and stops one that starts going round in a circle." })
     page:createOnOffButton({ label = "Let a line through to end a circle", configKey = "breakWithLine",
-        description = "The only way to end a circular walk from Lua. Off = only log it (the game will freeze)." })
+        description = "When a loop is found, lets one line through so the conversation can end. This is the only way "
+            .. "to stop it. Off = only log it, and the game will freeze." })
     page:createOnOffButton({ label = "Skip responses repeated through Choice answers", configKey = "breakChoiceLoops",
-        description = "When the same response is picked many times in a row via Choice answers, skip it for the "
-            .. "rest of the conversation. Off = only log it." })
+        description = "If the same reply comes up 8 times in a row through answer choices, it is skipped for the "
+            .. "rest of that conversation. Off = only log it." })
     page:createOnOffButton({ label = "Log every picked response", configKey = "liveTrace",
-        description = "For debugging. Each picked line costs one small disk read for its id." })
+        description = "For troubleshooting: writes every reply shown to the log. Slightly slower." })
     page:createButton({
         label = "Check again at next launch",
         buttonText = "Clear cache",
-        description = "Forgets the cached result so the next launch checks every topic again.",
+        description = "Forgets the last check, so every topic is checked again the next time you start the game.",
         callback = function()
             pcall(mwse.saveConfig, CACHE_NAME, { version = 0 })
             tes3.messageBox("mwinfoloop: the next launch checks every topic again.")

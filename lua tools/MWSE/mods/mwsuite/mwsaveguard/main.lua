@@ -525,18 +525,18 @@ event.register(tes3.event.modConfigReady, function()
 
 	local page = template:createSideBarPage({
 		label = "Settings",
-		description = "mwsaveguard is a core protection tool for Morrowind saves:\n\n1. Settling Window: Defers autosaves or quicksaves following cell transitions and chargen completion until actors, inventories, and custom Lua data stabilize, eliminating save-time freeze and crash bugs.\n\n2. Player Clone Purge: Detects and deletes duplicate player clone actors left in active cells from fresh starts or transitions, preventing the 50% save freeze and CTD.\n\n3. Load Integrity: Pre-scans save files to intercept and quarantine truncated or corrupted files before the engine attempts to load them.",
+		description = "mwsaveguard protects your saves:\n\n1. After you go through a door or finish making your character, an autosave or quicksave waits a few seconds until everything has finished loading. Saving too early is a common cause of save freezes and crashes.\n\n2. Stray copies of your character, which can appear after a new game or a door and make saving freeze at 50%, are removed.\n\n3. A save is checked before it loads, and a damaged one is stopped before it can crash the game.",
 	})
 
 	page:createOnOffButton({
 		label = "Enable Save Guard",
-		description = "Enables or disables mwsaveguard protection.",
+		description = "Turns save protection on.",
 		variable = mwse.mcm.createTableVariable({ id = "enabled", table = config }),
 	})
 
 	page:createSlider({
 		label = "World Settling Window (seconds)",
-		description = "How long mwsaveguard will defer saves following cell change or chargen completion while the scene stabilizes (default: 5.0 seconds).",
+		description = "How long a save waits after you go through a door or finish making your character. Raise it if saving right after a door still freezes. Default: 5 seconds.",
 		min = 1.0,
 		max = 10.0,
 		step = 0.5,
@@ -546,21 +546,21 @@ event.register(tes3.event.modConfigReady, function()
 
 	page:createOnOffButton({
 		label = "Auto-Purge Duplicate Player Clones",
-		description = "Detects and purges duplicate player clone actors across active cells, preventing the 50% save freeze and crash bug.",
+		description = "Finds and removes stray copies of your character nearby, which can make saving freeze at 50% or crash.",
 		variable = mwse.mcm.createTableVariable({ id = "cleanClones", table = config }),
 	})
 
 	page:createOnOffButton({
 		label = "Validate Saves on Load",
-		description = "Validates save files on load to catch corrupted saves before they crash Morrowind.",
+		description = "Checks a save before it loads and stops it if it is damaged, instead of letting it crash the game.",
 		variable = mwse.mcm.createTableVariable({ id = "validateOnLoad", table = config }),
 	})
 
 	page:createOnOffButton({
 		label = "Also copy save notices to MWSE.log",
-		description = "Every save's notices (requested, deferred, completed) are written to "
-			.. "Data Files\\MWSE\\logs\\mwsaveguard.log. This copies them to MWSE.log as well. Problems (a corrupt "
-			.. "save blocked, a failed save, a player clone) always reach MWSE.log.",
+		description = "Every save's routine notices (requested, waiting, done) go to "
+			.. "Data Files\\MWSE\\logs\\mwsaveguard.log. This copies them to MWSE.log too. Problems (a damaged "
+			.. "save stopped, a failed save, a copy of your character removed) always go to MWSE.log.",
 		variable = mwse.mcm.createTableVariable({ id = "copyNoticesToMWSELog", table = config }),
 	})
 

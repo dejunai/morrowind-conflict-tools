@@ -34,13 +34,13 @@ local generalCategory = page:createCategory("General Settings")
 
 generalCategory:createYesNoButton({
     label = "Enable Effect Inspector",
-    description = "Master toggle for the Effect Inspector suite.",
+    description = "Turns the inspector on: its hotkey and console commands work only while this is on. (The two buttons at the bottom work either way.)",
     variable = mwse.mcm.createTableVariable({ id = "enabled", table = config }),
 })
 
 generalCategory:createKeyBinder({
     label = "In-Game Inspection Hotkey",
-    description = "Press this hotkey in-game to inspect your current crosshair target (or yourself if no target). Defaults to Alt+I.",
+    description = "Press in game to open the inspector on whatever you are looking at, or on yourself if nothing. Default: Alt+I.",
     variable = mwse.mcm.createTableVariable({ id = "hotkey", table = config }),
     allowCombinations = true,
 })
@@ -49,31 +49,25 @@ local displayCategory = page:createCategory("Inspection Options")
 
 displayCategory:createYesNoButton({
     label = "Inspect Innate Spells, Abilities & Diseases",
-    description = "Include innate spells, racial abilities, birthsign traits, blights, and diseases in the inspection report.",
+    description = "Lists the target's spells, racial and birthsign abilities, diseases and blight in the report.",
     variable = mwse.mcm.createTableVariable({ id = "showSpells", table = config }),
 })
 
 displayCategory:createYesNoButton({
     label = "Inspect Equipped Items & Enchantments",
-    description = "Include equipped gear and their enchantments (Constant Effect, On Strike, On Use) in the inspection report.",
+    description = "Lists the target's equipped items and their enchantments in the report.",
     variable = mwse.mcm.createTableVariable({ id = "showEquipment", table = config }),
 })
 
 displayCategory:createYesNoButton({
     label = "Inspect Attached Scene Nodes & Lingering VFX",
-    description = "Traverse the 3D scene node hierarchy looking for particle systems and attached magic/shield VFX nodes.",
+    description = "Looks for leftover magic visuals (glows, shield bubbles, particles) stuck on the target, a common cause of effects that won't go away.",
     variable = mwse.mcm.createTableVariable({ id = "showVFXNodes", table = config }),
 })
 
 displayCategory:createYesNoButton({
-    label = "Show Interactive Dispel Popup",
-    description = "Display an in-game message box with a 'Purge / Dispel All Effects' button upon inspecting.",
-    variable = mwse.mcm.createTableVariable({ id = "interactivePopup", table = config }),
-})
-
-displayCategory:createYesNoButton({
     label = "Mirror Output to MWSE.log",
-    description = "Write full inspection details into MWSE.log for offline debugging.",
+    description = "Also copies each report into MWSE.log, so you can read it after you quit.",
     variable = mwse.mcm.createTableVariable({ id = "logToMWSE", table = config }),
 })
 
@@ -81,7 +75,7 @@ local actionsCategory = page:createCategory("Quick Actions")
 
 actionsCategory:createButton({
     label = "Inspect Player Character Now",
-    description = "Run a complete effect and VFX inspection on the player character immediately.",
+    description = "Opens the inspector on your character right now.",
     buttonText = "Inspect Player",
     callback = function()
         if tes3.player then
@@ -94,7 +88,7 @@ actionsCategory:createButton({
 
 actionsCategory:createButton({
     label = "Purge Player Active Effects Now",
-    description = "Remove all active magic effects currently on the player character.",
+    description = "Removes every active magic effect from your character right now, good and bad. Use it when an effect is stuck.",
     buttonText = "Purge Effects",
     callback = function()
         if tes3.player then

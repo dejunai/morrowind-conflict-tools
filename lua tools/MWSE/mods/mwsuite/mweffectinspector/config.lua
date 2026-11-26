@@ -4,7 +4,6 @@ local defaultConfig = {
     enabled = false,
     showVFXNodes = true,          -- Detect and log lingering particle systems and attached VFX nodes
     logToMWSE = true,             -- Mirror inspect summaries to MWSE.log
-    interactivePopup = true,      -- Display an in-game MessageBox with Dispel / Purge option
     showSpells = true,            -- Inspect innate spells, abilities, powers, blights, and diseases
     showEquipment = true,         -- Inspect equipped items and their enchantments
     hotkey = {

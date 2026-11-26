@@ -8,8 +8,8 @@ end
 local template = mwse.mcm.createTemplate({ name = "mwcompanions", onClose = save })
 local page = template:createSideBarPage({
     label = "Settings",
-    description = "Followers, warping and follower combat in one mod. Turn a switch on only after turning the "
-        .. "matching option off in Smart Companions (or Attend Me's teleport); mwcompanions logs a warning when both are on.",
+    description = "Followers, warping and follower combat in one mod. Before turning a switch on here, turn off the "
+        .. "matching option in Smart Companions (or Attend Me's teleport); if both are on, a warning is logged.",
 })
 
 local function yesNo(parent, id, label, description)
@@ -22,41 +22,41 @@ local function slider(parent, id, label, description, min, max, step)
         variable = mwse.mcm.createTableVariable({ id = id, table = config }) })
 end
 
-page:createYesNoButton({ label = "Enable mwcompanions", description = "Master switch. Nothing below does anything while this is off.",
+page:createYesNoButton({ label = "Enable mwcompanions", description = "Master switch. While it is off, none of the options below do anything.",
     variable = mwse.mcm.createTableVariable({ id = "enabled", table = config }) })
 
 local move = page:createCategory("Following")
 yesNo(move, "warp", "Warp followers to the player",
-    "Followers farther away than the distance below, or left in another loaded cell, appear behind the player. Companions and summons in a fight stay in it. Replaces Smart Companions' warp. When Attend Me's auto-teleport is enabled, Attend Me handles warping instead.")
+    "Followers who fall farther behind than the distance below, or get left in another nearby area, appear right behind you. Followers in a fight stay in it. Replaces Smart Companions' warp; if Attend Me's auto-teleport is on, Attend Me does the warping instead.")
 slider(move, "warpDistance", "Warp distance: %s",
-    "Followers beyond this distance can be warped behind you when warping is enabled.", 500, 8000, 100)
+    "How far a follower can fall behind before being warped to you (1000 is about 14 metres). Lower it to keep followers closer; raise it if they warp too often.", 500, 8000, 100)
 yesNo(move, "levitateWater", "Followers levitate and water walk with the player",
-    "While the player levitates or walks on water, followers do too; it ends when the player's does.")
+    "While you levitate or walk on water, your followers do too, so they don't get left behind or sink. It ends when yours does.")
 yesNo(move, "followerTraits", "Follower traits",
-    "Followers never raise an alarm; follower NPCs breathe water and get acrobatics 150 and athletics 220, so they keep up.")
+    "Followers never report your crimes, and NPC followers can breathe underwater and get Acrobatics 150 and Athletics 220 so they keep up with you.")
 yesNo(move, "muteOnCellChange", "Quiet followers after a cell change",
-    "Followers' attack and greeting lines are skipped for 3 seconds after entering a cell.")
+    "Followers skip their attack and greeting lines for 3 seconds after you go through a door, so they don't all talk at once.")
 yesNo(move, "noSneakActivate", "Don't activate followers while sneaking",
-    "Activating a follower while sneaking does nothing, so a companion isn't pickpocketed by accident.")
+    "Pressing activate on a follower while sneaking does nothing, so you don't pickpocket a companion by accident.")
 
 local fight = page:createCategory("Combat")
 yesNo(fight, "noFriendlyFire", "No friendly fire",
-    "The player and followers can't hurt each other with weapons or harmful spells, and a stray hit doesn't turn them hostile. Soul-trapping a non-companion follower still works.")
+    "You and your followers can't hurt each other with weapons or harmful spells, and a stray hit won't turn them against you. You can still soul-trap a follower who isn't a companion.")
 yesNo(fight, "resilient", "Followers collapse instead of dying",
-    "A killing blow knocks a follower out instead; it wakes up after the time below and follows again.")
+    "A killing blow knocks a follower out instead of killing them; they get up after the time set below and follow you again.")
 slider(fight, "collapseSeconds", "Collapse time: %s s",
-    "How long a protected follower stays unconscious before recovering.", 10, 300, 5)
+    "How long a knocked-out follower stays down before getting up. Used by 'Followers collapse instead of dying'.", 10, 300, 5)
 slider(fight, "collapseHealth", "Health after a collapse: %s%%",
-    "Percentage of base health restored when a protected follower collapses.", 10, 100, 5)
+    "How much health a knocked-out follower is left with, as a share of their full health.", 10, 100, 5)
 yesNo(fight, "sheatheAfterCombat", "Companions put their weapon away after a fight",
-    "The game can leave a companion standing combat-ready after the enemy is gone. Within a second of neither of you "
-        .. "fighting, while your own weapon and spell are away, the companion's weapon is put away too.")
+    "Sometimes a companion keeps their weapon out after a fight. With this on, about a second after the fighting stops "
+        .. "(and once your own weapon and spell are put away), they put theirs away too.")
 yesNo(fight, "assist", "Companions defend the player",
-    "Companions attack whoever starts a fight with the player. Escorted NPCs never do.")
+    "Companions attack anyone who starts a fight with you. NPCs you are escorting never join in.")
 yesNo(fight, "escortSelfDefense", "Escorted NPCs only defend themselves",
-    "An NPC escorted by the player fights only someone who attacks it, never in the player's defense.")
+    "An NPC you are escorting only fights someone who attacks them, and never jumps into your fights.")
 yesNo(fight, "escortProtection", "Escorted NPCs can't die",
-    "A killing blow to an escorted NPC drains its fatigue to zero instead; it stays down while the fight lasts and gets up when it is over.")
+    "An NPC you are escorting can't be killed: a killing blow knocks them down instead, and they get up once the fight is over.")
 
 local function getFollowers()
     local list = {}
@@ -81,7 +81,7 @@ end
 
 template:createExclusionsPage({
     label = "Blacklist",
-    description = "Actors on the left are permanently excluded from follower/companion handling (warping, combat protection, AI changes). Click an actor to move it between lists.",
+    description = "Actors on the left are never treated as followers by this mod: no warping, no combat protection, no other changes. Click a name to move it to the other list.",
     leftListLabel = "Never Followers (Blacklisted)",
     rightListLabel = "Available Actors",
     showAllBlocked = true,

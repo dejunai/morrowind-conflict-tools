@@ -1,6 +1,6 @@
 --[[
     mwwarnsuppression
-    Author: Antigravity
+    Author: dej (dejunai)
 
     Combines and manages engine warning suppression features:
       1. Body Part Warnings: Suppresses repetitive "Not able to find <BodyPart> part in <Item>"
@@ -170,24 +170,28 @@ event.register(tes3.event.modConfigReady, function()
 
     local page = template:createSideBarPage({
         label = "Settings",
-        description = "mwwarnsuppression cleans harmless engine warning spam from MWSE.log and Warnings.txt without hiding genuine mod issues or errors.\n\nToggle features on or off as desired.",
+        description = "mwwarnsuppression removes harmless, repeated warnings from MWSE.log and Warnings.txt, so real "
+            .. "problems are easier to spot. Real warnings (missing meshes or textures, dialogue errors, missing "
+            .. "masters) are never hidden.",
     })
 
     page:createOnOffButton({
         label = "Enabled",
-        description = "Off: no warning is suppressed and the game's code is left as it is.",
+        description = "Master switch. Off: no warning is hidden and the game is left unpatched.",
         variable = mwse.mcm.createTableVariable({ id = "enabled", table = config }),
     })
 
     page:createOnOffButton({
         label = "Suppress Body Part Missing Warnings",
-        description = "Suppresses Morrowind's repetitive 'Not able to find <BodyPart> part in <Item>' warning, which triggers intrusive Lua stack traces in MWSE.log when certain armor or clothing items are equipped or added.",
+        description = "Hides the game's repeated 'Not able to find <body part> part in <item>' warning, and the long "
+            .. "error trace it causes in MWSE.log, when some armor or clothing is worn or picked up.",
         variable = mwse.mcm.createTableVariable({ id = "suppressBodyPartWarnings", table = config }),
     })
 
     page:createOnOffButton({
         label = "Suppress Shutdown Cache Warnings",
-        description = "Suppresses benign engine shutdown dumps in Warnings.txt ('Texture count' refcount leaks and ModelLoader NIF/KF dumps) while preserving all genuine in-game warnings.",
+        description = "Hides the long, harmless lists the game writes to Warnings.txt when you quit ('Texture count' "
+            .. "and model-loader lists). Warnings from while you play are kept.",
         variable = mwse.mcm.createTableVariable({ id = "suppressShutdownWarnings", table = config }),
     })
 

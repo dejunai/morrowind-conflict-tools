@@ -446,41 +446,45 @@ event.register(tes3.event.modConfigReady, function()
     template:saveOnClose(CONFIG_NAME, config)
     local page = template:createSideBarPage({
         label = "Settings",
-        description = "mwguard profiles MWSE per-frame handlers and logs extreme priorities and performance bottlenecks to MWSE\\logs\\mwguard.log without affecting, throttling, or modifying other mods.",
+        description = "mwguard measures how much time other Lua mods take every frame and writes the slowest ones to "
+            .. "MWSE\\logs\\mwguard.log, so you can find a mod that slows the game down. It only watches: it never "
+            .. "changes or slows down other mods.",
     })
     page:createOnOffButton({
         label = "Enable Passive Profiler",
-        description = "Turns performance monitoring on or off. Turning it on takes effect after restarting the game; "
-            .. "while it is off at start-up, mwguard wraps nothing.",
+        description = "Turns the performance monitor on. Restart the game after turning it on; turning it off stops "
+            .. "the reports right away. While it is off at start-up, mwguard does nothing at all.",
         variable = mwse.mcm.createTableVariable({ id = "enabled", table = config }),
     })
     page:createOnOffButton({
         label = "Show address space on screen",
-        description = "Shows how much of Morrowind's 4 GB address space is in use (two digits, top right), whether or not the "
-            .. "profiler is on. A 32-bit Morrowind crashes when it reaches 100%.",
+        description = "Shows a small number in the top-right corner: how full Morrowind's 4 GB memory limit is, in "
+            .. "percent. The game crashes near 100%, so save and restart when it gets high. Works even with the monitor off.",
         variable = mwse.mcm.createTableVariable({ id = "showAddressSpace", table = config }),
     })
     page:createSlider({
         label = "Flag handlers taking more than (ms)",
-        description = "Handlers averaging more than this duration per call will be flagged as high CPU in mwguard.log.",
+        description = "A mod that takes longer than this each frame, on average, is marked as slow in the log. Lower it "
+            .. "to catch smaller slowdowns.",
         min = 0.25, max = 5.0, step = 0.25, decimalPlaces = 2,
         variable = mwse.mcm.createTableVariable({ id = "costMs", table = config }),
     })
     page:createSlider({
         label = "Report interval (seconds)",
-        description = "How often performance summaries are written to MWSE\\logs\\mwguard.log.",
+        description = "How often a new report is written to MWSE\\logs\\mwguard.log.",
         min = 10, max = 120, step = 5,
         variable = mwse.mcm.createTableVariable({ id = "reportSeconds", table = config }),
     })
     page:createSlider({
         label = "Sample rate (1 in N frames)",
-        description = "Timing every single frame adds measurement overhead. Sampling 1 in 8 frames is statistically accurate with zero measurable CPU impact.",
+        description = "Only 1 frame in this many is timed, so the monitor itself doesn't slow the game. 8 is accurate "
+            .. "enough; 1 times every frame.",
         min = 1, max = 32, step = 1,
         variable = mwse.mcm.createTableVariable({ id = "sampleEvery", table = config }),
     })
     page:createOnOffButton({
         label = "Output notices to MWSE.log",
-        description = "When high-CPU handlers are detected, output a brief notice to the main MWSE.log.",
+        description = "Also writes a short note to MWSE.log whenever a slow mod is found.",
         variable = mwse.mcm.createTableVariable({ id = "logNoticeToMWSE", table = config }),
     })
     template:register()

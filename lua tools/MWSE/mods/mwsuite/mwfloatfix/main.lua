@@ -871,43 +871,55 @@ event.register(tes3.event.modConfigReady, function()
     end
     local page = template:createSideBarPage({
         label = "Settings",
-        description = "Lowers loose items that float above the surface under them, once, the first time "
-            .. "their cell loads. Items against a wall, under water, or with no floor within reach are left "
-            .. "alone. Each move is written to MWSE\\logs\\mwfloatfix.log."
-            .. (floatList and "\n\nOnly the items in MWSE\\config\\mwfloatfix_data.json are checked (written by "
-                .. "mwdialog_check --cell-conflicts)." or "")
-            .. "\n\nPeople listed in MWSE\\config\\mwfloatfix_rescue.json (written by mwdialog_check --fix) who are "
-            .. "under water in this save are put back on their dock or footing, once per save.",
+        description = "Some loose items (books, bottles, plates) end up floating a little above the table or "
+            .. "floor, usually because another mod moved what they sat on. This lowers each one onto the surface "
+            .. "below it, once, the first time you visit the place. Items hanging on a wall or hook, items under "
+            .. "water, and items with nothing below them are left alone. Each move is written to "
+            .. "MWSE\\logs\\mwfloatfix.log."
+            .. (floatList and "\n\nOnly the items listed in MWSE\\config\\mwfloatfix_data.json are checked (that "
+                .. "list is made by mwdialog_check --cell-conflicts)." or "")
+            .. "\n\nPeople listed in MWSE\\config\\mwfloatfix_rescue.json (made by mwdialog_check --fix) who are "
+            .. "stuck under water in this save are put back on their dock or ledge, once per save.",
     })
-    page:createOnOffButton({ label = "Enabled", description = "Lower eligible floating objects when their cells load.",
+    page:createOnOffButton({ label = "Enabled", description = "Turns the fix on: floating items are lowered as each place loads, and stuck people "
+            .. "are rescued. Off: nothing is moved (items already lowered stay where they are).",
         variable = mwse.mcm.createTableVariable({ id = "enabled", table = config }) })
     page:createSlider({ label = "Still resting when the gap is up to (units)", min = 1, max = 16, step = 1,
-        description = "Ignore small gaps up to this size to avoid moving items that already look properly placed.",
+        description = "An item this close to the surface below already counts as resting on it and is left alone. "
+            .. "Raise it if items that look fine get nudged; lower it to also catch items that hover only slightly.",
         variable = mwse.mcm.createTableVariable({ id = "tolerance", table = config }) })
     page:createSlider({ label = "Lower an item by at most (units)", min = 16, max = 512, step = 8,
-        description = "Maximum distance to lower an item; larger gaps are left alone.",
+        description = "The farthest an item will be lowered. An item floating higher than this is left where it "
+            .. "is. Raise it if items floating high above the floor aren't being fixed.",
         variable = mwse.mcm.createTableVariable({ id = "maxDrop", table = config }) })
     page:createSlider({ label = "Counts as mounted on a wall within (units)", min = 0, max = 32, step = 1,
-        description = "Wall and hook detection distance for mounted items. The minimum checks are 22 units for walls and 20 for hooks.",
+        description = "An item this close to a wall, or with a hook just above it, counts as hanging there and is "
+            .. "never lowered. Values under 22 make no difference: walls are always checked out to 22 units and "
+            .. "hooks to 20. Raise it if wall-mounted things (shields, weapons, torches in sconces) still get dropped.",
         variable = mwse.mcm.createTableVariable({ id = "wallGap", table = config }) })
     if not floatList then                -- the list never names lights
-        page:createOnOffButton({ label = "Also carryable lights", description = "Include loose portable lights when checking for floating items.",
+        page:createOnOffButton({ label = "Also carryable lights", description = "Also lowers floating lanterns and torches that you can pick up. Off by default, because "
+            .. "many lanterns are meant to hang. Only used when the MWSE\\config\\mwfloatfix_data.json list isn't "
+            .. "loaded: while that list is used, this switch is hidden and lights are never checked.",
             variable = mwse.mcm.createTableVariable({ id = "lights", table = config }) })
     end
     page:createOnOffButton({ label = "Write moves to MWSE\\logs\\mwfloatfix.log",
-        description = "Record each item lowered by the floating-item fix.",
+        description = "Keeps a record of every item lowered (and why others were left alone) in the log file. "
+            .. "Turn off if you don't need it.",
         variable = mwse.mcm.createTableVariable({ id = "log", table = config }) })
     page:createKeyBinder({ label = "Hide key (look at an object, or click it in the console, then press)",
-        description = "Hide the targeted object across games; use Hidden Objects to restore the most recently hidden one.",
+        description = "Look at an object (or click it with the console open) and press this key. After you confirm, "
+            .. "that one object in that spot is hidden in this game and every new game. Meant for lanterns or ropes "
+            .. "left hanging in mid-air after another mod removed what held them. Bring it back on the Hidden Objects page.",
         allowCombinations = true, variable = mwse.mcm.createTableVariable({ id = "blacklistKey", table = config }) })
 
     template:createExclusionsPage({
-        label = "Whitelist / Blacklist",
-        description = "Items moved by Floatfix are automatically added to the Whitelist.\n\n"
-            .. "• Click any item in the Whitelist to move it to the Blacklist (Floatfix will leave it alone and restore its starting position if previously lowered).\n"
-            .. "• Click any item in the Blacklist to move it back to the Whitelist.",
-        leftListLabel = "Blacklist (Do Not Move)",
-        rightListLabel = "Whitelist (Allowed / Moved)",
+        label = "Moved / Never move",
+        description = "Items this mod has lowered are listed on the right.\n\n"
+            .. "• Click an item on the right to put it on the Never move list: it is left alone from now on, and put back where its mod placed it if it was lowered.\n"
+            .. "• Click an item on the left to allow it to be moved again.",
+        leftListLabel = "Never move",
+        rightListLabel = "Moved before (allowed)",
         showAllBlocked = true,
         variable = mwse.mcm.createTableVariable({
             id = "blacklist",
@@ -922,8 +934,8 @@ event.register(tes3.event.modConfigReady, function()
     })
 
     local bpage = template:createPage({ label = "Hidden Objects" })
-    bpage:createInfo({ text = "Objects permanently hidden using the hide key. Look at one (or click it with the console open) and "
-        .. "press the hide key to add it. The list is MWSE\\config\\mwfloatfix_blacklist.json." })
+    bpage:createInfo({ text = "Objects you hid with the hide key, in every game. To hide one, look at it (or click it with the "
+        .. "console open) and press the hide key. The list is kept in MWSE\\config\\mwfloatfix_blacklist.json." })
     local listInfo = bpage:createInfo({ text = "" })
     local function refreshList()
         local lines = {}
@@ -935,7 +947,7 @@ event.register(tes3.event.modConfigReady, function()
     end
     refreshList()
     bpage:createButton({ buttonText = "Bring back the last one",
-        description = "Restore the most recently hidden object in every game.", callback = function()
+        description = "Shows the most recently hidden object again, in every game.", callback = function()
         local e = undoLast()
         tes3.messageBox(e and ("Back in every game: " .. e.id .. " (" .. e.cell .. ")") or "The list is empty.")
         refreshList()

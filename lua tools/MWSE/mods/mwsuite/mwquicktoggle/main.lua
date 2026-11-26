@@ -150,12 +150,15 @@ event.register("modConfigReady", function()
         .. "a toggled light with its remembered shield. Works with vanilla quick keys and QuickKeys Hotbar Extended." })
     page:createYesNoButton({
         label = "Quick keys unequip equipped items",
-        description = "Press an equipped item's quick key again to unequip it.",
+        description = "Press the quick key of something you are already wearing or holding (weapon, armor, clothing or "
+            .. "a light) to take it off.",
         variable = mwse.mcm.createTableVariable({ id = "enabled", table = config }),
     })
     page:createYesNoButton({
         label = "Restore displaced equipment",
-        description = "When unequipping an item via its quick key, or when readying a weapon with a toggled light, re-equip the equipment it replaced (such as a shield replaced by a lantern or two-handed weapon).",
+        description = "When you take something off with its quick key, puts back what it replaced, like the shield a "
+            .. "lantern or two-handed weapon pushed off. Also swaps a quick-keyed light back to your shield when you "
+            .. "ready a weapon.",
         variable = mwse.mcm.createTableVariable({ id = "restoreDisplaced", table = config }),
     })
     template:register()

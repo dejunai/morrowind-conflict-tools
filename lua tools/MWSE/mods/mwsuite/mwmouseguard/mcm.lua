@@ -8,30 +8,30 @@ local page = template:createSideBarPage({
 })
 
 page.sidebar:createInfo({
-    text = [[mwmouseguard prevents the OS cursor and mousewheel scrolling from bleeding onto secondary monitors.
+    text = [[Mouse Guard stops the mouse from drifting onto a second monitor.
 
-In multi-monitor setups (especially with MGE XE borderless windowed mode), Windows often lets the invisible cursor drift across screen boundaries. This causes mousewheel scrolling in Morrowind (menus, inventory, camera) to simultaneously scroll web browsers or documents on your second screen.
+With more than one screen (especially in MGE XE's borderless window mode), Windows can let the hidden mouse pointer slide off the edge of the Morrowind window. Then scrolling the mouse wheel in game also scrolls whatever is open on your other screen.
 
-mwmouseguard clips the cursor to the Morrowind window while Morrowind is active, and immediately releases it when you Alt-Tab or press the Windows key.]],
+Mouse Guard keeps the pointer inside the Morrowind window while you play, and lets it go as soon as you Alt-Tab or press the Windows key.]],
 })
 
 local category = page:createCategory("Containment Options")
 
 category:createYesNoButton({
     label = "Enable Mouse Containment",
-    description = "When enabled, clips the mouse cursor to Morrowind's window to stop drift and scroll bleed to secondary monitors.",
+    description = "Keeps the mouse pointer inside the Morrowind window, so scrolling in game doesn't also scroll something on another monitor.",
     variable = mwse.mcm.createTableVariable({ id = "enabled", table = config }),
 })
 
 category:createYesNoButton({
     label = "Contain During Menus & UI",
-    description = "Keep cursor contained to Morrowind while inventory, journal, or dialog menus are open.",
+    description = "Also keeps the pointer in the window while menus (inventory, journal, dialogue) are open.",
     variable = mwse.mcm.createTableVariable({ id = "lockInMenus", table = config }),
 })
 
 category:createYesNoButton({
     label = "Contain During Gameplay",
-    description = "Keep cursor contained during active 3D gameplay.",
+    description = "Keeps the pointer in the window while you are playing with no menu open.",
     variable = mwse.mcm.createTableVariable({ id = "lockInGame", table = config }),
 })
 

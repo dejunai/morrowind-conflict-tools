@@ -319,23 +319,23 @@ event.register(tes3.event.modConfigReady, function()
     template:saveOnClose(CONFIG_NAME, config)
     local page = template:createSideBarPage({
         label = "Settings",
-        description = "Where two or more performers are in the same interior, one is picked at random to keep "
-            .. "performing (the same one on every visit in this game); the others stop: their song script is "
-            .. "held, their song stops and a performing animation goes back to the normal one. Nobody is "
-            .. "hidden or removed. Decisions go to MWSE\\logs\\mwperformers.log."
+        description = "When two or more bards or musicians perform in the same building, one is picked at random to "
+            .. "keep playing (the same one on every visit in this game) and the others stop: their song stops and "
+            .. "they go back to standing normally. Nobody is hidden or removed. Choices are written to "
+            .. "MWSE\\logs\\mwperformers.log."
             .. "\n\nAlso, while it is on, bards stop singing while you talk to them, and hold their lute instead "
             .. "of Weapon Sheathing showing it on their back (the lute part takes effect after a restart).",
     })
     page:createOnOffButton({
         label = "One performer per place",
-        description = "Off: everyone performs again, as each place is visited.",
+        description = "Only one performer plays in each building. Off: everyone performs again as you visit each place.",
         variable = mwse.mcm.createTableVariable({ id = "enabled", table = config }),
         callback = function() if tes3.player then settleActive() end end,
     })
     page:createButton({
         buttonText = "Pick again here now",
-        description = "Pick another performer, at random, for the place you're in (or apply the setting above "
-            .. "here without leaving).",
+        description = "Picks a different performer, at random, for the building you're in (or applies the switch "
+            .. "above here without leaving).",
         callback = function()
             if tes3.player then
                 settleActive(true)
@@ -345,7 +345,8 @@ event.register(tes3.event.modConfigReady, function()
     })
     page:createOnOffButton({
         label = "Write decisions to MWSE\\logs\\mwperformers.log",
-        description = "Record which performers are hidden or restored in the log file.",
+        description = "Keeps a record of which performer was picked and which were stopped or started again in the "
+            .. "log file.",
         variable = mwse.mcm.createTableVariable({ id = "log", table = config }),
     })
     template:register()

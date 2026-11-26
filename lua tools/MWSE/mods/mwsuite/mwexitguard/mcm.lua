@@ -8,18 +8,18 @@ local page = template:createSideBarPage({
 })
 
 page.sidebar:createInfo({
-    text = [[mwexitguard is a stability tool in the mwsuite intended to avoid the Morrowind on-exit hang and MGE XE d3d8.dll crash.
+    text = [[Exit Guard fixes the long freeze, and often a crash, that many modded games have when you quit.
 
-The Problem:
-In vanilla Morrowind with MGE XE and large modlists, choosing "Exit Game" triggers an exhaustive, single-threaded teardown of all loaded cells and gigabytes of merged distant land static meshes. This causes a 15-30 second CPU freeze, followed by an access violation crash (0xC0000005) when MGE XE's renderer unloading loop invokes ->Release() on a dangling COM DirectX resource.
+The problem:
+When you choose Exit, Morrowind unloads everything piece by piece. With MGE XE and a big mod list this can freeze the game for 15-30 seconds and then crash it.
 
-The Solution:
-Because all game data is already saved to disk when you save/quicksave (nothing is saved on exit), mwexitguard intercepts the confirmed exit event and instantly terminates the process via Win32 ExitProcess(0). The Windows kernel immediately and safely reclaims all RAM and GPU resources in <1 ms with zero hang, zero black screen, and zero crash.]]
+The fix:
+The game is only saved when you save, never when you quit. So once you confirm Exit, Exit Guard simply closes the game instantly. Save first as usual: anything you haven't saved is lost, just as with a normal exit.]]
 })
 
 page:createYesNoButton({
     label = "Enable Exit Guard",
-    description = "When enabled, cleanly terminates the process on confirmed exit, bypassing the broken deallocation loop. Restart Morrowind after enabling so the Exit button hook is installed.",
+    description = "Closes the game instantly when you confirm Exit, skipping the freeze and crash. Restart the game after turning it on.",
     variable = mwse.mcm.createTableVariable({
         id = "enabled",
         table = config,
@@ -28,7 +28,7 @@ page:createYesNoButton({
 
 page:createYesNoButton({
     label = "Skip Confirmation Dialog",
-    description = "If enabled, clicking 'Exit Game' from the menu immediately closes the game without showing the 'Are you sure you want to exit?' confirmation dialog. Default is off for safety.",
+    description = "Clicking Exit closes the game right away, without asking 'Are you sure?'. Off by default, so a misclick can't close your game.",
     variable = mwse.mcm.createTableVariable({
         id = "skipConfirmation",
         table = config,
@@ -37,7 +37,7 @@ page:createYesNoButton({
 
 page:createYesNoButton({
     label = "Enable Clean Alt+F4",
-    description = "When enabled, pressing Alt+F4 triggers the clean exit routine instead of the native hanging shutdown.",
+    description = "Pressing Alt+F4 also closes the game instantly, instead of freezing.",
     variable = mwse.mcm.createTableVariable({
         id = "enableAltF4",
         table = config,
@@ -46,7 +46,7 @@ page:createYesNoButton({
 
 page:createYesNoButton({
     label = "Log to MWSE.log",
-    description = "Write a notice to MWSE.log when a clean fast exit occurs.",
+    description = "Writes a line to MWSE.log each time Exit Guard closes the game.",
     variable = mwse.mcm.createTableVariable({
         id = "logToMWSE",
         table = config,

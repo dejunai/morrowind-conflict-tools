@@ -4,7 +4,6 @@ local defaultConfig = {
     enabled = false,
     lockInMenus = true,
     lockInGame = true,
-    releaseOnPause = false,
 }
 
 local config = mwse.loadConfig(CONFIG_NAME, defaultConfig)

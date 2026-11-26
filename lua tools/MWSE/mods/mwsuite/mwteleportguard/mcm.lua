@@ -8,44 +8,44 @@ local page = template:createSideBarPage({
 })
 
 page.sidebar:createInfo({
-    text = [[mwteleportguard is a mod-agnostic safety tool that prevents crashes and freezes caused by scripted player teleports during dialogue.
+    text = [[Teleport Guard stops crashes and freezes when a mod moves you somewhere else in the middle of a conversation.
 
-The Problem:
-In vanilla Morrowind, executing `Player->PositionCell` while the dialogue window is open unloads the active cell out from underneath the conversation. This triggers camera freezes, orphaned dialogue UI, actor pointer corruption, companion abandonment, and frequent crashes to desktop.
+The problem:
+Some mods send you to another place straight from a dialogue line, while the conversation window is still open. That can freeze the camera, break the dialogue window, leave your companions behind, or crash the game.
 
-The Solution:
-mwteleportguard intercepts any dialogue command attempting to teleport the player. It executes any accompanying quest updates (journal, items, variables) immediately, ensures a clean "Goodbye" exit, and defers the physical cell transition until the dialogue window has fully closed. It also ensures all companion followers are safely teleported alongside you.]],
+The fix:
+Teleport Guard catches these moves. Everything else the line does (journal updates, items) happens right away, the conversation ends normally, and only then are you moved, together with your companions.]],
 })
 
 local category = page:createCategory("Teleport Protection Options")
 
 category:createYesNoButton({
     label = "Enable Safe Dialogue Teleportation",
-    description = "Master toggle for intercepting and deferring mid-dialogue teleports.",
+    description = "Turns the protection on: a move during a conversation waits until the conversation is over.",
     variable = mwse.mcm.createTableVariable({ id = "enabled", table = config }),
 })
 
 category:createYesNoButton({
     label = "Teleport Active Companions",
-    description = "Automatically teleports all active companion followers along with the player to the destination cell.",
+    description = "Brings your companions along to wherever you are sent.",
     variable = mwse.mcm.createTableVariable({ id = "teleportCompanions", table = config }),
 })
 
 category:createYesNoButton({
     label = "Force Goodbye Mode on Dialogue",
-    description = "Forces the dialogue conversation into Goodbye mode when a teleport is queued, allowing a natural, clean exit.",
+    description = "Ends the conversation (only Goodbye is left) as soon as a move is waiting, so you can leave cleanly.",
     variable = mwse.mcm.createTableVariable({ id = "forceGoodbye", table = config }),
 })
 
 category:createYesNoButton({
     label = "Smooth Visual Fade Transition",
-    description = "Performs a smooth cinematic black fadeout and fadein when the deferred teleport occurs.",
+    description = "Fades the screen to black and back when you are moved.",
     variable = mwse.mcm.createTableVariable({ id = "fadeTransition", table = config }),
 })
 
 category:createSlider({
     label = "Fade Transition Duration (Seconds)",
-    description = "Length of the black screen fade transition in seconds.",
+    description = "How long the fade to black lasts, in seconds (with the fade above on).",
     min = 0,
     max = 2,
     step = 0.1,
@@ -55,7 +55,7 @@ category:createSlider({
 
 category:createYesNoButton({
     label = "Log Interceptions to MWSE.log",
-    description = "Record intercepted dialogue teleports and destinations in MWSE.log.",
+    description = "Writes each caught move, and where it sent you, to MWSE.log.",
     variable = mwse.mcm.createTableVariable({ id = "logToMWSE", table = config }),
 })
 

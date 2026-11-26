@@ -9,7 +9,7 @@ local page = template:createSideBarPage({
 
 page:createOnOffButton({
     label = "Enabled",
-    description = "The whole mod. Off: no patch below is applied. Takes effect after a restart.",
+    description = "Master switch for every patch on this page. Off: no patch is applied. Restart the game after changing this or turning any patch on or off.",
     variable = mwse.mcm.createTableVariable({ id = "enabled", table = config }),
 })
 
@@ -52,13 +52,13 @@ local fnfCategory = page:createCategory(string.format("Friends & Frens: Jiub Del
 
 fnfCategory:createYesNoButton({
     label = "Enable Jiub Companion Delayer",
-    description = "Delays Jiub's companion introduction rumor until you finish character generation and spend time exploring Vvardenfell.",
+    description = "With Friends & Frens, people don't start talking about Jiub as a possible companion until you have finished making your character and spent some time exploring. Needs a restart.",
     variable = mwse.mcm.createTableVariable({ id = "jiubDelayEnabled", table = config }),
 })
 
 fnfCategory:createSlider({
     label = "Delay After Census (Minutes)",
-    description = "How many minutes of active post-census gameplay must elapse before the Jiub companion rumor can appear in dialogue.",
+    description = "How many minutes of play after leaving the Census and Excise Office before the Jiub rumor can come up.",
     min = 0,
     max = 30,
     step = 1,
@@ -68,13 +68,13 @@ fnfCategory:createSlider({
 
 fnfCategory:createYesNoButton({
     label = "Exclude Census & Excise Office NPCs",
-    description = "Prevent NPCs inside the Census & Excise Office from mentioning Jiub's companion rumors.",
+    description = "People inside the Census and Excise Office never bring up the Jiub rumor.",
     variable = mwse.mcm.createTableVariable({ id = "jiubExcludeCensusOffice", table = config }),
 })
 
 fnfCategory:createYesNoButton({
     label = "Synchronize Jiub Head & Hair with Intro",
-    description = "Matches the companion Jiub's head and hair mesh with whatever custom head/hair replacer is used on the tutorial boat.",
+    description = "Companion Jiub gets the same head and hair as the Jiub on the prison ship, so he matches any head or hair replacer you use.",
     variable = mwse.mcm.createTableVariable({ id = "jiubSyncAppearance", table = config }),
 })
 
@@ -83,9 +83,9 @@ local fnfLoreCategory = page:createCategory(string.format("Friends & Frens: Dial
 
 fnfLoreCategory:createYesNoButton({
     label = "Restore Generic Dialogue for Converted NPCs",
-    description = "Friends & Frens' companion scripts block generic topics. This gives them back to the vanilla NPCs it "
-        .. "turned into companions (Fargoth, for one). Its own companions, and NPCs that never had generic topics, are "
-        .. "left alone. What it restores stays in the save. Takes effect after a restart.",
+    description = "Friends & Frens stops the original NPCs it turns into companions (Fargoth, for one) from answering "
+        .. "everyday topics. This gives those topics back. Its own new companions, and NPCs who never had those topics, "
+        .. "are left alone. Restored topics stay in your save. Needs a restart.",
     variable = mwse.mcm.createTableVariable({ id = "friendsAndFrensLoreEnabled", table = config }),
 })
 
@@ -94,7 +94,7 @@ local lostHeirCategory = page:createCategory(string.format("The Lost Heir: Delay
 
 lostHeirCategory:createYesNoButton({
     label = "Enable The Lost Heir Delayer",
-    description = "Disables quest NPC spawning from t_lostheir.esp until the Morrowind main quest reaches Mehra Milo (A2_4_MiloGone >= 1).",
+    description = "Keeps The Lost Heir's people and creatures out of the world until the main quest reaches Mehra Milo's disappearance, so its story doesn't start too early. Its buildings and containers stay put. Needs a restart.",
     variable = mwse.mcm.createTableVariable({ id = "lostHeirDelayEnabled", table = config }),
 })
 
@@ -103,7 +103,7 @@ local psCategory = page:createCategory(string.format("Privileges & Services: Gua
 
 psCategory:createYesNoButton({
     label = "Enable Privileges & Services Fixes",
-    description = "Fixes the guard cell black screen fadeout in non-vanilla interiors and suppresses the rogue °(target) topic on ordinary NPCs.",
+    description = "Fixes the screen getting stuck black when Privileges & Services' guards act inside interiors added by other mods, and hides the stray '°(target)' topic on ordinary NPCs. Needs a restart.",
     variable = mwse.mcm.createTableVariable({ id = "pAndSFixesEnabled", table = config }),
 })
 
@@ -112,7 +112,7 @@ local ysmirCategory = page:createCategory(string.format("YARR: Ysmir Combat Shie
 
 ysmirCategory:createYesNoButton({
     label = "Enable Dynamic Combat-Only Shield",
-    description = "Replaces the noisy constant blue bubble shield VFX on peaceful Nord NPCs with a combat-only shield.",
+    description = "Nord NPCs no longer glow with a blue shield bubble all the time. They get a shield only while fighting, and it goes away afterwards. Needs a restart.",
     variable = mwse.mcm.createTableVariable({ id = "ysmirShieldEnabled", table = config }),
 })
 
@@ -120,25 +120,25 @@ ysmirCategory:createYesNoButton({
 local mcaCategory = page:createCategory(string.format("Morrowind Comes Alive: AutoStartup%s", getStatusText(config.isMcaActive())))
 
 mcaCategory:createInfo({
-    text = "These questionnaire choices are applied when MCA first initializes in a save. Changing them does not "
-        .. "reconfigure a save where MCA has already been initialized.",
+    text = "These answers are used, instead of MCA's questions, the first time MCA starts in a save. Changing them "
+        .. "later doesn't change a save where MCA has already started.",
 })
 
 mcaCategory:createYesNoButton({
     label = "Enable Silent AutoStartup for MCA",
-    description = "Automatically initializes Morrowind Comes Alive silently without questionnaire popups.",
+    description = "Starts Morrowind Comes Alive quietly with the answers below, instead of asking its questions in pop-ups. Needs a restart.",
     variable = mwse.mcm.createTableVariable({ id = "mcaEnabled", table = config }),
 })
 
 mcaCategory:createYesNoButton({
     label = "Enable companions?",
-    description = "Allow recruitable companion NPCs and Ordinator Shareel to spawn.",
+    description = "Lets MCA's recruitable companions (and Ordinator Shareel) appear.",
     variable = mwse.mcm.createTableVariable({ id = "mcaCompanions", table = config }),
 })
 
 mcaCategory:createDropdown({
     label = "Enable courtesans?",
-    description = "Choose which courtesan NPCs spawn in taverns.",
+    description = "Which of MCA's courtesans appear in taverns.",
     options = {
         { label = "Enable", value = "all" },
         { label = "Disable", value = "none" },
@@ -150,38 +150,38 @@ mcaCategory:createDropdown({
 
 mcaCategory:createYesNoButton({
     label = "Enable hostile drunks in taverns?",
-    description = "Allow belligerent drunks to spawn in taverns.",
+    description = "Lets rowdy drunks who may start fights appear in taverns.",
     variable = mwse.mcm.createTableVariable({ id = "mcaHostileDrunks", table = config }),
 })
 
 mcaCategory:createYesNoButton({
     label = "Enable respawning hostile NPCs in caves and ruins?",
-    description = "Allow hostile bandits, witches, and daedra worshippers to respawn.",
+    description = "Lets hostile bandits, witches and Daedra worshippers come back to caves and ruins after you clear them.",
     variable = mwse.mcm.createTableVariable({ id = "mcaRespawnCaves", table = config }),
 })
 
 mcaCategory:createYesNoButton({
     label = "Enable bandit attacks in towns?",
-    description = "Allow random bandit raids on towns.",
+    description = "Lets bandits raid towns now and then.",
     variable = mwse.mcm.createTableVariable({ id = "mcaBanditAttacksTowns", table = config }),
 })
 
 mcaCategory:createYesNoButton({
     label = "Enable hostile Ashlanders at outcast Ashlander campsites?",
-    description = "Allow hostile Ashlander outcasts and Mabrigash to spawn at outcast camps.",
+    description = "Lets hostile outcast Ashlanders and Mabrigash appear at outcast camps.",
     variable = mwse.mcm.createTableVariable({ id = "mcaHostileAshlanders", table = config }),
 })
 
 mcaCategory:createYesNoButton({
     label = "Enable Brigands and Highwaymen at crossroads?",
-    description = "Allow highwaymen bandits to ambush travelers at crossroads.",
+    description = "Lets highwaymen ambush travelers at crossroads.",
     variable = mwse.mcm.createTableVariable({ id = "mcaCrossroadBandits", table = config }),
 })
 
 mcaCategory:createDropdown({
     label = "Preferred size of hostile NPC parties",
-    description = "Select MCA's hostile party size range. This affects bandits and other hostile NPC parties, "
-        .. "including outcasts, deserters and smugglers. Larger groups make encounters more dangerous.",
+    description = "How big MCA's hostile groups (bandits, outcasts, deserters, smugglers) can get. Bigger groups mean "
+        .. "harder fights.",
     options = {
         { label = "2-5", value = 0 },
         { label = "2-10", value = 1 },
@@ -195,19 +195,19 @@ local euCategory = page:createCategory(string.format("Ebonheart Underworks: Auto
 
 euCategory:createYesNoButton({
     label = "Enable Silent AutoStartup for Ebonheart Underworks",
-    description = "Automatically applies configuration without dialogue prompts upon entering Ebonheart.",
+    description = "Sets up Ebonheart Underworks quietly with the choices below, instead of asking you in pop-ups. Needs a restart.",
     variable = mwse.mcm.createTableVariable({ id = "euEnabled", table = config }),
 })
 
 euCategory:createYesNoButton({
     label = "Morrowind Rebirth Mode",
-    description = "Enable this if you have Morrowind Rebirth installed.",
+    description = "Turn on if you use Morrowind Rebirth, so Ebonheart Underworks is set up to match it.",
     variable = mwse.mcm.createTableVariable({ id = "euRebirth", table = config }),
 })
 
 euCategory:createYesNoButton({
     label = "Thief Branch Content",
-    description = "Enable the additional Thief questline content in the Underworks.",
+    description = "Adds the extra thief questline in the Underworks.",
     variable = mwse.mcm.createTableVariable({ id = "euThiefBranch", table = config }),
 })
 
@@ -216,7 +216,7 @@ local mabrCategory = page:createCategory(string.format("Mabrigash Distribution: 
 
 mabrCategory:createYesNoButton({
     label = "Suppress 'Distributing Mabrigash' Popup",
-    description = "Silently suppresses the background distribution notification box on game startup and cell load.",
+    description = "Hides the 'Distributing Mabrigash' message box that pops up when the game starts or you enter an area. Needs a restart.",
     variable = mwse.mcm.createTableVariable({ id = "mabrDistSuppressionEnabled", table = config }),
 })
 
@@ -226,7 +226,7 @@ local talesCategory = page:createCategory(string.format("Clean Tales of Seyda Ne
 
 talesCategory:createYesNoButton({
     label = "Filter 'Illegible Handwriting' Topic",
-    description = "Hides the 'illegible handwriting' topic from NPCs once the quest 'den_bottle' is completed (journal >= 50) or if the player does not have the note.",
+    description = "Once you have finished the message-in-a-bottle quest, people stop offering the 'illegible handwriting' topic. If you started the quest while the topic was hidden, you get the topic back. Needs a restart.",
     variable = mwse.mcm.createTableVariable({ id = "talesHandwritingFixEnabled", table = config }),
 })
 
@@ -236,13 +236,13 @@ local trainerCategory = page:createCategory(string.format("Trainer Log: Auto-Unl
 
 trainerCategory:createYesNoButton({
     label = "Enable Training Topic Auto-Unlock",
-    description = "Automatically unlocks all 27 'Training - <Skill>' topics when speaking to any training service provider or on save load, bypassing the Caius Cosades / Socucius Ergalla dialogue prerequisites.",
+    description = "Gives you all 27 'Training - <skill>' topics the first time you talk to any trainer, without needing to talk to Caius Cosades or Socucius Ergalla first. Needs a restart.",
     variable = mwse.mcm.createTableVariable({ id = "trainerLogUnlockEnabled", table = config }),
 })
 
 trainerCategory:createYesNoButton({
     label = "Unlock Immediately on Load",
-    description = "Adds the training topics immediately when loading a saved game rather than waiting until talking to a trainer NPC.",
+    description = "Gives the training topics as soon as you load a save, instead of waiting until you talk to a trainer.",
     variable = mwse.mcm.createTableVariable({ id = "trainerLogAutoUnlockOnLoad", table = config }),
 })
 
@@ -252,16 +252,14 @@ local graphicHerbalismCategory = page:createCategory(string.format("Graphic Herb
 
 graphicHerbalismCategory:createYesNoButton({
     label = "Enable Harvested Flora Respawn Delay",
-    description = "For MWSE Graphic Herbalism, keeps picked or spoiled organic containers in their harvested state "
-        .. "instead of restoring them when the engine restocks them at the next day. Applies only to compatible "
-        .. "organic containers; the respawn countdown is adjustable below.",
+    description = "With Graphic Herbalism, plants you have picked stay picked for the number of days set below, instead "
+        .. "of growing back the next day. Needs a restart.",
     variable = mwse.mcm.createTableVariable({ id = "graphicHerbalismRespawnEnabled", table = config }),
 })
 
 graphicHerbalismCategory:createSlider({
     label = "Harvested Flora Respawn Delay (Days)",
-    description = "Keeps harvested herbs picked or spoiled for this many in-game days. Minimum 1 day, maximum 90 days; "
-        .. "the default is 3 days.",
+    description = "How many in-game days a picked plant stays picked before it grows back. Default: 3 days.",
     min = 1,
     max = 90,
     step = 1,
@@ -274,51 +272,57 @@ local cgCategory = page:createCategory(string.format("Seyda Neen Coast Guard: Co
     getStatusText(config.isCoastGuardContrabandActive())))
 
 cgCategory:createYesNoButton({
+    label = "Enable Coast Guard Contraband Changes",
+    description = "Turns on the changes below for the Seyda Neen Coast Guard 'contraband' topic. Off: the topic works as the plugin made it. Needs a restart.",
+    variable = mwse.mcm.createTableVariable({ id = "coastGuardContrabandEnabled", table = config }),
+})
+
+cgCategory:createYesNoButton({
     label = "Enable Bulk Contraband Turn-In",
-    description = "Turns in all units of the current contraband type in a single press rather than 1 at a time, "
-        .. "awarding the full 10% market value finder's fee at once.",
+    description = "Hands in all your contraband of one kind at once, instead of one at a time, for the full reward "
+        .. "(10% of its value per item).",
     variable = mwse.mcm.createTableVariable({ id = "coastGuardBulkTurnIn", table = config }),
 })
 
 cgCategory:createYesNoButton({
     label = "Hide Topic When All Contraband Surrendered",
-    description = "Removes the 'contraband' topic from dialogue once all eligible and enabled contraband has been surrendered.",
+    description = "Removes the 'contraband' topic once you have nothing left to hand in.",
     variable = mwse.mcm.createTableVariable({ id = "coastGuardHideExhausted", table = config }),
 })
 
 cgCategory:createYesNoButton({
     label = "Turn In: Skooma (50 gold/bottle)",
-    description = "When enabled, skooma is surrendered for bounty. When disabled, skooma is kept in your inventory and the guard checks the next contraband type.",
+    description = "Hand in skooma for 50 gold a bottle. Off: you keep it, and the guard asks about the next kind.",
     variable = mwse.mcm.createTableVariable({ id = "coastGuardTurnInSkooma", table = config }),
 })
 
 cgCategory:createYesNoButton({
     label = "Turn In: Raw Ebony (20 gold/chunk)",
-    description = "When enabled, raw ebony is surrendered for bounty. When disabled, raw ebony is kept in your inventory.",
+    description = "Hand in raw ebony for 20 gold a chunk. Off: you keep it.",
     variable = mwse.mcm.createTableVariable({ id = "coastGuardTurnInRawEbony", table = config }),
 })
 
 cgCategory:createYesNoButton({
     label = "Turn In: Raw Glass (20 gold/piece)",
-    description = "When enabled, raw glass is surrendered for bounty. When disabled, raw glass is kept in your inventory.",
+    description = "Hand in raw glass for 20 gold a piece. Off: you keep it.",
     variable = mwse.mcm.createTableVariable({ id = "coastGuardTurnInRawGlass", table = config }),
 })
 
 cgCategory:createYesNoButton({
     label = "Turn In: Moon Sugar (5 gold/portion)",
-    description = "When enabled, moon sugar is surrendered for bounty. When disabled, moon sugar is kept in your inventory.",
+    description = "Hand in moon sugar for 5 gold a portion. Off: you keep it.",
     variable = mwse.mcm.createTableVariable({ id = "coastGuardTurnInMoonSugar", table = config }),
 })
 
 cgCategory:createYesNoButton({
     label = "Turn In: 6th House Ash Statues (25 gold/statue)",
-    description = "When enabled, 6th House ash statues are surrendered for bounty. When disabled, ash statues are kept in your inventory.",
+    description = "Hand in Sixth House ash statues for 25 gold each. Off: you keep them.",
     variable = mwse.mcm.createTableVariable({ id = "coastGuardTurnInAshStatues", table = config }),
 })
 
 cgCategory:createYesNoButton({
     label = "Turn In: Vampire Dust (50 gold/portion) [Lore Addition]",
-    description = "Optional lore-friendly extension: allow surrendering forbidden vampire dust to the Census and Excise for a 10% finder's fee (50 gold per portion).",
+    description = "Extra, lore-friendly: you can also hand in vampire dust, for 50 gold a portion.",
     variable = mwse.mcm.createTableVariable({ id = "coastGuardTurnInVampireDust", table = config }),
 })
 
@@ -328,9 +332,9 @@ local topicsCategory = page:createCategory(string.format("UI Expansion: Dialogue
 
 topicsCategory:createYesNoButton({
     label = "Wait for the Topic List Before Colouring",
-    description = "UI Expansion colours dialogue topics once, as the menu is first laid out. When another mod lays the "
-        .. "menu out early (ImmersiveTravel, with travel NPCs), that is too soon and every topic stays amber. This makes "
-        .. "the colouring wait for the list. Neither mod is edited. Takes effect after a restart.",
+    description = "UI Expansion colours dialogue topics only once, when the window first opens. If another mod builds "
+        .. "the window early (Immersive Travel, with travel NPCs), every topic stays amber. This makes the colouring "
+        .. "wait until the topic list is ready. Neither mod is edited. Needs a restart.",
     variable = mwse.mcm.createTableVariable({ id = "uiExpansionTopicsEnabled", table = config }),
 })
 
@@ -339,9 +343,9 @@ local personalEffectsCategory = page:createCategory(string.format("Personal Effe
 
 personalEffectsCategory:createYesNoButton({
     label = "Run Its Census Scripts in Lua",
-    description = "Replaces Personal Effects' Census and Excise scripts (its ESP stays required): the class effects "
-        .. "chest is unlocked and filled once, the legacy scripts are stopped, Sellus Gravius and the door guard keep "
-        .. "their facing, and duplicate chests and player clones are cleaned up. Takes effect after a restart.",
+    description = "Runs Personal Effects' Census and Excise Office scripts in Lua instead (its plugin is still needed): "
+        .. "your class's starting chest is unlocked and filled once, Sellus Gravius and the door guard keep facing the "
+        .. "right way, and duplicate chests or copies of your character are cleaned up. Needs a restart.",
     variable = mwse.mcm.createTableVariable({ id = "personalEffectsEnabled", table = config }),
 })
 
@@ -351,7 +355,7 @@ local voicesCategory = page:createCategory(string.format("Voices of Vvardenfell:
 voicesCategory:createYesNoButton({
     label = "Hide Voice-Line Console Messages",
     description = "Keeps Voices of Vvardenfell's 'Playing Line' and 'Missing Line' messages out of the console. "
-        .. "Other console output is untouched, and that mod's file is not edited. Takes effect after a restart.",
+        .. "Other console messages are untouched, and that mod's files are not edited. Needs a restart.",
     variable = mwse.mcm.createTableVariable({ id = "aiVoicesConsoleEnabled", table = config }),
 })
 
@@ -360,16 +364,16 @@ local instrumentCategory = page:createCategory(string.format("Bardic Inspiration
 
 instrumentCategory:createYesNoButton({
     label = "Enable Musical Instrument Whitelist",
-    description = "Items on the Musical Instruments page count as instruments for Bardic Inspiration, which otherwise "
-        .. "knows only lutes. Use one from the inventory or a quick key to perform; outdoors, use it again to stop. "
-        .. "The songs are Bardic Inspiration's own. Takes effect after a restart.",
+    description = "Lets the items on the Musical Instruments page (drums, flutes, lyres...) be played with Bardic "
+        .. "Inspiration, which otherwise only knows lutes. Use one from your inventory or a quick key to play; outdoors, "
+        .. "use it again to stop. The songs are Bardic Inspiration's own. Needs a restart.",
     variable = mwse.mcm.createTableVariable({ id = "musicalInstrumentsEnabled", table = config }),
 })
 
 template:createExclusionsPage({
     label = "Musical Instruments",
-    description = "Items on the left count as instruments for Bardic Inspiration. Click an item to move it. "
-        .. "Lutes the mod already knows need not be listed.",
+    description = "Items on the left count as instruments for Bardic Inspiration. Click an item to move it to the "
+        .. "other list. Lutes don't need to be listed.",
     leftListLabel = "Instruments",
     rightListLabel = "Other items",
     showAllBlocked = true,

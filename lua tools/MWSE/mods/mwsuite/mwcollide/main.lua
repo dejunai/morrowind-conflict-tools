@@ -153,19 +153,22 @@ event.register(tes3.event.modConfigReady, function()
     template:saveOnClose(CONFIG_NAME, config)
     local page = template:createSideBarPage({
         label = "Settings",
-        description = "Hides, as places load, the objects that two unrelated mods both put in the same "
-            .. "spot - the earlier mod's copy; the later one stays. The list comes from mwdialog_check "
-            .. "--cell-conflicts (MWSE\\config\\mwcollide_data.json). Hidden objects are only disabled.",
+        description = "Sometimes two mods put the same object in the same spot, so you see it doubled (two crates "
+            .. "inside each other, flickering walls). As each place loads, this hides the copy from the mod that "
+            .. "loads first and keeps the later one. Nothing is deleted, only hidden. The list comes from "
+            .. "mwdialog_check --cell-conflicts (MWSE\\config\\mwcollide_data.json).",
     })
     page:createOnOffButton({
         label = "Hide doubled objects",
-        description = "Off: everything it hid is shown again, as each place is visited.",
+        description = "Hides the doubled copies as you visit each place. Off: everything it hid comes back as you "
+            .. "visit each place again.",
         variable = mwse.mcm.createTableVariable({ id = "enabled", table = config }),
         callback = function() if tes3.player then settleActive() end end,
     })
     page:createButton({
         buttonText = "Re-read the list and apply it here now",
-        description = "After running --cell-conflicts again, or to apply the switch above without leaving.",
+        description = "Use after running mwdialog_check again, or to apply the switch above to the place you are in "
+            .. "without leaving.",
         callback = function()
             loadData()
             if tes3.player then
@@ -176,7 +179,8 @@ event.register(tes3.event.modConfigReady, function()
     })
     page:createOnOffButton({
         label = "Write what it does to MWSE\\logs\\mwcollide.log",
-        description = "Record which doubled objects are hidden or restored in the log file.",
+        description = "Keeps a record of every doubled object hidden or shown again in the log file. Turn off if you "
+            .. "don't need it.",
         variable = mwse.mcm.createTableVariable({ id = "log", table = config }),
     })
     template:register()

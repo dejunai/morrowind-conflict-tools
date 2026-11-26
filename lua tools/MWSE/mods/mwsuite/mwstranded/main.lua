@@ -373,32 +373,35 @@ event.register(tes3.event.modConfigReady, function()
     template:saveOnClose(CONFIG_NAME, config)
     local page = template:createSideBarPage({
         label = "Settings",
-        description = "When a mod rebuilds an interior, other mods' objects made for the old layout end up "
-            .. "in the void. As such a place loads, this brings the people, creatures, containers and loose "
-            .. "items into the rebuilt layout, and hides the cut-off scenery. The list comes from "
+        description = "When one mod rebuilds an interior, things other mods placed for the old layout can end up "
+            .. "floating outside it, in the void. As such a place loads, this brings the people, creatures, "
+            .. "containers and loose items inside, and hides scenery that no longer fits. The list comes from "
             .. "mwdialog_check --cell-conflicts (MWSE\\config\\mwstranded_data.json).",
     })
     page:createOnOffButton({
-        label = "On",
-        description = "Off: nothing more is moved or hidden, and what it hid shows again as places load. "
-            .. "Moved things stay where they were put.",
+        label = "Fix stranded objects",
+        description = "Off: nothing more is moved or hidden, and anything it hid comes back as you visit each place. "
+            .. "Things already moved stay where they were put.",
         variable = mwse.mcm.createTableVariable({ id = "enabled", table = config }),
         callback = function() if tes3.player then settleActive() end end,
     })
     page:createOnOffButton({
         label = "Bring people, creatures, containers and items into the rebuilt layout",
-        description = "Move listed stranded actors and objects into the rebuilt interior; disabling this does not undo prior moves.",
+        description = "Moves stranded people, creatures, containers and items into the rebuilt room. Turning this off "
+            .. "doesn't move back what was already moved.",
         variable = mwse.mcm.createTableVariable({ id = "move", table = config }),
     })
     page:createOnOffButton({
         label = "Hide cut-off scenery",
-        description = "Hide listed scenery stranded outside the rebuilt interior; turning this off restores it as places load.",
+        description = "Hides stranded scenery outside the rebuilt room. Turning this off shows it again as you visit "
+            .. "each place.",
         variable = mwse.mcm.createTableVariable({ id = "hide", table = config }),
         callback = function() if tes3.player then settleActive() end end,
     })
     page:createButton({
         buttonText = "Re-read the list and apply it here now",
-        description = "Reload the conflict list and apply the current settings to the active interior.",
+        description = "Re-reads the list and applies the current settings to the room you are in now (use after "
+            .. "running mwdialog_check again).",
         callback = function()
             loadData()
             if tes3.player then
@@ -409,7 +412,8 @@ event.register(tes3.event.modConfigReady, function()
     })
     page:createOnOffButton({
         label = "Write what it does to MWSE\\logs\\mwstranded.log",
-        description = "Record stranded-object moves, hides and restorations in the log file.",
+        description = "Keeps a record of what was moved, hidden or shown again in the log file. Turn off if you don't "
+            .. "need it.",
         variable = mwse.mcm.createTableVariable({ id = "log", table = config }),
     })
     template:register()

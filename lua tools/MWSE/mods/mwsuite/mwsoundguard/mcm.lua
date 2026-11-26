@@ -9,49 +9,55 @@ function this.register(config, applySettings)
 
     local page = template:createSideBarPage({
         label = "Settings",
-        description = "mwsoundguard prevents sound loops and one-shot spam from stacking infinitely on non-actor objects (such as runaway ambient scripts or light floats).\n\n"
-            .. "Changes take effect immediately without restarting.",
+        description = "mwsoundguard stops sounds from piling up on objects, for example an ambient sound that a script "
+            .. "restarts over and over until it roars or crackles.\n\n"
+            .. "Changes take effect right away, no restart needed.",
     })
 
     page:createOnOffButton({
         label = "Enable Sound Guard",
-        description = "When enabled, intercepts and throttles duplicate loop sounds and rapid one-shot sound spam on non-actor references.\n\n"
-            .. "When disabled, soundguard ceases all sound interception and unregisters its hooks.",
+        description = "Stops extra copies of the same looping sound, and rapid-fire repeats of short sounds, on objects "
+            .. "(never on people or creatures).\n\n"
+            .. "Off: no sound is touched.",
         variable = mwse.mcm.createTableVariable({ id = "enabled", table = config }),
         callback = applySettings,
     })
 
     page:createSlider({
         label = "Loop sound duplicate threshold (seconds)",
-        description = "A second start of the same loop sound on the same object within this time is treated as a duplicate.\n\nDefault: 1.0s",
+        description = "If the same looping sound is started again on the same object within this many seconds, the extra "
+            .. "start is dropped.\n\nDefault: 1.0 s",
         min = 0.1, max = 5.0, step = 0.1, jump = 0.5, decimalPlaces = 1,
         variable = mwse.mcm.createTableVariable({ id = "loopGap", table = config }),
     })
 
     page:createSlider({
         label = "Runaway duplicate count",
-        description = "Number of consecutive duplicate loop starts before classifying the sound as a runaway loop.\n\nDefault: 3",
+        description = "After this many dropped repeats, the sound is treated as a runaway: it is kept to one copy and "
+            .. "reported in the log.\n\nDefault: 3",
         min = 1, max = 10, step = 1, jump = 2,
         variable = mwse.mcm.createTableVariable({ id = "suspectLimit", table = config }),
     })
 
     page:createSlider({
         label = "One-shot sounds per second limit",
-        description = "Maximum one-shot starts allowed per object and sound per second.\n\nDefault: 8",
+        description = "The most times a short sound can start on one object each second. Mainly used for sounds whose "
+            .. "length isn't known; a sound of known length simply can't restart while it is still playing.\n\nDefault: 8",
         min = 1, max = 30, step = 1, jump = 5,
         variable = mwse.mcm.createTableVariable({ id = "oneShotPerSecond", table = config }),
     })
 
     page:createOnOffButton({
         label = "Trace sound diagnostics",
-        description = "Log every allowed loop start to Data Files\\MWSE\\logs\\mwsoundguard.log for audio troubleshooting.\n\nDefault: Off",
+        description = "For troubleshooting: logs every looping sound that is allowed to start, in "
+            .. "Data Files\\MWSE\\logs\\mwsoundguard.log.\n\nDefault: Off",
         variable = mwse.mcm.createTableVariable({ id = "trace", table = config }),
     })
 
     page:createOnOffButton({
         label = "Name the Lua caller",
-        description = "Notes which Lua file and line called tes3.playSound or tes3.removeSound, so a runaway in "
-            .. "Data Files\\MWSE\\logs\\mwsoundguard.log names the mod code that started it.\n\n"
+        description = "Notes which mod started or stopped each sound, so a runaway in "
+            .. "Data Files\\MWSE\\logs\\mwsoundguard.log names the mod responsible.\n\n"
             .. "Takes effect when the guard is switched on (or at the next start).\n\nDefault: On",
         variable = mwse.mcm.createTableVariable({ id = "attributeCallers", table = config }),
         callback = applySettings,
@@ -59,9 +65,9 @@ function this.register(config, applySettings)
 
     page:createOnOffButton({
         label = "Watch actor loops (log only)",
-        description = "NPC and creature sounds are never blocked. With this on, a loop started again on the same "
-            .. "actor within the loop window is written to mwsoundguard.log (with the Lua caller), so a mod that "
-            .. "stacks loops on actors or corpses can be found. Nothing is blocked.\n\nDefault: Off",
+        description = "Sounds on people and creatures are never blocked. With this on, a looping sound started again on "
+            .. "the same NPC or creature is noted in mwsoundguard.log (with the mod that did it), to help find a mod "
+            .. "that stacks sounds on actors or corpses. Nothing is blocked.\n\nDefault: Off",
         variable = mwse.mcm.createTableVariable({ id = "watchActors", table = config }),
     })
 
