@@ -1,3 +1,19 @@
+# Multipatch: beast skeleton for beast-race NPCs (2026-11-26; rule by dej / dejunai)
+
+- `--multipatch` now gives an NPC the beast skeleton when its race is a beast race (the winning RACE record's RADT
+  beast flag, so a later race override is followed; no list of ids) and its winning NPC_ record has no model, an
+  empty one, or a humanoid skeleton (`base_anim.nif`, `base_anim_female.nif` and their 1st-person/`x` forms). The
+  record (or the Multipatch's own merged record for that NPC) goes into the Multipatch with only MODL changed; the
+  patch hash record covers it as before. A beast skeleton (`animkna` in the file name) and any other model (a mod's
+  sitting, working or death pose) are left alone. The skeleton given: the one the NPC's plugin, else the race's
+  plugin, uses for most of its NPCs of that race when it is the mod's own `*animkna*` file; otherwise vanilla
+  `base_animkna.nif`, which Morrowind.esm uses for every Khajiit and Argonian NPC, women and men alike (there is no
+  female beast skeleton). `--no-beast-skeleton` turns it off; `--full` passes it on. A dry run lists each NPC.
+- Real load order (993 plugins, read only): 39 NPCs - 27 in MCA - Khajiit Diversity Revamped Addon (25 with no
+  model, two with base_anim/base_anim_female), 3 Telvanni Teleport Network, 3 Troxulgia, 2 Uvirith's Legacy,
+  2 Secrets of the Crystal City, 1 companionLeveler, 1 Balmora, The Weary Guar.
+- Tests: `tests/test_beast_skeleton.py`.
+
 # Stand-in files move to generated\dummy, created on first use; never shipped or synced (2026-11-26)
 
 - `mwdialog_media.dummy_path` kept the stand-ins (the Dwemer coin, an animation, the editor marker: the game's own

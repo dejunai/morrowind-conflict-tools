@@ -20,7 +20,7 @@ from mwdialog_records import merge_levlist, merge_object  # noqa: E402
 from mwdialog_redundant import OUR_PATCHES  # noqa: E402
 from mwdialog_state import read_merge_record  # noqa: E402
 from mwdialog_tes3 import (  # noqa: E402
-    FormatError, cstr, first_sub, iter_records, pack_sub,
+    FormatError, cstr, first_sub, iter_records, iter_subs, pack_str, pack_sub,
     read_header_masters, read_plugin_bytes)
 import mwdialog_text as MT  # noqa: E402
 
@@ -238,8 +238,124 @@ def merged_inputs_of(game_dir, data_dir):
     return {k.lower(): [(i, files.get(i.lower())) for i in ins] for k, ins in read_merge_record(game_dir).items()}
 
 
+# Beast skeleton (MODL) for NPCs of a beast race (rule approved by dej / dejunai, 2026-11-26)
+BEAST_SKELETON = "base_animkna.nif"     # Morrowind.esm: every Khajiit and Argonian NPC, male and female alike
+RACE_BEAST_FLAG = 0x2                   # RACE RADT flags (last 4 bytes): 1 playable, 2 beast race
+HUMAN_SKELETONS = {"base_anim.nif", "base_anim_female.nif", "base_anim.1st.nif", "base_anim_female.1st.nif",
+                   "xbase_anim.nif", "xbase_anim_female.nif", "xbase_anim.1st.nif", "xbase_anim_female.1st.nif"}
+
+
+def model_key(v):
+    """A MODL value compared the way the game finds it: lowercase, backslashes, no leading meshes\\."""
+    k = (v or "").strip().lower().replace("/", "\\").lstrip("\\")
+    return k[7:] if k.startswith("meshes\\") else k
+
+
+def is_beast_skeleton(v):
+    """The beast skeleton or a mod's own copy of it: the file name carries 'animkna' (base_animkna.nif,
+    xbase_animkna.nif, mymod\\base_animkna_tail.nif...)."""
+    return "animkna" in model_key(v).rsplit("\\", 1)[-1]
+
+
+def _set_modl(body, value):
+    """The NPC_ body with MODL set to `value` (replaced in place, or put right after NAME)."""
+    subs = [(n, d) for n, d in iter_subs(body)]
+    new = pack_str(value)
+    out, done = [], False
+    for n, d in subs:
+        if n == "MODL":
+            if not done:
+                out.append(("MODL", new))
+                done = True
+            continue
+        out.append((n, d))
+        if n == "NAME" and not done:
+            out.append(("MODL", new))
+            done = True
+    if not done:
+        out.insert(0, ("MODL", new))
+    return b"".join(pack_sub(n, d) for n, d in out)
+
+
+def beast_skeleton_fixes(plugins, merged=None):
+    """NPCs of a beast race (the winning RACE record's RADT beast flag, not a list of ids) whose winning NPC_
+    record has no model or a plain humanoid skeleton (HUMAN_SKELETONS): they get the beast skeleton. Any other
+    model is left alone: a beast skeleton (is_beast_skeleton) or a mod's own model (a sitting/working/dead pose
+    made for that NPC). The skeleton given is the one the NPC's own plugin, else the race's plugin, uses for
+    most of its NPCs of that race when that is a beast skeleton of its own (is_beast_skeleton, not the vanilla
+    one); otherwise the vanilla BEAST_SKELETON. Vanilla uses the same file for women and men.
+    plugins: the load order [(name, path)]; the Multipatch itself is not read. merged: {npc id lower: NPC_
+    record bytes} the Multipatch already writes (its object merge); such a record is the one patched.
+    Returns [{"id", "plugin", "race", "before", "after", "record"}], "before" None when there was no MODL."""
+    merged = merged or {}
+    races, npcs = {}, {}
+    seen = defaultdict(Counter)                      # (plugin lower, race lower) -> beast skeleton models
+    for n, p in plugins:
+        if n.lower() == MULTI_PATCH_NAME.lower():
+            continue
+        try:
+            recs = list(iter_records(read_plugin_bytes(p)))
+        except (OSError, FormatError) as e:
+            print(f"  {n}: left out of the beast skeleton check ({e})", file=sys.stderr)
+            continue
+        for _pos, tag, fl, body in recs:
+            if tag not in ("RACE", "NPC_"):
+                continue
+            try:
+                nm = first_sub(body, b"NAME")
+                if not nm:
+                    continue
+                low = cstr(nm).lower()
+                dele = bool(fl & 0x20) or first_sub(body, b"DELE") is not None
+                if tag == "RACE":
+                    rd = first_sub(body, b"RADT")
+                    beast = (not dele and rd is not None and len(rd) >= 4
+                             and bool(struct.unpack_from("<I", rd, len(rd) - 4)[0] & RACE_BEAST_FLAG))
+                    races[low] = (beast, n)
+                    continue
+                npcs[low] = (n, fl, body, dele)
+                race = cstr(first_sub(body, b"RNAM") or b"").lower()
+                md = first_sub(body, b"MODL")
+                if md is not None and is_beast_skeleton(cstr(md)):
+                    seen[(n.lower(), race)][cstr(md)] += 1
+            except FormatError:
+                continue
+
+    def skeleton_of(plugin, race):
+        for pl in (plugin, races.get(race, (False, ""))[1]):
+            top = seen.get((pl.lower(), race))
+            if top:
+                v = top.most_common(1)[0][0]
+                if model_key(v) != BEAST_SKELETON:
+                    return v
+        return BEAST_SKELETON
+    out = []
+    for low, (n, fl, body, dele) in sorted(npcs.items()):
+        if dele:
+            continue
+        mrec = merged.get(low)
+        if mrec is not None:
+            fl, body = struct.unpack_from("<I", mrec, 12)[0], mrec[16:]
+        try:
+            race = cstr(first_sub(body, b"RNAM") or b"").lower()
+            if not races.get(race, (False, ""))[0]:
+                continue
+            md = first_sub(body, b"MODL")
+            before = cstr(md) if md is not None else None
+            if before and model_key(before) and model_key(before) not in HUMAN_SKELETONS:
+                continue                             # a beast skeleton, or the mod's own model: left alone
+            after = skeleton_of(n, race)
+            nb = _set_modl(body, after)
+        except FormatError:
+            continue
+        out.append({"id": cstr(first_sub(body, b"NAME")), "plugin": n, "race": race, "before": before,
+                    "after": after, "record": b"NPC_" + struct.pack("<III", len(nb), 0, fl) + nb})
+    return out
+
+
 def run_multipatch(args, plugins, world):
-    """Build MULTI_PATCH_NAME: reverted cell names, fog-bugged cells, merged leveled lists."""
+    """Build MULTI_PATCH_NAME: reverted cell names, fog-bugged cells, merged leveled lists, merged objects and
+    the beast skeleton for beast-race NPCs (beast_skeleton_fixes)."""
     print("\n" + "=" * 70 + "\nMULTIPATCH\n" + "=" * 70)
     if any(n.lower() == "multipatch.esp" for n, _p in plugins):
         print("  WARNING: tes3cmd's multipatch.esp is active. Deactivate it: two merged-list plugins override\n"
@@ -316,11 +432,32 @@ def run_multipatch(args, plugins, world):
         merged_objects(plugins, known, file_ok=merge_file_check(args, world),
                        merged_inputs=merged_inputs_of(os.path.dirname(os.path.abspath(args.data_dir)),
                                                       args.data_dir))
+    beasts = []
+    if not getattr(args, "no_beast_skeleton", False):
+        mnpc = {}
+        for i, r in enumerate(mrecs):
+            if r[:4] == b"NPC_":
+                nm = first_sub(r[16:], b"NAME")
+                if nm:
+                    mnpc[cstr(nm).lower()] = i
+        beasts = beast_skeleton_fixes(plugins, {k: mrecs[i] for k, i in mnpc.items()})
+        for b in beasts:
+            i = mnpc.get(b["id"].lower())
+            if i is not None:
+                mrecs[i] = b["record"]               # the merged record gets the skeleton too
+            else:
+                mrecs.append(b["record"])
+            mnotes.append(f"NPC_ {b['id']} ({b['race']}, {b['plugin']}): beast skeleton '{b['after']}' "
+                          f"(was {repr(b['before']) if b['before'] is not None else 'no model'})")
     recs += mrecs
     notes += mnotes
     print(f"  {len(renamed)} cell name(s) protected, {len(world.fogcells)} fog-bugged cell(s), "
           f"{counts['LEVC']} creature and {counts['LEVI']} item list(s) merged, {len(mrecs)} object(s) several "
-          f"mods change merged")
+          f"mods change merged, {len(beasts)} beast-race NPC(s) given the beast skeleton")
+    if args.dry_run:
+        for b in beasts:
+            print(f"    {b['plugin']}: {b['id']} ({b['race']}) "
+                  f"{repr(b['before']) if b['before'] is not None else 'no model'} -> '{b['after']}'")
     if args.dry_run:
         print("Dry run: no files were changed.")
         return

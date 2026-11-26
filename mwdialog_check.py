@@ -9669,7 +9669,7 @@ def run_full(args):
               f"{CONFLICT_ANSWERS_FILE} (--fresh-answers to start without them)")
     common = ["--fix-log", args.fix_log, "--encoding", args.encoding, "--no-interactive"] + (["--yes"] if args.yes else [])
     for flag in ("dry_run", "no_sounds", "no_mlox_rules", "no_content_order", "no_vortex", "no_doubled",
-                 "no_placeholders", "no_merge_objects"):
+                 "no_placeholders", "no_merge_objects", "no_beast_skeleton"):
         if getattr(args, flag, False):
             common.append("--" + flag.replace("_", "-"))
     if getattr(args, "collide_radius", COLLIDE_ANY_RADIUS) != COLLIDE_ANY_RADIUS:
@@ -9946,6 +9946,9 @@ def check_parser():
     tc.add_argument("--no-merge-objects", action="store_true",
                     help="with --multipatch: don't merge objects several mods change (by default the Multipatch "
                          "combines what each changed in an NPC, creature, item or spell, like TES3Merge)")
+    tc.add_argument("--no-beast-skeleton", action="store_true",
+                    help="with --multipatch: don't give beast-race NPCs that have no model or a humanoid "
+                         "skeleton the beast skeleton (base_animkna.nif; by default the Multipatch does)")
     tc.add_argument("--all", action="store_true", help="--clean, then --fix, then --multipatch")
     tc.add_argument("--full", action="store_true",
                     help="everything, from scratch. Aborts first if a plugin's master isn't in Data Files. Then: "
