@@ -7,6 +7,7 @@
     and its settings are saved by that mod's own save, so nothing about the suite mods is changed or copied.
 
     Without this mod (or with a suite mod it does not know) every mod simply has its own entry again.
+    mwhangwatch has no tab of its own: its settings are in mwguard's "Guard & Hang Watch" menu.
 ]]
 
 local NAME = "MW Conflict Tools"
@@ -16,7 +17,7 @@ local PER_ROW = 4
 local SUITE = {
     "mwsaveguard", "mwteleportguard", "mwmouseguard", "mwwarnsuppression",
     "mwconsole", "mwpluginpatches", "mwfloatfix", "mwcollide", "mwstranded",
-    "mwperformers", "mwinfoloop", "mwsoundguard", "mwsoundfix", "mwhangwatch", "mwguard",
+    "mwperformers", "mwinfoloop", "mwsoundguard", "mwsoundfix", "mwguard",
     "mwexitguard", "mwquicktoggle", "mwcustomclasspersistence",
     "mwcriminal", "mwcompanions",
 }

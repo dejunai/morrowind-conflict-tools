@@ -34,10 +34,11 @@
                    Off until it is turned on in the Mod Config menu; once on,
                    it works even with the rest of the watch turned off.
 
-    Settings:      Mod Config menu -> mwhangwatch: turn the whole watch on or
-                   off, turn audio watching on or off, set how many sound
-                   lines are written per second, and turn the memory warning
-                   on or off and set its level. Changes apply right away.
+    Settings:      Mod Config menu -> Guard & Hang Watch (shared with mwguard):
+                   turn the whole watch on or off, turn audio watching on or
+                   off, set how many sound lines are written per second, and
+                   turn the memory warning on or off and set its level.
+                   Changes apply right away.
 
     If the log simply STOPS, the main thread is stuck inside the engine
     (no more frames at all). If it keeps going with falling fps, the growth
@@ -841,66 +842,11 @@ end
 startMemCheck()
 event.register(tes3.event.loaded, startMemCheck)
 
--- Mod Config menu ------------------------------------------------------------------
-local function registerModConfig()
-    local template = mwse.mcm.createTemplate({ name = "mwhangwatch" })
-    template.onClose = function()
-        mwse.saveConfig(CONFIG_NAME, config)
-        applySettings()
-    end
 
-    local page = template:createSideBarPage({
-        label = "Settings",
-        description = "mwhangwatch keeps a running log of what the game is doing in "
-            .. "Data Files\\MWSE\\logs\\mwhangwatch.log, so a freeze, slowdown or sound problem can be tracked down.\n\n"
-            .. "Changes apply right away. The log starts fresh each time the game starts.",
-    })
-
-    page:createOnOffButton({
-        label = "Enable the watch",
-        description = "Turns the log on: frame rate, memory, objects in nearby areas, area changes, menus, scripts "
-            .. "and (if turned on below) sounds.\n\n"
-            .. "Off: nothing is logged. The low-memory warning below has its own switch and works either way "
-            .. "(it writes its details to the same log).",
-        variable = mwse.mcm.createTableVariable({ id = "enabled", table = config }),
-        callback = applySettings,
-    })
-
-    page:createOnOffButton({
-        label = "Watch audio",
-        description = "Also logs every sound the game starts, music changes, and which mods block or swap sounds "
-            .. "(\"BLOCKED by ...\").\n\n"
-            .. "This makes the log much bigger. Needs the watch above to be on.",
-        variable = mwse.mcm.createTableVariable({ id = "audio", table = config }),
-        callback = applySettings,
-    })
-
-    page:createSlider({
-        label = "Sound lines per second",
-        description = "The most sound lines written to the log each second; any more are only counted in the "
-            .. "summaries. 0 = summaries only.",
-        min = 0, max = 200, step = 5, jump = 20,
-        variable = mwse.mcm.createTableVariable({ id = "soundLines", table = config }),
-    })
-
-    page:createOnOffButton({
-        label = "Warn when memory runs low",
-        description = "Morrowind can only use 4 GB of memory, however much your PC has. When it is nearly full, a "
-            .. "short message pops up so you can save before a crash, naming the biggest textures in the area "
-            .. "(details in the log). The message goes away by itself and never opens a menu.\n\n"
-            .. "Off until you turn it on here. Works even with the watch above turned off.",
-        variable = mwse.mcm.createTableVariable({ id = "memWarn", table = config }),
-        callback = startMemCheck,
-    })
-
-    page:createSlider({
-        label = "Memory warning level (%)",
-        description = "How full the 4 GB has to be before the warning comes up. The default is 80%; raise it for "
-            .. "fewer warnings, lower it for an earlier one.",
-        min = 70, max = 99, step = 1, jump = 5,
-        variable = mwse.mcm.createTableVariable({ id = "memLimit", table = config }),
-    })
-
-    template:register()
+-- Settings for the shared "Guard & Hang Watch" MCM (registered by mwguard).
+local hooks = include("mwhangwatch.mcm")
+if hooks then
+    hooks.config = config
+    hooks.applySettings = applySettings
+    hooks.startMemCheck = startMemCheck
 end
-event.register(tes3.event.modConfigReady, registerModConfig)
