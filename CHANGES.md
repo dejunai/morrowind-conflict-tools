@@ -1,3 +1,14 @@
+# --cell-conflicts remembers who lost an INCOMPATIBLE choice (2026-11-25)
+
+- The plugin you turn off in an INCOMPATIBLE pair is recorded with the plugin it lost to, in the new
+  generated file `mwdialog_incompatible_losers.txt` (`loser<TAB>lost to<TAB>when`; edit by hand to take a line back).
+  While the plugin it lost to is still active, the loser is resolved: any other incompatibility it is in
+  (Himmelryn against Anthology Solstheim after it lost to The Snow Prince) turns it off again without a question, even
+  when a saved answer for that pair picks the other side. When the winner is gone the line lapses and the loser is
+  asked about afresh (the existing re-enable of a plugin whose winner is gone is unchanged). It is a record of its
+  own, not the always-loses list: that list also makes `--sort` load a plugin early and drops its conflicts, which
+  is wrong for a plugin that is turned off. Names compare without regard to case (`.ESP` / `.esp`).
+
 # vortex_tidy reads omw2mwse's optional-plugin flag (2026-11-25)
 
 - omw2mwse 166252b lists every root plugin it emits or leaves in `mods[].plugins[]` (`--json`) and under `plugins` in

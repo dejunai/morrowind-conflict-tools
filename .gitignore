@@ -78,6 +78,7 @@ mwdialog_cell_winners.txt
 mwdialog_check.rules.txt
 mwdialog_conflict_answers.json
 mwdialog_disabled.txt
+mwdialog_incompatible_losers.txt
 mwdialog_generated_files.txt
 mwdialog_ignored_normal_maps.txt
 mwdialog_load_order.txt

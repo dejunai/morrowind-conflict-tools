@@ -599,6 +599,7 @@ When the tools are installed in `<game>\conflict-tools\`, the records, caches, j
 | `mwdialog_redundant.txt` | `--redundant` | Plugins turned off as redundant, and keep-both choices |
 | `mwdialog_conflict_answers.json`, `mwdialog_new_conflicts.txt` | `--cell-conflicts` | Remembered answers; pairs the last `--use-answers` run had none for |
 | `mwdialog_check.conflict.blacklist.txt` | generated (the tool makes it, and adds a plugin when you choose "<plugin> always loses" in `--cell-conflicts`) | Plugins that always lose cell conflicts: left out of `--cell-conflicts`, loaded early by `--sort`. A hand-written one is converted once (entries kept, old file backed up) |
+| `mwdialog_incompatible_losers.txt` | generated (`--cell-conflicts` adds a line when you turn off one side of an INCOMPATIBLE pair) | `loser<TAB>lost to<TAB>when`. While the winner is still active the loser is turned off again, unasked, in any incompatibility it is in; when the winner is gone the line lapses. Delete a line to take it back |
 | `mwdialog_auto-merge.blacklist.txt` | you | Plugins `--auto-merge` never merges |
 | `mwdialog_cell_winners.txt` | `--cell-conflicts` | Whose version of a rebuilt interior wins (built by `--fix` into `mwdialog_check Cell Fixes.esp`) |
 | `mwdialog_doubled_deleted.txt` | `--fix` | Doubled objects deleted in Cell Fixes |

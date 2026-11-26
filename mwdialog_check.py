@@ -102,8 +102,8 @@ from mwdialog_records import (  # noqa: E402,F401
     rewrite_cell_refs, SPEAKER_SUBS, split_cell, unresolved_refs,
     late_scales, misplaced_duplicates, drop_cell_refs, deleted_refs_cell)
 from mwdialog_state import (  # noqa: E402,F401
-    add_conflict_blacklist, ADDED_MASTERS_RECORD, CELL_WINNER_PATCH, CELL_WINNERS_FILE, CONFLICT_ANSWERS_FILE, CONFLICT_BLACKLIST_DEFAULT, CONFLICT_BLACKLIST_FILE, CONFLICT_BLACKLIST_HEADER, CONFLICT_BLACKLIST_MARK,
-    conflict_blacklisted, migrate_conflict_blacklist,
+    add_conflict_blacklist, add_incompatible_loser, ADDED_MASTERS_RECORD, CELL_WINNER_PATCH, CELL_WINNERS_FILE, CONFLICT_ANSWERS_FILE, CONFLICT_BLACKLIST_DEFAULT, CONFLICT_BLACKLIST_FILE, CONFLICT_BLACKLIST_HEADER, CONFLICT_BLACKLIST_MARK,
+    conflict_blacklisted, INCOMPATIBLE_LOSERS_FILE, migrate_conflict_blacklist, read_incompatible_losers,
     CONFLICT_RULE_NOTE, CONFLICT_RULES_HEADER, DISABLED_RECORD, mark_merge_rebuild, MERGE_REBUILD_RECORD, MERGE_RECORD, merged_away,
     NORMAL_MAP_RE, note_promoted_rules, PROMOTED_END, PROMOTED_START, read_added_masters, read_cell_winners, read_conflict_answers,
     read_conflict_blacklist, read_disabled, read_generated_record, read_merge_rebuild, read_merge_record, read_redundant, record_bases,
@@ -6038,6 +6038,15 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
         return 0
     # a plugin kept against an incompatible partner wins its other incompatible pairs without asking
     kept_winners = set()
+    # plugins that already lost an INCOMPATIBLE choice (loser, winner): resolved for as long as the winner is active
+    loss_records = read_incompatible_losers(game_dir)
+    present = {n.lower() for n in active_names} | merged_away(game_dir, os.path.abspath(args.data_dir))
+
+    def standing_wins(n):
+        """The plugins `n` lost an incompatibility to that are still here (active, and not turned off in this run)."""
+        gone = {x.lower() for x, _w in turned_off}
+        return [w for l, w in loss_records if l == n and w in present and w not in gone]
+
     strict_saves = preserve_saves(args) == "strict"    # no plugin is turned off: such answers are reported only
     for (a_, b_), c_ in ranked:
         last_ = answers.get("|".join(sorted((a_, b_)))) or {}
@@ -6065,7 +6074,14 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
         last = answers.get(pair_key) or {}
         if last.get("do") == "skip":
             last = {}                                # skipped = postponed: asked again, never an answer
-        synthetic = ""
+        synthetic, because = "", ""
+        if c.get("incompatible"):
+            la, lb = standing_wins(a), standing_wins(b)
+            if bool(la) != bool(lb) or (la and lb and (b in la) != (a in lb)):
+                a_loses = bool(la) and (not lb or b in la)
+                (loser, winner), seen = ((A, B), la) if a_loses else ((B, A), lb)
+                last, synthetic = {"do": "off", "plugin": loser}, winner
+                because = f"{loser} already lost an incompatibility to {name_of.get(seen[0], seen[0])} ({INCOMPATIBLE_LOSERS_FILE})"
         if not last and c.get("incompatible") and (a in kept_winners) != (b in kept_winners):
             winner, loser = (A, B) if a in kept_winners else (B, A)
             last, synthetic = {"do": "off", "plugin": loser}, winner   # it already won: no need to ask
@@ -6197,7 +6213,7 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
             default = pick(opts, off_plans)
             if default:
                 print(f"[{i}/{len(ranked)}] {A} vs {B}: "
-                      + (f"{synthetic} was kept against another incompatible plugin: " if synthetic else
+                      + (f"{because or synthetic + ' was kept against another incompatible plugin'}: " if synthetic else
                          "last time's answer: ") + opts[default][3])
             else:
                 quick = False                         # it no longer fits: show everything and ask
@@ -6284,6 +6300,13 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
             continue
         if what == "off" and c.get("incompatible"):
             kept_winners.add(y.lower())
+            if not because and (x.lower(), y.lower()) not in loss_records:      # a loss that came from a record is not a new one
+                loss_records.append((x.lower(), y.lower()))
+                if not args.dry_run:
+                    try:
+                        add_incompatible_loser(game_dir, x, y)
+                    except OSError as e:
+                        print(f"ERROR: could not save that {x} lost to {y}: {e}", file=sys.stderr)
         answered[pair_key] = {"do": what, "plugin": x, "pair": [A, B], "when": time.strftime("%Y-%m-%d %H:%M")}
         if what == "off":
             answered[pair_key]["affected"] = [active_names.get(n, name_of.get(n, n)) for n in off_plans[ans]]
