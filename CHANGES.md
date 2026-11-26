@@ -1,3 +1,14 @@
+# mwdialog_check: no plugin is built into the always-loses list; its header names the file it is in (2026-11-26)
+
+- `OAAB_Saplings.esm` is no longer built in (`CONFLICT_BLACKLIST_BUILTIN` is removed). Nothing is pre-decided for
+  anyone: with no `mwdialog_check.conflict.blacklist.txt`, or an empty one, no plugin always loses, and the first
+  `[7]` / `[8]` pick writes only the header and that pick. A list you already have is read as it is, `OAAB_Saplings.esm`
+  included if it is one of your entries.
+- The generated header names the file it is actually written to (`conflict_blacklist_header(path)`), not always
+  `mwdialog_check.conflict.blacklist.txt`: MWManager keeps the list in `mwmanager_conflict_blacklist.txt`, and a hand-written
+  list converted under any file name gets that name in its header. `CONFLICT_BLACKLIST_HEADER` is gone (use the function).
+- Tests: no built-in entry; the header follows the file name (default, MWManager's name, an absolute path).
+
 # docs: README and MORE_INFO cover the last day of work (2026-11-26)
 
 - vortex_tidy: the OpenMW converter (omw2mwse) is described: when it runs (OpenMW-only mods, `hardcode` by default,
@@ -9,7 +20,7 @@
   (https://github.com/dejunai/openmw-mwse) as experimental, in early development and private for now, and keep it
   apart from tidy's own `.omwaddon` / `Off\OpenMW\` handling.
 - `--cell-conflicts`: the `[7]` / `[8]` "<plugin> always loses" choices, the tool-managed
-  `mwdialog_check.conflict.blacklist.txt` (made by the first pick, with `OAAB_Saplings.esm` built in; reading never
+  `mwdialog_check.conflict.blacklist.txt` (made by the first pick; reading never
   makes it; remove a plugin by hand), and `mwdialog_incompatible_losers.txt` (holds
   while the winner is active, lapses when it is gone).
 - `--play`: the lua tools deploy is described by SHA-256 lineage (`generated\mwdialog_lua_manifest.json`, up to 16

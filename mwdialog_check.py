@@ -102,7 +102,7 @@ from mwdialog_records import (  # noqa: E402,F401
     rewrite_cell_refs, SPEAKER_SUBS, split_cell, unresolved_refs,
     late_scales, misplaced_duplicates, drop_cell_refs, deleted_refs_cell)
 from mwdialog_state import (  # noqa: E402,F401
-    add_conflict_blacklist, add_incompatible_loser, ADDED_MASTERS_RECORD, CELL_WINNER_PATCH, CELL_WINNERS_FILE, CONFLICT_ANSWERS_FILE, CONFLICT_BLACKLIST_BUILTIN, CONFLICT_BLACKLIST_FILE, CONFLICT_BLACKLIST_HEADER, CONFLICT_BLACKLIST_MARK,
+    add_conflict_blacklist, add_incompatible_loser, ADDED_MASTERS_RECORD, CELL_WINNER_PATCH, CELL_WINNERS_FILE, CONFLICT_ANSWERS_FILE, CONFLICT_BLACKLIST_FILE, CONFLICT_BLACKLIST_MARK,
     conflict_blacklisted, INCOMPATIBLE_LOSERS_FILE, migrate_conflict_blacklist, read_incompatible_losers,
     CONFLICT_RULE_NOTE, CONFLICT_RULES_HEADER, DISABLED_RECORD, mark_merge_rebuild, MERGE_REBUILD_RECORD, MERGE_RECORD, merged_away,
     NORMAL_MAP_RE, note_promoted_rules, PROMOTED_END, PROMOTED_START, read_added_masters, read_cell_winners, read_conflict_answers,
