@@ -1,5 +1,5 @@
-"""The vendored tes3conv (third_party/tes3conv): the pinned v0.4.1 program travels with its license files, wherever
-it goes (the repository, deploy.py's list, sync.py's copy into MWManager). Fails if the program is there without its
+"""The vendored tes3conv (tools/tes3conv): the pinned v0.4.1 program travels with its license files, wherever
+it goes (the repository, deploy.py's list, and a local sync.py copy into MWManager). Fails if the program is there without its
 licenses, or its SHA-256 is not the pin."""
 import hashlib
 import importlib.util
@@ -11,7 +11,7 @@ import pytest
 
 from conftest import SRC
 
-FOLDER = os.path.join(SRC, "third_party", "tes3conv")
+FOLDER = os.path.join(SRC, "tools", "tes3conv")
 EXE = os.path.join(FOLDER, "tes3conv.exe")
 # written out here on purpose: changing the program means changing this pin, tes3diff.py and NOTICE.md together
 PIN = "3c259868c9deca42a658ff6c69cbc8578f8eeee99ebab5342bdb73beef650b40"
@@ -32,7 +32,7 @@ def text(name):
 
 
 def test_the_vendored_program_is_the_pinned_release():
-    assert os.path.isfile(EXE), "third_party/tes3conv/tes3conv.exe is missing"
+    assert os.path.isfile(EXE), "tools/tes3conv/tes3conv.exe is missing"
     assert sha256(EXE) == PIN
 
 
@@ -59,8 +59,8 @@ def test_the_program_never_ships_without_its_license_files_and_notice():
         assert must in n, must
 
 
-def test_every_program_under_third_party_has_licenses_beside_it():
-    root = os.path.join(SRC, "third_party")
+def test_every_program_under_tools_tes3conv_has_licenses_beside_it():
+    root = os.path.join(SRC, "tools", "tes3conv")
     found = 0
     for base, _dirs, files in os.walk(root):
         exes = [f for f in files if f.lower().endswith((".exe", ".dll"))]
@@ -76,11 +76,11 @@ def test_every_program_under_third_party_has_licenses_beside_it():
 def test_git_tracks_the_program_and_every_license_file_without_lfs_or_ignore_rules():
     def git(*args):
         return subprocess.run(["git", "-C", SRC, *args], capture_output=True)
-    tracked = git("ls-files", "-z", "--", "third_party/tes3conv").stdout.decode().split("\0")
+    tracked = git("ls-files", "-z", "--", "tools/tes3conv").stdout.decode().split("\0")
     for name in ("tes3conv.exe", NOTICE) + LICENSES:
-        assert "third_party/tes3conv/" + name in tracked, name
-    assert git("check-ignore", "-q", "third_party/tes3conv/tes3conv.exe").returncode == 1   # not ignored
-    attrs = git("check-attr", "filter", "--", "third_party/tes3conv/tes3conv.exe").stdout.decode()
+        assert "tools/tes3conv/" + name in tracked, name
+    assert git("check-ignore", "-q", "tools/tes3conv/tes3conv.exe").returncode == 1   # not ignored
+    attrs = git("check-attr", "filter", "--", "tools/tes3conv/tes3conv.exe").stdout.decode()
     assert "lfs" not in attrs
 
 
@@ -91,9 +91,9 @@ def test_deploy_ships_the_program_only_together_with_its_licenses():
     d = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(d)
     names = [n for n in os.listdir(FOLDER)]
-    tracked = ["third_party/tes3conv/" + n for n in names] + ["README.md", "tes3diff.py", "tests/test_x.py"]
+    tracked = ["tools/tes3conv/" + n for n in names] + ["README.md", "tes3diff.py", "tests/test_x.py"]
     shipped = {src for src, _dst in d.ship_list(tracked, d.read_manifest(MANIFEST))}
-    assert "third_party/tes3conv/tes3conv.exe" in shipped
+    assert "tools/tes3conv/tes3conv.exe" in shipped
     for name in LICENSES + (NOTICE,):
-        assert "third_party/tes3conv/" + name in shipped, f"{name} would not ship with the program"
+        assert "tools/tes3conv/" + name in shipped, f"{name} would not ship with the program"
     assert "tes3diff.py" not in shipped and "tests/test_x.py" not in shipped         # the dev tool stays home

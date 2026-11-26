@@ -3,7 +3,7 @@ r"""mwdialog_offlayout.py - the one place and the one layout for what these tool
     <staged mod folder>\Off\<plugin>\<reason>\<path the file had in the mod>
 
 Off is never deployed by the managers (Vortex deploys everything in staging, so each mod keeps its own Off tree
-and the per-plugin folder tells the files of different mods apart). docs\OFF-LAYOUT.md is the specification;
+and the per-plugin folder tells the files of different mods apart). docs\dev\OFF-LAYOUT.md is the specification;
 this module is its code: the reason names, the owner (<plugin>) rule, the migration of the older layouts and
 the MAX_PATH guard that vortex_tidy, mwdialog_generated and mwdialog_assets share. Python 3.9+.
 """

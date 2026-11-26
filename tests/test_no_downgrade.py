@@ -1,5 +1,5 @@
-"""No downgrade: --play (deploy_lua_tools) and sync.py never put an older version of a lua tools file over a
-newer one. Hash lineage (--play's deploy record, a repo's git log) decides; modification times only for content
+"""No downgrade: --play (deploy_lua_tools) never puts an older version of a lua tools file over a
+newer one (the local sync.py script uses the same rule). Hash lineage (--play's deploy record, a repo's git log) decides; modification times only for content
 no record knows. Temporary folders only. Python 3.9+."""
 import hashlib
 import json

@@ -78,9 +78,9 @@ def test_every_reason_has_a_meaning_and_every_older_spelling_maps_to_one():
 
 def test_the_spec_lists_every_reason_and_the_max_path_list():
     here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    spec = os.path.join(here, "docs", "OFF-LAYOUT.md")
+    spec = os.path.join(here, "docs", "dev", "OFF-LAYOUT.md")
     if not os.path.isfile(spec):
-        pytest.skip("docs/ is not vendored here")                    # MWManager's copy of the tests has no docs folder
+        pytest.skip("docs/dev/OFF-LAYOUT.md is not vendored here")
     with open(spec, encoding="utf-8") as f:
         text = f.read()
     for name, meaning in OL.REASONS:

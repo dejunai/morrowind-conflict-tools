@@ -36,10 +36,10 @@ def test_the_lookup_order_is_explicit_then_vendored_then_env_then_path_then_dev_
     assert T.find_tes3conv(None, {}, dev, on_path, [tmp_path / "gone"]) == c                  # no vendored copy: on down
 
 
-def test_the_default_vendored_copy_is_third_party_tes3conv_in_the_repository():
-    assert T.vendored_dirs() == [T.HERE / "third_party" / "tes3conv"]
-    if (T.HERE / "third_party" / "tes3conv" / "tes3conv.exe").is_file() and os.name == "nt":
-        assert T.find_tes3conv(None, {}, [], lambda name: None) == T.HERE / "third_party" / "tes3conv" / "tes3conv.exe"
+def test_the_default_vendored_copy_is_tools_tes3conv_in_the_repository():
+    assert T.vendored_dirs() == [T.HERE / "tools" / "tes3conv"]
+    if (T.HERE / "tools" / "tes3conv" / "tes3conv.exe").is_file() and os.name == "nt":
+        assert T.find_tes3conv(None, {}, [], lambda name: None) == T.HERE / "tools" / "tes3conv" / "tes3conv.exe"
 
 
 def test_a_folder_is_searched_below_and_the_newest_version_folder_wins(tmp_path):

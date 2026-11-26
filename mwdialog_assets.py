@@ -528,7 +528,7 @@ def kf_model_name(rel):
 
 FEATURE_OF = {"snd": "converted sounds", "tex": "converted textures", "keys": "fixed text keys",
               "abs": "fixed texture paths", "broken": "broken", "orphan": "orphaned animations",
-              "unused": "unused assets", "splash": "converted splash screens"}     # Off reasons (OFF-LAYOUT.md)
+              "unused": "unused assets", "splash": "converted splash screens"}     # Off reasons (docs/dev/OFF-LAYOUT.md)
 
 
 def broken_dest(root_or_mod, rel, sub="broken", plugin=None):

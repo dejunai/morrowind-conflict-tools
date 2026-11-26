@@ -104,6 +104,15 @@ dummy assets/
 deploy.ini
 deploy.ini.tmp
 
+# Local developer script: carries the repo into MWManager. Never committed or deployed.
+sync.py
+tests/test_sync.py
+
+# Local changelog, not part of the package.
+docs/CHANGES.md
+
+# Local developer one-off diagnostics, not part of the package.
+diag/
 # sync.py's saved MWManager folder: this machine's path, never published
 sync.ini
 sync.ini.tmp

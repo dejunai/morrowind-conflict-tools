@@ -51,7 +51,7 @@ The suite is engineered for massive, complex mod lists (hundreds of plugins, ten
 
 1. **Folder & Hierarchy Normalization**:
    - Leaves alone any mod that installs into the game folder instead of `Data Files` (an `.exe`, `.dll` or `.asi`, or a `Data Files` folder, at its root, like MGE XE), and every mod on the blacklist: `Morrowind Code Patch*`, `MCP beta*` and `NIFZER0EDIT*` are built in; add one folder-name pattern per line (wildcards allowed) to `vortex_tidy_blacklist.txt`.
-   - Keeps game folders (`Meshes`, `Textures`, `Icons`, `Sound`, `Music`, `BookArt`, `Splash`, `Fonts`, `Video`, `DistantLand`), support folders (`MWSE`, `MGE3`, `Shaders`, `Grass`, `MCPatch`), plugins (`.esp`, `.esm`, `.omwaddon`), `.bsa` archives, MWSE `*-metadata.toml` files and `<plugin>.bugreport.txt` where they are. `Extras\` and `bugreports\` are never moved or looked inside. Each mod's `Off\` folder follows one layout, `Off\<plugin>\<reason>\<path>` (see [docs/OFF-LAYOUT.md](docs/OFF-LAYOUT.md)): tidy moves older layouts in it into that one (journaled, `--undo` reverses it) and never moves a file whose path is over MAX_PATH; those are listed in `Off\<plugin>\max_path_too_long.txt`.
+   - Keeps game folders (`Meshes`, `Textures`, `Icons`, `Sound`, `Music`, `BookArt`, `Splash`, `Fonts`, `Video`, `DistantLand`), support folders (`MWSE`, `MGE3`, `Shaders`, `Grass`, `MCPatch`), plugins (`.esp`, `.esm`, `.omwaddon`), `.bsa` archives, MWSE `*-metadata.toml` files and `<plugin>.bugreport.txt` where they are. `Extras\` and `bugreports\` are never moved or looked inside. Each mod's `Off\` folder follows one layout, `Off\<plugin>\<reason>\<path>` (see `docs/dev/OFF-LAYOUT.md` in the repository): tidy moves older layouts in it into that one (journaled, `--undo` reverses it) and never moves a file whose path is over MAX_PATH; those are listed in `Off\<plugin>\max_path_too_long.txt`.
    - Moves documentation files (`.txt`, `.md`, `.pdf`, `.html`, `.htm`, `.doc`, `.docx`, `.odt`, `.rtf`, `.nfo`) at the mod root into `Docs\`, renamed `<mod name> - <file>` so one mod's `readme.txt` cannot overwrite another's when deployed. Documents already in `Docs\` that do not already name the mod get the same prefix.
    - Moves root image previews (`.jpg`, `.png`, `.gif`, `.bmp`, `.webp`) into `Screenshots\`, renamed the same way.
    - A root folder holding a mod's readme (named after the mod or one of its plugins, or holding nothing but documents) becomes part of `Docs\`; anything in it that is not a document goes to `Extras\`. Everything else at the root that is not game data (FOMOD option folders, `meta.ini`, `.bak` files...) goes to `Extras\<mod name>\`, where `<mod name>` is the folder name without Vortex's Nexus id, version and download stamp.
@@ -443,15 +443,15 @@ Morrowind\
      +-- mwdialog_luafix.py       [MWSE Lua AST hardening tool]
      +-- README.md                [This documentation]
      +-- LICENSE
-     +-- docs\                    [MORE_INFO.md (architecture & function guide), CHANGES.md,
-                                   OFF-LAYOUT.md, LUA-DEBUGGING.md (MWSE Lua guide)]
+     +-- docs\                    [MORE_INFO.md (architecture & function guide); `docs\dev\` is repository-only:
+                                   LUA-DEBUGGING.md, OFF-LAYOUT.md, LUA_MOD_BUGS.md]
      +-- plans\                   [Plan-then-apply files (.txt)]
      +-- generated\               [Load order, rules, records, caches, journals, reports (see MORE_INFO)]
      +-- backups\                 [Automatic backups (legacy\ for older; luafix\, tidy\, lua deploy\)]
      +-- tools\                   [Bundled utilities (see below)]
      +-- lua tools\               [MWSE suite modules deployed to Data Files]
      +-- tests\                   [pytest suite (repository only)]
-     +-- diag\                    [Developer one-off diagnostics; load mwdialog_check.py (not part of the tools)]
+     +-- diag\                    [local, not in the package: one-off diagnostics; listed in .gitignore]
 ```
 
 When the tools are not installed inside the game folder, their records go straight into the game folder and backups into `<game>\mwdialog_backup\`.
@@ -504,24 +504,11 @@ python doc_scan.py [DIR]
 python doc_scan.py -h | --help
 ```
 
-It reads `README.md` and `docs\*.md` (not `docs\CHANGES.md`, which keeps removed names on purpose, and not `docs\dev\`), and the switches the tools define (argparse calls and hand-written parsers). It prints one line per documented switch the code doesn't have (file, line, and the tool it was checked against) and one per switch the code has that no doc mentions, then a summary. A switch hidden with `help=argparse.SUPPRESS` (retired or internal) is not listed as undocumented. Switches of other programs (`omw2mwse`, `luajit`, `git`...) written after that program's name are left out. `DIR` checks another copy of the project. Exit codes: `0` clean, `1` something to fix, `2` an unknown switch.
+It reads `README.md` and `docs\*.md` (not `docs\dev\`, and not a local `docs\CHANGES.md` if one is present), and the switches the tools define (argparse calls and hand-written parsers). It prints one line per documented switch the code doesn't have (file, line, and the tool it was checked against) and one per switch the code has that no doc mentions, then a summary. A switch hidden with `help=argparse.SUPPRESS` (retired or internal) is not listed as undocumented. Switches of other programs (`omw2mwse`, `luajit`, `git`...) written after that program's name are left out. `DIR` checks another copy of the project. Exit codes: `0` clean, `1` something to fix, `2` an unknown switch.
 
 ### sync.py
 
-Carries the tools from the repository into MWManager, one way: repository to MWManager. It never opens, reads or writes the Morrowind install (`deploy.py` is the only tool that writes there), never changes this repository and takes nothing back from MWManager.
-
-```text
-python sync.py [MWMANAGER] [--dry-run]
-python sync.py -h | --help
-```
-
-| Switch | Argument | Description |
-| :--- | :--- | :--- |
-| `MWMANAGER` | `<PATH>` | The MWManager folder to sync into. Saved in `sync.ini` beside `sync.py` (machine-specific, never committed); with none given the saved one is used. Refused when it is, or is inside, a Morrowind install. |
-| `--dry-run` | *(flag)* | Report everything a real run would do (copies, retirements, manifest and `UPSTREAM.json` changes) and write nothing at all (not even `sync.ini`). Run this first. |
-| `-h`, `--help` | *(flag)* | Print the full help and exit. |
-
-The source is the repository's working tree (the files git tracks, as they are on disk); tracked files with uncommitted changes are listed in a warning, and `UPSTREAM.json` names `HEAD`, so commit and run it again. The destination is MWManager's `tools\steam-upstream\` (the entries in `COPY_MANIFEST.json`, plus the repository's tests and the suite Lua, which always go along), its root copies of the upstream modules, `reference\mwse-lua-guards\` and `reference\mwmanager-menu\`; the sizes and hashes in both manifests follow the copied bytes. A mod gone from the repository is removed from MWManager after a backup to `<MWManager's parent>\_deploy_backups\mwmanager-retired-<stamp>\` (`SHA256SUMS.txt`, a relative `ROLLBACK.ps1`). No-downgrade: a `lua tools\` file is never put over a newer one in MWManager; it is skipped with one warning line and the rest goes on (other files are simply overwritten). MWManager's files are read only to compare versions. Nothing inside a `dummy`, `dummy assets` or `generated` folder is ever carried (stand-ins are made in code or copied out of `Morrowind.bsa` at run time into `<tools>\generated\dummy\`); a manifest entry for one is dropped. Before a real run, back up what it will change; it commits and pushes nothing. Exit codes: `0` done, `1` refused, `2` an unknown switch.
+`sync.py` is a local developer script on this machine, not part of the package: it is listed in `.gitignore`, is not committed, and is never deployed (`deploy.py` refuses it). A fresh clone does not include it. On a machine that has the script, it carries the tools from the checkout into MWManager, one way, and never writes to a Morrowind install (`deploy.py` is the only tool that does). The MWManager path is saved in `sync.ini` beside it (also ignored).
 
 ### tes3diff.py
 
@@ -543,9 +530,9 @@ python tes3diff.py -h | --help
 
 It prints one line per record added (`+`), removed (`-`) or changed (`~`), each changed field as `path: old -> new`, and a summary. Records are matched by type and id (a cell by name and grid), so a record that only moved is not a difference. Exit codes: `0` no differences, `1` differences, `2` an unknown switch, `3` tes3conv not found or failed.
 
-Finding tes3conv: `--tes3conv`, then the copy that ships with the tools (`third_party\tes3conv\tes3conv.exe`, see below), then the `TES3CONV` environment variable (`TES3CONV=off` switches the rest of the lookup off, to see the tests skip), then `PATH`, then an untracked dev tools folder relative to the repository: `.devtools\tes3conv\` in it (in `.gitignore`) or `_devtools\tes3conv\` beside it. Nothing is ever put in a game install or in the user profile. With the vendored copy there is nothing to set up; to try another location, download the official **v0.4.1** Windows asset `windows-latest.zip` from https://github.com/Greatness7/tes3conv/releases/tag/v0.4.1, check its SHA-256 (`2783e835efdd4e28e9d31d63674c9c036f1332ef948707d581af33e7618a87a9`, GitHub's digest for that asset) and unpack `tes3conv.exe` into one of those folders.
+Finding tes3conv: `--tes3conv`, then the copy that ships with the tools (`tools\tes3conv\tes3conv.exe`, see below), then the `TES3CONV` environment variable (`TES3CONV=off` switches the rest of the lookup off, to see the tests skip), then `PATH`, then an untracked dev tools folder relative to the repository: `.devtools\tes3conv\` in it (in `.gitignore`) or `_devtools\tes3conv\` beside it. Nothing is ever put in a game install or in the user profile. With the vendored copy there is nothing to set up; to try another location, download the official **v0.4.1** Windows asset `windows-latest.zip` from https://github.com/Greatness7/tes3conv/releases/tag/v0.4.1, check its SHA-256 (`2783e835efdd4e28e9d31d63674c9c036f1332ef948707d581af33e7618a87a9`, GitHub's digest for that asset) and unpack `tes3conv.exe` into one of those folders.
 
-**The vendored copy.** `third_party\tes3conv\` holds the unmodified official v0.4.1 Windows `tes3conv.exe` with its license files (`LICENSE`, `LICENSE-tes3`, `LICENSE-mimalloc_rust`) and a `NOTICE.md` naming the source, tag and checksums. It is carried by `deploy_manifest.txt` into an install and by `sync.py` into MWManager, always together with the licenses; `tests\test_tes3conv_vendored.py` fails if the program is there without them or its hash is not the pin. Nothing the tools do needs it yet; `tes3diff.py` itself stays repository-only.
+**The vendored copy.** `tools\tes3conv\` holds the unmodified official v0.4.1 Windows `tes3conv.exe` with its license files (`LICENSE`, `LICENSE-tes3`, `LICENSE-mimalloc_rust`) and a `NOTICE.md` naming the source, tag and checksums. It is carried by `deploy_manifest.txt` into an install and, on a machine that has the local `sync.py` script, into MWManager, always together with the licenses; `tests\test_tes3conv_vendored.py` fails if the program is there without them or its hash is not the pin. Nothing the tools do needs it yet; `tes3diff.py` itself stays repository-only.
 
 The version is pinned to v0.4.1. tes3conv has no way to print its version, so the check is the SHA-256 of `tes3conv.exe` (`3c259868c9deca42a658ff6c69cbc8578f8eeee99ebab5342bdb73beef650b40`, from that asset); another program, or a platform with no pinned hash, gets a warning and the run goes on. **The binary may lag the tes3 library it is built on: newer record types or fields may not round-trip.** A diff shows what the converter understands, not proof of byte-for-byte equality.
 
@@ -563,4 +550,4 @@ For the architecture of all 36 modules, the switches that trigger each subsystem
 
 Created by dej (dejunai).
 
-This project is licensed under the **MIT License**. See [LICENSE](LICENSE) for details. Bundled tools in `tools/` maintain their respective open-source licenses (see [tools/README.md](tools/README.md)). The optional developer helper `tes3diff.py` and its golden tests use [tes3conv](https://github.com/Greatness7/tes3conv) by Greatness7 (MIT License, pinned to v0.4.1). The unmodified v0.4.1 Windows `tes3conv.exe` is vendored in `third_party/tes3conv/` with its license files and a [NOTICE.md](third_party/tes3conv/NOTICE.md): tes3conv (MIT, Copyright (c) 2025 Greatness7), the tes3 library it is built on (MIT, Copyright (c) 2022 Greatness7; its crate says "MIT OR Apache-2.0", the repository carries the MIT text only) and mimalloc_rust (MIT). The licenses travel wherever the program goes.
+This project is licensed under the **MIT License**. See [LICENSE](LICENSE) for details. Bundled tools in `tools/` maintain their respective open-source licenses (see [tools/README.md](tools/README.md)). The optional developer helper `tes3diff.py` and its golden tests use [tes3conv](https://github.com/Greatness7/tes3conv) by Greatness7 (MIT License, pinned to v0.4.1). The unmodified v0.4.1 Windows `tes3conv.exe` is vendored in `tools/tes3conv/` with its license files and a [NOTICE.md](tools/tes3conv/NOTICE.md): tes3conv (MIT, Copyright (c) 2025 Greatness7), the tes3 library it is built on (MIT, Copyright (c) 2022 Greatness7; its crate says "MIT OR Apache-2.0", the repository carries the MIT text only) and mimalloc_rust (MIT). The licenses travel wherever the program goes.

@@ -21,17 +21,15 @@ include *.bat
 exclude Play Morrowind.bat              # the game-folder launcher: it lives beside Morrowind.exe, not in conflict-tools
 
 # What the tools deploy and run: the suite's MWSE Lua (laid out as in Data Files) and the bundled programs
+# (tools/tes3conv: tes3conv.exe with LICENSE*, NOTICE.md; the licenses always go where the program goes)
 include lua tools/**
 exclude lua tools/**/MWSE/core/**       # MWSE's own core files are never ours to ship (luafix patches them in place)
 
-include tools/**
-
-# Vendored programs with their license files (third_party/tes3conv: tes3conv.exe, LICENSE*, NOTICE.md): the licenses
-# always go where the program goes (tests/test_tes3conv_vendored.py checks it).
-include third_party/**
+include tools/**                        # includes tools/tes3conv/**
 
 # Docs keep the paths they have in the repository, so a relative link that works here works in the install.
 include docs/**
-exclude docs/dev/**                     # design notes, TODO and the Lua repair log: development only
+exclude docs/dev/**                     # Lua guide, off-layout spec and the Lua repair log: development only
+exclude docs/CHANGES.md                 # local changelog, not part of the package
 include README.md                       # stays at the root, as on GitHub
 include LICENSE

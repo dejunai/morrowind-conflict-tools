@@ -7,7 +7,7 @@ For each mod folder in Vortex's Morrowind staging folder (from Vortex's settings
     video, distantland; and support folders: MWSE, MGE3, shaders (MGE XE's XEshaders), grass, mcpatch.
     Plugins (.esp/.esm/.omwaddon), .bsa archives and MWSE's *-metadata.toml files at the root stay too.
     So do the folders this script makes or keeps: Docs, Extras, OpenMW, and the Off folder of every mod
-    (everything the tools set aside, in ONE layout - Off\\<plugin>\\<reason>\\<path>, see docs\\OFF-LAYOUT.md;
+    (everything the tools set aside, in ONE layout - Off\\<plugin>\\<reason>\\<path>, see docs\\dev\\OFF-LAYOUT.md;
     older layouts in it are migrated, below). An Off folder at the top of the staging folder is never touched.
   * Images at the root (.jpg, .png, .gif, .bmp, .webp) go to Screenshots\\, renamed "<mod name> - <file>";
     a mod's own Screenshots folder stays, and its pictures get the same prefix.
@@ -35,7 +35,7 @@ For each mod folder in Vortex's Morrowind staging folder (from Vortex's settings
   * OpenMW-only content goes to Off\\<plugin>\\OpenMW\\ (never deployed): *.omwscripts files and the scripts, l10n,
     animations and playlists folders; an OpenMW\\ folder an earlier run made at the root is moved there too.
   * The Off layout: <plugin> is the mod's first plugin's name (else its first .omwscripts' stem, as omw2mwse names
-    it, else the mod's name), <reason> one of a fixed list (docs\\OFF-LAYOUT.md: broken, ascii, unused assets...).
+    it, else the mod's name), <reason> one of a fixed list (docs\\dev\\OFF-LAYOUT.md: broken, ascii, unused assets...).
     Every older layout in a mod's Off folder is moved into it in the same plan and journal (so --undo reverses
     it): loose files directly in Off\\, Off\\<reason>\\<plugin>\\ (MWManager's and the older tools' spellings are
     mapped to the new reason names), Off\\OpenMW\\<mod>\\, Off\\<path>. A name taken is never overwritten (" (2)"),

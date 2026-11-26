@@ -11,6 +11,7 @@ with its license; the only exception is `Translation.txt` (below).
 | 7-Zip 26.02 | `7z/7z.exe`, `7z/7z.dll` | GNU LGPL v2.1 + unRAR restriction (`7z/License.txt`, `7z/LGPL-2.1.txt`) | `7z/7z2602-src.7z` |
 | MWRecompile 1.0.0 (MWEdit 0.7.0's script compiler, headless) | `MWRecompile/MWRecompile.exe` | MIT (dej) + MWEdit MIT (Walrus Tech; Dave Humphrey), both in `MWRecompile/LICENSE.txt` | `MWRecompile/source/MWRecompile-1.0.0-src.zip`; changes to MWEdit in `MWRecompile/CHANGES.md` and `CHANGES-vendor.diff` |
 | LuaJIT 2.1 | `luajit/` | MIT (`luajit/COPYRIGHT`) | https://luajit.org/ |
+| tes3conv 0.4.1 (Greatness7) | `tes3conv/tes3conv.exe` | MIT (`tes3conv/LICENSE`, `LICENSE-tes3`, `LICENSE-mimalloc_rust`; see `tes3conv/NOTICE.md`) | https://github.com/Greatness7/tes3conv |
 
 Keep each license file beside its binaries when redistributing.
 

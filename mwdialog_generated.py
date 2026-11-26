@@ -29,7 +29,7 @@ from mwdialog_tes3 import (  # noqa: E402
 
 def off_dest(mod, feature, plugin, rel):
     """<mod folder>\\Off\\<plugin>\\<reason>\\<rel>: where an original goes when <feature> (an Off reason, any
-    spelling: see mwdialog_offlayout.REASONS and docs\\OFF-LAYOUT.md) changes or takes it out. Off is never
+    spelling: see mwdialog_offlayout.REASONS and docs\\dev\\OFF-LAYOUT.md) changes or takes it out. Off is never
     deployed. <plugin> is the mod's own plugin (offlayout.owner_name; `plugin` is only a hint for a mod with
     none), sanitised like the converter's mod name."""
     fallback = re.split(r"-\d+-|\s+\d{4,}\s", os.path.basename(mod.rstrip("\\/")))[0].strip()
