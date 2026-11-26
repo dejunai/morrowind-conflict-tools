@@ -17,6 +17,10 @@ local PATCH = "mwdialog_check - MWSoundFix.esp"
 local flagsByScript = {}
 local errors = 0
 local PAGE_SIZE = 100
+-- tes3ui Info labels trim ordinary leading spaces; four UTF-8 NBSPs keep a visible indent, then a bullet
+local SOUND_INDENT = "\194\160\194\160\194\160\194\160- "
+-- tes3ui font 1 is Century Gothic, distinct from font 0 (Magic Cards) used for body Info text
+local HEADER_FONT = 1
 
 local function guarded(fn)
     return function(e)
@@ -71,7 +75,7 @@ end
 
 event.register(tes3.event.initialized, start)
 
--- page the long repaired-script list: 100 entries at a time, Previous / Next, "Page X of Y"
+-- page the long repaired-script list: 100 script entries at a time (headers do not count), Previous / Next, "Page X of Y"
 local function paginate(total, page, size)
     size = size or PAGE_SIZE
     total = tonumber(total) or 0
@@ -116,25 +120,48 @@ local function collectEntries(data)
     return entries, plugins
 end
 
-local function formatPageText(entries, nav)
-    if nav.total == 0 or nav.first == 0 then return "" end
-    local parts, current, count, buf = {}, nil, 0, nil
-    local function flush()
-        if current then
-            parts[#parts + 1] = string.format("%s (%d)", current, count)
-            parts[#parts + 1] = table.concat(buf, "\n")
-        end
+local function pluginCounts(entries)
+    local n = {}
+    for _, e in ipairs(entries) do
+        n[e.owner] = (n[e.owner] or 0) + 1
     end
+    return n
+end
+
+-- one group per plugin visible on this page; headers do not count toward PAGE_SIZE
+-- a plugin that started on an earlier page repeats its title as "Name (cont.)"
+local function pageGroups(entries, nav)
+    local groups, counts = {}, pluginCounts(entries)
+    if nav.total == 0 or nav.first == 0 then return groups end
+    local current
     for i = nav.first, nav.last do
         local e = entries[i]
-        if current ~= e.owner then
-            flush()
-            current, count, buf = e.owner, 0, {}
+        if not current or current.owner ~= e.owner then
+            local continued = i > 1 and entries[i - 1].owner == e.owner
+            current = {
+                owner = e.owner,
+                continued = continued and true or false,
+                title = continued and (e.owner .. " (cont.)")
+                    or string.format("%s (%d)", e.owner, counts[e.owner] or 0),
+                lines = {},
+            }
+            groups[#groups + 1] = current
         end
-        count = count + 1
-        buf[#buf + 1] = e.line
+        current.lines[#current.lines + 1] = SOUND_INDENT .. e.line
     end
-    flush()
+    return groups
+end
+
+local function formatPageText(entries, nav)
+    local groups = pageGroups(entries, nav)
+    local parts = {}
+    for i, g in ipairs(groups) do
+        if i > 1 then parts[#parts + 1] = "" end
+        parts[#parts + 1] = g.title
+        for _, line in ipairs(g.lines) do
+            parts[#parts + 1] = line
+        end
+    end
     return table.concat(parts, "\n")
 end
 
@@ -160,7 +187,38 @@ local function setButtonOn(btn, on)
     end
 end
 
+local function styleHeader(self)
+    local label = self.elements and self.elements.label
+    if not label then return end
+    pcall(function()
+        -- Category:enable already uses headerColor; set it again after a rebuild, and use font 1
+        if tes3ui and tes3ui.getPalette then
+            local pal = tes3.palette and tes3.palette.headerColor or "header_color"
+            label.color = tes3ui.getPalette(pal)
+        end
+        label.font = HEADER_FONT
+    end)
+end
+
+local function styleSoundList(self)
+    local el = self.elements and self.elements.info
+    if not el then return end
+    -- Info labels may still collapse leading spaces: keep a left border as well as the NBSP indent in the text
+    el.borderLeft = 16
+    el.wrapText = true
+end
+
+local function destroyChildren(box)
+    if not (box and box.children) then return end
+    for i = #box.children, 1, -1 do
+        local child = box.children[i]
+        if child and child.destroy then pcall(function() child:destroy() end) end
+    end
+end
+
 -- a read-only MCM page: the scripts the patch repaired, by plugin (nothing to set)
+-- Plugin names are MCM Category headers again (headerColor + font 1), as they were before paging,
+-- so they stay distinct from the body Info used for the sound/script lines.
 local function registerMcm()
     local template = mwse.mcm.createTemplate({ name = "mwsoundfix" })
     local page = template:createPage({ label = "Repaired sound scripts" })
@@ -174,7 +232,7 @@ local function registerMcm()
     local entries, plugins = collectEntries(data)
     local total = #entries
     local currentPage = 1
-    local pageInfo, listInfo, prevBtn, nextBtn
+    local pageInfo, prevBtn, nextBtn, listHost
 
     local function nav()
         return paginate(total, currentPage, PAGE_SIZE)
@@ -184,9 +242,28 @@ local function registerMcm()
         local n = nav()
         currentPage = n.page
         setInfoText(pageInfo, n.label)
-        setInfoText(listInfo, formatPageText(entries, n))
         setButtonOn(prevBtn, n.hasPrev)
         setButtonOn(nextBtn, n.hasNext)
+        if not listHost then return end
+        local box = listHost.elements and listHost.elements.subcomponentsContainer
+        destroyChildren(box)
+        listHost.components = {}
+        local groups = pageGroups(entries, n)
+        for i, g in ipairs(groups) do
+            local cat = listHost:createCategory({
+                label = g.title,
+                postCreate = styleHeader,
+            })
+            local text = table.concat(g.lines, "\n")
+            if i < #groups then text = text .. "\n" end   -- blank line before the next mod header, not after the last
+            cat:createInfo({ text = text, postCreate = styleSoundList })
+            if box then pcall(function() cat:create(box) end) end
+        end
+        pcall(function()
+            local root = box or (listHost.elements and listHost.elements.outerContainer)
+            local menu = root and root.getTopLevelMenu and root:getTopLevelMenu()
+            if menu and menu.updateLayout then menu:updateLayout() end
+        end)
     end
 
     page:createInfo({ text = string.format("%d script(s) in %d plugin(s), built %s. These scripts used to restart "
@@ -199,7 +276,6 @@ local function registerMcm()
         callback = function()
             if currentPage > 1 then currentPage = currentPage - 1; apply() end
         end,
-        postCreate = function() apply() end,
     })
     nextBtn = page:createButton({
         buttonText = "Next",
@@ -208,9 +284,11 @@ local function registerMcm()
             local n = nav()
             if currentPage < n.pages then currentPage = currentPage + 1; apply() end
         end,
+    })
+    -- unlabeled host: each visible plugin is a Category (header font/color) with the sound lines under it
+    listHost = page:createCategory({
         postCreate = function() apply() end,
     })
-    listInfo = page:createInfo({ text = formatPageText(entries, nav()) })
     apply()
     template:register()
 end
@@ -222,7 +300,10 @@ return {
     onReferenceActivated = onReferenceActivated,
     flagsByScript = flagsByScript,
     PAGE_SIZE = PAGE_SIZE,
+    HEADER_FONT = HEADER_FONT,
+    SOUND_INDENT = SOUND_INDENT,
     paginate = paginate,
     collectEntries = collectEntries,
+    pageGroups = pageGroups,
     formatPageText = formatPageText,
 }
