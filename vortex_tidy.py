@@ -48,8 +48,27 @@ NIFZER0EDIT built in, plus the folder names in vortex_tidy_blacklist.txt (one pe
     the safe ones in place (hard links stay; the LuaJIT checker must compile the result; originals kept in
     <backups folder>\\luafix), --undo puts them back. --no-lua skips this, --lua-only does only this.
 
+  * Broken asset files the asset check can't repair (empty, not the format their name says, truncated, a model
+    the game crashes on, an MP3 with no audio) go to <mod>\\Off\\broken\\<plugin>\\<path>, and a small valid
+    file of the same format takes their place, so what names them still finds a file. Made in code: a 4x4
+    placeholder texture (DDS, TGA, BMP, PNG; an 8x8 JPEG; a 32x32 icon under icons\\), silence (WAV, MP3), an
+    empty model (NIF). Any other type (.kf, .bik, .fnt, .tex...) gets a copy of a core game file of that type
+    (Morrowind/Tribunal/Bloodmoon.bsa, or the game's own loose Video and Fonts files): the one at the same path
+    if there is one, else one no active plugin (nor Morrowind.ini) names, cached in vortex_tidy_dummy_sources.json.
+    <original>.tidy-dummy beside the kept original marks the dummy, so a later run leaves it alone. A broken
+    model another mod or a BSA also has is only moved out (Deploy lets that copy win); a type with no dummy
+    either way is left as it is, which the plan says.
+
 It only shows the plan unless you pass --apply. Every move is written to a journal, and --undo puts
 everything back. Purge in Vortex before applying, and Deploy afterwards, so the game folder matches.
+Asset repairs are undone the same way: before a mod's files are repaired, every file the repairs can change
+(the file, a same-named file beside it, the mod's plugins and bug reports) is copied to
+<backups folder>\\tidy\\<run>\\assets\\<mod folder>\\ and journaled with its SHA-256; --undo puts each
+original back at its own path (in place, file dates as they were) and removes the files the repairs made
+(repaired copies under new names, the Off\\ copies, a new bug report). It does not reverse a repair: it brings
+back the file as it was. One --undo undoes the whole last --apply (repairs, then Lua patches, then moves); a
+missing or altered original, or a file changed since the --apply, stops it before anything is changed
+(--undo --force overwrites changed files, never without a matching original).
 --apply enacts only the plan you reviewed: it works the plan out again (moves, Lua patches, asset repairs -
 all listed in plans/vortex_tidy_plan.txt; --lua-only: its Lua section) and refuses, changing nothing, when the
 actions differ from the plan file: the new plan is written for review and the old one kept as
@@ -61,12 +80,14 @@ Copies of the plan as reviewed and as enacted go to <backups folder>\\tidy\\<run
     python vortex_tidy.py                      (plan for every mod; nothing is changed)
     python vortex_tidy.py --only "MUSE*"       (plan for some mods; wildcards allowed)
     python vortex_tidy.py --apply              (do it)
-    python vortex_tidy.py --undo               (put back everything the last --apply moved)
+    python vortex_tidy.py --undo               (put back everything the last --apply changed)
 """
 import fnmatch
+import hashlib
 import json
 import os
 import re
+import shutil
 import struct
 import sys
 import time
@@ -604,10 +625,8 @@ def apply(moves, staging, progress=None, head_extra=None):
     return failed
 
 
-def undo():
-    if not os.path.exists(JOURNAL):
-        print("Nothing to undo (no journal).")
-        return 1
+def _read_journal_runs():
+    """The journal as [{"head", "ops"}], oldest first (unreadable lines skipped)."""
     runs, cur = [], None
     with open(JOURNAL, encoding="utf-8") as jf:
         journal_lines = jf.read().splitlines()
@@ -624,54 +643,130 @@ def undo():
             runs.append(cur)
         elif cur is not None:
             cur["ops"].append(rec)
+    return runs
+
+
+def _last_apply(runs):
+    """Pop the runs of the last --apply off `runs`: its moves, Lua patches and asset repairs are journaled under
+    one head each, all with the same "apply" id. An older journal without the id: just the last head."""
+    group = [runs.pop()]
+    key = group[0]["head"].get("apply")
+    while key and runs and runs[-1]["head"].get("apply") == key:
+        group.insert(0, runs.pop())
+    return group
+
+
+def _luafix_preflight(ops, force):
+    """Why the journaled Lua patches (mods' files and MWSE's core files alike) can't all be put back, or []."""
+    if not ops:
+        return []
+    lf = _luafix()
+    if lf is None:
+        return ["mwdialog_luafix.py could not be loaded, so the Lua files it patched can't be put back"]
+    out = []
+    for op in ops:
+        p = op["luafix"]
+        try:
+            with open(p, "rb") as f:
+                cur = lf.sha(f.read())
+        except OSError as e:
+            out.append(f"{p}: can't be read ({e})")
+            continue
+        if cur == op.get("before"):
+            continue
+        if cur != op.get("after") and not force:
+            out.append(f"{p}: changed since it was patched (--undo --force puts the original back anyway)")
+            continue
+        try:
+            with open(op["backup"], "rb") as f:
+                ok = lf.sha(f.read()) == op.get("before")
+        except OSError:
+            out.append(f"{p}: its original is missing (was kept at {op['backup']})")
+            continue
+        if not ok:
+            out.append(f"{p}: its kept original ({op['backup']}) is not the file that was patched")
+    return out
+
+
+def undo(force=False):
+    """--undo: put back everything the last --apply did, newest first: the asset repairs (each original back at
+    its own path, the files the repairs made removed), the Lua patches (in place), then the moves. Asset and
+    Lua originals are checked first (present, the same hash as when kept; the file not changed since, unless
+    force): if any can't be put back, nothing is changed and the reason is printed. What could not be put back
+    stays in the journal, so --undo can try again."""
+    if not os.path.exists(JOURNAL):
+        print("Nothing to undo (no journal).")
+        return 1
+    runs = _read_journal_runs()
     if not runs:
         print("Nothing to undo.")
         return 1
-    last = runs.pop()
+    group = _last_apply(runs)
+    aops = [op for r in group for op in r["ops"] if _is_asset_op(op)]
+    lops = [op for r in group for op in r["ops"] if "luafix" in op]
+    aplan = _asset_undo_plan(aops)
+    problems = _asset_preflight(aplan, force) + _luafix_preflight(lops, force)
+    if problems:
+        print("--undo changed nothing: these can't be put back as they were before vortex_tidy --apply:",
+              file=sys.stderr)
+        for p in problems:
+            print("  " + p, file=sys.stderr)
+        print("The journal is unchanged. Put the missing originals back (an asset's original may also still be in "
+              "its mod's Off\\ folder), or --undo --force to overwrite files changed since.", file=sys.stderr)
+        return 1
     back = 0
-    left = []                                         # ops not undone: kept in the journal for another try
-    for op in reversed(last["ops"]):
-        if "luafix" in op:                            # a Lua file mwdialog_luafix patched in place
-            lf = _luafix()
-            ok, msg = lf.restore_op(op) if lf else (False, f"{op['luafix']}: mwdialog_luafix.py not found")
-            if ok:
-                back += 1
-            else:
-                print("  " + msg, file=sys.stderr)
-                left.append(op)
-            continue
-        try:
-            if "rmdir" in op:
-                os.makedirs(op["rmdir"], exist_ok=True)
-            elif os.path.exists(op["dst"]):
-                if os.path.exists(op["src"]):
-                    print(f"  not put back (something is at {op['src']} already): {op['dst']}", file=sys.stderr)
+    restored, removed, afailed = _asset_undo(aplan, aops, force) if aops else (0, 0, [])
+    keep_assets = bool(afailed)                       # every asset op stays for another try (putting back is idempotent)
+    out_runs = []
+    for r in reversed(group):
+        left = []                                     # ops not undone: kept in the journal for another try
+        for op in reversed(r["ops"]):
+            if _is_asset_op(op):
+                if keep_assets:
                     left.append(op)
-                    continue
-                os.makedirs(os.path.dirname(op["src"]), exist_ok=True)
-                os.rename(op["dst"], op["src"])
-                back += 1
-            elif os.path.exists(op["src"]):
-                back += 1                             # journaled, but the move itself never happened
-            else:
-                print(f"  not put back (no longer there): {op['dst']}", file=sys.stderr)
+                continue
+            if "luafix" in op:                        # a Lua file mwdialog_luafix patched in place (MWSE core too)
+                lf = _luafix()
+                ok, msg = lf.restore_op(op, force) if lf else (False, f"{op['luafix']}: mwdialog_luafix.py not found")
+                if ok:
+                    back += 1
+                else:
+                    print("  " + msg, file=sys.stderr)
+                    left.append(op)
+                continue
+            try:
+                if "rmdir" in op:
+                    os.makedirs(op["rmdir"], exist_ok=True)
+                elif os.path.exists(op["dst"]):
+                    if os.path.exists(op["src"]):
+                        print(f"  not put back (something is at {op['src']} already): {op['dst']}", file=sys.stderr)
+                        left.append(op)
+                        continue
+                    os.makedirs(os.path.dirname(op["src"]), exist_ok=True)
+                    os.rename(op["dst"], op["src"])
+                    back += 1
+                elif os.path.exists(op["src"]):
+                    back += 1                         # journaled, but the move itself never happened
+                else:
+                    print(f"  not put back (no longer there): {op['dst']}", file=sys.stderr)
+                    left.append(op)
+            except OSError as e:
+                print(f"  could not put back {op.get('dst')}: {e}", file=sys.stderr)
                 left.append(op)
-        except OSError as e:
-            print(f"  could not put back {op.get('dst')}: {e}", file=sys.stderr)
-            left.append(op)
-    top = last["head"].get("staging")         # an old journal without it: no folder is removed
-    top = os.path.normcase(os.path.abspath(top)) if top else None
-    for d in {os.path.dirname(op["dst"]) for op in last["ops"] if "dst" in op} if top else ():   # emptied folders
-        try:
-            # only folders inside the staging folder: never the staging folder itself or anything above it
-            while d and os.path.normcase(os.path.abspath(d)).startswith(top + os.sep) \
-                    and os.path.isdir(d) and not os.listdir(d):
-                os.rmdir(d)
-                d = os.path.dirname(d)
-        except OSError:
-            pass
-    if left:
-        runs.append({"head": last["head"], "ops": list(reversed(left))})
+        top = r["head"].get("staging")            # an old journal without it: no folder is removed
+        top = os.path.normcase(os.path.abspath(top)) if top else None
+        for d in {os.path.dirname(op["dst"]) for op in r["ops"] if "dst" in op} if top else ():   # emptied folders
+            try:
+                # only folders inside the staging folder: never the staging folder itself or anything above it
+                while d and os.path.normcase(os.path.abspath(d)).startswith(top + os.sep) \
+                        and os.path.isdir(d) and not os.listdir(d):
+                    os.rmdir(d)
+                    d = os.path.dirname(d)
+            except OSError:
+                pass
+        if left:
+            out_runs.insert(0, {"head": r["head"], "ops": list(reversed(left))})
+    runs.extend(out_runs)
     tmp = JOURNAL + ".tmp"
     with open(tmp, "w", encoding="utf-8") as j:
         for r in runs:
@@ -679,12 +774,407 @@ def undo():
             for op in r["ops"]:
                 j.write(json.dumps(op) + "\n")
     os.replace(tmp, JOURNAL)
-    print(f"Put back {back} item(s) moved by the run of {last['head']['run']}. Deploy in Vortex again.")
-    if left:
-        print(f"{len(left)} item(s) could not be put back (listed above); they stay in the journal "
+    print(f"Put back {back} item(s) moved or patched by the run of {group[-1]['head']['run']}. Deploy in Vortex again.")
+    if aops:
+        print(f"Asset repairs: {restored} original(s) put back at their own path, {removed} file(s) the repairs made "
+              f"removed.")
+    n_left = sum(len(r["ops"]) for r in out_runs)
+    if n_left:
+        print(f"{n_left} item(s) could not be put back (listed above); they stay in the journal "
               f"({JOURNAL}), so --undo can try them again.")
         return 1
     return 0
+
+
+# ---------------------------------------------------------------- asset repairs: the originals, for --undo
+# Before a mod's asset repairs (and the tidy section of its bug report) are made, every file they can change is
+# copied to <backups folder>\tidy\<run>\assets\<mod folder>\<path in the mod> and journaled with its hash; after
+# them the mod folder is compared with how it was: each changed file gets its new hash, each new file (repaired
+# copies under new names, the mod's own Off\ copies, a new bug report) is listed as made by the run. --undo puts
+# each original back at its own path (in place, so a Vortex hard link stays one; file times as they were) and
+# removes the files the run made. It never "reverses" a repair: the kept original is the file as it was.
+ASSET_BACKUP_DIR = "assets"
+ASSET_OPS = ("asset", "asset_after", "asset_created", "asset_mkdir", "asset_unbacked", "asset_lp_record")
+
+
+def _is_asset_op(op):
+    return any(k in op for k in ASSET_OPS)
+
+
+def _xp(p):
+    """p with Windows' \\\\?\\ prefix when it is long (so it can still be opened); unchanged elsewhere."""
+    if os.name != "nt" or len(p) < 240 or p.startswith("\\\\?\\"):
+        return p
+    return "\\\\?\\" + os.path.abspath(p)
+
+
+def _unxp(p):
+    return p[4:] if p.startswith("\\\\?\\") else p
+
+
+def _nk(p):
+    return os.path.normcase(os.path.abspath(_unxp(p)))
+
+
+def _sha256(path):
+    h = hashlib.sha256()
+    with open(_xp(path), "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _tree_state(root):
+    """({key: (path, size, mtime_ns)} of every file under root, {key: path} of its folders)."""
+    files, dirs = {}, {}
+    for base, ds, fns in os.walk(_xp(root)):
+        base = _unxp(base)
+        for d in ds:
+            p = os.path.join(base, d)
+            dirs[_nk(p)] = p
+        for fn in fns:
+            p = os.path.join(base, fn)
+            try:
+                st = os.stat(_xp(p))
+            except OSError:
+                continue
+            files[_nk(p)] = (p, st.st_size, st.st_mtime_ns)
+    return files, dirs
+
+
+def _lp_module():
+    import mwdialog_longpaths
+    return mwdialog_longpaths
+
+
+def _repair_candidates(root, fixes, lp_plan, lpm=None):
+    """Every existing file one mod's repairs can change or replace: each repaired file and the files beside it
+    with the same name (a .dds becoming .tga, a .wav becoming .mp3...), an ASCII rename's new path, the mod's
+    plugins (renames and short paths are written into them), its bug reports, the repair notes beside its
+    Off\\ originals, and for short paths the moved files and the models naming them."""
+    root = os.path.abspath(root)
+    out = set()
+
+    def add(p):
+        p = os.path.abspath(_unxp(p))
+        if os.path.isfile(_xp(p)):
+            out.add(p)
+
+    def with_siblings(p):
+        add(p)
+        d, b = os.path.split(os.path.abspath(_unxp(p)))
+        stem = os.path.splitext(b)[0].lower()
+        try:
+            names = os.listdir(_xp(d))
+        except OSError:
+            return
+        for n in names:
+            if os.path.splitext(n)[0].lower() == stem:
+                add(os.path.join(d, n))
+
+    for kind, full, _rel, job in fixes:
+        with_siblings(full)
+        if kind == "ascii" and isinstance(job, str):
+            with_siblings(os.path.join(root, job))
+    try:
+        names = os.listdir(_xp(root))
+    except OSError:
+        names = []
+    for e in names:
+        if os.path.splitext(e)[1].lower() in (".esp", ".esm", ".omwaddon"):
+            add(os.path.join(root, e))
+        elif e.lower() == "bugreports":
+            for base, _ds, fns in os.walk(_xp(os.path.join(root, e))):
+                for fn in fns:
+                    add(os.path.join(_unxp(base), fn))
+        elif e.lower() == "off":
+            for base, _ds, fns in os.walk(_xp(os.path.join(root, e))):
+                for fn in fns:
+                    if fn.lower().endswith((".repaired.sha256", DUMMY_MARK)):
+                        add(os.path.join(_unxp(base), fn))
+    if lp_plan:
+        fs = (lambda r: r.replace("\\", os.sep).replace("/", os.sep))
+        pairs = {}
+        for lp in lp_plan:
+            for rel in [lp["orig"], lp["short"]] + [x for t in (lp.get("twins") or []) for x in t]:
+                add(os.path.join(root, fs(rel)))
+            pairs[lp["orig"].replace("/", "\\").strip().lower().lstrip("\\")] = lp["short"]
+        mroot = next((os.path.join(root, d) for d in names if d.lower() == "meshes"), None)
+        for base, _ds, fns in (os.walk(_xp(mroot)) if mroot else ()):
+            for fn in fns:
+                if not fn.lower().endswith(".nif"):
+                    continue
+                nf = os.path.join(_unxp(base), fn)
+                try:
+                    with open(_xp(nf), "rb") as f:
+                        data = f.read()
+                    hit = lpm is None or bool(lpm.rewrite_nif_textures(data, pairs)[0])
+                except Exception:                     # can't tell: keep it to be safe
+                    hit = True
+                if hit:
+                    add(nf)
+    return out
+
+
+class AssetJournal:
+    """Keeps, for --undo, the original of every file one mod's asset repairs change (see above). Inactive (does
+    nothing) without a run folder for the originals (args._audit, set by --apply)."""
+
+    def __init__(self, args, staging=None):
+        self.audit = getattr(args, "_audit", None) if args is not None else None
+        self.head = {"run": time.strftime("%Y-%m-%d %H:%M:%S"), "what": "assets",
+                     "staging": staging or getattr(args, "staging", None)}
+        self.head.update(getattr(args, "_journal_extra", None) or {})
+        self.started = False
+
+    def _write(self, recs):
+        if not recs:
+            return
+        if not self.started:
+            recs = [self.head] + recs
+            self.started = True
+        os.makedirs(os.path.dirname(os.path.abspath(JOURNAL)), exist_ok=True)
+        with open(JOURNAL, "a", encoding="utf-8") as j:
+            for r in recs:
+                j.write(json.dumps(r) + "\n")
+            j.flush()
+            os.fsync(j.fileno())
+
+    def begin(self, folder, root, candidates):
+        """Copy each candidate to the run's originals folder (read back and compared) and journal it, before
+        anything is changed. Raises OSError when an original can't be kept: then the mod must not be repaired."""
+        if not self.audit:
+            return None
+        root = os.path.abspath(root)
+        files, dirs = _tree_state(root)
+        bdir = os.path.join(self.audit, ASSET_BACKUP_DIR, folder)
+        recs, kept = [], {}
+        for p in sorted(candidates):
+            rel = os.path.relpath(p, root)
+            if rel == os.pardir or rel.startswith(os.pardir + os.sep):
+                rel = os.path.join("_outside", os.path.splitdrive(p)[1].lstrip("\\/"))
+            bak = os.path.join(bdir, rel)
+            k = 2
+            while os.path.exists(_xp(bak)):           # the queue repairs a mod a second time: keep both
+                bak = os.path.join(bdir + f".{k}", rel)
+                k += 1
+            os.makedirs(_xp(os.path.dirname(bak)), exist_ok=True)
+            shutil.copy2(_xp(p), _xp(bak))
+            h = _sha256(p)
+            if _sha256(bak) != h:
+                raise OSError(f"the copy of {p} reads back different")
+            recs.append({"asset": p, "backup": bak, "before": h, "mtime_ns": os.stat(_xp(p)).st_mtime_ns,
+                         "mod": folder})
+            kept[_nk(p)] = (p, h, bak)
+        self._write(recs)
+        return {"folder": folder, "root": root, "files": files, "dirs": dirs, "kept": kept}
+
+    def end(self, tok, lp_plan=()):
+        """Journal what the repairs did to the mod folder: new hashes, new files and folders."""
+        if tok is None:
+            return
+        files, dirs = _tree_state(tok["root"])
+        recs = [{"asset_mkdir": p} for k, p in sorted(dirs.items(), key=lambda kv: len(kv[0]))
+                if k not in tok["dirs"]]
+        for k, (p, _size, _mt) in sorted(files.items()):
+            if k in tok["files"] or k in tok["kept"]:
+                continue
+            try:
+                recs.append({"asset_created": p, "sha": _sha256(p)})
+            except OSError as e:
+                recs.append({"asset_created": p, "sha": None})
+                print(f"  (could not read {p}: {e})", file=sys.stderr)
+        for k, (p, h, bak) in sorted(tok["kept"].items()):
+            if k not in files:
+                recs.append({"asset_after": p, "after": None})
+                continue
+            try:
+                h2 = _sha256(p)
+            except OSError:
+                h2 = "?"
+            if h2 == h:
+                recs.append({"asset_after": p, "unchanged": True})
+            else:
+                recs.append({"asset_after": p, "after": h2})
+        for k, (p, size, mt) in sorted(tok["files"].items()):
+            if k in tok["kept"]:
+                continue
+            now = files.get(k)
+            if now is None or now[1:] != (size, mt):
+                print(f"  WARNING: {p} was changed by a repair without its original kept; --undo can't put it back",
+                      file=sys.stderr)
+                recs.append({"asset_unbacked": p})
+        mod = os.path.basename(os.path.normpath(tok["root"]))
+        recs += [{"asset_lp_record": lp["orig"], "mod": mod} for lp in (lp_plan or ())]
+        self._write(recs)
+        self._drop_unchanged(tok, recs)
+
+    @staticmethod
+    def _drop_unchanged(tok, recs):
+        """Originals of files the repairs left as they were are not needed: removed again (never the journal)."""
+        same = {_nk(r["asset_after"]) for r in recs if r.get("unchanged")}
+        for k in same:
+            bak = tok["kept"][k][2]
+            try:
+                os.remove(_xp(bak))
+                d = os.path.dirname(bak)
+                while os.path.isdir(_xp(d)) and not os.listdir(_xp(d)):
+                    os.rmdir(_xp(d))
+                    d = os.path.dirname(d)
+            except OSError:
+                pass
+
+
+def _asset_undo_plan(ops):
+    """{key: {"path", "orig": None (no file there before the run) or (sha, backup, mtime_ns), "state": the hash the
+    run left (None: no file; "?": unknown, the run stopped), "touched"}} from one --apply's asset ops, in journal
+    order. A file journaled twice (the queue repairs a mod again) keeps its first original."""
+    plan = {}
+    for op in ops:
+        if "asset" in op:
+            k = _nk(op["asset"])
+            e = plan.get(k)
+            if e is None:
+                e = plan[k] = {"path": op["asset"], "orig": (op["before"], op["backup"], op.get("mtime_ns")),
+                               "touched": False}
+            e["state"], e["pending"] = "?", op["before"]          # until its after line says what happened
+        elif "asset_after" in op:
+            e = plan.get(_nk(op["asset_after"]))
+            if e is None:
+                continue
+            if op.get("unchanged"):
+                e["state"] = e.get("pending")
+            else:
+                e["state"], e["touched"] = op.get("after"), True
+        elif "asset_created" in op:
+            k = _nk(op["asset_created"])
+            e = plan.setdefault(k, {"path": op["asset_created"], "orig": None})
+            e["state"], e["touched"] = op.get("sha"), True
+    for e in plan.values():
+        if e["state"] == "?":
+            e["touched"] = True                       # the run stopped before saying: put the original back
+    return plan
+
+
+def _current(path):
+    """The file's hash, or None when there is no file."""
+    return _sha256(path) if os.path.isfile(_xp(path)) else None
+
+
+def _asset_preflight(plan, force):
+    """Why the asset originals can't all be put back, or []. Nothing is changed."""
+    out = []
+    for e in plan.values():
+        if not e["touched"]:
+            continue
+        p = e["path"]
+        try:
+            cur = _current(p)
+        except OSError as ex:
+            out.append(f"{p}: can't be read ({ex})")
+            continue
+        if e["orig"] is None:                         # made by the run: removed, unless changed since
+            if cur is not None and e["state"] not in (cur, "?", None) and not force:
+                out.append(f"{p}: made by the repairs, but changed since (--undo --force removes it anyway)")
+            continue
+        before, bak, _mt = e["orig"]
+        if cur == before:
+            continue                                  # as it was already
+        if e["state"] != "?" and cur != e["state"] and not force:
+            out.append(f"{p}: changed since it was repaired (--undo --force puts the original back anyway)")
+            continue
+        try:
+            ok = _sha256(bak) == before
+        except OSError:
+            out.append(f"{p}: its original is missing (was kept at {bak})")
+            continue
+        if not ok:
+            out.append(f"{p}: its kept original ({bak}) has a different hash than the file had")
+    return out
+
+
+def _put_back(path, bak, before, mtime_ns):
+    with open(_xp(bak), "rb") as f:
+        data = f.read()
+    if hashlib.sha256(data).hexdigest() != before:
+        raise OSError(f"its kept original ({bak}) has a different hash than the file had")
+    if os.path.isfile(_xp(path)):
+        with open(_xp(path), "r+b") as f:             # in place: a Vortex hard link stays one
+            f.seek(0)
+            f.write(data)
+            f.truncate()
+            f.flush()
+            os.fsync(f.fileno())
+    else:
+        os.makedirs(_xp(os.path.dirname(path)), exist_ok=True)
+        with open(_xp(path), "wb") as f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+    if _sha256(path) != before:
+        raise OSError("it reads back different after writing")
+    if mtime_ns:                                      # a plugin's date is its place in the load order
+        os.utime(_xp(path), ns=(mtime_ns, mtime_ns))
+
+
+def _asset_undo(plan, ops, force):
+    """Put the asset originals back (after _asset_preflight): the files the run made go first, then each original
+    goes back to its own path, then the folders the run made (if empty) and its short-path records. Returns
+    (originals put back, files removed, [paths that failed])."""
+    restored = removed = 0
+    failed = []
+    for e in plan.values():
+        if not e["touched"] or e["orig"] is not None:
+            continue
+        p = e["path"]
+        try:
+            cur = _current(p)
+            if cur is None:
+                continue
+            if e["state"] not in (cur, "?", None) and not force:
+                raise OSError("changed since the repairs made it")
+            os.remove(_xp(p))
+            removed += 1
+        except OSError as ex:
+            print(f"  could not remove {p}: {ex}", file=sys.stderr)
+            failed.append(p)
+    for e in plan.values():
+        if not e["touched"] or e["orig"] is None:
+            continue
+        p = e["path"]
+        before, bak, mt = e["orig"]
+        try:
+            if _current(p) == before:
+                continue
+            _put_back(p, bak, before, mt)
+            restored += 1
+        except OSError as ex:
+            print(f"  could not put back {p}: {ex}", file=sys.stderr)
+            failed.append(p)
+    for d in sorted({op["asset_mkdir"] for op in ops if "asset_mkdir" in op}, key=len, reverse=True):
+        try:
+            if os.path.isdir(_xp(d)) and not os.listdir(_xp(d)):
+                os.rmdir(_xp(d))
+        except OSError:
+            pass
+    for op in ops:
+        if "asset_unbacked" in op:
+            print(f"  not put back (its original was not kept): {op['asset_unbacked']}", file=sys.stderr)
+    lp = [op for op in ops if "asset_lp_record" in op]
+    if lp:
+        try:
+            lpm = _lp_module()
+            rec = lpm.Record(HERE)
+            drop = {(lpm.norm(op["asset_lp_record"]), (op.get("mod") or "").lower()) for op in lp}
+            keep = [x for x in rec.moves if not (x.get("by") == "tidy"
+                                                  and (lpm.norm(x["orig"]), (x.get("mod") or "").lower()) in drop)]
+            if len(keep) != len(rec.moves):
+                rec.moves = keep
+                rec.save()
+        except Exception as ex:                       # the files are back; only the record is stale
+            print(f"  (mwdialog_longpaths.json not updated: {ex}; mwdialog_check --longpaths-undo may list moves "
+                  f"that are undone already)", file=sys.stderr)
+    return restored, removed, failed
 
 
 def _luafix():
@@ -861,8 +1351,510 @@ def asset_action_lines(ent):
     return out
 
 
+# ---------------------------------------------------------------- broken assets: the original to Off\, a dummy in place
+# A file the asset check finds broken (empty, not the format its name says, truncated, a model the game crashes
+# on, an MP3 with no audio) can't be repaired: the original goes to <mod>\Off\broken\<plugin>\<path> (where the
+# asset tools already keep broken originals) and a small valid file of the same format takes its place, so the
+# plugins and models naming it still find one. Beside the kept original, <original>.tidy-dummy records the
+# dummy's path and SHA-256: a later run knows the file at that path is tidy's dummy (while it is unchanged) and
+# neither reports it nor replaces it again. Like every repair, it is journaled: --undo puts the original back and
+# removes the dummy's Off copy and its mark.
+DUMMY_MARK = ".tidy-dummy"
+
+
+def _rk(rel):
+    return rel.replace("/", "\\").strip("\\").lower()
+
+
+def _placeholder_bgra(rel):
+    """The colour mwdialog_media's placeholder textures use: a flat normal map for *_n / *_nm..., black for
+    glow, reflection and specular maps (so they add nothing), plain grey otherwise."""
+    stem = os.path.splitext(os.path.basename(rel.replace("\\", "/")).lower())[0]
+    if stem.endswith(("_nm", "_n", "_normal", "_nrm")):
+        return (255, 128, 128, 255)
+    if stem.endswith(("_glow", "_g", "_ref", "_spec", "_s", "_em", "_lum")):
+        return (0, 0, 0, 255)
+    return (128, 128, 128, 255)
+
+
+def dummy_tga(rel):
+    """A 4x4 uncompressed 24-bit TGA in the placeholder colour."""
+    b, g, r, _a = _placeholder_bgra(rel)
+    head = struct.pack("<BBBHHBHHHHBB", 0, 0, 2, 0, 0, 0, 0, 0, 4, 4, 24, 0)
+    return head + bytes((b, g, r)) * 16
+
+
+def dummy_bmp(rel):
+    """A 4x4 24-bit BMP in the placeholder colour (rows of 12 bytes: no padding needed)."""
+    b, g, r, _a = _placeholder_bgra(rel)
+    px = bytes((b, g, r)) * 16
+    return (struct.pack("<2sIHHI", b"BM", 54 + len(px), 0, 0, 54)
+            + struct.pack("<IiiHHIIiiII", 40, 4, 4, 1, 24, 0, len(px), 2835, 2835, 0, 0) + px)
+
+
+def dummy_png(rel):
+    """A 4x4 8-bit RGB PNG in the placeholder colour."""
+    import zlib
+    b, g, r, _a = _placeholder_bgra(rel)
+
+    def chunk(tag, data):
+        return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+    rows = b"".join(b"\0" + bytes((r, g, b)) * 4 for _ in range(4))
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 4, 4, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(rows, 9)) + chunk(b"IEND", b""))
+
+
+def dummy_dds(rel):
+    """A 4x4 uncompressed DDS in the placeholder colour (as mwdialog_media's placeholder_dds)."""
+    w = h = 4
+    head = struct.pack("<4sIIIIIII44sIIIIIIIIIIIII", b"DDS ", 124, 0x100F, h, w, w * 4, 0, 0, bytes(44),
+                       32, 0x41, 0, 32, 0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000, 0x1000, 0, 0, 0, 0)
+    return head + bytes(_placeholder_bgra(rel)) * (w * h)
+
+
+def dummy_icon():
+    """A 32x32 inventory icon (as mwdialog_media's placeholder_icon): a grey square with a red "!", so a missing
+    icon is visible."""
+    w = h = 32
+    head = struct.pack("<4sIIIIIII44sIIIIIIIIIIIII", b"DDS ", 124, 0x100F, h, w, w * 4, 0, 0, bytes(44),
+                       32, 0x41, 0, 32, 0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000, 0x1000, 0, 0, 0, 0)
+    px = bytearray()
+    for y in range(h):
+        for x in range(w):
+            edge = x in (0, w - 1) or y in (0, h - 1)
+            bar = 13 <= x <= 18 and 4 <= y <= 20 and not (y >= 17 and x in (13, 18))
+            dot = 13 <= x <= 18 and 23 <= y <= 27
+            px += bytes((40, 40, 210, 255)) if bar or dot else \
+                bytes((60, 60, 60, 255)) if edge else bytes((110, 110, 110, 255))
+    return head + bytes(px)
+
+
+def dummy_jpg(rel):
+    """An 8x8 greyscale baseline JPEG, flat, in the placeholder colour's brightness: one block whose only
+    coefficient is its DC term (quantisation 1), with one-code Huffman tables."""
+    b, g, r, _a = _placeholder_bgra(rel)
+    dc = 8 * (int(round(0.299 * r + 0.587 * g + 0.114 * b)) - 128)    # a flat block's DC term is 8x its level
+    cat = abs(dc).bit_length()
+    bits = "0"                                                         # the DC table's one code: category `cat`
+    if cat:
+        bits += format(dc if dc > 0 else dc + (1 << cat) - 1, f"0{cat}b")
+    bits += "0"                                                        # the AC table's one code: end of block
+    bits += "1" * (-len(bits) % 8)
+    scan = bytearray()
+    for i in range(0, len(bits), 8):
+        scan.append(int(bits[i:i + 8], 2))
+        if scan[-1] == 0xFF:
+            scan.append(0)                                             # byte stuffing
+
+    def seg(marker, body):
+        return struct.pack(">BBH", 0xFF, marker, len(body) + 2) + body
+
+    def dht(cls, sym):
+        return seg(0xC4, bytes((cls << 4,)) + bytes((1,)) + bytes(15) + bytes((sym,)))
+    return (b"\xff\xd8" + seg(0xDB, b"\0" + b"\1" * 64)
+            + seg(0xC0, struct.pack(">BHHB", 8, 8, 8, 1) + b"\x01\x11\x00")
+            + dht(0, cat) + dht(1, 0)
+            + seg(0xDA, b"\x01\x01\x00\x00\x3f\x00") + bytes(scan) + b"\xff\xd9")
+
+
+def dummy_wav():
+    """0.2 s of silence: 22,050 Hz mono 16-bit PCM."""
+    rate, n = 22050, 4410
+    data = bytes(2 * n)
+    return (b"RIFF" + struct.pack("<I", 36 + len(data)) + b"WAVEfmt "
+            + struct.pack("<IHHIIHH", 16, 1, 1, rate, rate * 2, 2, 16) + b"data" + struct.pack("<I", len(data)) + data)
+
+
+def dummy_mp3():
+    """Silence: 8 MPEG-1 Layer III frames (128 kbit/s, 44.1 kHz, 417 bytes each) whose side information is all
+    zero - no audio data, so every frame decodes as silence."""
+    return (b"\xff\xfb\x90\x64" + bytes(413)) * 8
+
+
+NIF_HEAD = b"NetImmerse File Format, Version 4.0.0.2\n"
+
+
+def dummy_nif():
+    """The smallest model the game loads: a NIF 4.0.0.2 with one empty NiNode (no name links, identity transform,
+    no properties, children or effects) as its root. It draws nothing - the asset tools treat a lone empty node
+    as made so on purpose."""
+    def s(t):
+        return struct.pack("<I", len(t)) + t
+    node = (s(b"NiNode") + s(b"vortex_tidy dummy") + struct.pack("<ii", -1, -1) + struct.pack("<H", 0)
+            + struct.pack("<3f", 0, 0, 0) + struct.pack("<9f", 1, 0, 0, 0, 1, 0, 0, 0, 1) + struct.pack("<f", 1)
+            + struct.pack("<3f", 0, 0, 0) + struct.pack("<IIII", 0, 0, 0, 0))   # properties, bbox, children, effects
+    return NIF_HEAD + struct.pack("<II", 0x04000002, 1) + node + struct.pack("<Ii", 1, 0)
+
+
+GENERATED = {".dds": "a 4x4 placeholder texture", ".tga": "a 4x4 placeholder TGA", ".bmp": "a 4x4 placeholder BMP",
+             ".png": "a 4x4 placeholder PNG", ".jpg": "an 8x8 placeholder JPEG", ".jpeg": "an 8x8 placeholder JPEG",
+             ".wav": "a silent WAV", ".mp3": "a silent MP3", ".nif": "an empty model (one empty node)"}
+
+
+def generate_dummy(rel):
+    """(bytes, what) of a dummy made in code for rel's type, or None."""
+    ext = os.path.splitext(rel)[1].lower()
+    if ext == ".dds" and _rk(rel).startswith("icons\\"):
+        return dummy_icon(), "a 32x32 placeholder icon"
+    make = {".dds": dummy_dds, ".tga": dummy_tga, ".bmp": dummy_bmp, ".png": dummy_png, ".jpg": dummy_jpg,
+            ".jpeg": dummy_jpg, ".wav": lambda r: dummy_wav(), ".mp3": lambda r: dummy_mp3(),
+            ".nif": lambda r: dummy_nif()}.get(ext)
+    return (make(rel), GENERATED[ext]) if make else None
+
+
+# A type no dummy can be made for in code (.kf animations, .bik videos, .fnt/.tex fonts...) gets a copy of a core
+# game file of that type: from Morrowind.bsa, Tribunal.bsa, Bloodmoon.bsa, or core loose files in Data Files (the
+# Video and Fonts folders; a file Vortex deployed, a hard link, never counts). First choice: the core file at the
+# same path (the one the mod replaces); then one nothing uses (its name appears in none of the active plugins nor
+# in Morrowind.ini); for a .kf then the small animation the asset tools always used (xin_dagoth_bridge00.kf);
+# then any core file of the type. Each type's pick is cached in vortex_tidy_dummy_sources.json until the plugins,
+# Morrowind.ini or the archives change. Nothing is copied out ahead of time and no dummy file is shipped.
+CORE_BSAS = ("Morrowind.bsa", "Tribunal.bsa", "Bloodmoon.bsa")
+CORE_LOOSE_DIRS = ("video", "fonts")
+KF_FALLBACK = "meshes\\i\\xin_dagoth_bridge00.kf"
+DUMMY_SOURCES = "vortex_tidy_dummy_sources.json"
+
+
+def _data_dir():
+    return os.path.join(HERE, "Data Files")
+
+
+def _ini_plugins(game_dir):
+    """The plugins Morrowind.ini loads ([Game Files] GameFileN=), or None without an ini."""
+    try:
+        with open(os.path.join(game_dir, "Morrowind.ini"), encoding="cp1252", errors="replace") as f:
+            text = f.read()
+    except OSError:
+        return None
+    out, on = [], False
+    for ln in text.splitlines():
+        s = ln.strip()
+        if s.startswith("["):
+            on = s.lower() == "[game files]"
+        elif on and s.lower().startswith("gamefile") and "=" in s:
+            out.append(s.split("=", 1)[1].strip())
+    return out
+
+
+def _reference_files(staging):
+    """The files whose text says what the game uses: Morrowind.ini, the active plugins in Data Files (every
+    plugin there without an ini) and every staged mod's plugins (which may be active once deployed)."""
+    data = _data_dir()
+    out = [os.path.join(HERE, "Morrowind.ini")]
+    names = _ini_plugins(HERE)
+    try:
+        listing = os.listdir(data)
+    except OSError:
+        listing = []
+    if names is None:
+        names = [e for e in listing if os.path.splitext(e)[1].lower() in (".esm", ".esp")]
+    out += [os.path.join(data, n) for n in names]
+    for d in (os.listdir(staging) if staging and os.path.isdir(staging) else ()):
+        md = os.path.join(staging, d)
+        if os.path.isdir(md):
+            out += [os.path.join(md, e) for e in os.listdir(md) if os.path.splitext(e)[1].lower() in (".esm", ".esp")]
+    return [p for p in out if os.path.isfile(p)]
+
+
+def _stat_sig(paths):
+    rows = []
+    for p in paths:
+        try:
+            st = os.stat(p)
+            rows.append([os.path.normcase(p), st.st_size, st.st_mtime_ns])
+        except OSError:
+            pass
+    return hashlib.sha1(json.dumps(sorted(rows)).encode()).hexdigest()
+
+
+def _core_candidates(ext):
+    """[(kind "bsa"/"loose", archive or "", path under Data Files, offset, size)] of the core files of a type."""
+    import mwdialog_bsa as BSA
+    data, out = _data_dir(), []
+    for name in CORE_BSAS:
+        p = os.path.join(data, name)
+        if not os.path.isfile(p):
+            continue
+        try:
+            idx = BSA.bsa_index(p)
+        except (OSError, ValueError, struct.error, BSA.FormatError):
+            continue
+        out += [("bsa", name, n, off, size) for n, (off, size) in sorted(idx.items()) if n.endswith(ext) and size > 0]
+    for top in (os.listdir(data) if os.path.isdir(data) else ()):
+        if top.lower() not in CORE_LOOSE_DIRS:
+            continue
+        for dp, _ds, fns in os.walk(os.path.join(data, top)):
+            for fn in sorted(fns):
+                if not fn.lower().endswith(ext):
+                    continue
+                p = os.path.join(dp, fn)
+                try:
+                    st = os.stat(p)
+                except OSError:
+                    continue
+                if st.st_nlink == 1 and st.st_size > 0:        # a Vortex-deployed file is a hard link: not core
+                    out.append(("loose", "", os.path.relpath(p, data).lower(), 0, st.st_size))
+    return out
+
+
+def _read_core(c):
+    kind, bsa, rel, off, size = c
+    data = _data_dir()
+    if kind == "bsa":
+        with open(os.path.join(data, bsa), "rb") as f:
+            f.seek(off)
+            b = f.read(size)
+    else:
+        with open(os.path.join(data, rel), "rb") as f:
+            b = f.read()
+    if len(b) != size:
+        raise OSError(f"{rel}: read {len(b)} of {size} bytes")
+    return b
+
+
+def _core_label(c, how):
+    kind, bsa, rel, _off, _size = c
+    name = rel.replace("\\", "/").rsplit("/", 1)[-1]
+    return f"a copy of the game's {name} ({bsa if kind == 'bsa' else 'Data Files'}; {how})"
+
+
+def _used(c, ext, text):
+    stem = os.path.splitext(c[2].replace("/", "\\").split("\\")[-1])[0].lower()
+    if ext == ".kf" and stem.startswith("x"):
+        stem = stem[1:]                               # x<model>.kf plays for <model>.nif
+    return stem.encode("cp1252", "replace") in text
+
+
+_REF_TEXT = {}
+
+
+def _reference_text(files):
+    key = _stat_sig(files)
+    if key not in _REF_TEXT:
+        parts = []
+        for p in files:
+            try:
+                with open(p, "rb") as f:
+                    parts.append(f.read().lower())
+            except OSError:
+                pass
+        _REF_TEXT.clear()
+        _REF_TEXT[key] = b"\n".join(parts)
+    return _REF_TEXT[key]
+
+
+def core_dummy(rel, staging=None):
+    """(bytes, what) of a core game file to stand in for a broken file at rel, or None (see above)."""
+    ext = os.path.splitext(rel)[1].lower()
+    if not ext:
+        return None
+    cands = _core_candidates(ext)
+    if not cands:
+        return None
+    k = _rk(rel)
+    for c in cands:                                   # the core file the mod's file replaces
+        if c[2].replace("/", "\\").lower() == k:
+            return _read_core(c), _core_label(c, "the original this file replaces")
+    files = _reference_files(staging)
+    sig = hashlib.sha1((_stat_sig(files) + _stat_sig([os.path.join(_data_dir(), n) for n in CORE_BSAS])).encode()
+                       ).hexdigest()
+    cache_path = MP.state_path(HERE, DUMMY_SOURCES)
+    try:
+        with open(cache_path, encoding="utf-8") as f:
+            cache = json.load(f)
+    except (OSError, ValueError):
+        cache = {}
+    hit = cache.get(ext) if isinstance(cache, dict) else None
+    if isinstance(hit, dict) and hit.get("sig") == sig:
+        c = next((x for x in cands if list(x[:3]) == hit.get("pick")), None)
+        if c is not None:
+            try:
+                b = _read_core(c)
+                if _sha256_bytes(b) == hit.get("sha"):
+                    return b, _core_label(c, hit.get("how", "cached choice"))
+            except OSError:
+                pass
+    text = _reference_text(files)
+    pick = how = None
+    unused = sorted((c for c in cands if not _used(c, ext, text)), key=lambda c: (c[4], c[2]))
+    if unused:
+        pick, how = unused[0], "nothing in your plugins uses it"
+    elif ext == ".kf":
+        pick = next((c for c in cands if c[2] == KF_FALLBACK), None)
+        how = "the small animation the asset tools use as a stand-in"
+    if pick is None:
+        pick, how = sorted(cands, key=lambda c: (c[4], c[2]))[0], "no unused one was found, so a used one"
+    b = _read_core(pick)
+    cache[ext] = {"sig": sig, "pick": list(pick[:3]), "sha": _sha256_bytes(b), "how": how}
+    try:
+        os.makedirs(os.path.dirname(os.path.abspath(cache_path)), exist_ok=True)
+        with open(cache_path + ".tmp", "w", encoding="utf-8") as f:
+            json.dump(cache, f, indent=1, sort_keys=True)
+        os.replace(cache_path + ".tmp", cache_path)
+    except OSError:
+        pass                                          # only the cache: the pick stands
+    return b, _core_label(pick, how)
+
+
+def dummy_bytes(rel, m=None, staging=None):
+    """(bytes, what it is) of the dummy for a broken file at rel, or (None, why there is none): made in code
+    when the type allows (GENERATED), else a copy of a core game file. m is not used (kept for callers)."""
+    got = generate_dummy(rel)
+    if got:
+        return got
+    ext = os.path.splitext(rel)[1].lower()
+    try:
+        got = core_dummy(rel, staging)
+    except OSError as e:
+        return None, f"no dummy for {ext} files: the core game file couldn't be read ({e})"
+    if got:
+        return got
+    return None, (f"no dummy for {ext or 'extension-less'} files: none can be made in code and the game data has "
+                  f"no core file of that type to copy (it would need a dummy shipped with the tools)")
+
+
+def _sha256_bytes(b):
+    return hashlib.sha256(b).hexdigest()
+
+
+def tidy_dummies(root):
+    """{path key: sha} of the files in the mod that are tidy's dummies, unchanged since they were put there."""
+    base = os.path.join(root, "Off", "broken")
+    out = {}
+    for dp, _ds, fns in (os.walk(_xp(base)) if os.path.isdir(_xp(base)) else ()):
+        for fn in fns:
+            if not fn.endswith(DUMMY_MARK):
+                continue
+            try:
+                with open(os.path.join(dp, fn), encoding="utf-8") as f:
+                    mark = json.load(f)
+                p = os.path.join(root, mark["rel"].replace("\\", os.sep))
+                if os.path.isfile(_xp(p)) and _sha256(p) == mark["sha"]:
+                    out[_rk(mark["rel"])] = mark["sha"]
+            except (OSError, ValueError, KeyError, TypeError):
+                continue
+    return out
+
+
+def _copy_elsewhere(rel, root, data_dir, bsa_meshes):
+    """True when another copy of the model at rel is there to win once this mod's is out of the way: in
+    another staged mod, loose in Data Files (not this mod's own deployed link) or in a BSA there."""
+    k = _rk(rel)
+    if k.startswith("meshes\\") and bsa_meshes and k[7:] in {x.lower() for x in bsa_meshes}:
+        return True
+    mine = os.path.join(root, rel)
+    staging = os.path.dirname(os.path.abspath(root))
+    places = [os.path.join(staging, d) for d in (os.listdir(staging) if os.path.isdir(staging) else ())
+              if os.path.normcase(d) != os.path.normcase(os.path.basename(os.path.abspath(root)))]
+    places += [data_dir] if data_dir else []
+    for base in places:
+        p = os.path.join(base, rel)
+        if os.path.isfile(p):
+            try:
+                if os.path.exists(mine) and os.path.samefile(p, mine):
+                    continue
+            except OSError:
+                pass
+            return True
+    return False
+
+
+def apply_dummy_rule(root, m, ah, data_dir, bsa_meshes, issues, fixes, stats=None):
+    """The asset check's findings with the dummy rule applied (see above): broken files get a "dummy" fix (the
+    plan says what goes in their place); a broken model another copy can stand in for keeps the old way (moved
+    out, Deploy lets the other copy win); a type with no safe dummy is left as it is and said so; tidy's own
+    dummies, and a stand-in already in place of a broken model, are left alone. Returns (issues, fixes)."""
+    mine = tidy_dummies(root)
+    out, notes, drop = [], {}, set(mine)
+    for fix in fixes:
+        kind, full, rel, job = fix
+        k = _rk(rel)
+        if k in mine:
+            continue                                  # tidy's dummy: not broken, not to be replaced
+        if kind == "broken" or (kind == "brokenout" and job != "stand-in"):
+            if kind == "brokenout" and _copy_elsewhere(rel, root, data_dir, bsa_meshes):
+                out.append(fix)                       # another copy wins once this one is out
+                continue
+            b, what = dummy_bytes(rel, m, os.path.dirname(os.path.abspath(root)))
+            if b is None:
+                if kind == "brokenout":
+                    out.append(fix)
+                    notes[k] = f"moved to Off\\...\\broken\\ with no dummy in its place: {what}"
+                else:
+                    notes[k] = f"left as it is: {what}"
+                    if stats is not None:
+                        stats.setdefault("no_dummy", set()).add(os.path.splitext(rel)[1].lower() or "(none)")
+                continue
+            why = job if isinstance(job, str) else json.dumps(job, sort_keys=True)
+            out.append(("dummy", full, rel, {"why": why}))
+            notes[k] = f"moved to Off\\...\\broken\\, {what} put in its place (a dummy, so what names it finds a file)"
+            if kind == "brokenout":
+                bm = getattr(ah, "BROKEN_MODELS", None)
+                if isinstance(bm, list):
+                    bm[:] = [(r, f"in {os.path.basename(os.path.normpath(root))}: vortex_tidy --apply moves it to "
+                                 f"Off\\...\\broken\\ and puts a stand-in model in its place") if _rk(r) == k else (r, w)
+                             for r, w in bm]
+        elif kind == "brokenout":                     # job "stand-in": one is in place of a broken model already
+            if _copy_elsewhere(rel, root, data_dir, bsa_meshes):
+                out.append(fix)
+            else:
+                drop.add(k)                           # what the dummy rule wants: it stays
+        else:
+            out.append(fix)
+    new_issues = []
+    for sev, rel, msg in issues:
+        k = _rk(rel)
+        if k in drop:
+            continue
+        if k in notes:
+            msg = msg.split(" -> ")[0] + " -> " + notes[k]
+        new_issues.append((sev, rel, msg))
+    if stats is not None and mine:
+        stats["dummies"] = stats.get("dummies", 0) + len(mine)
+    return new_issues, out
+
+
+def make_dummies(root, dfixes, m, plug, renamed=None):
+    """Put each broken file's original in <mod>\\Off\\broken\\<plugin>\\<path> (a different file there already: a
+    dated name beside it), write its dummy in place (a Vortex hard link stays one) and mark it. Returns (done,
+    [skipped notes])."""
+    done, skipped = 0, []
+    for _kind, full, rel, _job in dfixes:
+        if not os.path.isfile(_xp(full)) and renamed and full in renamed:
+            rel = renamed[full]                       # renamed to its ASCII name by this run
+            full = os.path.join(root, rel)
+        b, what = dummy_bytes(rel, m, os.path.dirname(os.path.abspath(root)))
+        if b is None:
+            skipped.append(f"{rel} ({what})")
+            continue
+        try:
+            h = _sha256(full)
+            dest = m.off_dest(root, "broken", plug, rel)
+            if os.path.exists(_xp(dest)) and _sha256(dest) != h:
+                stem, ext = os.path.splitext(dest)
+                dest, n = f"{stem}.{time.strftime('%Y%m%d-%H%M%S')}{ext}", 2
+                while os.path.exists(_xp(dest)):
+                    dest, n = f"{stem}.{time.strftime('%Y%m%d-%H%M%S')}-{n}{ext}", n + 1
+            if not os.path.exists(_xp(dest)):
+                os.makedirs(_xp(os.path.dirname(dest)), exist_ok=True)
+                shutil.copy2(_xp(full), _xp(dest))
+            if _sha256(dest) != h:
+                raise OSError(f"the copy in {dest} reads back different")
+            m.replace_asset_in_place(full, b)
+            if _sha256(full) != _sha256_bytes(b):
+                raise OSError("the dummy reads back different")
+            with open(_xp(dest + DUMMY_MARK), "w", encoding="utf-8") as f:
+                json.dump({"rel": rel, "sha": _sha256_bytes(b), "original": h, "dummy": what,
+                           "by": "vortex_tidy", "when": time.strftime("%Y-%m-%d %H:%M:%S")}, f)
+            done += 1
+        except OSError as e:
+            skipped.append(f"{rel} ({e})")
+    return done, skipped
+
+
 def assets_check_mod(root, m, ah, data_dir, bsa_meshes, game_dir, stats):
     issues, fixes = ah.check_folder(root, m, data_dir, bsa_meshes, stats=stats)
+    issues, fixes = apply_dummy_rule(root, m, ah, data_dir, bsa_meshes, issues, fixes, stats)
     lp_plan = []
     try:                                              # paths too long once deployed (Windows' 259 characters)
         lp_issues, lp_plan = m.longpaths_module().check_mod(root, data_dir, m, game_dir)
@@ -942,8 +1934,17 @@ def assets_check(args):
         body += [f"    {a}" for a in acts]
         body += [f"      issue: {sev} {rel}: {msg}" for sev, rel, msg in issues]
     summary = f"  {total_issue} asset issue(s), {total_fix} repairable"
+    n_dummy = sum(1 for ent in res["mods"].values() for f in ent["fixes"] if f[0] == "dummy")
+    if n_dummy:
+        summary += (f"; {n_dummy} broken file(s) to move to Off\\...\\broken\\ with a dummy put in each one's "
+                    f"place")
     print(f"\n{summary}" + ("" if args.apply else " (run with --apply to repair them)"))
     st = res["stats"]
+    if st.get("dummies"):
+        print(f"  {st['dummies']} dummy file(s) vortex_tidy put in place of broken ones left alone (originals in "
+              f"Off\\...\\broken\\; --undo puts them back)")
+    if st.get("no_dummy"):
+        print(f"  broken files left as they are, no safe dummy for: {', '.join(sorted(st['no_dummy']))}")
     if st.get("mips_skipped"):
         print(f"  {st['mips_skipped']} texture(s) without mipmaps left alone: no world model of their own "
               f"mod draws them (menu / MCM / icon / effect pictures, or a texture pack; mwdialog_check's asset "
@@ -992,10 +1993,13 @@ def assets_apply(args, ares, moved_mods=()):
     run touched is checked again first: the reviewed repairs that still apply are made, reviewed lines the
     moves made obsolete (old paths) are dropped, and repairs that only show up after the moves (new paths,
     or files moved into a checked folder) are queued. When every mod is done, the queue - and only the
-    queue - is processed. Originals go to <mod>\\Off\\<plugin>\\<path>."""
+    queue - is processed. Originals go to <mod>\\Off\\<plugin>\\<path>, and (for --undo) every file a mod's
+    repairs can change is first kept in <backups folder>\\tidy\\<run>\\assets (see AssetJournal): a mod whose
+    originals can't be kept is not repaired."""
     if not ares:
         return
     m, ah, game_dir = ares["m"], ares["ah"], ares["game_dir"]
+    aj = AssetJournal(args)
     queue = []
     for d, ent in ares["mods"].items():
         root = ent["root"]
@@ -1018,9 +2022,17 @@ def assets_apply(args, ares, moved_mods=()):
         issues, fixes, lp_plan = work["issues"], work["fixes"], work["lp_plan"]
         if not issues:                                # clean now: drop an old tidy section
             bdir = os.path.join(root, "bugreports")
-            for e in (os.listdir(bdir) if os.path.isdir(bdir) else ()):
-                if e.lower().endswith(".bugreport.txt"):
-                    ah.update_bug_report(os.path.join(bdir, e), "vortex_tidy (files)", [], [])
+            reports = [os.path.join(bdir, e) for e in (os.listdir(bdir) if os.path.isdir(bdir) else ())
+                       if e.lower().endswith(".bugreport.txt")]
+            if reports:
+                tok = _journal_begin(aj, d, root, reports)
+                if tok is False:
+                    continue
+                try:
+                    for p in reports:
+                        ah.update_bug_report(p, "vortex_tidy (files)", [], [])
+                finally:
+                    aj.end(tok)
             continue
         if not fixes and not lp_plan:
             continue
@@ -1031,8 +2043,14 @@ def assets_apply(args, ares, moved_mods=()):
         lines = ah.package_asset_bug_lines(issues)
         if lines:
             lines += ["", "(The mod's copy was repaired on this PC; originals kept in Off\\.)"]
-        ah.update_bug_report(ah.package_bug_report_path(root, subject), "vortex_tidy (files)", head, lines)
-        _repair(ares, d, root, fixes, lp_plan, plug)
+        tok = _journal_begin(aj, d, root, _repair_candidates(root, fixes, lp_plan, _lpm_of(m, lp_plan)))
+        if tok is False:
+            continue
+        try:
+            ah.update_bug_report(ah.package_bug_report_path(root, subject), "vortex_tidy (files)", head, lines)
+            _repair(ares, d, root, fixes, lp_plan, plug)
+        finally:
+            aj.end(tok, lp_plan)
     if queue:
         print(f"\nQueue: {sum(len(q[3]) for q in queue)} repair(s) found after the moves")
     for d, root, now, lines in queue:
@@ -1040,8 +2058,33 @@ def assets_apply(args, ares, moved_mods=()):
         plug_file = next((e for e in sorted(os.listdir(root))
                           if os.path.splitext(e)[1].lower() in (".esp", ".esm")), None)
         print(f"  {d}: {len(lines)} queued repair(s)")
-        _repair(ares, d, root, fixes, lp_plan, os.path.splitext(plug_file)[0] if plug_file else mod_name(d))
+        tok = _journal_begin(aj, d, root, _repair_candidates(root, fixes, lp_plan, _lpm_of(m, lp_plan)))
+        if tok is False:
+            continue
+        try:
+            _repair(ares, d, root, fixes, lp_plan, os.path.splitext(plug_file)[0] if plug_file else mod_name(d))
+        finally:
+            aj.end(tok, lp_plan)
         ares["queued"] = ares.get("queued", []) + [(d, a) for a in sorted(lines) if (d, a) not in ares["done"]]
+
+
+def _lpm_of(m, lp_plan):
+    """The short-path module (to tell which models a short path rewrites), or None (then all are kept)."""
+    if not lp_plan:
+        return None
+    try:
+        return m.longpaths_module()
+    except Exception:
+        return None
+
+
+def _journal_begin(aj, d, root, candidates):
+    """aj.begin(); False (after saying why) when the originals can't be kept, so the mod is left as it is."""
+    try:
+        return aj.begin(d, root, candidates)
+    except OSError as e:
+        print(f"  {d}: NOT repaired: its original files could not be kept for --undo ({e})")
+        return False
 
 
 def _repair(ares, d, root, fixes, lp_plan, plug):
@@ -1057,12 +2100,22 @@ def _repair(ares, d, root, fixes, lp_plan, plug):
               f"mwdialog_check --longpaths-undo puts them back)")
         gone = {lp["orig"].lower() for lp in lp_plan} | {t[0].lower() for lp in lp_plan for t in lp["twins"]}
         fixes = [f for f in fixes if f[2].replace("/", "\\").lower() not in gone]   # moved: next run
+    dfixes = [f for f in fixes if f[0] == "dummy"]
+    renamed = {f[1]: f[3] for f in fixes if f[0] == "ascii" and isinstance(f[3], str)}
+    fixes = [f for f in fixes if f[0] != "dummy"]
     if fixes:
         done, skipped = ah.apply_folder(root, fixes, m, game_dir, plug)
         for f, a in zip(fixes, asset_action_lines({"fixes": fixes, "lp_plan": []})):
             if not any(sk.startswith(f[2] + " (") for sk in skipped):
                 ares["done"].add((d, a))
         print(f"    -> {done} file(s) repaired (originals in Off\\{plug}\\)"
+              + (f"; {len(skipped)} skipped, e.g. {skipped[0]}" if skipped else ""))
+    if dfixes:
+        done, skipped = make_dummies(root, dfixes, m, plug, renamed)
+        for f, a in zip(dfixes, asset_action_lines({"fixes": dfixes, "lp_plan": []})):
+            if not any(sk.startswith(renamed.get(f[1], f[2]) + " (") or sk.startswith(f[2] + " (") for sk in skipped):
+                ares["done"].add((d, a))
+        print(f"    -> {done} broken file(s) moved to Off\\broken\\{plug}\\, a dummy put in each one's place"
               + (f"; {len(skipped)} skipped, e.g. {skipped[0]}" if skipped else ""))
 
 
@@ -1077,7 +2130,11 @@ def main():
                          "vortex_tidy_blacklist.txt)")
     ap.add_argument("--apply", action="store_true", help="make the changes (without it, only the plan is shown)")
     ap.add_argument("--yes", action="store_true", help="with --apply: don't ask first")
-    ap.add_argument("--undo", action="store_true", help="put back everything the last --apply moved")
+    ap.add_argument("--undo", action="store_true",
+                    help="put back everything the last --apply changed: the moves, the Lua patches, and the "
+                         "original of every file an asset repair changed, at its own path")
+    ap.add_argument("--force", action="store_true",
+                    help="with --undo: put originals back even over files changed since the --apply")
     ap.add_argument("--no-assets", action="store_true", help="skip the asset check of each mod's files")
     ap.add_argument("--no-lua", action="store_true", help="skip the Lua check (mwdialog_luafix)")
     ap.add_argument("--lua-only", action="store_true", help="only the Lua check: no moves, no asset check")
@@ -1099,7 +2156,7 @@ def main():
         print(MP.RUN_LOCKED_MESSAGE, file=sys.stderr)
         return 1
     if args.undo:
-        return undo()                                 # works from the journal; the plan file plays no part
+        return undo(args.force)                       # works from the journal; the plan file plays no part
     try:
         args.staging = MP.resolve_staging(cli=args.staging, required=True)
     except MP.VortexPathError as e:
@@ -1176,7 +2233,10 @@ def apply_main(args):
         return 2
     print("\nThe plan matches the one you reviewed.")
     audit = os.path.join(AUDIT_ROOT, time.strftime("%Y%m%d-%H%M%S"))
-    args._journal_extra = {"plan_copy": os.path.join(audit, "plan_enacted.txt")}
+    # "apply": one id for every journal head of this --apply (moves, Lua, assets), so one --undo undoes them all
+    args._journal_extra = {"plan_copy": os.path.join(audit, "plan_enacted.txt"),
+                           "apply": f"{time.strftime('%Y%m%d-%H%M%S')}-{os.getpid()}-{time.time_ns()}"}
+    args._audit = audit                               # asset repairs keep their originals in <audit>\\assets
     sec = PF.sections(reviewed)
     keep = {k: v for k, v in sec.items() if k not in parts and PF.has_any_actions(v)}   # not enacted: stays
     st = {"moves": [], "progress": [], "lua": lres, "assets": ares, "keep": keep, "started": False,

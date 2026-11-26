@@ -362,10 +362,10 @@ def tidy_assets(tidy, monkeypatch):
 def test_tidy_asset_repairs_are_in_the_plan_and_applied_only_as_reviewed(tidy_assets):
     assert tidy_assets() == 0
     plan = open(vt.PLAN).read()
-    assert "\nASSET CHECK\n" in plan and "    repair broken Meshes" in plan and "empty.nif empty" in plan
+    assert "\nASSET CHECK\n" in plan and "    repair dummy Meshes" in plan and 'empty.nif {"why": "empty"}' in plan
     assert tidy_assets.nif.stat().st_size == 0                              # plan mode changes nothing
     assert tidy_assets("--apply", "--yes") == 0
-    assert tidy_assets.nif.stat().st_size > 0 and PF.state(vt.PLAN) == "applied"   # stand-in put there
+    assert tidy_assets.nif.stat().st_size > 0 and PF.state(vt.PLAN) == "applied"   # a dummy put there
 
 
 def test_tidy_new_asset_repair_since_review_refuses(tidy_assets, capsys):
@@ -401,13 +401,15 @@ def test_tidy_asset_repair_that_fails_stays_in_the_plan(tidy_assets, monkeypatch
     from conftest import m
     tidy_assets()
 
-    def boom(rel):
-        if rel.endswith("empty.nif"):
-            raise OSError("no stand-in")
-        return b"NIF stand-in"
-    monkeypatch.setattr(m, "stand_in_bytes", boom)
+    real = m.replace_asset_in_place
+
+    def boom(path, data):
+        if path.endswith("empty.nif"):
+            raise OSError("locked")
+        return real(path, data)
+    monkeypatch.setattr(m, "replace_asset_in_place", boom)
     assert tidy_assets("--apply", "--yes") == 1
     plan = open(vt.PLAN).read()
     assert plan.startswith("# partially applied") and "ASSET CHECK" in plan
     plan = plan.replace("\\", "/")                          # the plan names files the way this OS writes them
-    assert "repair broken Meshes/empty.nif" in plan and "a.nif" not in plan and "readme.txt" not in plan
+    assert "repair dummy Meshes/empty.nif" in plan and "a.nif" not in plan and "readme.txt" not in plan
