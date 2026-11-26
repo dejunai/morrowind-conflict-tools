@@ -1,3 +1,23 @@
+# vortex_tidy sets an unconverted OpenMW-only mod aside as Off\<plugin name>\OpenMW (2026-11-26)
+
+- The whole-package move (blocked by omw2mwse, conversion failed, converter missing, `--no-convert-omwscripts`)
+  now goes to `Off\<plugin name>\OpenMW\`, omw2mwse's own place and name, not `Off\OpenMW\<mod name>\`. The name is
+  copied from the converter (`mod_name_for` in 3d372b3): the stem of the first `*.omwscripts` in the package folder
+  (pathlib order), everything but letters, digits, `_` and `-` removed, `OpenMWMod` if nothing is left, the folder's
+  own name when it has no `.omwscripts`. Example: `Wild Attacks-54448-1-9` holding `wildlife_attacks_npc.omwscripts`
+  -> `Off\wildlife_attacks_npc\OpenMW\` (before: `Off\OpenMW\Wild Attacks\`). The root package takes the name of the
+  `.omwscripts` at the mod root, else the one in an `OpenMW\` folder, else the package already under
+  `Off\<name>\OpenMW\`, so leftovers (`Docs\`, `Screenshots\`, ...) join it. `Docs\` and `Screenshots\` go inside the
+  package, so a later omw2mwse run finds it at its canonical place and moves nothing (it used to leave `Docs\` behind).
+- Migration: an `Off\OpenMW\<x>\` folder from an earlier tidy run is moved to `Off\<its plugin name>\OpenMW\` in the same
+  pass, the emptied folders are removed, and a second run finds nothing to do. Moves and removed folders are
+  journaled like any move, so `--undo` restores everything byte for byte, and journals written before the change
+  (they only hold source and destination) still undo.
+- Hybrids (real MWSE Lua) are unchanged: their OpenMW-specific files still go to `Off\OpenMW\<mod name>\`.
+  Tidy's own `Extras\<mod name>\` for other mods is unchanged. A converter-placed `Extras\<plugin>\` is ignored by tidy
+  (`Extras` is one of its own folders), listed in the manifest and removed by `--undo`; it cannot collide with
+  another mod's `Extras\<mod name>\`, and inside one mod a same-named folder would only share a folder.
+
 # vortex_tidy follows omw2mwse 0.2.3's plugin placement (2026-11-26)
 
 - omw2mwse 3d372b3 replaced the `optional` boolean with `placement` (`root`, `extras`, `off`), `status` (`required`,

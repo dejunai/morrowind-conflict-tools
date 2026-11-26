@@ -43,9 +43,10 @@ For each mod folder in Vortex's Morrowind staging folder (from Vortex's settings
     not convertible (below). A mod with real MWSE Lua (a .lua under MWSE\\ that omw2mwse didn't generate) is
     MWSE-first: its OpenMW files go to Off\\OpenMW\\ as above and are never converted. An OpenMW-only mod that
     is not converted (no converter, a failed or blocked conversion, --no-convert-omwscripts) has its ENTIRE
-    package moved to Off\\OpenMW\\<mod name>\\ - plugins, scripts, data folders, Docs\\, Screenshots\\ - so the
-    staging root keeps only Off\\ (and Vortex's marker file) and that is all it deploys; --undo puts each file
-    back. Without the converter: one WARNING line.
+    package moved to Off\\<plugin name>\\OpenMW\\ (omw2mwse's own place and name: the first .omwscripts' stem, e.g.
+    Off\\wildlife_attacks_npc\\OpenMW\\) - plugins, scripts, data folders, Docs\\, Screenshots\\ - so the staging root
+    keeps only Off\\ (and Vortex's marker file) and that is all it deploys; an Off\\OpenMW\\<mod>\\ folder from an
+    earlier tidy run is moved there too; --undo puts each file back. Without the converter: one WARNING line.
     --undo reverses a conversion: it journals what omw2mwse reported, deletes
     the files omw2mwse wrote (its manifest's list, each only if it still has the hash the manifest gives; an edited
     one stays, with one WARNING line) and puts the original package from Off\\<Mod>\\OpenMW\\ back at its
@@ -53,7 +54,7 @@ For each mod folder in Vortex's Morrowind staging folder (from Vortex's settings
     Data Files. The converter gets --title and --author from Vortex's mod info when it has them. omw2mwse's
     verdict is read from its JSON: blocked (it cannot run, but the converter still writes an active loader and
     exits 0) is not shipped - the output is undone at once, the mod is treated as not convertible, its whole
-    package goes to Off\\OpenMW\\ as above, one WARNING line, and the plan says so up front; partial counts as
+    package goes to Off\\<plugin name>\\OpenMW\\ as above, one WARNING line, and the plan says so up front; partial counts as
     converted, with one NOTE. Plugins are never renamed or enabled by tidy: omw2mwse renames .omwaddon/.omwgame
     to .esp/.esm itself (originals stay under Off\\). omw2mwse also places plugins itself and reports each in
     mods[].plugins[] of its JSON (else plugins in omw2mwse-manifest.json): placement root (enabled by default),
@@ -348,20 +349,70 @@ def has_diffuse_sibling(path):
                for x in names)
 
 
-def whole_package_moves(mod_dir, entries, name):
+def package_name(folder):
+    """The name omw2mwse gives the OpenMW package in `folder` (its mod_name_for, copied so the two always agree):
+    the stem of the first *.omwscripts there (sorted as pathlib sorts them), else the folder's own name, with
+    everything but letters, digits, _ and - removed; "OpenMWMod" when nothing is left."""
+    import pathlib
+    oms = sorted(pathlib.Path(folder).glob("*.omwscripts"))
+    base = oms[0].stem if oms else pathlib.Path(folder).name
+    return re.sub(r"[^A-Za-z0-9_\-]", "", base) or "OpenMWMod"
+
+
+def _has_omwscripts(folder):
+    try:
+        return any(x.lower().endswith(".omwscripts") and os.path.isfile(os.path.join(folder, x))
+                   for x in os.listdir(folder))
+    except OSError:
+        return False
+
+
+def whole_package_moves(mod_dir, entries, name=None):
     """The moves of an OpenMW-only mod that is not converted (omw2mwse missing, failed, judged it blocked, or
-    --no-convert-omwscripts): its ENTIRE package goes to Off\\OpenMW\\<mod name>\\ - plugins, scripts, data
-    folders, tidy's own Docs\\ and Screenshots\\ - so the staging root keeps only Off\\ (and Vortex's own
-    marker file) and that is all the mod deploys. Left where they are: Off\\ itself, Vortex's marker file and
-    omw2mwse-generated output (it is removed, not shipped). An OpenMW\\ folder an earlier run made is
-    unpacked there (not nested). --undo puts every file back from the journal."""
+    --no-convert-omwscripts): its ENTIRE package goes to Off\\<plugin name>\\OpenMW\\ - omw2mwse's own place for
+    the original package, named the way it names it (package_name) - plugins, scripts, data folders, tidy's
+    own Docs\\ and Screenshots\\ - so the staging root keeps only Off\\ (and Vortex's own marker file) and that
+    is all the mod deploys. The root package is named after the first .omwscripts at the mod root, else the one in
+    an OpenMW\\ folder, else the package already set aside under Off\\<name>\\OpenMW\\ (so leftovers join it).
+    An Off\\OpenMW\\<name>\\ folder an earlier tidy run made is moved to its Off\\<plugin name>\\OpenMW\\ too.
+    Left where they are: Off\\ itself, Vortex's marker file and omw2mwse-generated output (it is removed, not
+    shipped). An OpenMW\\ folder an earlier run made at the root is unpacked there (not nested). --undo puts every
+    file back from the journal (older journals included: a move is a move)."""
     off = os.path.join(mod_dir, existing(mod_dir, "Off"))
-    openmw = os.path.join(off, existing(off, "OpenMW") if os.path.isdir(off) else "OpenMW", name)
-    why = "OpenMW-only mod that is not converted: whole package -> Off\\OpenMW\\"
+    off_dirs = []                                     # (folder, its package name) under Off\, converter layout
+    legacy = []                                       # Off\OpenMW\<x>\: where tidy used to put packages
+    if os.path.isdir(off):
+        for x in sorted(os.listdir(off)):
+            px = os.path.join(off, x)
+            if not os.path.isdir(px):
+                continue
+            if x.lower() == "openmw":
+                legacy += [os.path.join(px, y) for y in sorted(os.listdir(px)) if os.path.isdir(os.path.join(px, y))]
+                continue
+            for y in sorted(os.listdir(px)):
+                if y.lower() == "openmw" and os.path.isdir(os.path.join(px, y)):
+                    off_dirs.append((os.path.join(px, y), x))
+    old_openmw = next((e for e in entries if e.lower() == "openmw" and os.path.isdir(os.path.join(mod_dir, e))), None)
+    old_path = os.path.join(mod_dir, old_openmw) if old_openmw else None
+    if _has_omwscripts(mod_dir):
+        root_name = package_name(mod_dir)
+    elif old_path and _has_omwscripts(old_path):
+        root_name = package_name(old_path)
+    elif off_dirs:
+        root_name = off_dirs[0][1]
+    elif legacy:
+        root_name = package_name(legacy[0])
+    else:
+        root_name = package_name(mod_dir)
+    why = "OpenMW-only mod that is not converted: whole package -> Off\\<plugin>\\OpenMW\\"
     moves, taken = [], set()
 
-    def move(src, rel):
-        moves.append((src, free_path(os.path.join(openmw, rel), taken), why))
+    def package_dir(pname):
+        pd = os.path.join(off, pname)
+        return os.path.join(pd, existing(pd, "OpenMW") if os.path.isdir(pd) else "OpenMW")
+
+    def move(src, pname, rel):
+        moves.append((src, free_path(os.path.join(package_dir(pname), rel), taken), why))
 
     for e in sorted(entries):
         el, src = e.lower(), os.path.join(mod_dir, e)
@@ -369,12 +420,19 @@ def whole_package_moves(mod_dir, entries, name):
             continue
         if os.path.isdir(src) and el == "openmw":
             for x in sorted(os.listdir(src)):
-                move(os.path.join(src, x), x)
+                move(os.path.join(src, x), root_name, x)
             moves.append((src, None, "remove the emptied folder"))
             continue
         if os.path.isdir(src) and el == "mwse" and any(MP.omw_generated(p) for p in files_under(src)):
             continue                                     # omw2mwse's own output: removed by its undo, never moved
-        move(src, e)
+        move(src, root_name, e)
+    for folder in legacy:                                 # migration: Off\OpenMW\<x>\ -> Off\<plugin>\OpenMW\
+        pname = package_name(folder)
+        for x in sorted(os.listdir(folder)):
+            move(os.path.join(folder, x), pname, x)
+        moves.append((folder, None, "remove the emptied folder"))
+    if legacy:
+        moves.append((os.path.join(off, existing(off, "OpenMW")), None, "remove the emptied folder"))
     return moves
 
 
@@ -393,7 +451,7 @@ def plan_mod(mod_dir):
             return []
         if CONVERTER["mode"]:
             CONVERTER["missed"] = CONVERTER.get("missed", 0) + 1     # not found
-        return whole_package_moves(mod_dir, entries, name)           # not converted: all of it goes to Off\
+        return whole_package_moves(mod_dir, entries)                 # not converted: all of it goes to Off\
     plugins = {os.path.splitext(e)[0].lower() for e in entries if os.path.splitext(e)[1].lower() in KEEP_FILE_EXT}
     # an OpenMW plugin (.omwaddon) and no Morrowind plugin: with no OpenMW scripts it is an ordinary plugin
     # in OpenMW's file name, so it becomes an .esp; with scripts, it needs OpenMW: you decide (REVIEW)
@@ -752,7 +810,7 @@ def preview_verdicts(data):
 
 def unconverted_moves(mod_dir):
     """The usual plan_mod moves of a mod, as if it were not going to be converted (blocked by omw2mwse: its
-    OpenMW files go to Off\\OpenMW\\ as for any OpenMW-only mod)."""
+    OpenMW files go to Off\\<plugin name>\\OpenMW\\, the whole package: see whole_package_moves)."""
     saved = CONVERTER["mode"]
     CONVERTER["mode"] = None
     try:
@@ -867,7 +925,7 @@ def convert_apply(staging, mods, mode, head_extra=None):
     """--apply: run the converter on each OpenMW-only mod and journal what it changed (for --undo). A conflict
     (exit 4) or any other failure gets one WARNING line and the run goes on. A mod omw2mwse judges blocked
     (verdict "blocked": it exits 0 and still writes an active loader) is not shipped: its output is undone at
-    once and its OpenMW files take the usual Off\\OpenMW\\ move, with one WARNING line; "partial" is converted,
+    once and its whole package goes to Off\\<plugin name>\\OpenMW\\, with one WARNING line; "partial" is converted,
     with one NOTE. Returns the mod folders not converted."""
     left = []
     for mod_dir in mods:
@@ -904,7 +962,7 @@ def convert_apply(staging, mods, mode, head_extra=None):
         else:
             moves = unconverted_moves(mod_dir)
             print(f"  WARNING: omw2mwse could not convert {name}: {line}; not converted, "
-                  + ("its whole package goes to Off\\OpenMW\\" if moves else "left as it is"))
+                  + ("its whole package goes to Off\\<plugin>\\OpenMW\\" if moves else "left as it is"))
             if moves:
                 apply(moves, staging, None, head_extra)
             else:
@@ -914,7 +972,7 @@ def convert_apply(staging, mods, mode, head_extra=None):
         for mname, op, why in blocked:
             if _undo_now(op, staging):
                 print(f"  WARNING: omw2mwse says {mname} cannot run ({why}): not converted, conversion undone, "
-                      f"its whole package goes to Off\\OpenMW\\")
+                      f"its whole package goes to Off\\<plugin>\\OpenMW\\")
                 moves = unconverted_moves(mod_dir)
                 if moves:
                     apply(moves, staging, None, head_extra)
@@ -1057,7 +1115,7 @@ def run_plan(args):
             if blocked:                              # omw2mwse would write an active loader that can't work
                 del CONVERT[full]
                 BLOCKED_PLAN.append(f"{d}: omw2mwse says {blocked[0][0]} cannot run ({blocked[0][1]}): not converted, "
-                                    f"its whole package goes to Off\\OpenMW\\")
+                                    f"its whole package goes to Off\\<plugin>\\OpenMW\\")
                 res = unconverted_moves(full)
             else:
                 PREVIEW[full] = converter_summary(code, data, err)
@@ -1079,14 +1137,14 @@ def run_plan(args):
         head.append(f"  - left alone: {d} ({why})")
     if CONVERTER.get("missed"):                      # one line: the converter isn't there
         head.append(f"  - WARNING: omw2mwse (the OpenMW converter) was not found on PATH or beside these tools: "
-                    f"{CONVERTER['missed']} OpenMW-only mod(s) get their whole package moved to Off\\OpenMW\\ instead")
+                    f"{CONVERTER['missed']} OpenMW-only mod(s) get their whole package moved to Off\\<plugin>\\OpenMW\\ instead")
     for text in BLOCKED_PLAN:
         head.append(f"  - WARNING: {text}")
     for mod_dir in sorted(CONVERT):                  # the preview (dry run); notes, not actions
         ok, line = PREVIEW[mod_dir]
         head.append(f"  - {'omw2mwse preview' if ok else 'WARNING: omw2mwse preview'} for "
                     f"{os.path.basename(mod_dir)} ({CONVERTER['mode']}): {line}"
-                    + ("" if ok else "; if --apply cannot convert it either, its whole package goes to Off\\OpenMW\\"))
+                    + ("" if ok else "; if --apply cannot convert it either, its whole package goes to Off\\<plugin>\\OpenMW\\"))
     for d, n in sorted(NORMAL_PACKS.items()):
         NOTES.append(f"{d}: a normal-map add-on pack ({n} normal map(s) under a 'normal maps' path) - not "
                      f"applicable to classic Morrowind (only OpenMW uses normal maps); consider removing it in Vortex")
@@ -2998,9 +3056,10 @@ def main():
                     help="OpenMW-only mods (OpenMW scripts, no MWSE Lua) are converted for MWSE by omw2mwse, found "
                          "on PATH or beside these tools, in this mode: hardcode (the default; hard-coded values "
                          "become MCM settings) or normal. Mods with MWSE Lua are never converted: their OpenMW "
-                         "files go to Off\\OpenMW\\. Without the converter: the usual Off\\OpenMW\\ move")
+                         "files go to Off\\OpenMW\\. An OpenMW-only mod that is not converted gets its whole "
+                         "package moved to Off\\<plugin name>\\OpenMW\\")
     ap.add_argument("--no-convert-omwscripts", dest="convert_omwscripts", action="store_const", const=None,
-                    help="don't convert: OpenMW-only mods get the usual Off\\OpenMW\\ move")
+                    help="don't convert: OpenMW-only mods get their whole package moved to Off\\<plugin name>\\OpenMW\\")
     args = ap.parse_args()
     setup_converter(args.convert_omwscripts)
     global NO_COINS

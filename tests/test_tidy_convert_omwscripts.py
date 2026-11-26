@@ -185,16 +185,16 @@ def test_missing_converter_is_one_warning_and_the_whole_package_goes_to_off(tidy
     assert out.count("WARNING: omw2mwse (the OpenMW converter) was not found") == 1
     plan = tidy.plan()
     assert "2 OpenMW-only mod(s) get their whole package moved to Off" in " ".join(plan.split()) and "convert with omw2mwse" not in plan
-    off = os.path.join("Off", "OpenMW", vt.mod_name("Lights-1-0"))
+    off = os.path.join("Off", "Lights", "OpenMW")                                # omw2mwse's own place and name
     assert "Lights.omwscripts  ->  " + os.path.join(off, "Lights.omwscripts") in plan
 
 
-def test_no_convert_flag_keeps_the_old_behaviour_without_a_warning(tidy, capsys):
+def test_no_convert_flag_moves_the_whole_package_without_a_warning(tidy, capsys):
     tidy.stub()
     openmw_mod(tidy.staging, "Lights")
     assert tidy.run("--no-convert-omwscripts") == 0
     assert "omw2mwse" not in capsys.readouterr().out and tidy.calls() == []
-    assert os.path.join("Off", "OpenMW") in tidy.plan() and "convert with omw2mwse" not in tidy.plan()
+    assert os.path.join("Off", "Lights", "OpenMW") in tidy.plan() and "convert with omw2mwse" not in tidy.plan()
 
 
 def test_conflict_at_apply_warns_once_converts_the_rest_and_moves_the_whole_package_of_the_one_that_failed(tidy, capsys, monkeypatch):
@@ -209,11 +209,11 @@ def test_conflict_at_apply_warns_once_converts_the_rest_and_moves_the_whole_pack
     assert out.count("WARNING: omw2mwse could not convert") == 1               # one (wrapped) line
     assert ("WARNING: omw2mwse could not convert Bad-1-0: conflict, nothing written for it: "
             "MWSE/mods/mwsuite/openmw/x/main.lua: not written by omw2mwse; not converted, its whole package "
-            "goes to Off\\OpenMW\\") in " ".join(out.split())
+            "goes to Off\\<plugin>\\OpenMW\\") in " ".join(out.split())
     assert (good / "MWSE" / "mods" / "mwsuite" / "openmw" / "Good" / "main.lua").exists()
     assert not (bad / "MWSE").exists() and not (bad / "Bad.omwscripts").exists()
     assert sorted(os.listdir(bad)) == ["Off"]
-    assert (bad / "Off" / "OpenMW" / vt.mod_name("Bad-1-0") / "Bad.omwscripts").exists()
+    assert (bad / "Off" / "Bad" / "OpenMW" / "Bad.omwscripts").exists()
     assert "Bad.omwscripts" not in tidy.plan()
 
 
