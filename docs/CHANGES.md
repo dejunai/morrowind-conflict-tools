@@ -1,3 +1,22 @@
+# F1 report: shimmed, high only where a patch is planned; the cache knows the shim version (2026-11-26)
+
+- Seen in tidy's Lua check: "F1: 138 high" with no repair planned. Cause (read only, Dej's real staging and the real
+  asset cache): the cache said, per file, whether the embedded log shim is out of date, but not which shim version
+  that was judged against. 61 files had been cached while their v6 shim was current; after the v7 shim shipped the
+  cache still said "current", so no upgrade was planned (want_shim false, no patch) while the file's F1 triggers
+  were still promoted to high. Judged fresh, 136 of the 138 are v6 shims that the plan upgrades to v7; no mod has a
+  current shim yet; the other 2 (The Crafting Framework: handlers that log through a logger made elsewhere, which
+  the shim cannot wrap) could never be patched.
+- The cache key now includes the shim version and text (`cfg_hash`), and an entry records the shim state of the file
+  (none / current / old); older entries are read again once.
+- F1 triggers are now settled after the patch decision: `high` only where the shim patch reaches them (their file
+  gets it, or the mod has a logger the patch wraps; a refused patch still counts: it is the action the plan wants); `shimmed` ("already handled by the log shim (v7)") where the current shim
+  is already embedded - not counted as high, listed apart in the summary lines and the plan, no patch, no effect on
+  `--lua-level` or the plan; `report` ("no repair planned: ...") where no patch can reach it. After `--apply` a
+  shimmed line reads SHIMMED. Plan and `--apply` agree (cached or not).
+- Tests: `tests/test_logshim.py` (shimmed, needs shim, old shim upgrades, stale cache after a version change,
+  cached = uncached lines, unreachable logger, status after apply).
+
 # Multipatch: beast skeleton for beast-race NPCs (2026-11-26; rule by dej / dejunai)
 
 - `--multipatch` now gives an NPC the beast skeleton when its race is a beast race (the winning RACE record's RADT

@@ -685,3 +685,127 @@ def test_plan_then_apply_round_trip_with_the_shim_is_not_refused(tmp_path, mem_c
     out = capsys.readouterr().out
     assert "REFUSED" not in out and "The plan matches the one you reviewed." in out
     assert lf.SHIM_END in (root / "main.lua").read_text(encoding="latin-1")
+
+# ------------------------------------------------------------------------------------ F1: shimmed / high / report
+ELSEWHERE = ("local log = require('othermod.mylog')\nlocal function onSim(e)\n  log:debug('frame')\nend\n"
+             "event.register('simulate', onSim)\n")
+
+
+def f1_of(entry):
+    return [f for f in entry["findings"] if f["rule"] == "F1"]
+
+
+def counts_of(rep):
+    return lf.format_report(rep, indent="  ")[1]
+
+
+def test_a_mod_with_the_current_shim_shows_f1_as_shimmed_not_high(tmp_path):
+    e, _ = plan(tmp_path / "a", {"main.lua": SPAM})
+    assert e["main.lua"]["patch"]["ok"]
+    shimmed_text = e["main.lua"]["patch"]["text"]
+    e, rep = plan(tmp_path / "b", {"main.lua": shimmed_text})
+    ent = e["main.lua"]
+    assert ent["patch"] is None                                       # nothing left to write
+    f1 = f1_of(ent)
+    assert f1 and {f["conf"] for f in f1} == {"shimmed"}
+    assert all(f["fix"] == f"already handled by the log shim (v{lf.SHIM_V})" for f in f1)
+    counts = counts_of(rep)
+    assert ("F1", "shimmed") in counts and ("F1", "high") not in counts
+    assert f"  F1: {len(f1)} shimmed" in lf.summary_lines(counts)
+    assert not lf.pending_lines(rep)                                  # no plan line for it
+    for level in ("high", "medium"):                                  # --lua-level gating is unchanged
+        rep2 = lf.check_paths([str(tmp_path / "b" / "Mod")], CFG, checker=OkChecker(), use_cache=False,
+                              data_dir=str(tmp_path / "none"), level=level)
+        for x in rep2.files.values():                                  # (medium may gate the frame handler: not F1)
+            assert {f["conf"] for f in f1_of(x)} == {"shimmed"}
+            assert not x["patch"] or "F1" not in x["patch"]["rules"]
+
+
+def test_a_mod_that_needs_the_shim_still_shows_f1_high_and_plans_the_patch(tmp_path):
+    e, rep = plan(tmp_path, {"main.lua": SPAM})
+    ent = e["main.lua"]
+    assert {f["conf"] for f in f1_of(ent)} == {"high"}
+    assert ent["patch"]["ok"] and "F1" in ent["patch"]["rules"]
+    assert lf.SHIM_END in ent["patch"]["text"]
+    assert ("F1", "high") in counts_of(rep) and ("F1", "shimmed") not in counts_of(rep)
+    assert any("patch ready (F1)" in ln for ln in lf.pending_lines(rep))
+
+
+def test_an_old_shim_shows_f1_high_and_the_patch_upgrades_it(tmp_path, monkeypatch):
+    monkeypatch.setattr(lf, "SHIM_V", lf.SHIM_V - 1)
+    e, _ = plan(tmp_path / "a", {"main.lua": SPAM})
+    old_text = e["main.lua"]["patch"]["text"]
+    assert f"S.v == {lf.SHIM_V}" in old_text
+    monkeypatch.undo()
+    e, rep = plan(tmp_path / "b", {"main.lua": old_text})
+    ent = e["main.lua"]
+    assert ent["old_shim"] and ent["shim_state"] == "old"
+    assert {f["conf"] for f in f1_of(ent)} == {"high"}
+    assert ent["patch"]["ok"] and "F1" in ent["patch"]["rules"]
+    assert f"S.v == {lf.SHIM_V}" in ent["patch"]["text"] and f"S.v == {lf.SHIM_V - 1}" not in ent["patch"]["text"]
+    assert ("F1", "shimmed") not in counts_of(rep)
+
+
+def test_a_cached_file_is_judged_again_when_the_shim_version_changes(tmp_path, mem_cache, monkeypatch):
+    """Seen 2026-11-26: tidy cached "this file's shim is current" at v6; after v7 the cache still said so, so 138
+    F1 findings showed high and no upgrade was planned."""
+    monkeypatch.setattr(lf, "SHIM_V", lf.SHIM_V - 1)
+    e, _ = plan(tmp_path / "a", {"main.lua": SPAM})
+    v_old = e["main.lua"]["patch"]["text"]
+    data, _root = mod_tree(tmp_path / "b", {"main.lua": v_old})
+
+    def run():
+        rep = lf.check_paths([str(data)], CFG, checker=OkChecker(), use_cache=True, data_dir=str(tmp_path / "none"))
+        return next(iter(rep.files.values())), rep
+
+    ent, rep = run()                                                   # cached while v(N-1) is current
+    assert ent["shim_state"] == "current" and ent["patch"] is None
+    assert {f["conf"] for f in f1_of(ent)} == {"shimmed"}
+    ent, rep = run()
+    assert ent.get("cached") and {f["conf"] for f in f1_of(ent)} == {"shimmed"}
+    monkeypatch.undo()                                                 # the shim moves on to the next version
+    ent, rep = run()
+    assert not ent.get("cached")                                       # the stale entry is not trusted
+    assert ent["shim_state"] == "old" and {f["conf"] for f in f1_of(ent)} == {"high"}
+    assert ent["patch"]["ok"] and "F1" in ent["patch"]["rules"]
+    first = lf.format_report(rep, indent="  ")[0]
+    ent, rep = run()                                                   # and from the cache again: same plan lines
+    assert ent.get("cached") and lf.format_report(rep, indent="  ")[0] == first
+
+
+def test_shimmed_plan_lines_are_the_same_cached_or_not(tmp_path, mem_cache):
+    e, _ = plan(tmp_path / "a", {"main.lua": SPAM})
+    data, _root = mod_tree(tmp_path / "b", {"main.lua": e["main.lua"]["patch"]["text"]})
+
+    def lines():
+        rep = lf.check_paths([str(data)], CFG, checker=OkChecker(), use_cache=True, data_dir=str(tmp_path / "none"))
+        return lf.format_report(rep, indent="  ")[0]
+    first = lines()
+    assert any(" F1 shimmed " in ln for ln in first) and lines() == first
+
+
+def test_an_f1_trigger_the_shim_cannot_reach_is_a_report_not_a_high(tmp_path):
+    """Crafting Framework: the handler logs through a logger made in another mod; no patch is possible."""
+    e, rep = plan(tmp_path, {"main.lua": ELSEWHERE})
+    ent = e["main.lua"]
+    f1 = f1_of(ent)
+    assert f1 and {f["conf"] for f in f1} == {"report"}
+    assert "no repair planned" in f1[0]["fix"]
+    assert ent["patch"] is None
+    assert ("F1", "high") not in counts_of(rep)
+
+
+def test_finding_status_after_apply_says_shimmed(tmp_path):
+    e, _ = plan(tmp_path / "a", {"main.lua": SPAM})
+    e, rep = plan(tmp_path / "b", {"main.lua": e["main.lua"]["patch"]["text"]})
+    out = lf.format_report(rep, done=[], indent="  ")[0]
+    assert any("SHIMMED: F1" in ln for ln in out)
+
+def test_f1_in_a_second_file_follows_whether_the_patch_reaches_it(tmp_path):
+    e, rep = plan(tmp_path / "a", {"main.lua": SPAM, "other.lua": ELSEWHERE})
+    assert {f["conf"] for f in f1_of(e["main.lua"])} == {"high"} and "F1" in e["main.lua"]["patch"]["rules"]
+    assert {f["conf"] for f in f1_of(e["other.lua"])} == {"report"}          # its logger is made somewhere unseen
+    logger_file = "local log = mwse.Logger.new()\nreturn log\n"
+    e, rep = plan(tmp_path / "b", {"log.lua": logger_file, "other.lua": ELSEWHERE})
+    assert {f["conf"] for f in f1_of(e["other.lua"])} == {"high"}            # the wrapped logger may be the one it uses
+    assert "F1" in e["log.lua"]["patch"]["rules"]

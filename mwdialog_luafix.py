@@ -406,6 +406,7 @@ def cfg_hash(cfg):
     keep = {k: v for k, v in cfg.items() if not k.startswith("_")}
     keep["_known_bugs"] = globals().get("KNOWN_BUGS", [])
     keep["_rules"] = RULES_REV
+    keep["_shim"] = hashlib.sha1(f"{SHIM_V}:{LOG_SHIM_LUA}".encode("latin-1", "replace"), usedforsecurity=False).hexdigest()[:8]
     return hashlib.sha1(json.dumps(keep, sort_keys=True).encode(), usedforsecurity=False).hexdigest()[:12] + f"v{VERSION}"
 
 
@@ -730,7 +731,7 @@ def module_name(name):
 
 
 class Finding(dict):
-    """rule, line, what, fix (proposal), conf (high | medium | report-high | report | trigger | covered | info),
+    """rule, line, what, fix (proposal), conf (high | medium | report-high | report | trigger | covered | shimmed | info),
     edits [(start, end, text)], needs (helpers the edits use: "gate", "shim")."""
 
 
@@ -759,6 +760,7 @@ class FileAnalysis:
             self.nodes = [n for n in self.nodes if n.s >= cut]
         embedded = SHIM_RE.search(src) or SHIM_V1_RE.search(src)
         self.old_shim = bool(embedded and embedded.group(0) != log_shim(mod_key, self.cfg))
+        self.shim_state = "none" if embedded is None else "old" if self.old_shim else "current"
         self.calls = [n for n in self.nodes if n.kind == "Call"]
         self._lines = None
         self.registrations = []          # (call, event, handler Function or None, handler arg, options)
@@ -4161,13 +4163,14 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
             ckey = "luafix1:" + os.path.normcase(os.path.abspath(p))
             if cache is not None and (mroot, key) not in kb_only:     # a cached finding has no edits to patch with
                 hit = cache.get(ckey, ah.stamp_of(st))
-                if hit is not None and hit.get("cfg") == ch and "mc" in hit and "ts" in hit and "ld" in hit:
+                if hit is not None and hit.get("cfg") == ch and "mc" in hit and "ts" in hit and "ld" in hit and "ss" in hit:
                     ent.update(error=hit.get("err"), logs=hit.get("logs", 0), requires=hit.get("req", []),
                                loads=tuple(hit["ld"]), etrig=[(n, e) for n, e in hit.get("et", [])],
                                mcalls=[tuple(x) for x in hit["mc"]],
                                tstart=[tuple(x) for x in hit["ts"]], treg=list(hit.get("tr", [])),
                                mfields=set(hit["mf"]) if hit.get("mf") is not None else None,
                                sha=hit.get("sha"), cached=True, old_shim=hit.get("v1", False), branded=hit.get("br", False),
+                               shim_state=hit["ss"],
                                findings=[Finding(f, edits=[], needs=set(f.get("needs", []))) for f in hit["f"]])
                     continue
             with open(p, "rb") as f:
@@ -4180,6 +4183,7 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
                 a = analyses[p] = _analyse(src, key, rel, cfg)
                 tstart, treg = a.timer_names()
                 ent.update(findings=a.findings, logs=a.log_calls(), requires=a.requires(), old_shim=a.old_shim,
+                           shim_state=a.shim_state,
                            mcalls=a.module_calls(), mfields=a.module_fields(), tstart=tstart, treg=sorted(treg),
                            loads=a.load_refs(), etrig=a.event_triggers())
             except L.LuaSyntaxError as e:
@@ -4189,7 +4193,8 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
             if cache is not None:
                 cache.put(ckey, ah.stamp_of(st), {
                     "cfg": ch, "err": ent["error"], "logs": ent["logs"], "req": ent["requires"], "sha": ent["sha"],
-                    "v1": ent.get("old_shim", False), "br": ent.get("branded", False), "mc": ent["mcalls"],
+                    "v1": ent.get("old_shim", False), "ss": ent.get("shim_state", "none"), "br": ent.get("branded", False),
+                    "mc": ent["mcalls"],
                     "mf": sorted(ent["mfields"]) if ent["mfields"] is not None else None,
                     "ts": ent["tstart"], "tr": ent["treg"], "ld": list(ent["loads"]), "et": ent["etrig"],
                     "f": [dict({k: v for k, v in f.items() if k not in ("edits", "needs")}, needs=sorted(f["needs"]),
@@ -4304,11 +4309,38 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
                 new, rules = a.src, ["N1"]                # only the names left by an older version
             if new is not None:
                 ent["patch"] = verify_patch(a.src, new, rules, checker, key, rel, cfg, level, own_rules)
+        _settle_f1(rep, files)
     for ent in rep.files.values():                  # unreferenced files: report-only findings listed apart
         if ent.get("dead"):
             ent["dead_findings"] = [f for f in ent["findings"] if not (f["edits"] or f.get("fixable"))]
             ent["findings"] = [f for f in ent["findings"] if f["edits"] or f.get("fixable")]
     return rep
+
+
+def _settle_f1(rep, files):
+    """An F1 trigger the per-mod pass made "high" stays high only where the shim patch reaches it: its own file
+    gets the shim patch, or the mod has a logger the patch wraps. "shimmed" where the current shim is already
+    embedded (nothing to do). "report" where no patch can reach it (its lines go through a logger made somewhere
+    the shim doesn't wrap: nothing is planned, so it is not a repair to count)."""
+    ents = [rep.files[p] for p, _r in files]
+
+    def planned(e):
+        return bool(e.get("patch") and "F1" in e["patch"]["rules"])
+    mod_logger = any(f["rule"] == "F1" and f["what"] == "logger created here" and f["conf"] == "high"
+                     for e in ents for f in e["findings"])
+    mod_shimmed = any(e.get("shim_state") == "current" for e in ents)
+    for e in ents:
+        for f in e["findings"]:
+            if f["rule"] != "F1" or f["conf"] != "high" or f["edits"] or f.get("fixable"):
+                continue                               # a "logger created here" has its own edit: it is patched
+            if planned(e):
+                continue
+            if e.get("shim_state") == "current" or (mod_shimmed and not mod_logger):
+                f["conf"], f["fix"] = "shimmed", f"already handled by the log shim (v{SHIM_V})"
+            elif not mod_logger:
+                f["conf"] = "report"
+                f["fix"] = ("no repair planned: the log shim wraps print, mwse.log, mwse.Logger and logging.logger "
+                            "calls, and this mod's lines go through something else")
 
 
 def _load_like_events(rep, files):
@@ -4651,7 +4683,7 @@ def undo(journal=JOURNAL, force=False, log=print):
 
 
 # ---------------------------------------------------------------------------------------------- report
-CONF_ORDER = {"high": 0, "report-high": 1, "medium": 2, "report": 3, "trigger": 4, "covered": 5, "info": 6}
+CONF_ORDER = {"high": 0, "report-high": 1, "medium": 2, "report": 3, "trigger": 4, "covered": 5, "shimmed": 5, "info": 6}
 
 
 KNOWN_LABELS = {"KB": "(Known Bugs)", "KP": "(Known Perf)", "KR": "(Ref Safety)"}
@@ -4666,6 +4698,8 @@ def known_label(rule):
 def finding_status(f, pt, written):
     """After --apply: PATCHED (fixed in the written file), NOT PATCHED (had a fix, the file was not written),
     UNCONFIGURED (should be fixed, no fix exists for it), REPORTED (report only)."""
+    if f["conf"] == "shimmed":
+        return "SHIMMED"
     if f["fix"]:
         return "PATCHED" if written and pt and pt["ok"] and f["rule"] in pt["rules"] else "NOT PATCHED"
     return "UNCONFIGURED" if f["conf"] in ("high", "medium") else "REPORTED"
