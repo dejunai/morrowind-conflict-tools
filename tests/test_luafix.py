@@ -490,6 +490,23 @@ def test_nested_suite_mods_are_excluded_and_never_receive_log_shims(tmp_path):
                for e in rep.files.values())
 
 
+def test_include_own_applies_only_nil_and_log_rules_to_exempt_mods(tmp_path):
+    src = "local x = ref.data.foo\nevent.register('save', function() end, { priority = 10000 })\n"
+    data, _root = mod_tree(tmp_path, {"main.lua": src}, name="custommod")
+    cfg = dict(CFG, exemptMods=["custommod"])
+    rep = lf.check_paths([str(data)], cfg, include_own=True, checker=OkChecker(), use_cache=False,
+                         data_dir=str(tmp_path / "none"), level="high")
+    patch_ = next(iter(rep.files.values()))["patch"]
+    assert patch_ and patch_["ok"]
+    assert "A1" in patch_["rules"] and "G1" not in patch_["rules"]
+    # the same file, not exempt, still gets G1
+    data2, _r2 = mod_tree(tmp_path / "other", {"main.lua": src}, name="thirdparty")
+    rep2 = lf.check_paths([str(data2)], CFG, include_own=True, checker=OkChecker(), use_cache=False,
+                          data_dir=str(tmp_path / "none"), level="high")
+    rules2 = next(iter(rep2.files.values()))["patch"]["rules"]
+    assert "A1" in rules2 and "G1" in rules2
+
+
 def test_own_mod_sources_do_not_embed_generic_log_shims():
     mods = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "lua tools", "MWSE", "mods", "mwsuite")
     for mod in lf.OWN_MODS:

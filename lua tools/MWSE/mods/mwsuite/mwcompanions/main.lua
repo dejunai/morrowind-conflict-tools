@@ -1,4 +1,4 @@
---[[mwdialog_luafix 4: A1]] --[[
+--[[
     mwcompanions: following, warping and follower combat in one place (replaces the companion suite's
     Smart Companions and Easy Escort parts). One 1-second timer, only while a switch that needs it is on; no
     per-frame handler. Followers come from the engine's friendlyActors list each time; nothing is cached.

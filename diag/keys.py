@@ -1,9 +1,18 @@
 import os, sys, importlib.util
-GAME = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); DATA = os.path.join(GAME, "Data Files")
-spec = importlib.util.spec_from_file_location("mwn", os.path.join(os.path.dirname(os.path.abspath(__file__)), "mwdialog_check_new.py"))
+HERE = os.path.dirname(os.path.abspath(__file__))
+TOOLS = os.path.dirname(HERE)
+GAME = os.path.dirname(TOOLS)
+DATA = os.path.join(GAME, "Data Files")
+spec = importlib.util.spec_from_file_location("mwn", os.path.join(TOOLS, "mwdialog_check.py"))
 M = importlib.util.module_from_spec(spec); sys.modules["mwn"] = M; spec.loader.exec_module(M)
+def state_file(game, tools, name):
+    """The tools' state file: conflict-tools\\generated\\name when present, else game\\name.
+    Looks only; it does not move a leftover copy."""
+    gen = os.path.join(tools, "generated", name)
+    old = os.path.join(game, name)
+    return gen if os.path.exists(gen) else old
 files = M.index_dir(DATA)
-order = [l.strip() for l in open(os.path.join(GAME, M.LOAD_ORDER_FILE), encoding="utf-8") if l.strip() and not l.startswith(";")]
+order = [l.strip() for l in open(state_file(GAME, TOOLS, M.LOAD_ORDER_FILE), encoding="utf-8") if l.strip() and not l.startswith(";")]
 mi = M.merged_inputs_of(GAME, DATA); am = M.AUTO_MERGE_NAME.lower()
 vorder, _ = M.expand_merged([(n, files[n.lower()]) for n in order], mi)
 WANT = {("ALCH", "p_fortify_intelligence_b"), ("CLOT", "aryongloveleft")}

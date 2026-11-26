@@ -28,11 +28,13 @@ rem  tes3cmd features (in place, .bak first, file dates kept, no Clean_ copies):
 rem    mwdialog_check.bat --all --dry-run          (clean + fix + multipatch: plan only)
 rem    mwdialog_check.bat --all                    (clean, then fix, then multipatch)
 rem    mwdialog_check.bat --full                   (everything, from scratch. Stops first if a plugin's
-rem       master isn't in Data Files, naming both. Then: turn back on what earlier runs turned off,
-rem       --unmerge, --cell-conflicts (report), --sort, --all --asset-check. Any ERROR left: it stops
-rem       and opens mwdialog_report.txt. Else --auto-merge, --sort, --all; any ERROR left: stops and
-rem       opens the report. Else it offers the interactive --cell-conflicts. --yes: no questions;
-rem       --add-all-esp: add every plugin first; --play: start the game at the end)
+rem       master isn't in Data Files, naming both. Then: undo the auto-merge, turn back on what earlier
+rem       runs turned off, turn off redundant plugins (asking in a console; --no-redundant skips it),
+rem       --cell-conflicts (report), --sort, set the old Multipatch aside, clean and fix with the asset
+rem       check (no Multipatch yet), sort again. Any ERROR left: it stops and opens mwdialog_report.txt.
+rem       Else --auto-merge, --sort, --all, sort again; any ERROR left: stops and opens the report. Else
+rem       it offers the interactive --cell-conflicts. --yes: no questions; --add-all-esp: add every
+rem       plugin first; --play: start the game at the end)
 rem    mwdialog_check.bat --clean                  (like tes3cmd clean)
 rem    mwdialog_check.bat --multipatch             (like tes3cmd multipatch; load it LAST)
 rem    mwdialog_check.bat --header MyMod.esp       (show Author/Description)
@@ -86,8 +88,12 @@ rem                                                (checks first: if a plugin's 
 rem                                                 missing or loads after it, it doesn't start;
 rem                                                 --play-anyway starts it regardless)
 rem    mwdialog_check.bat --sort --play            (sort the load order, then start the game)
-rem    mwdialog_check.bat --clean-up --dry-run     (list .bak backups that would be deleted)
-rem    mwdialog_check.bat --clean-up               (delete backups of removed plugins; keep 1 per plugin)
+rem    mwdialog_check.bat --clean-up --dry-run     (list the .bak backups that would be deleted or moved)
+rem    mwdialog_check.bat --clean-up               (delete in-between backups of installed or parked plugins;
+rem                                                 delete every backup of a plugin no longer installed or
+rem                                                 parked; when that cannot be confirmed, move those backups
+rem                                                 to Off\cleanup under the backups folder)
+rem    mwdialog_check.bat --clean-up-undo          (put back the backups the last --clean-up moved to Off)
 rem    mwdialog_check.bat --merge "Merged.esp" "Extras\some-folder" --dry-run   (preview a merge)
 rem    mwdialog_check.bat --merge "Merged.esp" a.esp b.esp ...   (merge; inputs for uninstalled mods are left out)
 rem    mwdialog_check.bat --auto-merge --dry-run   (find small script-free plugins that can be merged)

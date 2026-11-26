@@ -59,8 +59,7 @@ Rules (thresholds come from MWSE\\config\\mwguard.json when it exists - the same
      a field or function MWSE documents as returning a vector, tes3vectorN.new, or a local set from one  fix
 
 Never touched: MWSE's own code except exact KNOWN_BUGS fingerprints in named core files, and
-your own mods (mwcollide, mwfloatfix, mwguard, mwhangwatch, mwinfoloop, mwperformers, mwsoundguard,
-mwstranded, MWManager) unless --include-own.
+your own mods (the names in OWN_MODS, plus any in exemptMods) unless --include-own.
 
 Edits are made in place (the file is rewritten through the same handle, so Vortex's hard links between
 staging and Data Files keep sharing it). The file as it was is copied first to
@@ -113,6 +112,14 @@ OWN_MODS = {"mwcollide", "mwcompanions", "mwcriminal", "mwcustomclasspersistence
             "mwmouseguard", "mwperformers", "mwpersonaleffects", "mwplainpaperfix", "mwpluginpatches",
             "mwquicktoggle", "mwsaveguard", "mwsoundfix", "mwsoundguard", "mwstranded", "mwteleportguard",
             "mwwarnsuppression", "mwmanager", "mwmanagermenu", "mwsuite"}
+
+# under --include-own, first-party files (OWN_MODS and exemptMods) only get these rules applied
+OWN_FIX_RULES = frozenset({"A1", "A2", "A3", "A4", "A5", "F1"})
+
+
+def own_mod_names(cfg=None):
+    """OWN_MODS plus any names in cfg['exemptMods'] (lowercase)."""
+    return set(OWN_MODS) | {str(m).lower() for m in ((cfg or {}).get("exemptMods") or [])}
 
 # defaults; mwguard.json (shared with the runtime guard) and mwdialog_luafix.json override them
 DEFAULTS = {
@@ -3699,8 +3706,7 @@ def excluded(path, include_own=False, cfg=None):
     if os.path.basename(path).lower() == "initialize.lua":
         return "MWSE's own code"
     first = rel.split("/")[0].lower()
-    own = set(OWN_MODS) | {str(m).lower() for m in ((cfg or {}).get("exemptMods") or [])}
-    if not include_own and first in own:
+    if not include_own and first in own_mod_names(cfg):
         return "your own mod (--include-own checks it)"
     return None
 
@@ -3883,8 +3889,8 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
             ent = rep.files[p]
             if ent["error"]:
                 continue
-            own_rules = {"A1", "A2", "A3", "A4", "A5", "F1"} if include_own and \
-                key.split("/", 1)[0].lower() in OWN_MODS else None
+            own_rules = set(OWN_FIX_RULES) if include_own and \
+                key.split("/", 1)[0].lower() in own_mod_names(cfg) else None
             if log_exempt(cfg, key):
                 with open(p, encoding="latin-1") as fh:
                     old_text = unbrand(fh.read())

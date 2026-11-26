@@ -58,13 +58,87 @@ def test_restore_all_keeps_the_mod_update_it_replaces(df):
     assert b"v1" in p.read_bytes() and kept(df.parent, update)
 
 
-def test_clean_up_during_a_purge_keeps_every_backup(df):
-    p = df / "Mod.esp"
-    original = plugin(p, [], [misc("original")])
-    shutil.copy2(p, B.backup_path(str(p)))
+def _ns(df, **extra):
+    kw = dict(data_dir=str(df), dry_run=False, yes=True, fix_log=str(df.parent / "log"))
+    kw.update(extra)
+    return argparse.Namespace(**kw)
+
+
+def _backups(p, versions):
+    made = []
+    for i, data in enumerate(versions):
+        made.append(plugin(p, [], [misc(data)]))
+        shutil.copy2(p, B.backup_path(str(p)))
+    return made
+
+
+def test_clean_up_deletes_all_backups_of_a_gone_plugin(df):
+    p = df / "Gone.esp"
+    made = _backups(p, ("v0", "v1", "v2"))
     p.unlink()
-    R.run_clean_up(argparse.Namespace(data_dir=str(df), dry_run=False, yes=True, fix_log=str(df.parent / "log")))
-    assert kept(df.parent, original)
+    R.run_clean_up(_ns(df))
+    assert not B.backup_candidates(str(p))
+    assert not kept(df.parent, made[0]) and not kept(df.parent, made[1]) and not kept(df.parent, made[2])
+    log = (df.parent / "log").read_text(encoding="utf-8")
+    assert "orphans" in log and "Gone.esp" in log
+
+
+def test_clean_up_keeps_oldest_and_newest_for_a_parked_plugin(df):
+    p = df / "Parked.esp"
+    grass = df / "Grass"
+    grass.mkdir()
+    made = _backups(p, ("v0", "v1", "v2", "v3"))
+    p.replace(grass / "Parked.esp")
+    R.run_clean_up(_ns(df))
+    assert [Path(b).read_bytes() for b in B.backup_candidates(str(p))] == [made[0], made[3]]
+
+
+def test_clean_up_treats_a_disabled_record_as_parked(df):
+    import mwdialog_state as S
+    p = df / "Offed.esp"
+    made = _backups(p, ("v0", "v1", "v2", "v3"))
+    p.unlink()
+    S.write_disabled(str(df.parent), {"Offed.esp": "doubled with Other.esp"})
+    R.run_clean_up(_ns(df))
+    assert [Path(b).read_bytes() for b in B.backup_candidates(str(p))] == [made[0], made[3]]
+
+
+def test_clean_up_treats_a_staging_copy_as_installed(df, tmp_path):
+    p = df / "Staged.esp"
+    made = _backups(p, ("v0", "v1", "v2", "v3"))
+    p.unlink()
+    staging = tmp_path / "staging" / "Some Mod"
+    staging.mkdir(parents=True)
+    plugin(staging / "Staged.esp", [], [misc("live")])
+    R.run_clean_up(_ns(df, vortex_dir=str(tmp_path / "staging")))
+    assert [Path(b).read_bytes() for b in B.backup_candidates(str(p))] == [made[0], made[3]]
+
+
+def test_clean_up_moves_uncertain_backups_to_off_and_journals_them(df):
+    p = df / "Maybe.esp"
+    made = _backups(p, ("v0", "v1"))
+    p.unlink()
+    R.run_clean_up(_ns(df, vortex_dir=str(df.parent / "missing-staging")))
+    assert not B.backup_candidates(str(p))
+    off = Path(B.backup_root(str(df.parent))) / "Off" / "cleanup"
+    found = list(off.rglob("Maybe.esp.bak*"))
+    assert found and {f.read_bytes() for f in found} == set(made)
+    journal = Path(R.cleanup_journal_path(str(df.parent)))
+    text = journal.read_text(encoding="utf-8")
+    assert "clean-up" in text and "sha256" in text and "Maybe.esp" in text
+    log = (df.parent / "log").read_text(encoding="utf-8")
+    assert "uncertain" in log and "Maybe.esp" in log
+
+
+def test_clean_up_undo_restores_shelved_backups(df):
+    p = df / "Maybe.esp"
+    made = _backups(p, ("v0", "v1"))
+    p.unlink()
+    R.run_clean_up(_ns(df, vortex_dir=str(df.parent / "missing-staging")))
+    assert not B.backup_candidates(str(p))
+    assert R.run_clean_up_undo(_ns(df)) == 0
+    got = [Path(b).read_bytes() for b in B.backup_candidates(str(p))]
+    assert set(got) == set(made)
 
 
 def test_clean_up_keeps_the_original_and_the_newest(df):

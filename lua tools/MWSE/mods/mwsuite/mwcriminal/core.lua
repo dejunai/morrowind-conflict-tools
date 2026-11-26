@@ -1,4 +1,4 @@
---[[mwdialog_luafix 3: A1]] --[[
+--[[
     mwcriminal core: the ownership, lock and detection questions every feature asks. Everything is answered on
     demand when the player activates something; nothing is scanned per frame or kept in a growing table (only
     the keyring containers are remembered, as safe handles).

@@ -1,4 +1,4 @@
---[[mwdialog_luafix 4: A1]] --[[
+--[[
     mwcriminal: sneaking, theft and door locks in one place.
     One activate handler (priority 9300, above abot Door Locks and Modern Lockpicking so it decides first), one
     detectSneak handler and one book-menu hook. Each behavior has its own MCM switch; all start off.

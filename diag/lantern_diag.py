@@ -1,10 +1,18 @@
 import os, sys
-GAME = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, sys.argv[1] if len(sys.argv) > 1 else GAME)
+HERE = os.path.dirname(os.path.abspath(__file__))
+TOOLS = os.path.dirname(HERE)
+GAME = os.path.dirname(TOOLS)
+sys.path.insert(0, sys.argv[1] if len(sys.argv) > 1 else TOOLS)
 import mwdialog_check as M
 DATA = os.path.join(GAME, "Data Files")
+def state_file(game, tools, name):
+    """The tools' state file: conflict-tools\\generated\\name when present, else game\\name.
+    Looks only; it does not move a leftover copy."""
+    gen = os.path.join(tools, "generated", name)
+    old = os.path.join(game, name)
+    return gen if os.path.exists(gen) else old
 files = {f.lower(): os.path.join(DATA, f) for f in os.listdir(DATA) if f.lower().endswith((".esp", ".esm"))}
-order = [l.strip() for l in open(os.path.join(GAME, M.LOAD_ORDER_FILE), encoding="utf-8", errors="replace")
+order = [l.strip() for l in open(state_file(GAME, TOOLS, M.LOAD_ORDER_FILE), encoding="utf-8", errors="replace")
          if l.strip() and not l.strip().startswith(";")]
 rec = M.read_merge_record(GAME)
 inputs = rec.get(M.AUTO_MERGE_NAME, [])

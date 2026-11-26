@@ -1,4 +1,4 @@
---[[mwdialog_luafix 3: G1]] local validator = require("mwsaveguard.validator")
+local validator = require("mwsaveguard.validator")
 
 -- Compatibility aliases for existing mods
 package.loaded["corruptsaveguard.validator"] = validator

@@ -1,4 +1,4 @@
---[[mwdialog_luafix 4: A1]] --[[
+--[[
     Graphic Herbalism Respawn Delay Patch
     Mod: Graphic Herbalism (MWSE)
     Graphic Herbalism shows a herb picked until the engine restocks it (the next day). This keeps a picked herb
@@ -56,8 +56,8 @@ end
 -- Graphic Herbalism fires containerClosed right after it picks a herb (ref.data.GH set): the day is noted then.
 local function onContainerClosed(e)
     local ref = e.reference
-    if isHerb(ref) and ref.data and (ref.data and ref.data.GH) and not (ref.data and ref.data.GH_harvestDay) then
-        if ref.data then ref.data.GH_harvestDay = today() end
+    if isHerb(ref) and ref.data and ref.data.GH and not ref.data.GH_harvestDay then
+        ref.data.GH_harvestDay = today()
     end
 end
 
