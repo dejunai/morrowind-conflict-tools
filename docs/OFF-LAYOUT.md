@@ -50,6 +50,7 @@ one adds it here and to `mwdialog_offlayout.REASONS` first.
 | `shortened paths` | the original of a file whose too-long path was shortened (or that was edited to name the short path) | `long paths`, `longpaths` |
 | `converted sounds` | the original of a sound that was converted or repaired | `reprocessed sounds`, `sound` |
 | `converted textures` | the original of a texture that was converted or reduced | `reprocessed textures`, `textures` |
+| `reduced textures` | the original of a texture that was downscaled or reduced, kept before the reduction | `texture-reduction` |
 | `converted splash screens` | the original of a splash screen that was converted | `splash screens` |
 | `fixed text keys` | the original of an animation or model whose text keys were fixed | `reprocessed unix line joins`, `text keys` |
 | `fixed texture paths` | the original of a model whose texture paths were fixed | `reprocessed texture paths`, `texture paths` |
@@ -69,7 +70,9 @@ one adds it here and to `mwdialog_offlayout.REASONS` first.
 | `altered assets` | files a plugin deployed that changed afterwards, kept instead of deleted | - |
 
 Reasons are never nested (`Off\<plugin>\<reason>\<reason>\` does not exist: a folder inside a reason is part
-of a `<path>`, even when it is called `sound` or `broken`).
+of a `<path>`, even when it is called `sound` or `broken`). One approved exception: MWManager's BSA packing may
+use a batch subfolder `Off\<plugin>\packed into bsa\<uuid>\` (the uuid names the packing batch; it is not a
+second reason and not part of the file's `<path>`). All other reasons stay un-nested.
 
 ## 4. Older layouts tidy recognises, and what it does
 

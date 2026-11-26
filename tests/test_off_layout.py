@@ -70,6 +70,7 @@ def test_every_reason_has_a_meaning_and_every_older_spelling_maps_to_one():
     assert len(set(n.lower() for n in names)) == len(names) and all(m.strip() for _n, m in OL.REASONS)
     assert set(OL.LEGACY.values()) <= set(names)
     assert OL.reason_for("Names") == "ascii" and OL.reason_for("LONGPATHS") == "shortened paths"
+    assert OL.reason_for("texture-reduction") == "reduced textures"
     assert OL.reason_for("openmw") == "OpenMW" and OL.reason_for("Damaged assets") == "broken"
     with pytest.raises(ValueError):
         OL.reason_for("whatever")

@@ -1,3 +1,11 @@
+# Off layout: reduced textures reason; BSA packing may use a batch uuid (2026-11-26)
+
+- New reason `reduced textures`: the original of a texture that was downscaled or reduced, kept before
+  the reduction. The older spelling `texture-reduction` (MWManager's asset_backup_file name) maps to it.
+- The one approved exception to un-nested reasons: MWManager's BSA packing may use
+  `Off\<plugin>\packed into bsa\<uuid>\`. All other reasons stay un-nested.
+- Recorded in `docs/OFF-LAYOUT.md` and `mwdialog_offlayout.py`.
+
 # Docs ship at their repository paths, so relative links resolve in the install (2026-11-26)
 
 - `deploy_manifest.txt` ships `README.md` and `LICENSE` at the target root, the same paths they have in the
