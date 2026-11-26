@@ -430,8 +430,10 @@ Morrowind\
      +-- vortex_tidy.py           [Vortex staging organizer & sanitizer]
      +-- vortex_tidy.bat          [Windows batch runner]
      +-- mwdialog_luafix.py       [MWSE Lua AST hardening tool]
-     +-- docs\                    [README.md (this documentation), MORE_INFO.md (architecture & function guide),
-                                   CHANGES.md, OFF-LAYOUT.md, LUA-DEBUGGING.md (MWSE Lua guide)]
+     +-- README.md                [This documentation]
+     +-- LICENSE
+     +-- docs\                    [MORE_INFO.md (architecture & function guide), CHANGES.md,
+                                   OFF-LAYOUT.md, LUA-DEBUGGING.md (MWSE Lua guide)]
      +-- plans\                   [Plan-then-apply files (.txt)]
      +-- generated\               [Load order, rules, records, caches, journals, reports (see MORE_INFO)]
      +-- backups\                 [Automatic backups (legacy\ for older; luafix\, tidy\, lua deploy\)]

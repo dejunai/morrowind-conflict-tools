@@ -1,3 +1,10 @@
+# Docs ship at their repository paths, so relative links resolve in the install (2026-11-26)
+
+- `deploy_manifest.txt` ships `README.md` and `LICENSE` at the target root, the same paths they have in the
+  repository (it no longer maps README into `docs/`). A relative link that works here works in the installed
+  tree; `tests/test_deploy.py` deploys to a temporary folder and checks every relative markdown link in the
+  shipped docs against both trees.
+
 # Release tidy: docs in docs\, dev notes in docs\dev\, no generated files in the checkout (2026-11-26)
 
 - Docs moved with their history: `MORE_INFO.md` and this file to `docs/`; the Lua guide

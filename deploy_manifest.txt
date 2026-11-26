@@ -3,7 +3,7 @@
 #
 # Only files git tracks are candidates. Rules, one per line, paths relative to the project with '/':
 #   include <glob>                  ship the matching files at the same path in the target
-#   include <file> => <target path> ship one file under another path (the docs live in the target's docs\)
+#   include <file> => <target path> ship one file under another path (a relative link in a moved doc would break)
 #   exclude <glob>                  never ship these (an exclude always wins over an include)
 # Globs: '*' stays inside one folder, '**' crosses folders ("lua tools/**" is everything below "lua tools").
 # deploy.py also refuses on its own, whatever this file says: tests, .git and CI files, deploy.py and its
@@ -20,7 +20,8 @@ exclude lua tools/**/MWSE/core/**       # MWSE's own core files are never ours t
 
 include tools/**
 
-# Docs: the target keeps them in docs\ (README.md stays at the project root for GitHub)
+# Docs keep the paths they have in the repository, so a relative link that works here works in the install.
 include docs/**
 exclude docs/dev/**                     # design notes, TODO and the Lua repair log: development only
-include README.md => docs/README.md
+include README.md                       # stays at the root, as on GitHub
+include LICENSE

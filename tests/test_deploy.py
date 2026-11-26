@@ -4,6 +4,7 @@ NEW_FILES.txt, a relative ROLLBACK.ps1), hash-checks, never puts an older "lua t
 unknown switch does nothing. Temporary folders only. Python 3.9+."""
 import importlib.util
 import os
+import re
 import shutil
 import subprocess
 
@@ -47,7 +48,7 @@ def proj(tmp_path):
     shutil.copyfile(DEPLOY, str(p / "deploy.py"))
     shutil.copyfile(os.path.join(SRC, "deploy_manifest.txt"), str(p / "deploy_manifest.txt"))
     for rel, data in {"vortex_tidy.py": "print(1)\n", "mwdialog_x.py": "x = 1\n", "tidy.bat": "@echo off\n",
-                      "Play Morrowind.bat": "@echo off\n", "README.md": "# readme\n", "docs/MORE_INFO.md": "more\n",
+                      "Play Morrowind.bat": "@echo off\n", "README.md": "# readme\n", "LICENSE": "mit\n", "docs/MORE_INFO.md": "more\n",
                       "docs/CHANGES.md": "c\n", "docs/dev/TODO.md": "todo\n", "LUA_EDIT_AUDIT.md": "audit\n", "AGENTS.md": "a\n", "sync.py": "s\n",
                       "docs/OFF-LAYOUT.md": "off\n", "tests/test_a.py": "def test(): pass\n",
                       "tests/fixtures/f.lua": "--\n", "diag/d.py": "d\n", ".gitignore": "deploy.ini\n",
@@ -86,7 +87,7 @@ def test_the_real_manifest_ships_no_test_or_dev_file():
     assert bad == [], bad
     assert not any("/mwse/core/" in d.lower() for _r, d in files)
     dests = {d for _r, d in files}
-    assert {"vortex_tidy.py", "mwdialog_check.py", "docs/README.md", "docs/MORE_INFO.md", "docs/CHANGES.md"} <= dests
+    assert {"vortex_tidy.py", "mwdialog_check.py", "README.md", "LICENSE", "docs/MORE_INFO.md", "docs/CHANGES.md"} <= dests
     assert not any(d.lower().startswith("docs/dev/") for d in dests)       # dev notes stay in the repository
 
 
@@ -103,11 +104,11 @@ def test_a_deploy_ships_the_manifest_set_and_nothing_dev(proj, capsys):
     target, backups = tmp / "game" / "conflict-tools", tmp / "bk"
     assert run(dep, p, str(target), "--backups", str(backups)) == 0
     got = tree(target)
-    assert set(got) == {"vortex_tidy.py", "mwdialog_x.py", "tidy.bat", "docs/README.md", "docs/MORE_INFO.md",
+    assert set(got) == {"vortex_tidy.py", "mwdialog_x.py", "tidy.bat", "README.md", "LICENSE", "docs/MORE_INFO.md",
                         "docs/CHANGES.md", "docs/OFF-LAYOUT.md", "lua tools/MWSE/mods/mwsuite/mwguard/main.lua",
                         "lua tools/mwsuite-metadata.toml", "tools/luajit/luajit.exe"}
     assert not [r for r in got if is_dev(r)]                              # the deployed tree has no test/dev file
-    assert got["docs/README.md"] == b"# readme\n"
+    assert got["README.md"] == b"# readme\n"
     assert "deploy.ini" in os.listdir(str(p))                             # saved for next time
     assert run(dep, p) == 0                                               # no argument: the saved target
     assert "Nothing to copy" in capsys.readouterr().out
@@ -199,3 +200,75 @@ def test_an_older_committed_lua_tools_file_in_the_target_is_replaced(proj):
     os.utime(str(dst), (os.path.getmtime(str(src)) + 100,) * 2)          # newer mtime, but a known older version
     assert run(dep, p) == 0
     assert dst.read_text() == "return 3\n"
+
+# Relative destinations of markdown links and images, ignoring fenced/inline code and URL schemes.
+_INLINE = re.compile(
+    r"""(?xs)
+    !?\[(?:[^\]\\]|\\.)*]
+    \(\s*
+    (?:<(?P<angle>[^>\n]+)>|(?P<bare>[^\s)]+))
+    (?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?
+    \s*\)
+    """
+)
+
+
+def _mask_code(text):
+    """Blank out fenced and inline code so an example [text](path) is not treated as a link."""
+    out, fence = [], None
+    for line in text.splitlines(True):
+        if fence:
+            out.append("\n" if line.endswith("\n") else "")
+            if line.lstrip().startswith(fence):
+                fence = None
+            continue
+        m = re.match(r"^ {0,3}(`{3,}|~{3,})", line)
+        if m:
+            fence = m.group(1)[0] * len(m.group(1))
+            out.append("\n" if line.endswith("\n") else "")
+            continue
+        out.append(re.sub(r"`[^`\n]+`", lambda mm: " " * len(mm.group(0)), line))
+    return "".join(out)
+
+
+def relative_md_links(text):
+    """(line, destination path without a fragment) for each relative markdown link or image."""
+    found = []
+    for m in _INLINE.finditer(_mask_code(text)):
+        raw = (m.group("angle") or m.group("bare") or "").strip()
+        dest = raw.split()[0] if raw else ""
+        if dest.startswith("<") and dest.endswith(">"):
+            dest = dest[1:-1]
+        scheme = dest.split(":", 1)[0].lower() if ":" in dest and not dest[1:2] == ":" else ""
+        if scheme in ("http", "https", "mailto", "file", "ftp", "data", "irc") or dest.startswith("//"):
+            continue
+        path = dest.split("#", 1)[0]
+        if not path:
+            continue
+        line = text[:m.start()].count("\n") + 1
+        found.append((line, path))
+    return found
+
+
+def test_every_relative_markdown_link_in_the_shipped_docs_resolves(tmp_path, monkeypatch):
+    """A real deploy to a temp folder: every relative markdown link in a shipped doc resolves both in the
+    repository (from the source file) and in the deployed tree (from where that file landed)."""
+    dep = load()
+    monkeypatch.setattr(dep, "busy", lambda: [])
+    target, backups = tmp_path / "dest", tmp_path / "bk"
+    ini = str(tmp_path / "deploy.ini")
+    assert dep.main([str(target), "--backups", str(backups)], project=SRC, ini=ini) == 0
+    shipped = dep.ship_list(dep.tracked_files(SRC), dep.read_manifest(os.path.join(SRC, "deploy_manifest.txt")))
+    docs = [(s, d) for s, d in shipped if d.lower().endswith((".md", ".markdown"))]
+    assert docs, "no markdown shipped"
+    missing = []
+    for src, dest in docs:
+        text = open(os.path.join(SRC, src), encoding="utf-8").read()
+        for line, rel in relative_md_links(text):
+            rel = rel.replace("\\", "/")
+            for root, here, label in ((SRC, src, "repo"), (str(target), dest, "deployed")):
+                folder = os.path.dirname(here).replace("\\", "/")
+                want = os.path.normpath(os.path.join(root, folder, rel) if folder else os.path.join(root, rel))
+                if not os.path.exists(want):
+                    missing.append(f"{src}:{line} ({label}) {rel} -> {os.path.relpath(want, root)}")
+    assert missing == [], "relative markdown links that do not resolve:\n  " + "\n  ".join(missing)
