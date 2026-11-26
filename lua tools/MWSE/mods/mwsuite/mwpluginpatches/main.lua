@@ -22,6 +22,9 @@ local kegDripCadence = require("mwpluginpatches.patches.kegDripCadence")
 local essentialAttackerFilter = require("mwpluginpatches.patches.essentialAttackerFilter")
 local magicantMenuGuard = require("mwpluginpatches.patches.magicantMenuGuard")
 local aheadOfTheClassesEquip = require("mwpluginpatches.patches.aheadOfTheClassesEquip")
+local attendMeRays = require("mwpluginpatches.patches.attendMeRays")
+local attendMeRecruitLabel = require("mwpluginpatches.patches.attendMeRecruitLabel")
+local g7ContainersLinkCache = require("mwpluginpatches.patches.g7ContainersLinkCache")
 
 -- OAAB and Garden of Dreams call include("MWCA.interop") at file scope when their
 -- main.lua is loaded. That is after this file (load-priority 4500) and before
@@ -32,9 +35,12 @@ end
 
 -- Watch the Skies requires its util module, and Party Alchemy shows its module message on
 -- initialized. Keg Drip registers its simulate handler at file scope, Essential Indicators its
--- damage handler and Magican't its enterFrame handler on initialized. All of that happens after
--- this file loads, so the intercepts go in now and see every one.
-for _, patch in ipairs({ wtsMetadataLog, partyAlchemyModuleBox, kegDripCadence, essentialAttackerFilter, magicantMenuGuard }) do
+-- damage handler and Magican't its enterFrame handler on initialized. Attend Me registers its command-wheel
+-- simulate handler at file scope and its recruit one when recruiting starts; MWSE Containers Extended registers
+-- its handlers at file scope. All of that happens after this file loads, so the intercepts go in now and see
+-- every one.
+for _, patch in ipairs({ wtsMetadataLog, partyAlchemyModuleBox, kegDripCadence, essentialAttackerFilter, magicantMenuGuard,
+    attendMeRays, attendMeRecruitLabel, g7ContainersLinkCache }) do
     local ok, err = pcall(patch.init)
     if not ok then
         mwse.log("[mwpluginpatches] An intercept failed to start: %s", tostring(err))

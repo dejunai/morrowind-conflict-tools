@@ -41,7 +41,9 @@ Active Plugin Status:
   • Keg Drip: %s
   • Essential Indicators: %s
   • Magican't: %s
-  • Ahead of the Classes: %s]],
+  • Ahead of the Classes: %s
+  • Attend Me (MWSE): %s
+  • MWSE Containers Extended: %s]],
     config.isMcaActive() and "Active" or "Not Active",
     config.isEbonheartUnderworksActive() and "Active" or "Not Active",
     config.isPAndSActive() and "Active" or "Not Active",
@@ -58,7 +60,9 @@ Active Plugin Status:
     config.isKegDripInstalled() and "Active" or "Not Active",
     config.isEssentialIndicatorsInstalled() and "Active" or "Not Active",
     config.isMagicantInstalled() and "Active" or "Not Active",
-    config.isAheadOfTheClassesInstalled() and "Active" or "Not Active"),
+    config.isAheadOfTheClassesInstalled() and "Active" or "Not Active",
+    config.isAttendMeInstalled() and "Active" or "Not Active",
+    config.isG7ContainersInstalled() and "Active" or "Not Active"),
 })
 
 -- SECTION 1: FRIENDS & FRENS (JIUB COMPANION DELAY)
@@ -454,6 +458,40 @@ aotcCategory:createYesNoButton({
         .. "alone. Adding the gear is unchanged, you can equip anything yourself afterwards, and its files are not edited. "
         .. "Off unless Ahead of the Classes is installed. Needs a restart.",
     variable = mwse.mcm.createTableVariable({ id = "aotcEquipOnceEnabled", table = config }),
+})
+
+local attendMeCategory = page:createCategory(string.format("Attend Me: Fewer Eye Rays%s",
+    getStatusText(config.isAttendMeInstalled())))
+
+attendMeCategory:createYesNoButton({
+    label = "Command Wheel: One Eye Ray Per Frame",
+    description = "While Attend Me's command wheel is open, its labels and target display cast the same long eye ray "
+        .. "up to four times in one frame. With this on, a repeat of the same ray in that frame reuses the first "
+        .. "answer, so what the wheel shows is unchanged. Stands down by itself if Attend Me's actions.lua still has "
+        .. "the old luafix KP1 edit. Its files are not edited. Off unless Attend Me is installed. Needs a restart.",
+    variable = mwse.mcm.createTableVariable({ id = "attendMeRaysEnabled", table = config }),
+})
+
+attendMeCategory:createYesNoButton({
+    label = "Recruit Mode: Aim Label Every 3rd Frame",
+    description = "In recruitment mode Attend Me casts an eye ray every frame just to name the NPC under the "
+        .. "crosshair. With this on, that label refreshes every 3rd frame, like the command wheel's target display. "
+        .. "Clicking still checks who you aim at, so who is recruited or dismissed is unchanged. Stands down by itself "
+        .. "if recruit.lua still has the old luafix KP2 edit. Its files are not edited. Off unless Attend Me is "
+        .. "installed. Needs a restart.",
+    variable = mwse.mcm.createTableVariable({ id = "attendMeRecruitLabelEnabled", table = config }),
+})
+
+local g7Category = page:createCategory(string.format("MWSE Containers Extended: Linked Containers%s",
+    getStatusText(config.isG7ContainersInstalled())))
+
+g7Category:createYesNoButton({
+    label = "Find Each Linked Container Once",
+    description = "MWSE Containers Extended searches every cell for an item's linked container on each inventory "
+        .. "tile, tooltip and equip. With this on, the container is found once and kept, and looked up again only "
+        .. "if it is gone or was deleted (and after loading a save). Stands down by itself if its main.lua still has "
+        .. "the old luafix KP4 edit. Its files are not edited. Off unless the mod is installed. Needs a restart.",
+    variable = mwse.mcm.createTableVariable({ id = "g7ContainersLinkCacheEnabled", table = config }),
 })
 
 local voicesCategory = page:createCategory(string.format("Voices of Vvardenfell: Console%s",

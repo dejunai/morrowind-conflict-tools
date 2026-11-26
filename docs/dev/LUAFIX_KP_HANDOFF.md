@@ -204,3 +204,16 @@ local function checkData(itemData)
     end
 end
 ```
+
+## Status: taken over by mwsuite (2026-11-26)
+
+| KP | Intercept (mwpluginpatches) | MCM switch | How it works | Stays loaded? | Old luafix edit present |
+|---|---|---|---|---|---|
+| KP1 | `patches/attendMeRays.lua` | `attendMeRaysEnabled` | wraps the `simulate` handler registered from `attendmemwse/actions.lua`; while it runs, `tes3.rayTest` answers a repeat of the same plain ray (same position, direction, maxDistance and ignore list) with `{ reference = ... }` of the first answer; any other call passes through; put back on return or error | yes: the handler runs every frame | stands down (actions.lua contains `-- local fix (KP1)`) |
+| KP2 | `patches/attendMeRecruitLabel.lua` | `attendMeRecruitLabelEnabled` | wraps the `simulate` handler registered from `attendmemwse/recruit.lua` so it runs one non-menu frame in three; the click handler is untouched | yes: recruit mode can start any time | stands down (recruit.lua contains `-- local fix (KP2)`) |
+| KP3 | none | none | `normalizeMesh` is a local of KegDrip\main.lua and its callers are locals too, so there is nothing to intercept without editing the file or hooking string functions for every mod. `kegDripCadence` already calls its refresh at most every 3 s (MCM slider, 1-10 s) instead of every second, which cuts this cost by the same factor | n/a | the old edit, if present, keeps working beside `kegDripCadence` |
+| KP4 | `patches/g7ContainersLinkCache.lua` | `g7ContainersLinkCacheEnabled` | wraps the `itemTileUpdated`, `uiObjectTooltip`, `equip` and `equipped` handlers registered from `spammer/g7 containers/main.lua`; while they run, `tes3.getReference(id)` for a plain string id is answered from a safe handle per id (looked up again when the handle is invalid or the reference deleted; all handles dropped on `load`); put back on return or error | yes: runs whenever an inventory is open | stands down (main.lua contains `-- local fix (KP4)`) |
+
+The marker check reads the mod's file once when mwpluginpatches loads (`config.modFileHas`). Undoing the old luafix edit
+(`--undo`) or reinstalling the mod lets the intercept take over on the next start. Tests: `tests/test_kp_intercepts.py`.
+No credits: these are performance fixes, not borrowed ideas.

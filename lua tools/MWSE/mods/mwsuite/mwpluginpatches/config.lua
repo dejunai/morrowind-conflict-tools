@@ -131,6 +131,26 @@ function config.isAheadOfTheClassesInstalled()
     return (lfs and lfs.fileexists and lfs.fileexists("Data Files/MWSE/mods/Danae/Classes/main.lua")) or false
 end
 
+-- the intercepts that took over luafix KP1, KP2 and KP4 (patches/: attendMeRays, attendMeRecruitLabel, g7ContainersLinkCache)
+function config.isAttendMeInstalled()
+    return (lfs and lfs.fileexists and lfs.fileexists("Data Files/MWSE/mods/AttendMeMWSE/main.lua")) or false
+end
+
+function config.isG7ContainersInstalled()
+    return (lfs and lfs.fileexists and lfs.fileexists("Data Files/MWSE/mods/Spammer/G7 Containers/main.lua")) or false
+end
+
+-- true when a mod's Lua file (path under Data Files/MWSE/mods) contains text; used to see an old luafix edit
+-- ("-- local fix (KPn)") so an intercept doing the same job stands down. Read only, once per intercept at start.
+function config.modFileHas(relativePath, text)
+    if type(relativePath) ~= "string" or type(text) ~= "string" or not io or not io.open then return false end
+    local f = io.open("Data Files/MWSE/mods/" .. relativePath, "rb")
+    if not f then return false end
+    local ok, data = pcall(f.read, f, "*a")
+    f:close()
+    return ok and type(data) == "string" and data:find(text, 1, true) ~= nil
+end
+
 local function getDynamicDefaults()
     local mca = config.isMcaActive()
     local eu = config.isEbonheartUnderworksActive()
@@ -243,6 +263,11 @@ local function getDynamicDefaults()
 
         -- Ahead of the Classes: its post-chargen equip pass fills each slot with at most one item
         aotcEquipOnceEnabled = config.isAheadOfTheClassesInstalled(),
+
+        -- Attend Me and MWSE Containers Extended: the per-frame work luafix KP1, KP2 and KP4 used to cut by editing them
+        attendMeRaysEnabled = config.isAttendMeInstalled(),
+        attendMeRecruitLabelEnabled = config.isAttendMeInstalled(),
+        g7ContainersLinkCacheEnabled = config.isG7ContainersInstalled(),
     }
 end
 
