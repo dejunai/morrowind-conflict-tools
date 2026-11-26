@@ -217,6 +217,7 @@ check(activate(locked) == false and sounds[1] == "LockedDoor", "standing at a lo
 check(#notices == 0, "no notice unless switched on")
 config.lockedNotification = true; reset()
 activate(locked)
+check(sounds[1] == "LockedDoor", "locked sound still plays when the notice is on")
 check(notices[1] == "The door is locked.", "optional notice for players without sound")
 local keyed = door(cell("Balmora, Tomb", true), { locked = true, key = "tomb_key" })
 inventory.tomb_key = true

@@ -572,13 +572,14 @@ event.register(tes3.event.modConfigReady, function()
 				.. "bard's songs (Bards of Bardenfell: Sound\\Vo\\Bard\\) count as voiceovers and follow one "
 				.. "another, so in an inn with a bard every save was swallowed without a word. On: WBSR's save block "
 				.. "is lifted for bard songs only; a real speech still blocks saving. Works whether or not the Save "
-				.. "Guard above is enabled. On by default when WBSR is installed and loaded; without WBSR it does "
-				.. "nothing.\n\n" .. wbsrBard.status(),
+				.. "Guard above is enabled. On by default when WBSR is installed; without WBSR it does "
+				.. "nothing. Can be turned on or off at the main menu; the lift itself waits until a game is loaded.\n\n" .. wbsrBard.status(),
+			inGameOnly = false,
 			variable = mwse.mcm.createCustom({
-				getter = function() return wbsrBard.enabled() end,
+				inGameOnly = false,
+				getter = function() return wbsrBard.wanted() end,
 				setter = function(_, v)
-					config.letBardSongsSave = v and true or false
-					wbsrBard.refresh()
+					wbsrBard.setWanted(v)
 				end,
 			}),
 		})

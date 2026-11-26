@@ -79,7 +79,8 @@ yesNo(locks, "noLoadDoorOnPick", "Picking a loading door only unlocks it",
     "Modern Lockpicking opens a door the moment you pick it. With this on, a door that leads somewhere else is "
         .. "only unlocked, so you choose when to go through. Other doors and containers open as before.")
 yesNo(locks, "lockedNotification", "Show a notice for locked things",
-    "Shows a 'Locked' message when something you try is locked, for players who play without sound.")
+    "Shows a 'Locked' message when something you try is locked. The locked door or chest sound always plays, "
+        .. "whether this is on or off; the notice is there if you play without sound.")
 yesNo(locks, "lockedCrosshair", "Tint the crosshair on locked things",
     "With Essential Indicators installed, the crosshair turns orange over a locked door or container you have no key for.")
 yesNo(locks, "eveningLocks", "Owned homes lock in the evening",

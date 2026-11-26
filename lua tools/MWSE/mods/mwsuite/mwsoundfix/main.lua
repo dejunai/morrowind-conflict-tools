@@ -16,6 +16,7 @@
 local PATCH = "mwdialog_check - MWSoundFix.esp"
 local flagsByScript = {}
 local errors = 0
+local PAGE_SIZE = 100
 
 local function guarded(fn)
     return function(e)
@@ -70,6 +71,95 @@ end
 
 event.register(tes3.event.initialized, start)
 
+-- page the long repaired-script list: 100 entries at a time, Previous / Next, "Page X of Y"
+local function paginate(total, page, size)
+    size = size or PAGE_SIZE
+    total = tonumber(total) or 0
+    if total < 0 then total = 0 end
+    local pages = 1
+    if total > 0 then pages = math.ceil(total / size) end
+    page = math.floor(tonumber(page) or 1)
+    if page < 1 then page = 1 end
+    if page > pages then page = pages end
+    local first, last = 0, 0
+    if total > 0 then
+        first = (page - 1) * size + 1
+        last = math.min(total, page * size)
+    end
+    return {
+        page = page,
+        pages = pages,
+        first = first,
+        last = last,
+        total = total,
+        hasPrev = page > 1,
+        hasNext = page < pages,
+        label = string.format("Page %d of %d", page, pages),
+    }
+end
+
+local function collectEntries(data)
+    local byPlugin, plugins, entries = {}, {}, {}
+    for id, info in pairs(data.scripts) do
+        local owner = type(info) == "table" and info.owner or "?"
+        if not byPlugin[owner] then byPlugin[owner] = {}; plugins[#plugins + 1] = owner end
+        local repairs = type(info) == "table" and type(info.repairs) == "table" and table.concat(info.repairs, "; ") or ""
+        table.insert(byPlugin[owner], id .. (repairs ~= "" and ("  -  " .. repairs) or ""))
+    end
+    table.sort(plugins, function(a, b) return a:lower() < b:lower() end)
+    for _, owner in ipairs(plugins) do
+        table.sort(byPlugin[owner])
+        for _, line in ipairs(byPlugin[owner]) do
+            entries[#entries + 1] = { owner = owner, line = line }
+        end
+    end
+    return entries, plugins
+end
+
+local function formatPageText(entries, nav)
+    if nav.total == 0 or nav.first == 0 then return "" end
+    local parts, current, count, buf = {}, nil, 0, nil
+    local function flush()
+        if current then
+            parts[#parts + 1] = string.format("%s (%d)", current, count)
+            parts[#parts + 1] = table.concat(buf, "\n")
+        end
+    end
+    for i = nav.first, nav.last do
+        local e = entries[i]
+        if current ~= e.owner then
+            flush()
+            current, count, buf = e.owner, 0, {}
+        end
+        count = count + 1
+        buf[#buf + 1] = e.line
+    end
+    flush()
+    return table.concat(parts, "\n")
+end
+
+local function setInfoText(comp, text)
+    if not comp then return end
+    comp.text = text
+    local el = comp.elements and comp.elements.info
+    if el then
+        el.text = text
+        pcall(function()
+            local menu = el.getTopLevelMenu and el:getTopLevelMenu()
+            if menu and menu.updateLayout then menu:updateLayout() end
+        end)
+    end
+end
+
+local function setButtonOn(btn, on)
+    if not btn then return end
+    if on then
+        pcall(function() if btn.enable then btn:enable() end end)
+    else
+        pcall(function() if btn.disable then btn:disable() end end)
+    end
+end
+
 -- a read-only MCM page: the scripts the patch repaired, by plugin (nothing to set)
 local function registerMcm()
     local template = mwse.mcm.createTemplate({ name = "mwsoundfix" })
@@ -81,26 +171,58 @@ local function registerMcm()
         template:register()
         return
     end
-    local byPlugin, plugins, total = {}, {}, 0
-    for id, info in pairs(data.scripts) do
-        local owner = type(info) == "table" and info.owner or "?"
-        if not byPlugin[owner] then byPlugin[owner] = {}; plugins[#plugins + 1] = owner end
-        local repairs = type(info) == "table" and type(info.repairs) == "table" and table.concat(info.repairs, "; ") or ""
-        table.insert(byPlugin[owner], id .. (repairs ~= "" and ("  -  " .. repairs) or ""))
-        total = total + 1
+    local entries, plugins = collectEntries(data)
+    local total = #entries
+    local currentPage = 1
+    local pageInfo, listInfo, prevBtn, nextBtn
+
+    local function nav()
+        return paginate(total, currentPage, PAGE_SIZE)
     end
-    table.sort(plugins, function(a, b) return a:lower() < b:lower() end)
+
+    local function apply()
+        local n = nav()
+        currentPage = n.page
+        setInfoText(pageInfo, n.label)
+        setInfoText(listInfo, formatPageText(entries, n))
+        setButtonOn(prevBtn, n.hasPrev)
+        setButtonOn(nextBtn, n.hasNext)
+    end
+
     page:createInfo({ text = string.format("%d script(s) in %d plugin(s), built %s. These scripts used to restart "
         .. "their sound every frame; %s keeps their own state instead. %s", total, #plugins, tostring(data.built or "?"),
         PATCH, tes3.findGlobal("MWSF_Epoch") and "The patch is active." or "The patch is NOT active in this game.") })
-    for _, owner in ipairs(plugins) do
-        table.sort(byPlugin[owner])
-        local cat = page:createCategory(string.format("%s (%d)", owner, #byPlugin[owner]))
-        cat:createInfo({ text = table.concat(byPlugin[owner], "\n") })
-    end
+    pageInfo = page:createInfo({ text = nav().label })
+    prevBtn = page:createButton({
+        buttonText = "Previous",
+        description = "Show the previous 100 repaired scripts. Disabled on the first page.",
+        callback = function()
+            if currentPage > 1 then currentPage = currentPage - 1; apply() end
+        end,
+        postCreate = function() apply() end,
+    })
+    nextBtn = page:createButton({
+        buttonText = "Next",
+        description = "Show the next 100 repaired scripts. Disabled on the last page.",
+        callback = function()
+            local n = nav()
+            if currentPage < n.pages then currentPage = currentPage + 1; apply() end
+        end,
+        postCreate = function() apply() end,
+    })
+    listInfo = page:createInfo({ text = formatPageText(entries, nav()) })
+    apply()
     template:register()
 end
 
 event.register(tes3.event.modConfigReady, registerMcm)
 
-return { onLoaded = onLoaded, onReferenceActivated = onReferenceActivated, flagsByScript = flagsByScript }
+return {
+    onLoaded = onLoaded,
+    onReferenceActivated = onReferenceActivated,
+    flagsByScript = flagsByScript,
+    PAGE_SIZE = PAGE_SIZE,
+    paginate = paginate,
+    collectEntries = collectEntries,
+    formatPageText = formatPageText,
+}

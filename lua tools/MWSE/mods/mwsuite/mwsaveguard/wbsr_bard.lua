@@ -95,16 +95,23 @@ end
 
 function M.present() return state.file and state.loaded end
 
+-- the MCM switch: saved even at the main menu, when no game (and no WBSR handlers) are loaded yet
+function M.wanted()
+    local v = opts.config.letBardSongsSave
+    if v == nil then return state.file == true end   -- unset: on when WBSR is installed
+    return v == true
+end
+
 function M.enabled()
     if not M.present() then return false end
-    local v = opts.config.letBardSongsSave
-    if v == nil then return true end                 -- unset: on wherever WBSR is
-    return v == true
+    return M.wanted()
 end
 
 function M.status()
     if not state.file then return "WBSR isn't installed: this does nothing." end
-    if not state.loaded then return "WBSR is installed but isn't loaded: this does nothing." end
+    if not state.loaded then
+        return "WBSR is installed. It isn't loaded yet (normal at the main menu); this setting is saved and used once a game is loaded."
+    end
     if state.blockOff then return "WBSR is loaded, with its voiceover save block (shortBlockLoadSave) off." end
     return "WBSR is installed and loaded."
 end
@@ -182,6 +189,14 @@ local function refresh()
 end
 M.refresh = refresh
 
+function M.setWanted(v)
+    opts.config.letBardSongsSave = v and true or false
+    -- bookends go around WBSR's addTempSound handler, which it registers on the first load
+    if tes3.player and tes3.mobilePlayer then
+        refresh()
+    end
+end
+
 -- opts: config (mwsaveguard's table: letBardSongsSave), log (mwsaveguard.log), handlers(name) -> { {fn, priority} }
 function M.setup(o)
     opts = o
@@ -193,7 +208,7 @@ function M.setup(o)
         end
     end, { priority = -100 })
     event.register("loaded", function()
-        if state.file then refresh() end
+        refresh()
     end, { priority = -100 })
     return M
 end
