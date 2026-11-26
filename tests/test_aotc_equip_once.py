@@ -46,18 +46,27 @@ def mods(tmp_path):
 
 
 BOOT = r"""
-local logs = {}
+local logs, handlers = {}, {}
 mwse = { log = function(fmt, ...) logs[#logs + 1] = string.format(fmt, ...) end }
+local function list(name) handlers[name] = handlers[name] or {} return handlers[name] end
+event = {
+  register = function(name, fn) local l = list(name) for _, f in ipairs(l) do if f == fn then return end end l[#l + 1] = fn end,
+  unregister = function(name, fn) local l = list(name) for i = #l, 1, -1 do if l[i] == fn then table.remove(l, i) end end end,
+  isRegistered = function(name, fn) for _, f in ipairs(list(name)) do if f == fn then return true end end return false end,
+}
+function trigger(name, e) e = e or {} for _, f in ipairs({ unpack(list(name)) }) do f(e) end return e end
 tes3 = {
+  event = setmetatable({}, { __index = function(_, k) return k end }),
   objectType = { armor = "armor", weapon = "weapon", clothing = "clothing", misc = "misc" },
   weaponType = { marksmanBow = 9, marksmanCrossbow = 10, marksmanThrown = 11, arrow = 12, bolt = 13 },
   armorSlot = { helmet = 0, cuirass = 1, shield = 8 },
   clothingSlot = { shirt = 2, ring = 8 },
 }
+charGenValue = -1
+tes3.findGlobal = function(id) if id == "CharGenState" then return { value = charGenValue } end return nil end
 tes3.player = { id = "player", object = { equipment = {}, inventory = {} } }
 tes3.mobilePlayer = { reference = tes3.player }
-local npc = { id = "npc" }
--- items: id, objectType, slot / type
+local npc = { id = "npc", equipment = {} }
 ITEMS = {
   helm1 = { objectType = "armor", slot = 0 }, helm2 = { objectType = "armor", slot = 0 },
   cuir1 = { objectType = "armor", slot = 1 },
@@ -92,7 +101,6 @@ local function engineEquip(p)
   return true
 end
 tes3.equip = engineEquip
-npc.equipment = {}
 tes3.getObject = function(id) return ITEMS[id] end
 tes3.addItem = function(id)
   local inv = tes3.player.object.inventory
@@ -120,8 +128,16 @@ local function worn()
   table.sort(ids)
   return joined(ids)
 end
-local function wear(...) local eq = {} for _, o in ipairs({ ... }) do eq[#eq + 1] = { object = o } end tes3.player.object.equipment = eq end
+local function wear(...)
+  local eq = {}
+  for _, o in ipairs({ ... }) do eq[#eq + 1] = { object = o } end
+  tes3.player.object.equipment = eq
+end
 local function fire() local t = started[#started] started[#started] = nil return t.callback({}) end
+function beginChargen() charGenValue = 10 trigger("loaded") end
+local function unloaded()
+  return timer.start == nativeTimerStart and tes3.equip == engineEquip and #(list("simulate")) == 0
+end
 """
 
 
@@ -136,25 +152,26 @@ def run(script, mods, enabled=True, flag=True, installed=True):
 def test_each_slot_gets_one_item_and_repeats_are_skipped(mods):
     run(r"""
 assert(patch.init() == true)
+assert(timer.start == nativeTimerStart, "not armed until chargen is pending")
+beginChargen()
+assert(timer.start ~= nativeTimerStart)
 load("Danae/Classes/main.lua")
 GEAR = { "helm1", "helm2", "cuir1", "shirt1", "shirt2", "sword1", "sword2", "arrows", "bolts", "potion" }
 chargenDone()
 assert(#started == 1)
 fire()
 local got = worn()
-local helmets = 0
-for _, s in ipairs(tes3.player.object.equipment) do if s.object.id:match("^helm") then helmets = helmets + 1 end end
-assert(helmets == 1, got)
-local shirts, swords, ammo = 0, 0, 0
+local helmets, shirts, swords, ammo = 0, 0, 0, 0
 for _, s in ipairs(tes3.player.object.equipment) do
   local o = s.object
-  if o.id:match("^shirt") then shirts = shirts + 1 elseif o.id:match("^sword") then swords = swords + 1
+  if o.id:match("^helm") then helmets = helmets + 1
+  elseif o.id:match("^shirt") then shirts = shirts + 1 elseif o.id:match("^sword") then swords = swords + 1
   elseif o.id == "arrows" or o.id == "bolts" then ammo = ammo + 1 end
 end
-assert(shirts == 1 and swords == 1 and ammo == 1, got)
-assert(#tes3.player.object.equipment == 5, got)          -- helmet, cuirass, shirt, weapon, ammo
+assert(helmets == 1 and shirts == 1 and swords == 1 and ammo == 1, got)
+assert(#tes3.player.object.equipment == 5, got)
 assert(equipCalls == 5, "only the equips that fill a slot reach the engine: " .. equipCalls)
-assert(tes3.equip == engineEquip, "tes3.equip is put back")
+assert(unloaded(), "wrappers and simulate come off after the pass")
 local seen = false
 for _, l in ipairs(logs) do if l:find("skipped", 1, true) then seen = true end end
 assert(seen, "one summary line")
@@ -165,11 +182,13 @@ print("ok")
 def test_a_slot_filled_before_the_pass_is_left_alone(mods):
     run(r"""
 assert(patch.init())
+beginChargen()
 load("Danae/Classes/main.lua")
 wear(ITEMS.shirt1, ITEMS.ring1)
 GEAR = { "shirt2", "helm1", "ring2", "ring3" }
 chargenDone() fire()
-assert(worn() == "helm1,ring1,ring2,shirt1", worn())     -- shirt kept, the second ring fits, the third does not
+assert(worn() == "helm1,ring1,ring2,shirt1", worn())
+assert(unloaded())
 print("ok")
 """, mods)
 
@@ -177,10 +196,10 @@ print("ok")
 def test_two_handed_weapon_and_shield_do_not_go_together(mods):
     run(r"""
 assert(patch.init())
+beginChargen()
 load("Danae/Classes/main.lua")
 GEAR = { "shield1", "claymore", "sword1" }
 chargenDone() fire()
--- whichever of shield/claymore came first stays; the one-handed sword fits with the shield, the claymore does not
 local s = worn()
 local hasShield, hasClaymore = s:find("shield1", 1, true), s:find("claymore", 1, true)
 assert(not (hasShield and hasClaymore), s)
@@ -189,6 +208,7 @@ print("ok")
 """, mods)
     run(r"""
 assert(patch.init())
+beginChargen()
 load("Danae/Classes/main.lua")
 wear(ITEMS.bow)
 GEAR = { "shield1", "arrows" }
@@ -198,6 +218,7 @@ print("ok")
 """, mods)
     run(r"""
 assert(patch.init())
+beginChargen()
 load("Danae/Classes/main.lua")
 wear(ITEMS.shield1)
 GEAR = { "claymore", "sword1" }
@@ -210,6 +231,7 @@ print("ok")
 def test_thrown_weapons_use_the_ammunition_slot(mods):
     run(r"""
 assert(patch.init())
+beginChargen()
 load("Danae/Classes/main.lua")
 GEAR = { "dart", "arrows", "sword1" }
 chargenDone() fire()
@@ -223,9 +245,9 @@ print("ok")
 def test_guard_only_runs_inside_the_mods_timer_callback(mods):
     run(r"""
 assert(patch.init())
+beginChargen()
 load("Danae/Classes/main.lua")
 load("someOtherMod/main.lua")
--- another mod's timer is not wrapped, and equips outside the pass are untouched
 local called = false
 local cb = function() called = true end
 otherStartsTimer(cb)
@@ -233,7 +255,6 @@ assert(started[#started].callback == cb)
 tes3.equip{ item = ITEMS.helm1, reference = tes3.player }
 tes3.equip{ item = ITEMS.helm2, reference = tes3.player }
 assert(equipCalls == 2 and worn() == "helm2", worn())
--- the mod's timer keeps its other settings
 GEAR = {}
 chargenDone()
 local t = started[#started]
@@ -245,6 +266,7 @@ print("ok")
 def test_other_references_pass_through_during_the_pass(mods):
     run(r"""
 assert(patch.init())
+beginChargen()
 local src = [[
 timer.start{ callback = function()
   tes3.equip{ item = ITEMS.helm1, reference = NPC }
@@ -259,16 +281,18 @@ end }
 NPC = { id = "npc" }
 assert(loadstring(src, "@C:/x/mods/Danae/Classes/main.lua"))()
 fire()
--- the npc's two helmets and the non-gear item reach the engine; the player gets one helmet and one shirt
 assert(equipLog[1] == "N:helm1" and equipLog[2] == "N:helm2" and equipLog[3] == "P:potion", joined(equipLog))
 assert(worn() == "helm1,potion,shirt1", worn())
 assert(equipCalls == 5, equipCalls)
+assert(unloaded())
 print("ok")
 """, mods)
+
 
 def test_tes3_equip_is_restored_when_the_callback_fails(mods):
     run(r"""
 assert(patch.init())
+beginChargen()
 load("Danae/Classes/main.lua")
 GEAR = { "helm1" }
 chargenDone()
@@ -276,8 +300,7 @@ local cb = started[#started].callback
 tes3.addItem = function() error("boom") end
 local ok, err = pcall(cb, {})
 assert(not ok and tostring(err):find("boom", 1, true), tostring(err))
-assert(tes3.equip == engineEquip, "restored after an error")
-tes3.addItem = nil
+assert(unloaded(), "restored after an error")
 print("ok")
 """, mods)
 
@@ -285,8 +308,9 @@ print("ok")
 def test_the_callback_still_gets_its_arguments_and_returns(mods):
     run(r"""
 assert(patch.init())
+beginChargen()
 local got
-timer.start{ callback = function(...) got = { ... } return "r" end }   -- called from this chunk, not the mod: untouched
+timer.start{ callback = function(...) got = { ... } return "r" end }
 assert(started[#started].callback ~= nil)
 local src = [[
 timer.start{ callback = function(a, b) seenA, seenB = a, b return "back" end }
@@ -297,6 +321,80 @@ local cb = started[#started].callback
 assert(cb ~= nil)
 local r = cb("a", "b")
 assert(seenA == "a" and seenB == "b" and r == "back")
+assert(unloaded())
+print("ok")
+""", mods)
+
+
+def test_save_load_with_chargen_done_does_not_arm(mods):
+    run(r"""
+assert(patch.init() == true)
+assert(#list("loaded") == 1, "the loaded hook is registered")
+charGenValue = -1
+trigger("loaded")
+assert(unloaded())
+assert(#list("loaded") == 1, "loaded stays so a later new game can re-arm")
+print("ok")
+""", mods)
+
+
+def test_disarms_a_second_after_chargen_if_the_timer_never_runs(mods):
+    run(r"""
+assert(patch.init())
+beginChargen()
+assert(not unloaded())
+charGenValue = -1
+trigger("simulate", { delta = 0.5 })
+assert(not unloaded(), "still waiting for AotC's 0.7 s timer")
+trigger("simulate", { delta = 0.6 })
+assert(unloaded(), "gone after 1 s with no equip callback")
+assert(#list("loaded") == 1)
+print("ok")
+""", mods)
+
+
+def test_a_new_game_later_in_the_session_rearms(mods):
+    run(r"""
+assert(patch.init())
+beginChargen()
+load("Danae/Classes/main.lua")
+GEAR = { "helm1", "helm2" }
+chargenDone() fire()
+assert(unloaded() and worn() == "helm1")
+-- a later new game
+tes3.player.object.equipment, tes3.player.object.inventory = {}, {}
+equipCalls = 0
+GEAR = { "shirt1", "shirt2" }
+beginChargen()
+assert(timer.start ~= nativeTimerStart)
+chargenDone() fire()
+assert(worn() == "shirt1", worn())
+assert(equipCalls == 1)
+assert(unloaded())
+print("ok")
+""", mods)
+
+
+def test_does_not_clobber_a_later_timer_wrapper(mods):
+    run(r"""
+assert(patch.init())
+beginChargen()
+local ours = timer.start
+local laterCalls = 0
+local later = function(...) laterCalls = laterCalls + 1 return ours(...) end
+timer.start = later
+load("Danae/Classes/main.lua")
+GEAR = { "helm1", "helm2" }
+chargenDone() fire()
+assert(timer.start == later, "a wrapper installed after ours is left in place")
+assert(tes3.equip == engineEquip)
+assert(#list("simulate") == 0)
+-- our function is still under theirs, but is now a pass-through
+local ran = false
+later({ callback = function() ran = true end, duration = 1 })
+assert(laterCalls >= 2 and started[#started].callback ~= nil)
+started[#started].callback()
+assert(ran and tes3.equip == engineEquip)
 print("ok")
 """, mods)
 
@@ -306,6 +404,7 @@ def test_left_alone_when_off_or_not_installed(mods, enabled, flag, installed):
     run(r"""
 assert(patch.init() == false)
 assert(timer.start == nativeTimerStart, "timer.start is not wrapped")
+assert(#list("loaded") == 0)
 load("Danae/Classes/main.lua")
 GEAR = { "helm1", "helm2" }
 chargenDone() fire()

@@ -1,8 +1,24 @@
+-- Friends & Frens: hold back the Jiub companion rumor until a configurable number of minutes after
+-- the player leaves chargen (Census Office / journal enabled, CharGenState == -1), and keep it from
+-- NPCs still in the Census Office or named as chargen staff while the delay is running. Optionally
+-- copy the vanilla chargen Jiub's head and hair onto aa_comp_jiub.
+--
+-- Once the delay has been reached, or on a save load where it already has, every handler this patch
+-- registered is removed (simulate, infoFilter, mobileActivated) and nothing of it stays resident
+-- for the rest of the session. A thin loaded handler is kept so a new game started later in the
+-- same session can re-arm. Appearance is synced once more as the handlers come off. By dej (dejunai).
+
 local config = require("mwpluginpatches.config")
 
 local jiubDelay = {}
 
 local JIUB_RUMOR_INFO_ID = "1453113367223718194"
+
+local ready = false
+local armed = false
+local counting = false
+local infoRegistered = false
+local mobileRegistered = false
 
 local function getPlayerData()
     if not tes3.player then return nil end
@@ -32,7 +48,7 @@ local function syncJiubAppearance()
     end
 end
 
--- globals are base objects that live as long as the game: looked up once (init runs at initialized)
+-- globals are base objects that live as long as the game
 local charGenGlobal
 local function charGenState()
     if not charGenGlobal then charGenGlobal = tes3.findGlobal("CharGenState") end
@@ -43,19 +59,55 @@ local function requiredSeconds()
     return math.max(0, (config.jiubDelayMinutes or 5) * 60)
 end
 
--- the post-census clock only runs (a simulate handler) until the delay is reached; it starts again on a load
--- whose character hasn't reached it, or when a longer delay is set in the Mod Config menu
-local counting = false
-local onSimulate
+local function delayReached()
+    local data = getPlayerData()
+    return data ~= nil and (data.secondsSinceCensus or 0) >= requiredSeconds()
+end
+
+local onSimulate, onInfoFilter, onMobileActivated, onLoaded
+
 local function startCounting()
     if counting then return end
     counting = true
     event.register(tes3.event.simulate, onSimulate)
 end
+
 local function stopCounting()
     if not counting then return end
     counting = false
     event.unregister(tes3.event.simulate, onSimulate)
+end
+
+local function unload(reason)
+    stopCounting()
+    if infoRegistered then
+        event.unregister(tes3.event.infoFilter, onInfoFilter)
+        infoRegistered = false
+    end
+    if mobileRegistered then
+        event.unregister(tes3.event.mobileActivated, onMobileActivated)
+        mobileRegistered = false
+    end
+    syncJiubAppearance()
+    armed = false
+    if reason then
+        mwse.log("[mwpluginpatches] Friends & Frens Jiub companion delay: %s", reason)
+    end
+end
+
+local function arm()
+    if armed then return end
+    armed = true
+    syncJiubAppearance()
+    if not infoRegistered then
+        event.register(tes3.event.infoFilter, onInfoFilter)
+        infoRegistered = true
+    end
+    if not mobileRegistered then
+        event.register(tes3.event.mobileActivated, onMobileActivated)
+        mobileRegistered = true
+    end
+    startCounting()
 end
 
 onSimulate = function(e)
@@ -78,13 +130,13 @@ onSimulate = function(e)
             mwse.log("[mwpluginpatches] Post-census delay of %s minutes reached. Jiub companion rumor is now eligible to appear.",
                 config.jiubDelayMinutes)
         end
-        stopCounting()
+        unload("delay reached; handlers removed.")
     end
 end
 
-local function onInfoFilter(e)
-    if not e.passes or not e.info then return end          -- first: it runs for every response tried
-    if not config.jiubDelayEnabled then return end         -- Friends & Frens itself was checked once, in init
+onInfoFilter = function(e)
+    if not e.passes or not e.info then return end
+    if not config.jiubDelayEnabled then return end
 
     local isJiubRumor = (tostring(e.info.id) == JIUB_RUMOR_INFO_ID)
     if not isJiubRumor then return end
@@ -118,41 +170,46 @@ local function onInfoFilter(e)
     -- 3. Check post-census gameplay timer
     local data = getPlayerData()
     if not data or (data.secondsSinceCensus or 0) < requiredSeconds() then
-        startCounting()                                    -- a longer delay set since it was reached
+        startCounting()
         e.passes = false
         return
     end
+
+    -- the delay is already reached; this call is allowed, and the handlers come off
+    unload("delay already reached; handlers removed.")
 end
 
-local function onLoaded()
-    syncJiubAppearance()
-    local data = getPlayerData()
-    if data and (data.secondsSinceCensus or 0) >= requiredSeconds() then
-        stopCounting()
-    else
-        startCounting()
-    end
-end
-
-local function onMobileActivated(e)
+onMobileActivated = function(e)
     if not config.jiubSyncAppearance then return end
     if e.reference and e.reference.object.id:lower() == "aa_comp_jiub" then
         syncJiubAppearance()
     end
 end
 
-function jiubDelay.init()
-    if not config.jiubDelayEnabled or not config.isFriendsAndFrensActive() then
+onLoaded = function()
+    charGenGlobal = nil   -- a new load may have a different global object
+    if not config.jiubDelayEnabled then
+        unload()
         return
     end
+    if delayReached() then
+        unload("already reached on this save; handlers not kept loaded.")
+    else
+        arm()
+    end
+end
 
-    syncJiubAppearance()
-    startCounting()
-    event.register(tes3.event.infoFilter, onInfoFilter)
-    event.register(tes3.event.mobileActivated, onMobileActivated)
+function jiubDelay.init()
+    if ready then return true end
+    if not config.jiubDelayEnabled or not config.isFriendsAndFrensActive() then
+        return false
+    end
+    if type(event) ~= "table" or type(event.register) ~= "function" then return false end
     event.register(tes3.event.loaded, onLoaded)
-
-    mwse.log("[mwpluginpatches] Friends & Frens Jiub Companion Delayer patch active.")
+    ready = true
+    if tes3.player then onLoaded() end
+    mwse.log("[mwpluginpatches] Friends & Frens Jiub Companion Delayer will arm after a load while the delay is pending, then unload.")
+    return true
 end
 
 return jiubDelay
