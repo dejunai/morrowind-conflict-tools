@@ -66,3 +66,49 @@ def test_full_strict_has_no_reset_unmerge_or_redundant_step(staged, tmp_path):  
     assert not any(s[0] in ("--redundant", "--redundant-auto") for s in steps)
     assert all("--preserve-saves" in s and s[s.index("--preserve-saves") + 1] == "strict"
                for s in steps if s[0] not in ("--redundant", "--redundant-auto"))
+
+
+
+def test_preserve_saves_bare_flag_before_the_path(tmp_path):
+    path = str(tmp_path / "Data Files")
+    args = m.parse_check_argv(["--preserve-saves", path])
+    assert args.preserve_saves == "basic"
+    assert args.data_dir == path
+
+
+def test_preserve_saves_bare_flag_at_the_end(tmp_path):
+    path = str(tmp_path / "Data Files")
+    args = m.parse_check_argv([path, "--preserve-saves"])
+    assert args.preserve_saves == "basic"
+    assert args.data_dir == path
+
+
+def test_preserve_saves_explicit_value_with_and_without_equals(tmp_path):
+    path = str(tmp_path / "Data Files")
+    space = m.parse_check_argv(["--preserve-saves", "strict", path])
+    assert space.preserve_saves == "strict" and space.data_dir == path
+    eq_strict = m.parse_check_argv(["--preserve-saves=strict", path])
+    assert eq_strict.preserve_saves == "strict" and eq_strict.data_dir == path
+    eq_basic = m.parse_check_argv([path, "--preserve-saves=basic"])
+    assert eq_basic.preserve_saves == "basic" and eq_basic.data_dir == path
+    space_basic = m.parse_check_argv([path, "--preserve-saves", "basic"])
+    assert space_basic.preserve_saves == "basic" and space_basic.data_dir == path
+
+
+def test_preserve_saves_path_first_order(tmp_path):
+    path = str(tmp_path / "Data Files")
+    args = m.parse_check_argv([path, "--preserve-saves", "--no-sounds"])
+    assert args.preserve_saves == "basic"
+    assert args.data_dir == path
+    assert args.no_sounds
+    # unique abbreviation, when the parser allows it (argparse default)
+    ap = m.check_parser()
+    if ap.allow_abbrev:
+        abbr = m.parse_check_argv(["--preserve", path], ap)
+        assert abbr.preserve_saves == "basic" and abbr.data_dir == path
+
+
+def test_preserve_saves_help_shows_choices_and_that_bare_means_basic():
+    text = m.check_parser().format_help()
+    assert "[basic|strict]" in text
+    assert "bare flag means basic" in text

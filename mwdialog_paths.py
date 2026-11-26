@@ -129,55 +129,658 @@ def find_mwrecompile(game_dir=None, explicit=None):
     return find_program("MWRecompile", game_dir)
 
 
-def deploy_lua_tools(data_dir, src=None, backup_dir=None):
-    """Bring Data Files up to date with the suite's Lua mods in lua tools\\ (laid out like Data Files), where
-    every edit to them is made. A file Data Files lacks is copied in. A deployed file that differs from its
-    lua tools copy is replaced when lua tools' copy is the newer one; the deployed one goes to backup_dir
-    first (default <backups>\\lua deploy\\<date>). A deployed copy newer than lua tools' is left alone and
-    listed: an edit made there belongs in lua tools. MWSE\\config\\ holds the player's settings: only a
-    missing file is copied there. Returns {"copied", "updated", "newer", "retired", "backup"}: paths relative
-    to Data Files ("retired": files in Data Files\\MWSE\\mods\\mwsuite that lua tools no longer has, only
-    listed)."""
+LUA_MANIFEST = "mwdialog_lua_manifest.json"         # what --play last deployed from lua tools (a record: state_path)
+LUA_MANIFEST_SCHEMA = "mwdialog-lua-deploy-manifest"
+LUA_MANIFEST_VERSION = 1
+LUA_PRUNE_DIR = "lua prune"                          # <backups>\\lua prune\\<date>\\: what a prune removed + journal
+LUA_PRUNE_JOURNAL = "journal.jsonl"
+# Suite mods taken out of lua tools before --play kept a manifest. Each is pruned once (then listed in the
+# manifest's "retired_done"), and only while lua tools has no folder of that name: every file under
+# Data Files\\MWSE\\mods\\mwsuite\\<name>\\ (the suite's own folder), <name>-metadata.toml, and each config
+# given (see CONFIG_ENTRY), unless a module still in lua tools uses it. Name: configs.
+RETIRED_SUITE_MODS = {
+    "mweffectinspector": ("mweffectinspector",),     # removed in 05a1d7c; mwconsole replaces it
+    "mwpersonaleffects": ("mwpersonaleffects",),     # folded into mwpluginpatches (0b76018); only its config is left
+}
+# A config entry, in the manifest's "configs", RETIRED_SUITE_MODS and ownmods.json's "configs": "name" is
+# Data Files\\MWSE\\config\\name.json; "name/" is the whole folder Data Files\\MWSE\\config\\name\\.
+OWNMODS_FILE = ("MWSE", "mods", "mwsuite", "ownmods.json")    # in lua tools; the luafix exempt list ships there
+OWNMODS_CONFIGS_KEY = "configs"                                # {"<module>": ["name", "folder/", ...]}: overrides
+_LUA_STR = r'"((?:[^"\\\n]|\\.)*)"' + "|" + r"'((?:[^'\\\n]|\\.)*)'"
+_ASSIGN_STR = re.compile(r"^\s*(?:local\s+)?([A-Za-z_][\w.]*)\s*=\s*(?:" + _LUA_STR + r")\s*(?:--.*)?$", re.M)
+_ARG = r"\s*(?:" + _LUA_STR + r"|([A-Za-z_][\w.]*))"
+_WRITE_CALL = re.compile(r"\b(mwse\.saveConfig|json\.savefile|io\.open)\s*\(" + _ARG +
+                         r"(?:\s*,\s*(?:\"([^\"\n]*)\"|'([^'\n]*)'))?")
+_READ_CALL = re.compile(r"\b(mwse\.loadConfig|json\.loadfile)\s*\(" + _ARG)
+_PCALL = re.compile(r"\bpcall\s*\(\s*(mwse\.saveConfig|json\.savefile|mwse\.loadConfig|json\.loadfile)\s*," + _ARG)
+_SAVE_ON_CLOSE = re.compile(r"(:\s*saveOnClose)\s*\(" + _ARG)              # an MCM template saving its config
+_CFG_PATH = re.compile(r"(?:^|[\\/])mwse[\\/]+config[\\/]+([^\\/]+?)[\\/]*$", re.I)
+_CFG_REL = re.compile(r"^config[\\/]+([^\\/]+)$", re.I)
+
+
+def _rkey(rel):
+    return os.path.normcase(os.path.normpath(rel))
+
+
+def _mrel(rel):
+    """A path relative to Data Files as the manifest and the journal keep it: forward slashes."""
+    return "/".join(p for p in re.split(r"[\\/]+", rel) if p)
+
+
+def _local_rel(mrel):
+    return os.path.join(*[p for p in re.split(r"[\\/]+", mrel) if p])
+
+
+def _safe_rel(rel):
+    """A relative path that stays inside Data Files (no drive, no root, no ..)."""
+    if not rel or os.path.isabs(rel) or DRIVE_RE.match(rel) or rel[:1] in "\\/":
+        return False
+    parts = [p for p in re.split(r"[\\/]+", rel) if p]
+    return bool(parts) and ".." not in parts
+
+
+def _sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _is_config(rel):
+    low = [p.lower() for p in re.split(r"[\\/]+", rel) if p]
+    return len(low) == 3 and low[:2] == ["mwse", "config"]
+
+
+def lua_tools_names(src=None):
+    """(suite module folders under lua tools\\MWSE\\mods\\mwsuite, other folders under lua tools\\MWSE\\mods)."""
     src = src or LUA_TOOLS_DIR
-    res = {"copied": [], "updated": [], "newer": [], "retired": [], "backup": None}
-    have = set()
+    def subdirs(*p):
+        try:
+            return sorted(d for d in os.listdir(os.path.join(src, *p))
+                          if os.path.isdir(os.path.join(src, *p, d)) and d != "__pycache__")
+        except OSError:
+            return []
+    return subdirs("MWSE", "mods", "mwsuite"), [d for d in subdirs("MWSE", "mods") if d.lower() != "mwsuite"]
+
+
+def lua_mod_of(rel, suite_leaves=(), other_tops=()):
+    """(mod, suite) for a path relative to Data Files: MWSE\\mods\\mwsuite\\<m>\\... -> "mwsuite/<m>" (a file
+    directly in mwsuite\\ -> "mwsuite"), MWSE\\mods\\<M>\\... -> "<M>"; <name>-metadata.toml and
+    MWSE\\config\\<name>.json belong to the module or mod folder of that name, else to "<name>". suite: the
+    file is the suite's own (its folder, or named after a suite module), so nothing else ships it."""
+    p = [x for x in re.split(r"[\\/]+", rel) if x]
+    low = [x.lower() for x in p]
+    if len(p) >= 4 and low[:3] == ["mwse", "mods", "mwsuite"]:
+        return ("mwsuite/" + p[3], True) if len(p) >= 5 else ("mwsuite", True)
+    if len(p) >= 4 and low[:2] == ["mwse", "mods"]:
+        return p[2], False
+    stem = None
+    if len(p) == 1 and low[0].endswith("-metadata.toml"):
+        stem = p[0][:-len("-metadata.toml")]
+    elif len(p) == 3 and low[:2] == ["mwse", "config"] and low[2].endswith(".json"):
+        stem = p[2][:-len(".json")]
+    if stem is None:
+        return "/".join(p[:-1]) or p[0], False
+    if stem.lower() == "mwsuite":
+        return "mwsuite", True
+    for leaf in suite_leaves:
+        if leaf.lower() == stem.lower():
+            return "mwsuite/" + leaf, True
+    for top in other_tops:
+        if top.lower() == stem.lower():
+            return top, False
+    return stem, False
+
+
+def _valid_config_name(name):
+    """A config entry (CONFIG_ENTRY) that stays inside MWSE\\config."""
+    if not isinstance(name, str):
+        return False
+    base = name[:-1] if name.endswith("/") else name
+    return bool(base.strip()) and not re.search(r"[\\/:*?\"<>|]|\.\.", base)
+
+
+def _cfg_key(name):
+    """Compare config entries: a module's name.json and its name\\ folder count as one."""
+    return name.rstrip("/").lower()
+
+
+def _lua_unescape(text):
+    return re.sub(r"\\(.)", lambda m: m.group(1), text)
+
+
+def _config_of_path(path, call):
+    """The config entry a path a Lua call names, or None: mwse.save/loadConfig "x" -> "x";
+    json.savefile/loadfile "config\\x" -> "x"; io.open "...MWSE\\config\\x.json" -> "x"; a folder there -> "x/"."""
+    if call.startswith("mwse."):
+        return path if _valid_config_name(path) else None
+    m = (_CFG_REL.match(path) if call.startswith("json.") else None) or _CFG_PATH.search(path)
+    if not m:
+        return None
+    name = m.group(1)
+    if name.lower().endswith(".json"):
+        name = name[:-len(".json")]
+    elif call == "io.open" or "." in name:
+        return None                                   # another kind of file
+    elif call.startswith("folder"):
+        name += "/"
+    return name if _valid_config_name(name) else None
+
+
+def lua_config_use(lua_files):
+    """(writes, reads): the config entries the Lua files write (mwse.saveConfig, json.savefile, io.open for
+    writing) and only read (mwse.loadConfig, json.loadfile). Names are literals or a string assigned in the same
+    file (`local NAME = "..."`, `store.BASE = "..."`). A folder under MWSE\\config assigned in a file that calls
+    lfs.mkdir counts as written ("name/")."""
+    writes, reads = set(), set()      # also pcall(mwse.saveConfig, NAME, ...) and template:saveOnClose(NAME, ...)
+    for path in lua_files:
+        try:
+            with open(path, encoding="utf-8", errors="replace") as f:
+                text = f.read()
+        except OSError:
+            continue
+        consts = {}
+        for m in _ASSIGN_STR.finditer(text):
+            consts.setdefault(m.group(1), _lua_unescape(m.group(2) if m.group(2) is not None else m.group(3)))
+
+        def arg(m):
+            if m.group(2) is not None:
+                return _lua_unescape(m.group(2))
+            if m.group(3) is not None:
+                return _lua_unescape(m.group(3))
+            return consts.get(m.group(4) or "")
+
+        for m in _WRITE_CALL.finditer(text):
+            call, value = m.group(1), arg(m)
+            mode = m.group(5) if m.group(5) is not None else (m.group(6) or "")
+            if value is None or (call == "io.open" and not re.search(r"[wa+]", mode)):
+                continue
+            name = _config_of_path(value, call)
+            if name:
+                writes.add(name)
+        for m in _SAVE_ON_CLOSE.finditer(text):
+            value = arg(m)
+            name = _config_of_path(value, "mwse.saveConfig") if value is not None else None
+            if name:
+                writes.add(name)
+        for m in list(_READ_CALL.finditer(text)) + list(_PCALL.finditer(text)):
+            value = arg(m)
+            name = _config_of_path(value, m.group(1)) if value is not None else None
+            if name:
+                (writes if "save" in m.group(1) else reads).add(name)
+        if "lfs.mkdir" in text:
+            for value in consts.values():
+                name = _config_of_path(value, "folder")
+                if name and name.endswith("/"):
+                    writes.add(name)
+    return writes, reads - writes
+
+
+def _mod_lua_files(src, mod):
+    """The Lua files of a suite module in lua tools ("mwsuite": only the files directly in mods\\mwsuite)."""
+    base = os.path.join(src, "MWSE", "mods", "mwsuite")
+    if mod.lower() == "mwsuite":
+        try:
+            return [os.path.join(base, f) for f in sorted(os.listdir(base))
+                    if f.lower().endswith(".lua") and os.path.isfile(os.path.join(base, f))]
+        except OSError:
+            return []
+    out = []
+    for root, dirs, files in os.walk(os.path.join(base, mod.split("/", 1)[1])):
+        dirs.sort()
+        out += [os.path.join(root, f) for f in sorted(files) if f.lower().endswith(".lua")]
+    return out
+
+
+def own_config_overrides(src=None):
+    """ownmods.json's optional "configs" in lua tools: {module name (lowercase): [config entries]}. A module
+    listed there owns exactly those configs (detection is skipped for it); absent or unreadable: {}."""
+    try:
+        with open(os.path.join(src or LUA_TOOLS_DIR, *OWNMODS_FILE), encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    table = data.get(OWNMODS_CONFIGS_KEY) if isinstance(data, dict) else None
+    if not isinstance(table, dict):
+        return {}
+    out = {}
+    for mod, names in table.items():
+        if isinstance(mod, str) and isinstance(names, list):
+            out[mod.lower().split("/")[-1]] = sorted({n for n in names if _valid_config_name(n)}, key=str.lower)
+    return out
+
+
+def mod_configs(src, mod, overrides=None):
+    """(owned, read): the config entries suite module `mod` ("mwsuite/<m>" or "mwsuite") owns, i.e. writes, or
+    those ownmods.json declares for it, and the ones it only reads."""
+    overrides = own_config_overrides(src) if overrides is None else overrides
+    writes, reads = lua_config_use(_mod_lua_files(src, mod))
+    leaf = mod.split("/")[-1].lower()
+    if leaf in overrides:
+        owned = set(overrides[leaf])
+        return sorted(owned, key=str.lower), sorted(reads | writes - owned, key=str.lower)
+    return sorted(writes, key=str.lower), sorted(reads, key=str.lower)
+
+
+def suite_config_names(mod_dir, leaf):
+    """The config entries a suite module's Lua in mod_dir writes (kept for callers of the older name)."""
+    files = []
+    for root, dirs, fs in os.walk(mod_dir):
+        dirs.sort()
+        files += [os.path.join(root, f) for f in sorted(fs) if f.lower().endswith(".lua")]
+    return sorted(lua_config_use(files)[0], key=str.lower)
+
+
+def lua_manifest_path(data_dir):
+    """Where --play keeps its record of what it deployed from lua tools: generated\\ of an installed
+    conflict-tools (state_path), never Data Files."""
+    return state_path(os.path.dirname(os.path.abspath(data_dir)), LUA_MANIFEST)
+
+
+def read_lua_manifest(path):
+    """(manifest, error): (None, None) when there is none yet; (None, message) when it can't be used."""
+    if not os.path.isfile(path):
+        return None, None
+    try:
+        with open(path, encoding="utf-8") as f:
+            man = json.load(f)
+    except (OSError, ValueError) as e:
+        return None, f"{path} can't be read ({e})"
+    if not isinstance(man, dict) or man.get("schema") != LUA_MANIFEST_SCHEMA or not isinstance(man.get("mods"), dict):
+        return None, f"{path} is not a lua tools deploy manifest"
+    if not isinstance(man.get("version"), int) or man["version"] > LUA_MANIFEST_VERSION:
+        return None, f"{path} has version {man.get('version')!r}, newer than this script's {LUA_MANIFEST_VERSION}"
+    return man, None
+
+
+def _write_json_atomic(path, obj):
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(obj, f, indent=1, sort_keys=True)
+        f.write("\n")
+    os.replace(tmp, path)
+
+
+def _lua_tools_files(src):
+    out = []
     for root, dirs, files in os.walk(src):
         dirs[:] = sorted(d for d in dirs if d != "__pycache__")
         for fn in sorted(files):
-            s = os.path.join(root, fn)
-            rel = os.path.relpath(s, src)
-            have.add(os.path.normcase(rel))
-            dest = os.path.join(data_dir, rel)
-            if not os.path.exists(dest):
-                os.makedirs(os.path.dirname(dest), exist_ok=True)
-                shutil.copy2(s, dest)
-                res["copied"].append(rel)
-                continue
-            if os.path.normcase(rel).startswith(os.path.normcase(os.path.join("MWSE", "config")) + os.sep):
-                continue                                  # the player's settings
-            if _same_bytes(s, dest):
-                continue
-            if os.path.getmtime(s) <= os.path.getmtime(dest):
-                res["newer"].append(rel)
-                continue
-            if res["backup"] is None:
-                import mwdialog_backup
-                res["backup"] = backup_dir or os.path.join(
-                    mwdialog_backup.backup_root(os.path.dirname(os.path.abspath(data_dir))), "lua deploy",
-                    time.strftime("%Y%m%d-%H%M%S"))
-            bak = os.path.join(res["backup"], rel)
-            os.makedirs(os.path.dirname(bak), exist_ok=True)
-            shutil.copy2(dest, bak)
-            tmp = dest + ".mwdeploy.tmp"
-            shutil.copy2(s, tmp)
-            os.replace(tmp, dest)                         # a new file: a Vortex hardlink is not written through
-            res["updated"].append(rel)
+            out.append(os.path.relpath(os.path.join(root, fn), src))
+    return out
+
+
+def deploy_lua_tools(data_dir, src=None, backup_dir=None, manifest_path=None, prune=True, prune_dir=None):
+    """Bring Data Files up to date with the suite's Lua mods in lua tools\\ (laid out like Data Files), where
+    every edit to them is made. A file Data Files lacks is copied in. A deployed file that differs from its
+    lua tools copy is replaced when lua tools' copy is the newer one, or when the deployed one is still what
+    --play put there; the deployed one goes to backup_dir first (default <backups>\\lua deploy\\<date>). A
+    deployed copy newer than lua tools' is left alone and listed: an edit made there belongs in lua tools.
+    MWSE\\config\\ holds the player's settings: only a missing file is copied there. Outside the suite's own
+    files (another mod's folder, MWSE\\mods\\<mod>\\), a file --play didn't put there is never
+    replaced ("foreign").
+
+    What was deployed is recorded, per mod with SHA-256, in the manifest (lua_manifest_path). With prune, a
+    file the manifest lists that lua tools no longer has is removed first (prune_lua_deploy), and so is a
+    removed suite module's MWSE\\config\\ settings. Returns {"copied", "updated", "newer", "retired",
+    "foreign", "backup"} (paths relative to Data Files; "retired": files in Data Files\\MWSE\\mods\\mwsuite
+    that lua tools doesn't have and nothing records as deployed, only listed) plus prune_lua_deploy's keys
+    and "manifest", "manifest_error"."""
+    src = src or LUA_TOOLS_DIR
+    data_dir = os.path.abspath(data_dir)
+    manifest_path = manifest_path or lua_manifest_path(data_dir)
+    res = {"copied": [], "updated": [], "newer": [], "retired": [], "foreign": [], "backup": None,
+           "manifest": manifest_path, "manifest_error": None,
+           "pruned": [], "edited": [], "kept": [], "prune_backup": None, "journal": None, "retired_done": []}
+    old, err = read_lua_manifest(manifest_path)
+    newer_version = bool(err and "newer than this script" in err)
+    files = _lua_tools_files(src)
+    have = {_rkey(r) for r in files}
+    suite_leaves, other_tops = lua_tools_names(src)
+    retired_done = set(old.get("retired_done", [])) if old else set()
+    if err:
+        res["manifest_error"] = err
+        retired_done |= set(RETIRED_SUITE_MODS)       # can't tell what was deployed: prune nothing this time
+    elif prune:
+        prune_lua_deploy(data_dir, src, old, res, prune_dir=prune_dir)
+        retired_done |= set(res["retired_done"])
+    owned = {}
+    for mod, info in ((old or {}).get("mods") or {}).items():
+        for mrel, ent in (info.get("files") or {}).items():
+            if isinstance(ent, dict):
+                owned[_rkey(_local_rel(mrel))] = ent
+    mods = {}
+    for rel in files:
+        s = os.path.join(src, rel)
+        dest = os.path.join(data_dir, rel)
+        mod, suite = lua_mod_of(rel, suite_leaves, other_tops)
+        prev = owned.get(_rkey(rel))
+        src_sha = _sha256(s)
+        ent = {"sha256": src_sha, "size": os.path.getsize(s)}
+        cfg = _is_config(rel)
+        if cfg:
+            ent["config"] = True
+
+        def record(e=ent):
+            mods.setdefault(mod, {"suite": suite, "configs": [], "files": {}})["files"][_mrel(rel)] = e
+
+        if not os.path.exists(dest):
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            shutil.copy2(s, dest)
+            res["copied"].append(rel)
+            record()
+            continue
+        if cfg:                                       # the player's settings
+            if suite or prev:
+                if prev:
+                    ent["sha256"], ent["size"] = prev.get("sha256", src_sha), prev.get("size", ent["size"])
+                record()
+            continue
+        if _same_bytes(s, dest):
+            record()
+            continue
+        dest_sha = _sha256(dest)
+        ours = bool(prev) and prev.get("sha256") == dest_sha          # still what --play put there
+        if not suite and not ours:
+            res["foreign"].append(rel)                # another mod's file: not --play's to replace
+            continue
+        if not ours and os.path.getmtime(s) <= os.path.getmtime(dest):
+            res["newer"].append(rel)
+            if prev:
+                ent["sha256"], ent["size"] = prev.get("sha256", src_sha), prev.get("size", ent["size"])
+            ent["kept"] = "newer"
+            record()
+            continue
+        if res["backup"] is None:
+            import mwdialog_backup
+            res["backup"] = backup_dir or os.path.join(
+                mwdialog_backup.backup_root(os.path.dirname(data_dir)), "lua deploy", time.strftime("%Y%m%d-%H%M%S"))
+        bak = os.path.join(res["backup"], rel)
+        os.makedirs(os.path.dirname(bak), exist_ok=True)
+        shutil.copy2(dest, bak)
+        tmp = dest + ".mwdeploy.tmp"
+        shutil.copy2(s, tmp)
+        os.replace(tmp, dest)                         # a new file: a Vortex hardlink is not written through
+        res["updated"].append(rel)
+        record()
+    overrides = own_config_overrides(src)
+    for mod, info in mods.items():
+        if info["suite"]:                             # what it writes now: kept for after its Lua is gone
+            info["configs"] = mod_configs(src, mod, overrides)[0]
     suite = os.path.join(data_dir, "MWSE", "mods", "mwsuite")
-    for root, dirs, files in os.walk(suite):
-        for fn in sorted(files):
+    for root, dirs, fs in os.walk(suite):
+        dirs.sort()
+        for fn in sorted(fs):
             rel = os.path.relpath(os.path.join(root, fn), data_dir)
-            if os.path.normcase(rel) not in have:
+            if _rkey(rel) not in have:
                 res["retired"].append(rel)
+    if newer_version:
+        return res                                    # a newer script's record: left as it is
+    if err and os.path.exists(manifest_path):
+        try:
+            os.replace(manifest_path, manifest_path + time.strftime(".unreadable-%Y%m%d-%H%M%S"))
+        except OSError:
+            pass
+    man = {"schema": LUA_MANIFEST_SCHEMA, "version": LUA_MANIFEST_VERSION,
+           "written": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "source": "lua tools", "data_dir": "Data Files",
+           "mods": {k: mods[k] for k in sorted(mods, key=str.lower)},
+           "retired_done": sorted(retired_done, key=str.lower)}
+    try:
+        _write_json_atomic(manifest_path, man)
+    except OSError as e:
+        res["manifest_error"] = f"{manifest_path} not written ({e})"
+    return res
+
+
+_KEEP_DIRS = (("MWSE",), ("MWSE", "mods"), ("MWSE", "mods", "mwsuite"), ("MWSE", "config"))
+
+
+def prune_lua_deploy(data_dir, src, old, res, prune_dir=None):
+    """Remove from Data Files what earlier --play runs deployed from lua tools and lua tools no longer has:
+    every file the manifest `old` lists that lua tools lacks (a config under MWSE\\config only when its whole
+    mod is gone, since a module still there reads it), and for a removed suite module the configs the
+    manifest kept for it (what it wrote, or ownmods.json declared), unless a module still in lua tools writes,
+    reads or ships the same name ("kept"). Without a manifest entry for them, the RETIRED_SUITE_MODS are removed once. Nothing else is touched.
+    Each file is copied to <backups>\\lua prune\\<date>\\Data Files\\<path> (hash-checked) and journaled in
+    journal.jsonl there before it is deleted; undo_lua_prune puts them back. A suite file changed since --play
+    deployed it is still removed (listed in "edited"); outside the suite's folders a changed file is left
+    alone ("kept"). Folders left empty are removed. Fills res["pruned"] ({rel, mod, why, edited, config}),
+    "edited", "kept" ((rel, mod, reason)), "prune_backup", "journal", "retired_done"."""
+    data_dir = os.path.abspath(data_dir)
+    files = _lua_tools_files(src)
+    have = {_rkey(r) for r in files}
+    suite_leaves, other_tops = lua_tools_names(src)
+    present = {lua_mod_of(r, suite_leaves, other_tops)[0].lower() for r in files}
+    in_use = {os.path.splitext(os.path.basename(r))[0].lower(): "shipped in lua tools" for r in files
+              if _is_config(r)}
+    overrides = own_config_overrides(src)
+    for mod in ["mwsuite"] + ["mwsuite/" + leaf for leaf in suite_leaves]:
+        owned, read = mod_configs(src, mod, overrides)
+        for n in owned + read:
+            in_use.setdefault(_cfg_key(n), f"{'written' if n in owned else 'read'} by {mod}")
+    plan, seen, folders = [], set(), []
+
+    def add(rel, mod, why, expected, suite, cfg):
+        k = _rkey(rel)
+        if k in seen or k in have or not _safe_rel(rel):
+            return
+        seen.add(k)
+        plan.append((rel, mod, why, expected, suite, cfg))
+
+    def add_config(name, mod, why):
+        """A removed module's config entry: name.json, or every file in the name\\ folder."""
+        if not _valid_config_name(name):
+            return
+        if _cfg_key(name) in in_use:
+            target = os.path.join(data_dir, "MWSE", "config", name.rstrip("/") + ("" if name.endswith("/") else ".json"))
+            if os.path.exists(target):
+                res["kept"].append((os.path.relpath(target, data_dir), mod,
+                                    f"settings still {in_use[_cfg_key(name)]} in lua tools: left alone"))
+            return
+        if name.endswith("/"):
+            folder = os.path.join(data_dir, "MWSE", "config", name[:-1])
+            for root, dirs, fs in os.walk(folder):
+                dirs.sort()
+                folders.append(root)
+                for fn in sorted(fs):
+                    add(os.path.relpath(os.path.join(root, fn), data_dir), mod, why, None, True, True)
+        else:
+            add(os.path.join("MWSE", "config", name + ".json"), mod, why, None, True, True)
+
+    for mod, info in sorted(((old or {}).get("mods") or {}).items(), key=lambda kv: kv[0].lower()):
+        if not isinstance(info, dict):
+            continue
+        gone = mod.lower() not in present
+        suite = bool(info.get("suite"))
+        for mrel, ent in sorted((info.get("files") or {}).items()):
+            if not isinstance(ent, dict):
+                continue
+            rel = _local_rel(mrel)
+            cfg = bool(ent.get("config")) or _is_config(rel)
+            if cfg and not gone:
+                continue                              # the module is still there and reads its settings
+            add(rel, mod, "mod removed from lua tools" if gone else "file removed from lua tools",
+                ent.get("sha256"), suite, cfg)
+        if gone and suite:
+            for name in info.get("configs") or []:
+                add_config(name, mod, "settings of a removed mod")
+    done = {n.lower() for n in ((old or {}).get("retired_done") or [])}
+    leaves = {l.lower() for l in suite_leaves}
+    for name, configs in sorted(RETIRED_SUITE_MODS.items()):
+        if name.lower() in done or name.lower() in leaves:
+            continue
+        mod = "mwsuite/" + name
+        why = "suite mod retired before --play kept a manifest"
+        folder = os.path.join(data_dir, "MWSE", "mods", "mwsuite", name)
+        for root, dirs, fs in os.walk(folder):
+            dirs.sort()
+            for fn in sorted(fs):
+                add(os.path.relpath(os.path.join(root, fn), data_dir), mod, why, None, True, False)
+        add(name + "-metadata.toml", mod, why, None, True, False)
+        for c in configs:
+            add_config(c, mod, "settings of a retired mod")
+        res["retired_done"].append(name)
+    touched = set()
+    journal = None
+    try:
+        for rel, mod, why, expected, suite, cfg in plan:
+            path = os.path.join(data_dir, rel)
+            if not os.path.isfile(path):
+                continue                              # already gone
+            cur = _sha256(path)
+            edited = bool(expected) and cur != expected
+            if edited and not suite:
+                res["kept"].append((rel, mod, "changed since --play deployed it, and it is in another mod's "
+                                              "folder: left alone"))
+                continue
+            if res["prune_backup"] is None:
+                import mwdialog_backup
+                base = prune_dir or os.path.join(mwdialog_backup.backup_root(os.path.dirname(data_dir)),
+                                                 LUA_PRUNE_DIR, time.strftime("%Y%m%d-%H%M%S"))
+                run, n = base, 1
+                while os.path.exists(run):
+                    n += 1
+                    run = f"{base}-{n}"
+                os.makedirs(run)
+                res["prune_backup"] = run
+                res["journal"] = os.path.join(run, LUA_PRUNE_JOURNAL)
+                journal = open(res["journal"], "a", encoding="utf-8", newline="\n")
+                journal.write(json.dumps({"op": "run", "tool": "mwdialog_check --play (lua tools prune)",
+                                          "version": 1, "time": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                                          "data_dir": "Data Files"}) + "\n")
+            bak_rel = os.path.join("Data Files", rel)
+            bak = os.path.join(res["prune_backup"], bak_rel)
+            os.makedirs(os.path.dirname(bak), exist_ok=True)
+            shutil.copy2(path, bak)
+            if _sha256(bak) != cur:
+                raise OSError(f"the backup of {rel} doesn't match it; nothing removed for it")
+            os.remove(path)
+            journal.write(json.dumps({"op": "pruned", "rel": _mrel(rel), "mod": mod, "why": why, "sha256": cur,
+                                      "expected": expected, "edited": edited, "config": cfg,
+                                      "backup": _mrel(bak_rel)}) + "\n")
+            journal.flush()
+            res["pruned"].append({"rel": rel, "mod": mod, "why": why, "edited": edited, "config": cfg})
+            if edited and not cfg:
+                res["edited"].append(rel)
+            touched.add(os.path.dirname(path))
+        if journal:
+            touched |= {d for d in folders if os.path.isdir(d)}     # a removed config folder's empty subfolders
+        keep = {os.path.normcase(data_dir)} | {os.path.normcase(os.path.join(data_dir, *k)) for k in _KEEP_DIRS}
+        for d in sorted(touched, key=len, reverse=True):
+            while (os.path.normcase(d) not in keep and _is_under(d, data_dir) and os.path.isdir(d)
+                   and not os.listdir(d)):
+                os.rmdir(d)
+                journal.write(json.dumps({"op": "rmdir", "rel": _mrel(os.path.relpath(d, data_dir))}) + "\n")
+                d = os.path.dirname(d)
+    finally:
+        if journal:
+            journal.close()
+    return res
+
+
+def lua_prune_report(res):
+    """[(to_stderr, line)]: what deploy_lua_tools pruned or left, for --play to print."""
+    out = []
+    if not res:
+        return out
+    if res.get("manifest_error"):
+        out.append((True, f"--play: lua tools deploy record: {res['manifest_error']}. Nothing was removed this "
+                          f"time; a new record is written from what is deployed now."))
+    pruned = res.get("pruned") or []
+    if pruned:
+        out.append((False, f"--play: removed {len(pruned)} file(s) that earlier --play runs deployed from lua tools "
+                           f"and lua tools no longer has (copies and journal in {res['prune_backup']}; put them "
+                           f"back with: python mwdialog_paths.py --undo-lua-prune):"))
+        by_mod = {}
+        for p in pruned:
+            by_mod.setdefault((p["mod"], p["why"]), []).append(p)
+        for (mod, why), items in by_mod.items():
+            out.append((False, f"    {mod} ({why}):"))
+            for p in items:
+                tag = ""
+                if p["edited"] and not p["config"]:
+                    tag = "   <-- EDITED since --play deployed it"
+                elif p["config"]:
+                    tag = "   (settings; a copy is in the backup)"
+                out.append((False, f"      {p['rel']}{tag}"))
+    edited = res.get("edited") or []
+    if edited:
+        out.append((True, f"--play: WARNING: {len(edited)} removed file(s) had been EDITED after --play deployed "
+                          f"them. Your edited copies are in {res['prune_backup']}; edits belong in lua tools:"))
+        for rel in edited:
+            out.append((True, "    " + rel))
+    for rel, mod, why in res.get("kept") or []:
+        out.append((True, f"--play: kept {rel} ({mod}): {why}."))
+    foreign = res.get("foreign") or []
+    if foreign:
+        out.append((True, f"--play: {len(foreign)} file(s) of lua tools are in Data Files from another mod (not "
+                          f"put there by --play) and were left alone:"))
+        for rel in foreign:
+            out.append((True, "    " + rel))
+    return out
+
+
+def undo_lua_prune(data_dir, run=None):
+    """Put back what a --play prune removed: the newest run under <backups>\\lua prune\\ that still has
+    something to put back, or `run` (its folder, or its name there). A file is restored only when its backup
+    still has the journaled SHA-256 and nothing is at its place (an identical file there counts as restored).
+    The manifest isn't changed, so the next --play doesn't remove them again. Returns {"run", "restored",
+    "skipped", "failed"} (failed/skipped: (rel, reason))."""
+    import mwdialog_backup
+    data_dir = os.path.abspath(data_dir)
+    root = os.path.join(mwdialog_backup.backup_root(os.path.dirname(data_dir)), LUA_PRUNE_DIR)
+    res = {"run": None, "restored": [], "skipped": [], "failed": []}
+
+    def pending(folder):
+        try:
+            with open(os.path.join(folder, LUA_PRUNE_JOURNAL), encoding="utf-8") as f:
+                rows = [json.loads(line) for line in f if line.strip()]
+        except (OSError, ValueError):
+            return []
+        undone = {r.get("rel") for r in rows if r.get("op") == "undone"}
+        return [r for r in rows if r.get("op") == "pruned" and r.get("rel") not in undone]
+
+    if run:
+        folder = run if os.path.isabs(run) else os.path.join(root, run)
+    else:
+        try:
+            runs = sorted((d for d in os.listdir(root) if os.path.isdir(os.path.join(root, d))), reverse=True)
+        except OSError:
+            runs = []
+        folder = next((os.path.join(root, d) for d in runs if pending(os.path.join(root, d))), None)
+        if folder is None:
+            return res
+    res["run"] = folder
+    rows = pending(folder)
+    with open(os.path.join(folder, LUA_PRUNE_JOURNAL), "a", encoding="utf-8", newline="\n") as journal:
+        for r in reversed(rows):
+            rel, brel = r.get("rel") or "", r.get("backup") or ""
+            if not (_safe_rel(rel) and _safe_rel(brel)):
+                res["failed"].append((rel, "unsafe path in the journal"))
+                continue
+            dest = os.path.join(data_dir, _local_rel(rel))
+            bak = os.path.join(folder, _local_rel(brel))
+            if not os.path.isfile(bak) or _sha256(bak) != r.get("sha256"):
+                res["failed"].append((rel, "its backup is missing or changed"))
+                continue
+            if os.path.exists(dest):
+                if os.path.isfile(dest) and _sha256(dest) == r.get("sha256"):
+                    res["skipped"].append((rel, "already there"))
+                    journal.write(json.dumps({"op": "undone", "rel": rel}) + "\n")
+                else:
+                    res["skipped"].append((rel, "another file is there now; left alone"))
+                continue
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            tmp = dest + ".mwdeploy.tmp"
+            shutil.copy2(bak, tmp)
+            os.replace(tmp, dest)
+            if _sha256(dest) != r.get("sha256"):
+                res["failed"].append((rel, "restored copy doesn't match its backup"))
+                continue
+            journal.write(json.dumps({"op": "undone", "rel": rel}) + "\n")
+            res["restored"].append(_local_rel(rel))
     return res
 
 
@@ -1042,3 +1645,43 @@ def describe_luajit_search(game_dir):
     exe = "luajit.exe" if os.name == "nt" else "luajit"
     return (f"Looked in {os.path.join(root, 'tools', 'luajit', exe)}, then on PATH. "
             f"Pass --luajit PATH to use a specific binary, or --no-syntax-check to rely on the parser alone.")
+
+
+def _main(argv=None):
+    """python mwdialog_paths.py --undo-lua-prune [RUN] [--data-dir PATH]: put back what --play pruned."""
+    import argparse
+    import sys
+    ap = argparse.ArgumentParser(prog="mwdialog_paths.py",
+                                 description="Put back the files a --play run removed from Data Files because "
+                                             "lua tools no longer has them (from <backups>\\lua prune\\).")
+    ap.add_argument("--undo-lua-prune", nargs="?", const="", default=None, metavar="RUN",
+                    help="the newest prune that still has something to put back, or the one in folder RUN")
+    ap.add_argument("--data-dir", help='the game\'s "Data Files" (default: found from the working folder, its '
+                                       'parent or these scripts\' parent)')
+    args = ap.parse_args(argv)
+    if args.undo_lua_prune is None:
+        ap.print_help()
+        return 2
+    data = args.data_dir or default_data_dir()
+    if not data or not os.path.isdir(data):
+        print("No Data Files folder found; pass --data-dir.", file=sys.stderr)
+        return 2
+    if not acquire_game_lock(os.path.dirname(os.path.abspath(data))):
+        print(RUN_LOCKED_MESSAGE, file=sys.stderr)
+        return 2
+    res = undo_lua_prune(data, args.undo_lua_prune or None)
+    if res["run"] is None:
+        print("Nothing to put back: no --play prune with files still removed.")
+        return 0
+    print(f"Put back {len(res['restored'])} file(s) from {res['run']}:")
+    for rel in res["restored"]:
+        print("    " + rel)
+    for rel, why in res["skipped"]:
+        print(f"    skipped {rel}: {why}")
+    for rel, why in res["failed"]:
+        print(f"    NOT restored {rel}: {why}", file=sys.stderr)
+    return 2 if res["failed"] else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(_main())

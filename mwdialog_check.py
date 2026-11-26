@@ -3090,10 +3090,13 @@ def launch_game(args):
         for rel in dep["newer"]:
             print("    " + rel, file=sys.stderr)
     if dep and dep["retired"]:
-        print(f"--play: {len(dep['retired'])} file(s) in the suite's folder aren't in lua tools any more (retired, "
-              f"or left by an old install); the game still loads any .lua among them. Delete them if unwanted:")
+        print(f"--play: {len(dep['retired'])} file(s) in the suite's folder aren't in lua tools, and no --play run "
+              f"recorded deploying them (left by an old install or put there by hand); the game still loads any "
+              f".lua among them. Delete them if unwanted:")
         for rel in dep["retired"]:
             print("    " + rel)
+    for to_err, line in MP.lua_prune_report(dep):    # files of mods gone from lua tools, removed with a backup
+        print(line, file=sys.stderr if to_err else sys.stdout)
     kwargs = {"cwd": game_dir, "env": env, "close_fds": True}
     if os.name == "nt":
         try:
@@ -9777,8 +9780,69 @@ def _ensure_vortex_paths(args):
         print(f"Vortex downloads: {args.vortex_downloads}  (from {src})")
 
 
-def _main(argv=None):
-    global ENC
+
+def normalize_preserve_saves_argv(argv, parser):
+    """Rewrite a bare --preserve-saves so argparse does not take the next token as
+    its value unless that token is basic or strict. A following Data Files path
+    (or any other non-value) stays in place and is parsed as the usual positional
+    or flag. Unique abbreviations such as --preserve are treated the same way
+    when the parser allows them (argparse's default allow_abbrev)."""
+    if not argv:
+        return [] if argv is None else list(argv)
+    values = ("basic", "strict")
+    flag = "--preserve-saves"
+    out = []
+    i = 0
+    n = len(argv)
+    while i < n:
+        tok = argv[i]
+        if tok == "--":
+            out.extend(argv[i:])
+            break
+        if _is_preserve_saves_flag(tok, parser):
+            nxt = argv[i + 1] if i + 1 < n else None
+            if nxt in values:
+                out.append(flag)
+                out.append(nxt)
+                i += 2
+                continue
+            out.append(flag + "=basic")
+            i += 1
+            continue
+        out.append(tok)
+        i += 1
+    return out
+
+
+def _is_preserve_saves_flag(token, parser):
+    """True if token is --preserve-saves, or a unique abbreviation of it."""
+    if not isinstance(token, str) or not token.startswith("--") or token.startswith("---"):
+        return False
+    if "=" in token:
+        return False
+    flag = "--preserve-saves"
+    if token == flag:
+        return True
+    if not getattr(parser, "allow_abbrev", True):
+        return False
+    options = []
+    for action in getattr(parser, "_actions", ()):
+        options.extend(action.option_strings)
+    matches = [s for s in options if s.startswith(token)]
+    return matches == [flag]
+
+
+def parse_check_argv(argv=None, parser=None):
+    """Normalize a bare --preserve-saves, then parse. Used by _main and by tests."""
+    if parser is None:
+        parser = check_parser()
+    if argv is None:
+        argv = sys.argv[1:]
+    return parser.parse_args(normalize_preserve_saves_argv(argv, parser))
+
+
+def check_parser():
+    """The mwdialog_check CLI parser (flags only; argv is normalized separately)."""
     ap = MT.parser(description="Scan a Morrowind Data Files folder for dialogue errors.")
     ap.add_argument("data_dir", nargs="?", help='path to the "Data Files" folder (default: Data Files of the Morrowind '
                                                  'folder holding Morrowind.ini: the working folder or its parent, or '
@@ -9978,13 +10042,15 @@ def _main(argv=None):
                          "helper when its object comes back; restart: also restarted on every cell change "
                          "(for an install without MWSE)")
     tc.add_argument("--no-soundfix", action="store_true", help="with --fix: don't rebuild the sound-script patch")
-    tc.add_argument("--preserve-saves", nargs="?", const="basic", choices=("basic", "strict"), metavar="strict",
-                    help="keep a game in progress working: skip --soundfix (it adds script variables), the topic "
-                         "renames, any rebuild of Cell Fixes that would bring back an object it deletes, and setting "
-                         "aside an earlier version's Performers patch. =strict also keeps the active plugins, the "
-                         "auto-merge and those patches exactly as they are, and skips the reference clean-ups and "
-                         "persistence flips (--full then has no reset, unmerge or redundant step); what it holds "
-                         "back is reported")
+    tc.add_argument("--preserve-saves", nargs="?", const="basic", choices=("basic", "strict"),
+                    metavar="basic|strict",
+                    help="keep a game in progress working (the bare flag means basic): skip --soundfix "
+                         "(it adds script variables), the topic renames, any rebuild of Cell Fixes that would "
+                         "bring back an object it deletes, and setting aside an earlier version's Performers "
+                         "patch. --preserve-saves strict or --preserve-saves=strict also keeps the active "
+                         "plugins, the auto-merge and those patches exactly as they are, and skips the "
+                         "reference clean-ups and persistence flips (--full then has no reset, unmerge or "
+                         "redundant step); what it holds back is reported")
     tc.add_argument("--mwrecompile", metavar="PATH",
                     help="MWRecompile.exe to use (default: tools\\MWRecompile\\, or the MWRECOMPILE variable)")
     tc.add_argument("--reenable", nargs="*", metavar="NAME",
@@ -10019,7 +10085,13 @@ def _main(argv=None):
     fx.add_argument("--clean-up-undo", action="store_true",
                     help="put back the backups the last --clean-up moved to Off\\cleanup")
     fx.add_argument("--fix-log", default="mwdialog_fixes.log", help="where to append a record of fixes (default mwdialog_fixes.log)")
-    args = ap.parse_args(argv)
+    return ap
+
+
+def _main(argv=None):
+    global ENC
+    ap = check_parser()
+    args = parse_check_argv(argv, ap)
     if args.no_reduce_textures or args.no_reduce_splash:
         asset_health_module().keep_full_size(sys.modules[__name__], args.no_reduce_textures, args.no_reduce_splash)
     if args.data_dir is None:
