@@ -2069,15 +2069,21 @@ class World:
                                                                              "rename_ref_field"))]
 
     def _check_headers(self):
-        """tes3cmd header --synchronize: record counts and master sizes."""
+        """tes3cmd header --synchronize: master sizes are synced; a wrong record count is only reported.
+
+        The game reads every record by its own size and uses the header's count for nothing but the loading
+        bar, so a wrong count is cosmetic. Rewriting a released plugin in place just for it (through its hard
+        link, into the Vortex staging copy too) made the file differ from the mod's release every --fix run
+        (No Fires in Bad Weather.esp: saved with 1, has 2). The count is still set to the true one whenever
+        --fix rewrites the plugin for a real repair (fix_plugin), and our own patches always write it."""
         r = self.r
         for plugin, claimed in self.hedr_count.items():
             real = self.real_count.get(plugin)
             if real is None or real == claimed or is_our_patch(plugin):
                 continue
             if plugin.lower().endswith(FIXABLE_EXT):
-                r.add("ERROR", plugin, "", "", f"header says {claimed} record(s), the file has {real}",
-                      fix=(0, ("fix_count",), f"set the header's record count to {real}"))
+                r.add("INFO", plugin, "", "", f"header says {claimed} record(s), the file has {real} (cosmetic: "
+                                              f"the game only uses it for the loading bar; not rewritten for it)")
             else:
                 r.add("INFO", plugin, "", "", f"header says {claimed} record(s), the file has {real} (a master; not changed)")
         for plugin, master, expected, actual in self.size_mismatch:

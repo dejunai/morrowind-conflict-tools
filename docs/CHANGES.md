@@ -1,3 +1,16 @@
+# mwdialog_check: a wrong header record count no longer rewrites a released plugin (2026-11-26)
+
+- `--fix` (and so `--full` and the GUI's full pass) set a plugin's HEDR record count to the true one and rewrote the
+  `.esp` in place for that alone, through its hard link, so the Vortex staging copy changed too. No Fires in Bad
+  Weather.esp (an OpenMW-CS `.omwaddon` renamed to `.esp`) is saved with 1 and has 2 records (SCPT, SSCR): byte 320
+  went 01 -> 02 on every run, so it kept differing from the mod's release after the OpenMW converter restored it.
+- The game reads each record by its own size and uses the count only for the loading bar, so the mismatch is now an
+  INFO (`cosmetic ... not rewritten for it`) with no fix. Master sizes are still synced, and the true count is still
+  written whenever `--fix` rewrites the plugin for a real repair, and in our own patches. On the current load order
+  (837 active plugins) No Fires is the only plugin with a wrong count.
+- Test: `tests/test_hedr_count_not_rewritten.py` (no rewrite, no backup, date kept over two runs; still reported;
+  a master-size repair writes the true count and a second run changes nothing).
+
 # docs/dev: LUAFIX_KP_HANDOFF.md and MWSUITE_RESUME.md removed (2026-11-26)
 
 - Removed `docs/dev/LUAFIX_KP_HANDOFF.md` (the KP1-KP4 handoff to mwsuite) and `docs/dev/MWSUITE_RESUME.md` (a pause

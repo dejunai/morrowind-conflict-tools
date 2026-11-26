@@ -103,6 +103,7 @@ The cleaning subsystem (`mwdialog_records.py`, `mwdialog_tes3.py`, `mwdialog_pat
 | `read_plugin_bytes` | *(internal)* | `mwdialog_tes3.py` | Fast cached binary reader with file modification and size validation. | Verified integrity of `Morrowind.esm` (79,836,375 bytes) |
 | `iter_records` | *(internal)* | `mwdialog_tes3.py` | Binary generator yielding 4-character record tags, body bytes, flags, and offsets. | Streamed 45,000 records from `TR_Mainland.esm` |
 | `pack_sub` / `set_link` | `--fix` | `mwdialog_tes3.py` | Rebuilds or replaces a 4-byte subrecord tag while the writer recalculates parent record header lengths. | `MCA - Khajiit Diversity Revamped Addon.esp: cleaned [cell Sadrith Mora, Dirty Muriel's Cornerclub] redundant WHGT` |
+| `_check_headers` | scan, `--fix` | `mwdialog_check.py` | Like `tes3cmd header --synchronize`, but only the master sizes are synced in place. A header record count that doesn't match the file is reported as INFO and not rewritten (the game uses it only for the loading bar, and rewriting a released plugin just for it makes it differ from the mod's release); the true count is written whenever `--fix` rewrites the plugin for a real repair. | `No Fires in Bad Weather.esp: header says 1 record(s), the file has 2 (cosmetic: ...)` |
 
 ---
 
