@@ -1,3 +1,26 @@
+# docs: README and MORE_INFO cover the last day of work (2026-11-26)
+
+- vortex_tidy: the OpenMW converter (omw2mwse) is described: when it runs (OpenMW-only mods, `hardcode` by default,
+  `--convert-omwscripts` / `--no-convert-omwscripts`), the verdict (`blocked` undone at once, `partial` converted with
+  a NOTE), the 0.2.3 plugin `placement` / `status` contract (only root plugins on by default, one NOTE for the rest),
+  `--undo` of a conversion, the whole-package move to `Off\<plugin name>\OpenMW\` (the entries below dated
+  2026-11-25 still name `Off\OpenMW\<mod>\` for it; 193acde moved it), and the cleanup of empty `bugreports\` folders.
+  A new README section and a MORE_INFO subsection point to the OpenMW Converter project
+  (https://github.com/dejunai/openmw-mwse) as experimental, in early development and private for now, and keep it
+  apart from tidy's own `.omwaddon` / `Off\OpenMW\` handling.
+- `--cell-conflicts`: the `[7]` / `[8]` "<plugin> always loses" choices, the tool-managed
+  `mwdialog_check.conflict.blacklist.txt` (remove a plugin by hand), and `mwdialog_incompatible_losers.txt` (holds
+  while the winner is active, lapses when it is gone).
+- `--play`: the lua tools deploy is described by SHA-256 lineage (`generated\mwdialog_lua_manifest.json`, up to 16
+  earlier hashes per file), with file times only for content no record knows. It said older / newer by time before.
+- luafix: README lists the generic tuning rules (G2, G2S, G8, U1, M1) and the `skipRules` key; MORE_INFO's M1 row
+  notes that M1 and G2 share a handler's first line.
+- Corrections: mwhangwatch has no Mod Config tab of its own (its settings are on mwguard's Guard & Hang Watch page,
+  saved in `mwhangwatch.json`); mwguard's `EnableLogTimestamps` is off by default and has a `logTimestampMode`
+  (`wallclock` or `elapsed`); the suite is tested on Python 3.9 and 3.15 (the luafix `lupa` tests on 3.14), not only
+  3.15; the empty-`bugreports\` rule (removed when empty and made or emptied during the run; one already empty at the
+  start stays).
+
 # luafix's lock check uses its own module copy; two suite tests made deterministic (2026-11-26)
 
 - `mwdialog_luafix.main()` and `find_checker()` each re-imported `mwdialog_paths` inside the function. That resolves
