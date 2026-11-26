@@ -10,8 +10,9 @@ files here are never changed by it.
   Destination: tools\\steam-upstream\\ (the entries in COPY_MANIFEST.json), MWManager's root copies of the upstream
   modules (byte-identical to steam-upstream), reference\\mwse-lua-guards\\ (the mw* suite, SOURCE_MANIFEST.json)
   and reference\\mwmanager-menu\\. Sizes and hashes in both manifests follow the copied bytes. The repository's tests
-  (tests\\, fixtures included) and suite Lua (lua tools\\MWSE\\mods\\mwsuite\\) go along always: a new one is added to
-  COPY_MANIFEST.json, since the vendored tests run them. Other repository files neither manifest lists are
+  (tests\\, fixtures included), suite Lua (lua tools\\MWSE\\mods\\mwsuite\\) and third_party\\ (the tes3conv program with
+  its license files: they always travel together) go along always: a new one is added to COPY_MANIFEST.json, since the
+  vendored tests run them. Other repository files neither manifest lists are
   reported, not added: adding one to MWManager is a decision.
 
 Never puts an older version of a "lua tools\\" file over a newer one: the file is skipped with one WARNING line
@@ -60,8 +61,8 @@ What it does:
                 modules, reference\mwse-lua-guards\ (the mw* suite named in mwguard's exemptMods,
                 SOURCE_MANIFEST.json) and reference\mwmanager-menu\. Sizes and hashes in both manifests follow the
                 copied bytes.
-    - the repository's tests\ (fixtures included) and the suite Lua (lua tools\MWSE\mods\mwsuite\) always go
-      along; a new one is added to COPY_MANIFEST.json. reference\mwmanager-menu\ follows its twins in "lua tools".
+    - the repository's tests\ (fixtures included), the suite Lua (lua tools\MWSE\mods\mwsuite\) and third_party\
+      (tes3conv.exe with its license files) always go along; a new one is added to COPY_MANIFEST.json. reference\mwmanager-menu\ follows its twins in "lua tools".
     - other repository files neither manifest lists are only reported ("repository files no manifest lists"):
       adding one to MWManager is a decision, so add it by hand.
     - UPSTREAM.json is stamped with the repository's HEAD commit. If tracked files have uncommitted changes, the
@@ -96,7 +97,8 @@ import mwdialog_paths as MP  # noqa: E402  (beside this script, in the repositor
 REPO = HERE                                         # the source: this repository's working tree
 MWM = UP = REF = None                               # the destination, set by configure()
 SUITE = "lua tools/MWSE/mods/mwsuite/"
-AUTO = ("tests/", SUITE)                            # the vendored tests and the suite they test: always copied
+THIRD = "third_party/"                               # vendored programs and their license files
+AUTO = ("tests/", SUITE, THIRD)                     # the vendored tests, the suite they test and third_party: always copied
 # MWManager keeps its own snapshot of these (COPY_MANIFEST "Excluded": user-state records)
 MWM_KEEPS = {"lua tools/MWSE/config/mwguard.json"}
 DRY = False
@@ -127,8 +129,14 @@ def copy(src, dst):
     """Copy src over dst when the content differs. True if it changed (or would, with --dry-run). A line-ending
     difference alone is not a change: the repository checks out CRLF, MWManager LF."""
     data = src.read_bytes()
-    if dst.is_file() and dst.read_bytes().replace(b"\r\n", b"\n") == data.replace(b"\r\n", b"\n"):
-        return False
+    if dst.is_file():
+        old = dst.read_bytes()
+        if b"\0" not in data and b"\0" not in old:          # text: line endings alone are not a change; a program is exact
+            old, data_cmp = old.replace(b"\r\n", b"\n"), data.replace(b"\r\n", b"\n")
+        else:
+            data_cmp = data
+        if old == data_cmp:
+            return False
     if not DRY:
         dst.parent.mkdir(parents=True, exist_ok=True)
         tmp = dst.with_name(dst.name + ".synctmp")

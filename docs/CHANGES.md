@@ -24,6 +24,24 @@
 - `diag/luafix_kb_compare.py` (dev, read-only): compares each Known Bugs part with what the rules alone make of the
   released text and lists the new rules' findings outside Known Bugs files. Tests: `tests/test_luafix_general_rules.py`.
 
+# tes3conv is vendored under third_party/tes3conv, with its licenses (2026-11-26)
+
+- The official v0.4.1 Windows `tes3conv.exe` (Greatness7, MIT; SHA-256 `3c259868...0b40`, the pin `tes3diff.py` already
+  used; 2.9 MB) is now in the repository at `third_party/tes3conv/`, with `LICENSE` (tes3conv), `LICENSE-tes3` (the tes3
+  library it is built on), `LICENSE-mimalloc_rust` and a `NOTICE.md` (source URL, tag `v0.4.1` = `6dc51f7`, the build's
+  tes3 and mimalloc revisions, checksums). tes3conv's v0.4.1 tag has no license file: `LICENSE` is the one added nine
+  minutes later by the next commit (`0d66873`, a LICENSE-only change). The tes3 crate says "MIT OR Apache-2.0" but its
+  repository holds only the MIT text, which is what ships.
+- `deploy_manifest.txt` ships `third_party/**`; `sync.py` always carries `third_party/` into MWManager (listed in
+  COPY_MANIFEST.json); a program is now compared byte for byte (only text ignores a CRLF/LF difference). Either way
+  the program and its license files go together. `tests/test_tes3conv_vendored.py`: the hash is the pin, the licenses
+  and notice exist, every program under `third_party` has licenses beside it, git tracks all of it (no LFS, not
+  ignored), and deploy's list carries them with the program. `tests/test_sync.py`: sync carries the program and all
+  licenses byte for byte and lists them.
+- `tes3diff.py` looks in `third_party\tes3conv\` right after `--tes3conv` (then `TES3CONV`, `PATH`, the dev folders;
+  `TES3CONV=off` still switches all but `--tes3conv` off). tes3diff.py itself is still repository-only; the golden
+  tests now run wherever the repository does instead of skipping.
+
 # F1 report: shimmed, high only where a patch is planned; the cache knows the shim version (2026-11-26)
 
 - Seen in tidy's Lua check: "F1: 138 high" with no repair planned. Cause (read only, Dej's real staging and the real

@@ -22,29 +22,38 @@ def fake(folder, name=None, data=b"not really tes3conv"):
 
 
 # ------------------------------------------------------------------------------------------- finding it
-def test_the_lookup_order_is_explicit_then_env_then_path_then_dev_folders(tmp_path):
-    a, b, c, d = (fake(tmp_path / n) for n in "abcd")
-    dev = [tmp_path / "d"]
+def test_the_lookup_order_is_explicit_then_vendored_then_env_then_path_then_dev_folders(tmp_path):
+    a, b, c, d, v = (fake(tmp_path / n) for n in "abcdv")
+    dev, ven = [tmp_path / "d"], [tmp_path / "v"]
     on_path = lambda name: str(c)
-    assert T.find_tes3conv(str(a), {"TES3CONV": str(b)}, dev, on_path) == a
-    assert T.find_tes3conv(None, {"TES3CONV": str(b)}, dev, on_path) == b
-    assert T.find_tes3conv(None, {}, dev, on_path) == c
-    assert T.find_tes3conv(None, {}, dev, lambda name: None) == d
-    assert T.find_tes3conv(None, {"TES3CONV": str(tmp_path / "missing")}, dev, lambda name: None) == d
-    assert T.find_tes3conv(None, {}, [tmp_path / "nothing"], lambda name: None) is None
+    assert T.find_tes3conv(str(a), {"TES3CONV": str(b)}, dev, on_path, ven) == a              # --tes3conv first
+    assert T.find_tes3conv(None, {"TES3CONV": str(b)}, dev, on_path, ven) == v                # then the vendored copy
+    assert T.find_tes3conv(None, {"TES3CONV": str(b)}, dev, on_path, []) == b                 # then TES3CONV
+    assert T.find_tes3conv(None, {}, dev, on_path, []) == c                                   # then PATH
+    assert T.find_tes3conv(None, {}, dev, lambda name: None, []) == d                         # then the dev folders
+    assert T.find_tes3conv(None, {"TES3CONV": str(tmp_path / "missing")}, dev, lambda name: None, []) == d
+    assert T.find_tes3conv(None, {}, [tmp_path / "nothing"], lambda name: None, []) is None
+    assert T.find_tes3conv(None, {}, dev, on_path, [tmp_path / "gone"]) == c                  # no vendored copy: on down
+
+
+def test_the_default_vendored_copy_is_third_party_tes3conv_in_the_repository():
+    assert T.vendored_dirs() == [T.HERE / "third_party" / "tes3conv"]
+    if (T.HERE / "third_party" / "tes3conv" / "tes3conv.exe").is_file() and os.name == "nt":
+        assert T.find_tes3conv(None, {}, [], lambda name: None) == T.HERE / "third_party" / "tes3conv" / "tes3conv.exe"
 
 
 def test_a_folder_is_searched_below_and_the_newest_version_folder_wins(tmp_path):
     fake(tmp_path / "tes3conv" / "v0.4.0")
     new = fake(tmp_path / "tes3conv" / "v0.4.1")
-    assert T.find_tes3conv(None, {}, [tmp_path / "tes3conv"], lambda name: None) == new
-    assert T.find_tes3conv(str(tmp_path / "tes3conv" / "v0.4.1"), {}, [], lambda name: None) == new
+    assert T.find_tes3conv(None, {}, [tmp_path / "tes3conv"], lambda name: None, []) == new
+    assert T.find_tes3conv(str(tmp_path / "tes3conv" / "v0.4.1"), {}, [], lambda name: None, []) == new
 
 
 @pytest.mark.parametrize("value", ["off", "OFF", "none", "0", "disabled"])
 def test_tes3conv_off_switches_the_lookup_off(tmp_path, value):
     p = fake(tmp_path / "x")
-    assert T.find_tes3conv(None, {"TES3CONV": value}, [tmp_path / "x"], lambda name: str(p)) is None
+    assert T.find_tes3conv(None, {"TES3CONV": value}, [tmp_path / "x"], lambda name: str(p)) is None   # the vendored copy too
+    assert T.find_tes3conv(None, {"TES3CONV": value}, [], lambda name: None, [tmp_path / "x"]) is None
     assert T.find_tes3conv(str(p), {"TES3CONV": value}, [], lambda name: None) == p      # --tes3conv still wins
 
 

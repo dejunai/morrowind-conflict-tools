@@ -276,3 +276,65 @@ def test_is_dummy_matches_the_stand_in_and_generated_folders_only():
         assert S.is_dummy(rel), rel
     for rel in ("mwdialog_dummy.py", "tests/test_dummy_dir.py", "lua tools/MWSE/mods/mwsuite/dummyfix/main.lua", "docs/dummy.md"):
         assert not S.is_dummy(rel), rel
+
+
+def put_bytes(root, rel, data, mtime=None):
+    p = os.path.join(str(root), *rel.split("/"))
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    with open(p, "wb") as f:
+        f.write(data)
+    if mtime is not None:
+        os.utime(p, (mtime, mtime))
+    return p
+
+
+T3 = "third_party/tes3conv/"
+EXE_BYTES = b"MZ\x90\x00\r\n\x00\x01\r\nprogram\x00\xff"           # a program: NULs and CRLFs, no line-ending fix-ups
+THIRD = {T3 + "tes3conv.exe": EXE_BYTES, T3 + "LICENSE": b"MIT License\nCopyright (c) 2025 Greatness7\n",
+         T3 + "LICENSE-tes3": b"MIT License\nCopyright (c) 2022 Greatness7\n", T3 + "LICENSE-mimalloc_rust": b"MIT\n",
+         T3 + "NOTICE.md": b"# tes3conv\n"}
+
+
+def test_third_party_goes_along_with_the_program_and_all_its_license_files_and_is_listed(world, capsys):
+    repo, mwm, steam = world
+    for rel, data in THIRD.items():
+        put_bytes(repo, rel, data)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "tes3conv")
+    rc, out = run(world, capsys=capsys)
+    assert rc == 0
+    up = mwm / "tools" / "steam-upstream"
+    for rel, data in THIRD.items():
+        assert (up / rel).read_bytes() == data, rel                           # byte for byte, the program too
+    listed = {e["RelativePath"].replace("\\", "/"): e for e in json.load(open(up / "COPY_MANIFEST.json"))["Files"]}
+    for rel, data in THIRD.items():
+        assert rel in listed and listed[rel]["SHA256"] == hashlib.sha256(data).hexdigest()
+        assert listed[rel]["Bytes"] == len(data)
+    assert (up / T3 / "tes3conv.exe").exists() and not [r for r in THIRD if not (up / r).exists()]
+    rc, out = run(world, capsys=capsys)                                       # a second run copies nothing
+    assert rc == 0 and "updated: 0" in out
+
+
+def test_a_program_that_differs_only_in_its_line_endings_is_still_updated(world, capsys):
+    repo, mwm, steam = world
+    for rel, data in THIRD.items():
+        put_bytes(repo, rel, data)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "tes3conv")
+    up = mwm / "tools" / "steam-upstream"
+    put_bytes(up, T3 + "tes3conv.exe", EXE_BYTES.replace(b"\r\n", b"\n"))      # same but for CRLF: not the same program
+    rc, out = run(world, capsys=capsys)
+    assert rc == 0 and (up / T3 / "tes3conv.exe").read_bytes() == EXE_BYTES
+
+
+def test_dry_run_lists_third_party_and_writes_nothing(world, capsys):
+    repo, mwm, steam = world
+    for rel, data in THIRD.items():
+        put_bytes(repo, rel, data)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "tes3conv")
+    before = snap(mwm)
+    rc, out = run(world, dry=True, capsys=capsys)
+    assert rc == 0 and snap(mwm) == before
+    for rel in THIRD:
+        assert "tools/steam-upstream/" + rel in out

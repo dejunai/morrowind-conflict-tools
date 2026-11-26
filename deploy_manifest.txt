@@ -26,6 +26,10 @@ exclude lua tools/**/MWSE/core/**       # MWSE's own core files are never ours t
 
 include tools/**
 
+# Vendored programs with their license files (third_party/tes3conv: tes3conv.exe, LICENSE*, NOTICE.md): the licenses
+# always go where the program goes (tests/test_tes3conv_vendored.py checks it).
+include third_party/**
+
 # Docs keep the paths they have in the repository, so a relative link that works here works in the install.
 include docs/**
 exclude docs/dev/**                     # design notes, TODO and the Lua repair log: development only

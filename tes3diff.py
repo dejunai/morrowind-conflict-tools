@@ -39,10 +39,11 @@ Usage: python tes3diff.py OLD NEW [--tes3conv PATH] [--limit N]
 Arguments and switches (anything else is refused with exit code 2 and NOTHING is done):
   OLD NEW         the two plugins (.esp/.esm) to compare. Both are only read; nothing is written anywhere.
   --check         look for tes3conv, verify it against the pinned release and report; compares nothing.
-  --tes3conv PATH the tes3conv program (or a folder holding it). Default: the TES3CONV environment variable, then
-                  PATH, then an untracked dev tools folder: .devtools\tes3conv\ in the repository, or
-                  _devtools\tes3conv\ beside it (searched below those folders). TES3CONV=off switches the
-                  environment, PATH and dev folder lookup off, as if it were not installed (this switch still wins).
+  --tes3conv PATH the tes3conv program (or a folder holding it). Default: the copy that ships with the tools
+                  (third_party\tes3conv\ in the repository), then the TES3CONV environment variable, then PATH, then an
+                  untracked dev tools folder: .devtools\tes3conv\ in the repository, or _devtools\tes3conv\ beside it
+                  (searched below those folders). TES3CONV=off switches the vendored copy, environment, PATH and dev
+                  folder lookup off, as if it were not installed (this switch still wins).
   --limit N       print at most N changed fields per record (default 20; 0 for all).
   -h, --help      print this text and exit. Writes nothing.
 
@@ -50,7 +51,8 @@ Output: one line per record that was added (+), removed (-) or changed (~), with
 `path: old -> new`; then a summary. Records are matched by type and id (cell by name and grid), not by position, so
 a record that only moved is not a difference. The two plugins' headers are compared too.
 
-tes3conv is optional: when it is not found, tes3diff.py says so and exits with code 3. It is pinned to tes3conv v0.4.1
+tes3conv is optional: when it is not found (the vendored copy is missing and nothing else is set), tes3diff.py
+says so and exits with code 3. It is pinned to tes3conv v0.4.1
 (Greatness7, MIT): the program's SHA-256 is compared with the one from the official release asset and a warning is
 printed when it differs. """ + LAG_NOTE + """
 Exit codes: 0 no differences, 1 differences found, 2 an unknown switch or missing argument, 3 tes3conv not found or
@@ -67,6 +69,11 @@ def _platform():
 
 def _exe_names():
     return ("tes3conv.exe",) if _platform() == "windows" else ("tes3conv", "tes3conv.exe")
+
+
+def vendored_dirs():
+    """The copy that ships with the tools: third_party\\tes3conv in the repository (the program with its license files)."""
+    return [HERE / "third_party" / "tes3conv"]
 
 
 def dev_dirs():
@@ -92,8 +99,9 @@ def _pick(base, depth=3):
     return sorted(hits, reverse=True)[0] if hits else None
 
 
-def find_tes3conv(explicit=None, environ=None, search_dirs=None, which=None):
-    """The tes3conv program, or None: explicit path, then TES3CONV, then PATH, then the dev tools folders."""
+def find_tes3conv(explicit=None, environ=None, search_dirs=None, which=None, vendored=None):
+    """The tes3conv program, or None: explicit path, then the vendored copy (third_party\\tes3conv), then TES3CONV,
+    then PATH, then the dev tools folders. TES3CONV=off switches all but the explicit path off."""
     env = os.environ if environ is None else environ
     if explicit:
         hit = _pick(explicit)
@@ -101,6 +109,10 @@ def find_tes3conv(explicit=None, environ=None, search_dirs=None, which=None):
             return hit
     if str(env.get(ENV_VAR, "")).strip().lower() in OFF_VALUES:
         return None                                     # TES3CONV=off: pretend it is not installed (tests skip)
+    for d in (vendored_dirs() if vendored is None else vendored):
+        hit = _pick(d)
+        if hit:
+            return hit
     if env.get(ENV_VAR):
         hit = _pick(env[ENV_VAR])
         if hit:
@@ -302,7 +314,7 @@ def main(argv=None):
     plugins, explicit, limit, check = parse_args(sys.argv[1:] if argv is None else argv)
     exe = find_tes3conv(explicit)
     if exe is None:
-        print("tes3diff.py: tes3conv not found. Set %s, put it on PATH, or unpack the official %s release into "
+        print("tes3diff.py: tes3conv not found. Restore third_party\\tes3conv\\, set %s, put it on PATH, or unpack the official %s release into "
               ".devtools\\tes3conv\\ (repository) or _devtools\\tes3conv\\ (beside it). It is optional: nothing "
               "shipped needs it. %s" % (ENV_VAR, VERSION, RELEASE_URL), file=sys.stderr)
         return 3
