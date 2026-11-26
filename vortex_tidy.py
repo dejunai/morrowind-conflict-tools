@@ -60,6 +60,14 @@ For each mod folder in Vortex's Morrowind staging folder (from Vortex's settings
     current omw2mwse is 3.9+). Tidy probes the Python that would run it and, when that is older than the declared minimum
     (or, if nothing is declared, older than 3.11), treats the converter as missing - one WARNING, and the mod's whole
     package goes to Off\\<plugin>\\OpenMW\\.
+    The plan shows what the converter would do (its dry run): the verdict with any partly implemented OpenMW API
+    the mod uses beside it, each hard-coded value it would make a setting and where each plugin goes, and an
+    "omw2mwse check" digest of that preview, of every file in the mod folder and of the converter itself (version,
+    path, Python, the hashes of its files). --apply works it out again and refuses when the digest changed (a
+    sidecar edit, a changed source file, another converter), and checks the converter once more before running it.
+    Before omw2mwse writes anything, --apply records a recovery intent beside the journal (every file of the mod
+    with its hash; a copy of each file the converter will overwrite or remove); a run that stopped part-way is put
+    back exactly by the next --apply or --undo (the plan warns), or, when that can't be exact, nothing is changed.
     --undo reverses a conversion: it journals what omw2mwse reported, deletes
     the files omw2mwse wrote (its manifest's list, each only if it still has the hash the manifest gives; an edited
     one stays, with one WARNING line) and puts the original package from Off\\<Mod>\\OpenMW\\ back at its
@@ -138,6 +146,7 @@ import fnmatch
 import hashlib
 import json
 import os
+import posixpath
 import re
 import shutil
 import struct
@@ -626,6 +635,7 @@ REVIEW = {}            # mod folder -> (its .omwaddon files, the OpenMW scripts 
 CONVERTED = {}         # mod folder -> (its .omwaddon files, the omw2mwse-generated folders in it): left as they are
 CONVERT = {}           # OpenMW-only mod folder -> its .omwscripts files: --apply hands it to omw2mwse
 PREVIEW = {}           # converted-to-be mod folder -> (ok, summary line) of omw2mwse's dry run
+PREVIEW_CHECK = {}     # converted-to-be mod folder -> {"digest", "identity", "lines"}: what --apply is bound to
 BLOCKED_PLAN = []      # warning texts: mods omw2mwse's dry run judged blocked (they get the usual Off\\ move)
 CONVERT_MODES = ("normal", "hardcode")          # omw2mwse's own --convert-omwscripts modes
 CONVERT_DEFAULT = "normal"                      # what ships: end users get this unless they pass --convert-omwscripts=hardcode
@@ -806,7 +816,8 @@ def convert_mode(chosen=_CONVERT_UNSET):
     forces hardcode."""
     if chosen is not _CONVERT_UNSET:
         return chosen
-    return "hardcode" if CONVERT_DEV_HARDCODE else CONVERT_DEFAULT
+    # read by name: ready_to_ship.py has the marked line removed before shipping, and then this is CONVERT_DEFAULT
+    return "hardcode" if globals().get("CONVERT_DEV_HARDCODE", False) else CONVERT_DEFAULT
 
 
 def setup_converter(mode):
@@ -900,7 +911,7 @@ def converter_summary(code, data, err):
     bits = []
     for m in data.get("mods") or []:
         blockers = sum(1 for al in entry_alerts(m) if al.get("code") == "blocker")
-        b = f"{m.get('name')} {m.get('status')}, verdict {m.get('verdict')}"
+        b = f"{m.get('name')} {m.get('status')}, {readiness_text(m)}"
         if m.get("verdict") == "blocked" and not is_opt_out(m) and reason_text(m.get("reason")):
             b += f" ({reason_text(m.get('reason'))})"
         if blockers:
@@ -912,10 +923,422 @@ def converter_summary(code, data, err):
     return True, what + ("" if data.get("dryRun") else (" (changed)" if data.get("changed") else " (unchanged)"))
 
 
-def convert_lines(d, oms, mode):
-    """The plan lines of one OpenMW-only mod handed to the converter (an action --apply compares)."""
+def convert_lines(d, oms, mode, extra=()):
+    """The plan lines of one OpenMW-only mod handed to the converter (actions --apply compares): the conversion,
+    then (extra, from preview_check) the converter check digest, its hard-coded rewrites and plugin placements."""
     return [f"\n{d}   [{mod_name(d)}]",
-            f"    {CONVERT_ACTION} ({mode}): OpenMW-only, no MWSE Lua ({', '.join(oms)})"]
+            f"    {CONVERT_ACTION} ({mode}): OpenMW-only, no MWSE Lua ({', '.join(oms)})"] + list(extra)
+
+
+# ---------------------------------------------------------------- binding --apply to the converter's preview
+# The plan's conversion lines carry a digest of what the converter would do (its dry run's substantive JSON),
+# of what it reads (every file of the mod folder, the mode, --title/--author) and of the converter itself (its
+# version, path, the Python that runs it and the hashes of its files: the launcher, and for a checkout its
+# package, runtime and sidecars). --apply works the plan out again, so a changed sidecar, source file or
+# converter changes the digest line and the plan is refused (one REFUSED, nothing done); right before the real
+# run the converter's own identity is checked once more. Volatile things (the absolute folder in the JSON, the
+# "dir" and "dryRun" keys) are left out, so the same inputs always give the same digest.
+
+CHECK_LABEL = "omw2mwse check"
+_FP_SKIP_DIRS = {".git", "__pycache__", "tests", "docs", ".pytest_cache", ".ruff_cache", ".venv", "venv"}
+_FP_CACHE = {}
+
+
+def _converter_root(where):
+    """The converter checkout `where` lies in (a folder up to three levels above it holding pyproject.toml and an
+    omw2mwse package with cli.py within two levels), else None: a lone launcher or .exe is its own identity."""
+    d = os.path.abspath(where) if where else ""
+    d = d if os.path.isdir(d) else os.path.dirname(d)
+    for _ in range(4):
+        if d and os.path.isfile(os.path.join(d, "pyproject.toml")):
+            for base, dirs, fns in os.walk(d):
+                dirs[:] = [x for x in dirs if x not in _FP_SKIP_DIRS]
+                if os.path.basename(base) == "omw2mwse" and "cli.py" in fns:
+                    return d
+                if base[len(d):].count(os.sep) >= 2:
+                    dirs[:] = []
+        up = os.path.dirname(d)
+        if up == d:
+            break
+        d = up
+    return None
+
+
+def _files_digest(root, only=None):
+    """SHA-256 over (relative path, content hash) of the files under root (or of the one file `only`), skipping
+    VCS, caches, tests and docs (*.md): what the converter runs and reads, not what documents it."""
+    h = hashlib.sha256()
+    if only:
+        h.update(b"file\0" + _sha256(only).encode())
+        return h.hexdigest()
+    for base, dirs, fns in os.walk(root):
+        dirs[:] = sorted(x for x in dirs if x not in _FP_SKIP_DIRS)
+        for fn in sorted(fns):
+            if fn.lower().endswith((".md", ".pyc", ".pyo")):
+                continue
+            p = os.path.join(base, fn)
+            rel = os.path.relpath(p, root).replace(os.sep, "/")
+            h.update(rel.encode("utf-8") + b"\0" + _sha256(p).encode() + b"\n")
+    return h.hexdigest()
+
+
+def converter_identity(cmd=None, where=None):
+    """{"path", "python", "files"}: who would run the conversion. Cached per run (main() clears it)."""
+    cmd = CONVERTER["cmd"] if cmd is None else cmd
+    where = CONVERTER["why"] if where is None else where
+    key = (tuple(cmd or ()), where)
+    if key not in _FP_CACHE:
+        root = _converter_root(where) if where else None
+        try:
+            if root:
+                files = _files_digest(root)
+            elif where and os.path.isdir(where):
+                files = _files_digest(where)
+            elif where and os.path.isfile(where):
+                files = _files_digest(None, only=where)
+            else:
+                files = ""
+        except OSError as e:
+            files = f"unreadable: {e.__class__.__name__}"
+        ver = interpreter_version(cmd) if cmd else None
+        _FP_CACHE[key] = {"path": os.path.normcase(os.path.abspath(where)) if where else "",
+                          "python": "%d.%d" % ver if ver else "", "files": files}
+    return _FP_CACHE[key]
+
+
+RECOVERY_DIR = ".omw2mwse-recovery"     # omw2mwse's own journal of an unfinished run: tidy never moves, sweeps or hashes it
+
+
+def mod_inputs(mod_dir):
+    """{relative path ('/'): SHA-256} of every file in a mod folder: what the converter reads (and, for the
+    recovery intent, what the folder held before it ran). omw2mwse's recovery folder is left out."""
+    out = {}
+    for base, dirs, fns in os.walk(_xp(mod_dir)):
+        dirs[:] = sorted(d for d in dirs if d.lower() != RECOVERY_DIR)
+        for fn in fns:
+            p = os.path.join(base, fn)
+            out[os.path.relpath(_unxp(p), mod_dir).replace(os.sep, "/")] = _sha256(_unxp(p))
+    return out
+
+
+def _preview_substance(data, mod_dir):
+    """The converter's dry-run JSON without what carries no meaning between two runs: the top-level "dir" and
+    "dryRun", and the mod folder's absolute path inside any text (shown as <mod>); backslashes become '/'."""
+    roots = {mod_dir, os.path.abspath(mod_dir), os.path.realpath(mod_dir)}
+    variants = sorted({v for r in roots for v in (r, r.replace("\\", "/"), r.replace("/", "\\"))}, key=len,
+                      reverse=True)
+
+    def norm(x):
+        if isinstance(x, dict):
+            return {str(k): norm(v) for k, v in x.items()}
+        if isinstance(x, list):
+            return [norm(v) for v in x]
+        if isinstance(x, str):
+            for v in variants:
+                if v:
+                    x = re.sub(re.escape(v), "<mod>", x, flags=re.I)
+            return x.replace("\\", "/")
+        return x
+    return norm({k: v for k, v in (data or {}).items() if k not in ("dir", "dryRun")})
+
+
+def partial_api(entry, uses=False):
+    """The partly implemented OpenMW APIs a converted mod uses, as "api xN" texts (uses: with its first use,
+    "api xN (file:line)"): from the entry's "partialApis" (omw2mwse 64e2a6a: [{api, kind, count, uses: [{file,
+    line}], missing}]), else "partialApi", else a "symbols" map ({name: {"status": "partial", "count"}}).
+    Always [] for an author opt-out: nothing about such a mod's files is ever shown."""
+    entry = entry if isinstance(entry, dict) else {}
+    out = []
+    if is_opt_out(entry):
+        return out
+    got = entry.get("partialApis") if isinstance(entry.get("partialApis"), list) else entry.get("partialApi")
+    if isinstance(got, list):
+        for x in got:
+            if isinstance(x, dict) and (x.get("api") or x.get("symbol") or x.get("name")):
+                n = x.get("count")
+                t = str(x.get("api") or x.get("symbol") or x.get("name")) + (f" x{n}" if isinstance(n, int) and n > 1
+                                                                            else "")
+                first = [u for u in (x.get("uses") or []) if isinstance(u, dict) and u.get("file")][:1]
+                if uses and first:
+                    t += f" ({str(first[0]['file']).replace(chr(92), '/')}:{first[0].get('line', '?')})"
+                out.append(t)
+            elif isinstance(x, str) and x:
+                out.append(x)
+    elif isinstance(entry.get("symbols"), dict):
+        for name, e in sorted(entry["symbols"].items()):
+            if isinstance(e, dict) and e.get("status") == "partial":
+                n = e.get("count")
+                out.append(str(name) + (f" x{n}" if isinstance(n, int) and n > 1 else ""))
+    return out
+
+
+def readiness_text(entry):
+    """'verdict <v>' with its partial API matches beside it (so a tester knows what to try), e.g. 'verdict ready
+    (partial API: openmw.ui.showMessage x2, openmw.nearby.castRay)'."""
+    v = f"verdict {entry.get('verdict')}"
+    part = partial_api(entry)
+    return v + (f" (partial API: {', '.join(part[:8])}" + (f", +{len(part) - 8} more" if len(part) > 8 else "")
+                + ")" if part else "")
+
+
+def preview_lines(data, mod_dir):
+    """The reviewable lines of a converter preview, one per hard-coded rewrite and per plugin placement."""
+    out = []
+    for m in (data or {}).get("mods") or []:
+        if not isinstance(m, dict) or m.get("status") != "ok":
+            continue
+        mname = m.get("name")
+        for r in m.get("rewrites") or []:
+            if isinstance(r, dict):
+                where = f"{str(r.get('file') or '?').replace(os.sep, '/')}:{r.get('line', '?')}"
+                out.append(f"    omw2mwse makes a setting of {mname}'s hard-coded value: {where} "
+                           f"{r.get('name') or r.get('key') or '?'} = {r.get('literal', r.get('default', '?'))}")
+        for pl in converter_plugins(m) or []:
+            place = str(pl.get("placement") or ("off" if pl.get("optional") is True else "root"))
+            path = str(pl.get("path") or pl["name"]).replace("\\", "/")
+            out.append(f"    omw2mwse places {mname}'s plugin {pl['name']}: {place} ({pl.get('status') or 'unknown'}) "
+                       f"at {path}")
+    return out
+
+
+def preview_check(data, mod_dir, mode):
+    """{"digest", "identity", "lines"} for a converter preview: the digest --apply is bound to (see above) and
+    the plan lines that carry it."""
+    info = vortex_info(mod_dir)
+    ident = converter_identity()
+    body = {"mode": mode, "title": info.get("title") or "", "author": info.get("author") or "",
+            "converter": dict(ident, version=str((data or {}).get("version") or "")),
+            "inputs": mod_inputs(mod_dir), "preview": _preview_substance(data, mod_dir)}
+    digest = hashlib.sha256(json.dumps(body, sort_keys=True).encode("utf-8")).hexdigest()[:16]
+    ver = (data or {}).get("version") or "?"
+    lines = [f"    {CHECK_LABEL} {digest} (omw2mwse {ver}: its preview, the mod's files and the converter's own)"]
+    return {"digest": digest, "identity": ident, "lines": lines + preview_lines(data, mod_dir)}
+
+
+CHECK_REFUSED = ("The OpenMW converter's preview, the files it reads (a sidecar or a source file) or the converter "
+                 "itself (a different version or copy) changed since the plan you reviewed")
+
+
+# ---------------------------------------------------------------- recovery intent for a conversion
+# Before omw2mwse writes anything, --apply records an intent (vortex_tidy_journal_intent.json beside the journal,
+# flushed to disk): the mod folder, every file it holds with its SHA-256, its folders, the start time, and a
+# hash-checked copy (in <backups folder>\tidy\<run>\convert\) of every existing file the converter's preview
+# says it will overwrite or remove. When the converter returns and its undo record is journaled (or a blocked
+# result undone), the intent is removed. An intent still there means the run stopped in between: the next
+# --apply or --undo puts the folder back as the intent recorded it (kept copies restored, relocated originals
+# moved back by hash, files that appeared since removed, new folders removed) and the plan says so. If that can't
+# be done exactly, nothing is changed and the intent stays, with the reasons.
+
+def _intent_path():
+    return os.path.splitext(JOURNAL)[0] + "_intent.json"
+
+
+def read_intent():
+    try:
+        with open(_intent_path(), encoding="utf-8") as f:
+            got = json.load(f)
+    except (OSError, ValueError):
+        return None
+    return got if isinstance(got, dict) and got.get("mod") else None
+
+
+def _write_intent(intent):
+    p = _intent_path()
+    os.makedirs(os.path.dirname(os.path.abspath(p)), exist_ok=True)
+    tmp = p + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(intent, f)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, p)
+
+
+def _clear_intent():
+    try:
+        os.remove(_intent_path())
+    except FileNotFoundError:
+        pass
+
+
+def begin_intent(mod_dir, staging, mode, preview, audit):
+    """Record the intent of one conversion (see above) before the converter runs; returns it."""
+    files = mod_inputs(mod_dir)
+    dirs = []
+    for base, ds, _fns in os.walk(_xp(mod_dir)):
+        ds[:] = [d for d in ds if d.lower() != RECOVERY_DIR]
+        dirs += [os.path.relpath(_unxp(os.path.join(base, d)), mod_dir).replace(os.sep, "/") for d in ds]
+    planned = set()                                   # what it may overwrite or remove: its planned outputs,
+    for m in (preview or {}).get("mods") or []:       # the MAX_PATH list beside its Off package, earlier output
+        if isinstance(m, dict):
+            planned |= {str(k).replace("\\", "/") for k in (m.get("files") or {})}
+            off = str(m.get("off") or m.get("willRelocateTo") or m.get("source") or "").replace("\\", "/").strip("/")
+            if off:
+                planned.add(posixpath.join(posixpath.dirname(off), OL.LIST_NAME))
+    for g in omw_converted(mod_dir):
+        g = g.replace(os.sep, "/").rstrip("/") + "/"
+        planned |= {k for k in files if k.lower().startswith(g.lower())}
+    low = {k.lower(): k for k in files}
+    kept = {}
+    stamp = f"{time.strftime('%Y%m%d-%H%M%S')}-{os.getpid()}-{time.time_ns()}"
+    keep_dir = os.path.join(audit or os.path.join(AUDIT_ROOT, stamp), "convert", os.path.basename(mod_dir))
+    for rel in sorted(planned):
+        rel = os.path.normpath(rel).replace(os.sep, "/")
+        have = low.get(rel.lower())
+        if not have:
+            continue
+        dst = os.path.join(keep_dir, *have.split("/"))
+        os.makedirs(_xp(os.path.dirname(dst)), exist_ok=True)
+        shutil.copyfile(_xp(os.path.join(mod_dir, *have.split("/"))), _xp(dst))
+        if _sha256(dst) != files[have]:
+            raise OSError(f"the kept copy of {have} did not hash-check")
+        kept[have] = dst
+    intent = {"intent": stamp, "mod": mod_dir, "staging": staging, "mode": mode, "started": time.time(),
+              "files": files, "dirs": sorted(dirs), "kept": kept}
+    _write_intent(intent)
+    return intent
+
+
+def _journal_has_intent(iid):
+    try:
+        with open(JOURNAL, encoding="utf-8") as f:
+            return any(iid in ln and json.loads(ln).get("intent") == iid for ln in f if ln.strip())
+    except (OSError, ValueError):
+        return False
+
+
+def reconcile_intent(intent, log=print, quiet=False):
+    """Put a mod folder back as a pending intent recorded it (see above). True when done (the intent is
+    removed); False when it can't be done exactly (nothing changed, the intent stays, the reasons printed).
+    quiet: say nothing when the folder already is as recorded (the end of every conversion that journaled
+    nothing)."""
+    mod, iid = intent["mod"], intent.get("intent")
+    name = os.path.basename(mod)
+    if iid and _journal_has_intent(iid):              # the converter finished and its undo record is journaled
+        _clear_intent()
+        return True
+    if os.path.isdir(mod) and recovery_journals(mod):   # the converter's own record first: it undoes its run
+        ok, text = converter_rollback(mod)
+        if text:
+            log(f"{'  ' if quiet else ''}{'' if ok else 'WARNING: '}{name}: {text}")
+    was, kept = intent.get("files") or {}, intent.get("kept") or {}
+    now = mod_inputs(mod) if os.path.isdir(mod) else {}
+    new = {r: h for r, h in now.items() if r not in was}
+    restore, back, problems = [], [], []
+    for rel, h in sorted(was.items()):
+        cur = now.get(rel)
+        if cur == h:
+            continue
+        if rel in kept:
+            if not os.path.isfile(_xp(kept[rel])) or _sha256(kept[rel]) != h:
+                problems.append(f"{rel}: its kept copy ({kept[rel]}) is missing or not the original")
+            else:
+                restore.append((kept[rel], rel))
+            continue
+        if cur is None:
+            cands = sorted((r for r, x in new.items() if x == h), key=lambda r: (not r.lower().endswith("/" + rel.lower()), r))
+            if cands:
+                back.append((cands[0], rel))
+                del new[cands[0]]
+                continue
+            problems.append(f"{rel}: gone, and no copy with its content is in the folder")
+        else:
+            problems.append(f"{rel}: changed, and no original was kept")
+    stale = [r for r in new if os.path.getmtime(_xp(os.path.join(mod, *r.split("/")))) < intent.get("started", 0) - 2]
+    for r in stale:
+        problems.append(f"{r}: not there before the conversion, but older than it (not removed by tidy)")
+    if problems:
+        ind = "  " if quiet else ""
+        log(f"{ind}WARNING: {name} could not be put back exactly as it was before omw2mwse ran; nothing was "
+            f"changed and the recovery record stays ({_intent_path()}):")
+        for p in problems[:20]:
+            log(f"{ind}  {p}")
+        return False
+    for src, rel in back:
+        dst = os.path.join(mod, *rel.split("/"))
+        os.makedirs(_xp(os.path.dirname(dst)), exist_ok=True)
+        os.replace(_xp(os.path.join(mod, *src.split("/"))), _xp(dst))
+    for src, rel in restore:
+        dst = os.path.join(mod, *rel.split("/"))
+        os.makedirs(_xp(os.path.dirname(dst)), exist_ok=True)
+        tmp = dst + ".tidytmp"
+        shutil.copyfile(_xp(src), _xp(tmp))
+        os.replace(_xp(tmp), _xp(dst))
+    for rel in new:
+        try:
+            os.remove(_xp(os.path.join(mod, *rel.split("/"))))
+        except FileNotFoundError:
+            pass
+    keep_dirs = {d.lower() for d in intent.get("dirs") or []}
+    for base, ds, fns in os.walk(_xp(mod), topdown=False):
+        rel = os.path.relpath(_unxp(base), mod).replace(os.sep, "/")
+        if RECOVERY_DIR in rel.lower().split("/"):
+            continue
+        if rel != "." and rel.lower() not in keep_dirs and not os.listdir(base):
+            os.rmdir(base)
+    if recovery_journals(mod):
+        log(f"{'  ' if quiet else ''}NOTE: {name}: omw2mwse's record of an unfinished run is still in "
+            f"{', '.join(recovery_journals(mod))}; tidy leaves it alone (omw2mwse recover --rollback undoes it)")
+    _clear_intent()
+    if back or restore or new or not quiet:
+        log(f"{'  ' if quiet else ''}{name}: put back as it was before omw2mwse ran: {len(back)} original(s) moved "
+            f"back, {len(restore)} kept file(s) restored, {len(new)} file(s) it had written removed.")
+    return True
+
+
+def recovery_journals(mod_dir):
+    """omw2mwse's journals of unfinished runs in a mod folder ('/'-relative paths): <MWSE>/mods/mwsuite/openmw/
+    <Mod>/.omw2mwse-recovery/journal.json. Read-only: tidy never moves, sweeps or hashes that folder."""
+    out = []
+    base = os.path.join(mod_dir, existing(mod_dir, "MWSE"), "mods", "mwsuite", "openmw")
+    try:
+        names = sorted(os.listdir(base))
+    except OSError:
+        return out
+    for n in names:
+        j = os.path.join(base, n, RECOVERY_DIR, "journal.json")
+        if os.path.isfile(j):
+            out.append(os.path.relpath(j, mod_dir).replace(os.sep, "/"))
+    return out
+
+
+def pending_recovery(data):
+    """The unfinished omw2mwse runs a convert result reports (top-level "pendingRecovery": [{mod, stage, ...}])."""
+    got = (data or {}).get("pendingRecovery") if isinstance(data, dict) else None
+    return [x for x in got if isinstance(x, dict)] if isinstance(got, list) else []
+
+
+def converter_rollback(mod_dir):
+    """omw2mwse recover <mod> --rollback --json: the converter undoes its own unfinished runs from its recovery
+    journal (originals back from Off, created files deleted, replaced ones restored from its backup). (ok, text).
+    Nothing to do (no journal) is ok; no converter is not."""
+    if not recovery_journals(mod_dir):
+        return True, ""
+    if not CONVERTER.get("cmd"):
+        return False, "omw2mwse is not available to roll back its unfinished run"
+    try:
+        r = subprocess.run(list(CONVERTER["cmd"]) + ["recover", mod_dir, "--rollback", "--json"],
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=CONVERTER["env"],
+                           timeout=CONVERTER_TIMEOUT)
+    except (OSError, subprocess.SubprocessError) as e:
+        return False, f"could not run omw2mwse recover ({e})"
+    try:
+        data = json.loads(r.stdout.decode("utf-8", "replace"))
+    except ValueError:
+        data = {}
+    kept = [k for rb in (data.get("rolledBack") or []) if isinstance(rb, dict) for k in (rb.get("kept") or [])]
+    if r.returncode or recovery_journals(mod_dir):
+        return False, f"omw2mwse recover --rollback did not finish (exit {r.returncode})"
+    return True, ("omw2mwse rolled back its unfinished run" + (f"; it kept {len(kept)} file(s) changed by hand"
+                                                                 if kept else ""))
+
+
+def pending_intent_line():
+    """The plan's WARNING for a pending intent, or ""."""
+    it = read_intent()
+    if not it:
+        return ""
+    return (f"WARNING: an omw2mwse conversion of {os.path.basename(it['mod'])} was interrupted; --apply (or --undo) "
+            f"first puts that folder back as it was, then stops so you can plan again")
 
 
 def entry_alerts(entry):
@@ -1107,32 +1530,53 @@ def _undo_now(op, staging):
     return ok
 
 
-def convert_apply(staging, mods, mode, head_extra=None):
+def convert_apply(staging, mods, mode, head_extra=None, audit=None):
     """--apply: run the converter on each OpenMW-only mod and journal what it changed (for --undo). A conflict
     (exit 4) or any other failure gets one WARNING line and the run goes on. A mod omw2mwse judges blocked
     (verdict "blocked": it exits 0 and still writes an active loader) is not shipped: its output is undone at
     once and its whole package goes to Off\\<plugin name>\\OpenMW\\, with one WARNING line; "partial" is converted,
     with one NOTE. Returns the mod folders not converted."""
     left = []
-    for mod_dir in mods:
+    for i, mod_dir in enumerate(mods):
+        name = os.path.basename(mod_dir)
+        bound = PREVIEW_CHECK.get(mod_dir)
+        _FP_CACHE.clear()
+        if bound and converter_identity() != bound["identity"]:      # the converter changed during this run
+            print(f"  WARNING: {name}: {CHECK_REFUSED}; not converted, nothing was written for it")
+            left.append(mod_dir)
+            continue
+        try:
+            intent = begin_intent(mod_dir, staging, mode, bound and bound.get("data"), audit)
+        except OSError as e:
+            print(f"  WARNING: {name}: could not record the recovery intent ({e}); not converted")
+            left.append(mod_dir)
+            continue
         code, data, err = run_converter(mod_dir, mode)
         ok, line = converter_summary(code, data, err)
-        name = os.path.basename(mod_dir)
+        if pending_recovery(data):                   # it stopped part-way and says so: not a finished conversion
+            ok, line = False, (f"an unfinished run is pending ({', '.join(str(x.get('mod')) for x in pending_recovery(data))}"
+                               f", stage {pending_recovery(data)[0].get('stage')})")
+            data = None
         ops, blocked, notes = [], [], []
         verdicts = preview_verdicts(data)
+        touched = bool(verdicts) and mod_inputs(mod_dir) != intent["files"]   # the folder says what was written too
         for mname, verdict, m in verdicts:
             if data.get("dryRun"):
                 continue
-            wrote = bool(m.get("changed") or m.get("relocated"))
+            wrote = bool(m.get("changed") or m.get("relocated")) or (touched and len(verdicts) == 1)
             if verdict == "blocked":                  # also when nothing was written (an author opt-out writes nothing)
                 blocked.append((mname, conversion_op(mod_dir, m, mode) if wrote else None, blocked_says(mname, m), m))
                 continue
             if not wrote:
                 continue
             op = conversion_op(mod_dir, m, mode)
+            op["intent"] = intent["intent"]
             ops.append(op)
             if verdict == "partial":
                 notes.append(f"{mname} is only partly supported by omw2mwse (verdict partial): converted anyway")
+            if isinstance(m.get("resumed"), dict):
+                notes.append(f"{mname}: omw2mwse finished an earlier run that had stopped at stage "
+                             f"{m['resumed'].get('stage')}")
             for al in entry_alerts(m):
                 if al.get("code") == "plugin-rename-clash":
                     notes.append(f"{mname}: {al.get('message')}; tidy leaves it there and never enables it")
@@ -1147,10 +1591,21 @@ def convert_apply(staging, mods, mode, head_extra=None):
                                  f"enable one in Vortex only if you want that option")
         if ops:                                      # also from a result with a conflict in another mod
             journal_conversions(staging, ops, head_extra)
+            _clear_intent()                          # the journal is the record now (--undo reverses it)
+        state = {"open": not ops}
+
+        def settle():
+            """Nothing journaled: the folder must be as the intent recorded it (a failed or crashed run may have
+            left files; a blocked one is undone by its own record first). True when it is."""
+            if state["open"]:
+                state["open"] = not reconcile_intent(intent, quiet=True)
+            return not state["open"]
         if ok and verdicts and all(v == "blocked" for _n, v, _m in verdicts):
             pass                                     # nothing was converted: the WARNING below says so
         elif ok:
             print(f"  converted {name} with omw2mwse ({mode}): {line}")
+        elif not settle():
+            print(f"  WARNING: omw2mwse could not convert {name}: {line}; what it wrote could not be put back")
         else:
             moves = unconverted_moves(mod_dir)
             print(f"  WARNING: omw2mwse could not convert {name}: {line}; not converted, "
@@ -1162,7 +1617,7 @@ def convert_apply(staging, mods, mode, head_extra=None):
         for note in notes:
             print(f"  NOTE: {note}")
         for mname, op, says, m in blocked:
-            if op is None or _undo_now(op, staging):          # no op: the converter wrote nothing, nothing to undo
+            if (op is None or _undo_now(op, staging)) and settle():   # no op: the converter wrote nothing
                 print(f"  WARNING: {says}{blocked_then(m)}not converted, "
                       + ("conversion undone, " if op is not None else "nothing was written, ")
                       + "its whole package goes to Off\\<plugin>\\OpenMW\\")
@@ -1175,6 +1630,11 @@ def convert_apply(staging, mods, mode, head_extra=None):
             else:
                 print(f"  WARNING: {says}, and its output could not be undone")
                 left.append(mod_dir)
+        if not settle():                             # the intent stays for the next --apply or --undo
+            print(f"  WARNING: stopped converting: {name} could not be put back as it was before omw2mwse ran "
+                  f"(listed above); the next --apply or --undo tries again")
+            left += [d for d in mods[i:] if d not in left]
+            break
     return left
 
 
@@ -1296,6 +1756,8 @@ def run_plan(args):
     CONVERT.clear()
     _VORTEX_INFO.clear()
     PREVIEW.clear()
+    PREVIEW_CHECK.clear()
+    _FP_CACHE.clear()
     del BLOCKED_PLAN[:]
     CONVERTER["missed"] = 0
     _TEX_INDEX.clear()
@@ -1319,6 +1781,9 @@ def run_plan(args):
                 del CONVERT[full]
                 res = unconverted_moves(full)
                 data = None
+            if pending_recovery(data) or recovery_journals(full):
+                NOTES.append(f"{d}: omw2mwse has an unfinished run here; --apply runs it again, which finishes it "
+                             f"(if that fails too, omw2mwse rolls it back and tidy puts the folder back as it was)")
             blocked = [(n, blocked_says(n, m), blocked_then(m)) for n, v, m in preview_verdicts(data) if v == "blocked"]
             if late:
                 pass
@@ -1329,12 +1794,19 @@ def run_plan(args):
                 res = unconverted_moves(full)
             else:
                 PREVIEW[full] = converter_summary(code, data, err)
-                for n, v, _m in preview_verdicts(data):
+                for n, v, m_ in preview_verdicts(data):
                     if v == "partial":
                         NOTES.append(f"{d}: omw2mwse verdict partial for {n}: it will be converted, only partly "
                                      f"supported")
+                    if partial_api(m_):
+                        NOTES.append(f"{d}: {n} uses OpenMW API that omwcompat only partly supports - test these in "
+                                     f"game first: {', '.join(partial_api(m_, uses=True)[:12])}")
+                chk = preview_check(data, full, CONVERTER["mode"]) if data is not None else None
+                if chk:
+                    chk["data"] = data
+                    PREVIEW_CHECK[full] = chk
                 touched += 1
-                lines += convert_lines(d, CONVERT[full], CONVERTER["mode"])
+                lines += convert_lines(d, CONVERT[full], CONVERTER["mode"], chk["lines"] if chk else ())
                 continue
         res, too_long = OL.guard_moves(res, full)    # a path over MAX_PATH is never moved (it would get longer)
         listed = OL.list_update(full, OWNER.get(full) or OL.owner_name(full, fallback=mod_name(d)), too_long)
@@ -1362,6 +1834,9 @@ def run_plan(args):
     elif CONVERTER.get("missed"):                    # one line: the converter isn't there
         head.append(f"  - WARNING: omw2mwse (the OpenMW converter) was not found on PATH or beside these tools: "
                     f"{CONVERTER['missed']} OpenMW-only mod(s) get their whole package moved to Off\\<plugin>\\OpenMW\\ instead")
+    pend = pending_intent_line()
+    if pend:
+        head.append(f"  - {pend}")
     for text in BLOCKED_PLAN:
         head.append(f"  - WARNING: {text}")
     for mod_dir in sorted(CONVERT):                  # the preview (dry run); notes, not actions
@@ -1543,9 +2018,14 @@ def undo(force=False):
     Lua originals are checked first (present, the same hash as when kept; the file not changed since, unless
     force): if any can't be put back, nothing is changed and the reason is printed. What could not be put back
     stays in the journal, so --undo can try again."""
-    if not os.path.exists(JOURNAL):
-        print("Nothing to undo (no journal).")
+    pend = read_intent()
+    if pend and not reconcile_intent(pend):           # an interrupted conversion first: it was the last thing done
+        print("--undo changed nothing else: the interrupted conversion above has to be put back first.",
+              file=sys.stderr)
         return 1
+    if not os.path.exists(JOURNAL):
+        print("Nothing to undo (no journal)." if not pend else "Nothing else to undo (no journal).")
+        return 1 if not pend else 0
     runs = _read_journal_runs()
     if not runs:
         print("Nothing to undo.")
@@ -3428,6 +3908,11 @@ def apply_main(args):
     nothing is done - the new plan is written for review and the old one kept as vortex_tidy_plan.prev.txt.
     Afterwards the plan file is blanked, or cut down to what was not applied, atomically, with copies of the
     plan as reviewed and as enacted in <backups folder>\\tidy\\<run>\\."""
+    pend = read_intent()
+    if pend:                                          # an earlier --apply stopped inside a conversion
+        reconcile_intent(pend)
+        print("\nNothing else was done this run: run vortex_tidy again to plan, review, then --apply.")
+        return 1
     reviewed = PF.read(PLAN)
     parts = [LUA_HEAD] if args.lua_only else \
         ["moves"] + ([] if args.no_lua else [LUA_HEAD]) + ([] if args.no_assets else [ASSET_HEAD])
@@ -3438,6 +3923,8 @@ def apply_main(args):
     added, removed = PF.compare(reviewed, text, parts)
     if added or removed:
         PF.refuse_mismatch(PLAN, text, added, removed, "vortex_tidy.py" + (" --lua-only" if args.lua_only else ""))
+        if any(CHECK_LABEL in str(a) for a in list(added) + list(removed)):
+            print(f"{CHECK_REFUSED}: review the new plan before --apply.")
         return 2
     print("\nThe plan matches the one you reviewed.")
     audit = os.path.join(AUDIT_ROOT, time.strftime("%Y%m%d-%H%M%S"))
@@ -3473,7 +3960,7 @@ def apply_main(args):
         assets_apply(args, ares, moved_mods)
         if st["convert"]:                            # last: it lays those mods out itself
             st["convert_left"] = convert_apply(args.staging, st["convert"], CONVERTER["mode"],
-                                              args._journal_extra)
+                                              args._journal_extra, audit)
         st["finished"] = True
     finally:
         left = _finish_plan(args, st, reviewed, audit)
@@ -3487,7 +3974,8 @@ def _left_lines(args, st):
         out += [ln for ln in st["keep"]["moves"].splitlines() if not ln.startswith("#")]
     out += moves_as_lines([m for i, m in enumerate(st["moves"]) if i not in done], args.staging)
     for mod_dir in st.get("convert_left") or []:     # not converted (failed, or the run stopped first)
-        out += convert_lines(os.path.basename(mod_dir), CONVERT.get(mod_dir, []), CONVERTER["mode"])
+        out += convert_lines(os.path.basename(mod_dir), CONVERT.get(mod_dir, []), CONVERTER["mode"],
+                             (PREVIEW_CHECK.get(mod_dir) or {}).get("lines", ()))
     lua = lua_pending(st["lua"]) or ([st["keep"][LUA_HEAD]] if LUA_HEAD in st["keep"] else [])
     if lua:
         out += ["", LUA_HEAD] + lua

@@ -1,3 +1,37 @@
+# Audit 2026-11-26: recoverable conversions, apply bound to the converter preview, partial API shown; deploy.py (2026-11-26)
+
+- Recovery intent: before omw2mwse writes anything, `--apply` records `vortex_tidy_journal_intent.json` beside the
+  journal (every file of the mod folder with its SHA-256, its folders, the start time, and a hash-checked copy under
+  `<backups>\tidy\<run>\convert\` of each existing file the preview says the converter will overwrite or remove,
+  plus earlier omw2mwse output and the MAX_PATH list). It is removed once the conversion's undo record is journaled.
+  A conversion that journaled nothing (a failed, crashed or blocked run) is checked against the intent at once and
+  whatever it left is put back. A pending intent (tidy itself stopped) is put back by the next `--apply` (which then
+  stops so you plan again) or `--undo`; the plan warns. Put back = kept copies restored, relocated originals moved
+  back by hash, new files and folders removed; if that can't be exact nothing changes and the intent stays.
+  A converter result that changed the folder without saying so is journaled too (so `--undo` covers it).
+- `--apply` is bound to an `omw2mwse check <digest>` plan line: the converter's dry-run JSON (without `dir`,
+  `dryRun` and the mod's absolute path), every file of the mod folder, mode, title/author, and the converter's
+  identity (version, path, the Python that runs it, the hashes of its launcher or, for a checkout, its package,
+  runtime and sidecars; tests, docs and caches left out). A changed sidecar, source file or converter is refused
+  with one clear line; the converter is checked again right before the real run. The plan also lists each
+  hard-coded rewrite and each plugin placement (`omw2mwse makes a setting of...`, `omw2mwse places...`).
+- Partial API next to readiness: `verdict ready (partial API: GameObject:remove x3, ...)` and a NOTE with each
+  API's first use (file:line), from omw2mwse's `mods[].partialApis` (64e2a6a); never for an author opt-out.
+- omw2mwse 64e2a6a contract: JSON paths relative with '/', '.' for the staged folder (older absolute/backslash
+  paths still read the same). Its recovery folder `.omw2mwse-recovery/` is never moved, swept or hashed by tidy.
+  A result with `pendingRecovery`, or a run that died, is rolled back with `omw2mwse recover <mod> --rollback`
+  before tidy reconciles its own intent; a pending run seen in the plan gets a NOTE (--apply re-runs, which
+  finishes it). `mods[].resumed` gets a NOTE.
+- `convert_mode()` reads `CONVERT_DEV_HARDCODE` by name, so deleting the marked line before shipping leaves the
+  default `normal` (tested by loading tidy without that line). The setting stays `True` for development.
+- `deploy.py` + `deploy_manifest.txt`: copy the runtime files and docs (git-tracked, chosen by the manifest's
+  include/exclude rules; tests, .git/CI, dev files, audits and backups never ship) to a target folder, saved in an
+  untracked `deploy.ini`. `--dry-run`, `--help`, `--backups DIR`; an unknown switch exits 2 doing nothing. Backs up
+  overwritten files (SHA256SUMS.txt, NEW_FILES.txt, a relative ROLLBACK.ps1), hash-checks, never downgrades a
+  `lua tools` file, refuses while Morrowind or MWManager runs.
+- Tests: `test_tidy_convert_audit.py`, `test_deploy.py`, `test_tidy_real_converter.py` (the real omw2mwse: plan,
+  apply, undo; skipped when it isn't found).
+
 # Off list refresh keeps a short source whose Off copy is too long; the converter gate honours 3.9+ (2026-11-26)
 
 - `max_path_too_long.txt` refresh no longer drops a line just because the source path itself is short: a line stays

@@ -127,7 +127,9 @@ def test_openmw_only_mod_goes_to_the_converter_in_hardcode_mode_while_the_dev_se
     real = tidy.calls()[-1]
     assert "--dry-run" not in real and "--accept-hardcode-conversions" in real and "--json" in real
     assert (mod / "Off" / "Lights" / "OpenMW" / "Lights.omwscripts").exists()
-    assert not os.path.exists(vt.JOURNAL) or "Lights" not in open(vt.JOURNAL).read()
+    moved = [ln for ln in (open(vt.JOURNAL).read().splitlines() if os.path.exists(vt.JOURNAL) else [])
+             if '"dst"' in ln]
+    assert not any("Lights" in ln for ln in moved)                            # tidy moved nothing itself: omw2mwse did
     # the next run sees a converted mod: no second conversion, its .omwaddon is the converter's
     assert tidy.run() == 0
     assert "convert with omw2mwse" not in tidy.plan()

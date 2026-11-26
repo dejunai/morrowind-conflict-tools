@@ -1,0 +1,26 @@
+# deploy_manifest.txt - the one list of what deploy.py ships from this project to a runtime install
+# (usually <Morrowind>\conflict-tools\). Credit: dej (dejunai).
+#
+# Only files git tracks are candidates. Rules, one per line, paths relative to the project with '/':
+#   include <glob>                  ship the matching files at the same path in the target
+#   include <file> => <target path> ship one file under another path (the docs live in the target's docs\)
+#   exclude <glob>                  never ship these (an exclude always wins over an include)
+# Globs: '*' stays inside one folder, '**' crosses folders ("lua tools/**" is everything below "lua tools").
+# deploy.py also refuses on its own, whatever this file says: tests, .git and CI files, deploy.py and its
+# deploy.ini/manifest, sync.py, audits, backups and personal notes (see NEVER in deploy.py).
+
+# The tools: the Python modules and launchers at the project root
+include *.py
+include *.bat
+exclude Play Morrowind.bat              # the game-folder launcher: it lives beside Morrowind.exe, not in conflict-tools
+
+# What the tools deploy and run: the suite's MWSE Lua (laid out as in Data Files) and the bundled programs
+include lua tools/**
+exclude lua tools/**/MWSE/core/**       # MWSE's own core files are never ours to ship (luafix patches them in place)
+
+include tools/**
+
+# Docs: the target keeps them in docs\
+include docs/**
+include README.md => docs/README.md
+include MORE_INFO.md => docs/MORE_INFO.md

@@ -37,6 +37,8 @@ mwdialog_loadorder_undo.txt
 mwdialog_longpaths.json
 mwdialog_luafix.json
 vortex_tidy_journal.jsonl
+vortex_tidy_journal_intent.json
+vortex_tidy_journal_intent.json.tmp
 mwdialog_luafix_journal.jsonl
 mwdialog_luafix_known_bugs.txt
 .mwdialog*.tmp
@@ -97,3 +99,7 @@ _backup/
 
 # Stand-ins the tools copy out of the player's own Morrowind.bsa (game files: never committed)
 dummy assets/
+
+# deploy.py's saved target and backups folder: this machine's paths, never published
+deploy.ini
+deploy.ini.tmp
