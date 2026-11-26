@@ -18,6 +18,9 @@ local personalEffects = require("mwpluginpatches.patches.personalEffects")
 local mwcaInterop = require("mwpluginpatches.patches.mwcaInterop")
 local wtsMetadataLog = require("mwpluginpatches.patches.wtsMetadataLog")
 local partyAlchemyModuleBox = require("mwpluginpatches.patches.partyAlchemyModuleBox")
+local kegDripCadence = require("mwpluginpatches.patches.kegDripCadence")
+local essentialAttackerFilter = require("mwpluginpatches.patches.essentialAttackerFilter")
+local magicantMenuGuard = require("mwpluginpatches.patches.magicantMenuGuard")
 
 -- OAAB and Garden of Dreams call include("MWCA.interop") at file scope when their
 -- main.lua is loaded. That is after this file (load-priority 4500) and before
@@ -27,8 +30,10 @@ if config.enabled and config.mwcaInteropEnabled and config.isMwcaConsumerActive(
 end
 
 -- Watch the Skies requires its util module, and Party Alchemy shows its module message on
--- initialized, both after this file loads; the intercepts go in now so they see both.
-for _, patch in ipairs({ wtsMetadataLog, partyAlchemyModuleBox }) do
+-- initialized. Keg Drip registers its simulate handler at file scope, Essential Indicators its
+-- damage handler and Magican't its enterFrame handler on initialized. All of that happens after
+-- this file loads, so the intercepts go in now and see every one.
+for _, patch in ipairs({ wtsMetadataLog, partyAlchemyModuleBox, kegDripCadence, essentialAttackerFilter, magicantMenuGuard }) do
     local ok, err = pcall(patch.init)
     if not ok then
         mwse.log("[mwpluginpatches] An intercept failed to start: %s", tostring(err))

@@ -37,7 +37,10 @@ Active Plugin Status:
   • Personal Effects: %s
   • Animated Containers addons: %s
   • Watch the Skies: %s
-  • Party Alchemy: %s]],
+  • Party Alchemy: %s
+  • Keg Drip: %s
+  • Essential Indicators: %s
+  • Magican't: %s]],
     config.isMcaActive() and "Active" or "Not Active",
     config.isEbonheartUnderworksActive() and "Active" or "Not Active",
     config.isPAndSActive() and "Active" or "Not Active",
@@ -50,7 +53,10 @@ Active Plugin Status:
     config.isPersonalEffectsActive() and "Active" or "Not Active",
     config.isMwcaConsumerActive() and "Active" or "Not Active",
     config.isWatchTheSkiesInstalled() and "Active" or "Not Active",
-    config.isPartyAlchemyInstalled() and "Active" or "Not Active"),
+    config.isPartyAlchemyInstalled() and "Active" or "Not Active",
+    config.isKegDripInstalled() and "Active" or "Not Active",
+    config.isEssentialIndicatorsInstalled() and "Active" or "Not Active",
+    config.isMagicantInstalled() and "Active" or "Not Active"),
 })
 
 -- SECTION 1: FRIENDS & FRENS (JIUB COMPANION DELAY)
@@ -388,6 +394,51 @@ partyAlchemyCategory:createYesNoButton({
         .. "game starts. This hides only that message, and only when it comes from Party Alchemy; its other messages "
         .. "and its log line are kept. Its files are not edited. Off unless Party Alchemy is installed. Needs a restart.",
     variable = mwse.mcm.createTableVariable({ id = "partyAlchemyModuleBoxEnabled", table = config }),
+})
+
+local kegDripCategory = page:createCategory(string.format("Keg Drip: Refresh Cadence%s",
+    getStatusText(config.isKegDripInstalled())))
+
+kegDripCategory:createYesNoButton({
+    label = "Refresh Drips and Puddles Less Often",
+    description = "Keg Drip checks every active cell for drips and puddles once a second. With this on, it checks "
+        .. "once per the interval below instead, and puddles grow by the time that passed, so they look the same "
+        .. "over time. Its files are not edited. Off unless Keg Drip is installed. Needs a restart.",
+    variable = mwse.mcm.createTableVariable({ id = "kegDripCadenceEnabled", table = config }),
+})
+
+kegDripCategory:createSlider({
+    label = "Refresh Interval (Seconds)",
+    description = "How often Keg Drip refreshes while the setting above is on. Default 3.",
+    min = 1,
+    max = 10,
+    step = 1,
+    jump = 2,
+    variable = mwse.mcm.createTableVariable({ id = "kegDripIntervalSeconds", table = config }),
+})
+
+local essentialCategory = page:createCategory(string.format("Essential Indicators: Prophecy Warning%s",
+    getStatusText(config.isEssentialIndicatorsInstalled())))
+
+essentialCategory:createYesNoButton({
+    label = "Warn Only for Your Own Hits",
+    description = "Essential Indicators shows its 'thread of prophecy' warning whenever an essential character is "
+        .. "hurt, even by guards or creatures. With this on, it shows only when the hit came from you, a creature you "
+        .. "summoned, or your arrow, bolt, thrown weapon or spell. Essential characters are still protected as before. "
+        .. "Its files are not edited. Off unless Essential Indicators is installed. Needs a restart.",
+    variable = mwse.mcm.createTableVariable({ id = "essentialAttackerFilterEnabled", table = config }),
+})
+
+local magicantCategory = page:createCategory(string.format("Magican't: Menu Pause%s",
+    getStatusText(config.isMagicantInstalled())))
+
+magicantCategory:createYesNoButton({
+    label = "Skip Fill-Bar Check While a Menu Is Open",
+    description = "Magican't checks every frame whether you can afford your selected spell and greys the HUD "
+        .. "magic bar if not. With this on, it doesn't check while a menu is open, so if you pick a new spell in "
+        .. "the magic menu the bar updates when the menu closes. Its files are not edited. Off unless Magican't is "
+        .. "installed. Needs a restart.",
+    variable = mwse.mcm.createTableVariable({ id = "magicantMenuGuardEnabled", table = config }),
 })
 
 local voicesCategory = page:createCategory(string.format("Voices of Vvardenfell: Console%s",
