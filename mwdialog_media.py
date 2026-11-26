@@ -327,7 +327,10 @@ def silent_audio(ext):
             struct.pack("<IHHIIHH", 16, 1, 1, rate, rate * 2, 2, 16) + b"data" + struct.pack("<I", len(data)) + data)
 
 
-DUMMY_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dummy assets")   # the stand-in files
+# Where the stand-in files are kept (see dummy_dir): never next to the script, never shipped, never in the game folder.
+DUMMY_DIR = None                       # a caller's choice (a module attribute); None: the rules in dummy_dir()
+DUMMY_DIR_ENV = "MWDIALOG_DUMMY_DIR"   # or this environment variable
+DUMMY_SUBDIR = "dummy"
 DUMMY_NIF = "mwdialog_dummy.nif"       # a small vanilla Dwemer coin, for missing models
 
 DUMMY_KF = "mwdialog_dummy.kf"                   # the game's xin_dagoth_bridge00.kf (510 bytes): broken animations
@@ -337,17 +340,46 @@ DUMMY_SOURCES = {DUMMY_NIF: "meshes\\m\\misc_dwrv_coin00.nif", DUMMY_KF: "meshes
                  "mwdialog_dummy_anim.nif": "meshes\\base_anim.nif"}
 
 
+def _current_game_dir(game_dir=None):
+    """The game folder: the one given, else the running check's Data Files' parent (MWManager runs outside the
+    game), else the one found from where the tools are run."""
+    if game_dir:
+        return game_dir
+    import mwdialog_paths as MP
+    data = getattr(getattr(sys.modules.get("mwdialog_check"), "TOP_ARGS", None), "data_dir", None)
+    return os.path.dirname(os.path.abspath(data)) if data else MP.find_game_dir()
+
+
+def dummy_dir(game_dir=None):
+    """The folder the stand-ins are kept in. It is not created here: dummy_path makes it the first time a stand-in
+    is written. In order: the DUMMY_DIR attribute; the MWDIALOG_DUMMY_DIR environment variable; where a caller that
+    routes the tools' state puts it (mwdialog_paths.state_path(game, "dummy"), outside the game folder: MWManager's
+    outputs\\dummy); else <tools>\\generated\\dummy (conflict-tools\\generated\\ when installed in the game).
+    A "dummy assets" folder an older version left next to the script is left alone and no longer used."""
+    if DUMMY_DIR:
+        return str(DUMMY_DIR)
+    if os.environ.get(DUMMY_DIR_ENV):
+        return os.environ[DUMMY_DIR_ENV]
+    import mwdialog_paths as MP
+    game = _current_game_dir(game_dir)
+    if game:
+        routed = os.path.abspath(MP.state_path(game, DUMMY_SUBDIR))
+        inside = os.path.normcase(os.path.abspath(game)) + os.sep
+        if not (os.path.normcase(routed) + os.sep).startswith(inside):
+            return routed
+    return os.path.join(MP.GENERATED_DIR, DUMMY_SUBDIR)
+
+
 def dummy_path(name, game_dir=None):
-    """The stand-in `name` in DUMMY_DIR. A missing one is copied out of the game's Morrowind.bsa and kept there
-    for the next time. Raises OSError when there is none and no Morrowind.bsa to copy it from."""
-    path = os.path.join(DUMMY_DIR, name)
+    """The stand-in `name` in dummy_dir(). A missing one is copied out of the game's Morrowind.bsa and kept there
+    for the next time (the folder is made then, not before). Raises OSError when there is none and no Morrowind.bsa
+    to copy it from."""
+    folder = dummy_dir(game_dir)
+    path = os.path.join(folder, name)
     if os.path.exists(path) or name not in DUMMY_SOURCES:
         return path
-    import mwdialog_paths as MP
     from mwdialog_bsa import bsa_index
-    if not game_dir:                       # the running check's Data Files (MWManager runs outside the game)
-        data = getattr(getattr(sys.modules.get("mwdialog_check"), "TOP_ARGS", None), "data_dir", None)
-        game_dir = os.path.dirname(os.path.abspath(data)) if data else MP.find_game_dir()
+    game_dir = _current_game_dir(game_dir)
     bsa = os.path.join(game_dir or "", "Data Files", "Morrowind.bsa")
     entry = bsa_index(bsa).get(DUMMY_SOURCES[name]) if os.path.isfile(bsa) else None
     if entry is None:
@@ -355,7 +387,7 @@ def dummy_path(name, game_dir=None):
     with open(bsa, "rb") as f:
         f.seek(entry[0])
         data = f.read(entry[1])
-    os.makedirs(DUMMY_DIR, exist_ok=True)
+    os.makedirs(folder, exist_ok=True)
     with open(path + ".tmp", "wb") as f:
         f.write(data)
     os.replace(path + ".tmp", path)

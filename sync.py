@@ -68,6 +68,10 @@ What it does:
       run says so: commit, then run sync.py again so UPSTREAM.json names that commit (the second run copies
       nothing).
 
+Never carried: anything inside a "dummy", "dummy assets" or "generated" folder (the stand-in files are made in code or
+copied out of Morrowind.bsa at run time, into <tools>\generated\dummy\). Such a path is skipped, and a manifest entry
+for one is dropped (the file in MWManager is left alone).
+
 Checks it makes along the way:
   No-downgrade  a "lua tools" file is never replaced by an older one. Hash lineage decides: if MWManager's git
                 history already contains the source's content and MWManager has moved past it, the file is skipped
@@ -149,6 +153,12 @@ def guarded(src, dst, rel, repo, repo_rel, src_repo=None, names=("the repo", "MW
                       f"one in the repo's lua tools (or revert {names[1]}'s), then run sync.py again")
                 return False
     return copy(src, dst)
+
+
+def is_dummy(rel):
+    """A path inside a stand-in ("dummy" or "dummy assets") or generated-records folder. Stand-ins are made in code or
+    copied out of Morrowind.bsa at run time, so these are never carried to MWManager and never listed in a manifest."""
+    return any(p in ("dummy", "dummy assets", "generated") for p in rel.replace("\\", "/").lower().split("/")[:-1])
 
 
 def is_metadata(rel):
@@ -295,6 +305,12 @@ def to_mwmanager():
     listed = set()
     man_path = UP / "COPY_MANIFEST.json"
     man, fmt = load_manifest(man_path)
+    carried = [e["RelativePath"] for e in man["Files"] if is_dummy(e["RelativePath"].replace("\\", "/"))]
+    if carried:                                         # a dummy folder is never carried: its entries go (files stay)
+        man["Files"] = [e for e in man["Files"] if e["RelativePath"] not in carried]
+        for r in carried:
+            print(f"DROPPED {r} from COPY_MANIFEST.json: the dummy folder is never carried (the file on disk is left alone)")
+        changed += ["COPY_MANIFEST.json: dropped %d dummy entr%s" % (len(carried), "y" if len(carried) == 1 else "ies")]
     ok = (REPO / LUA).is_dir()                         # a checkout without lua tools\\ retires nothing
     gone = []
     for e in man["Files"]:
@@ -315,6 +331,8 @@ def to_mwmanager():
         man["Files"] = [e for e in man["Files"] if e["RelativePath"].replace("\\", "/") not in dropped]
         changed += ["tools/steam-upstream/" + r + " (retired)" for r in sorted(dropped)]
     for rel in git(REPO, "ls-files", "-z"):
+        if is_dummy(rel):
+            continue
         if (rel.startswith(AUTO) or is_metadata(rel)) and rel not in listed and rel not in MWM_KEEPS and (REPO / rel).is_file():
             listed.add(rel)
             guarded(REPO / rel, UP / rel, rel, MWM, "tools/steam-upstream/" + rel, REPO, ("the repo", "MWManager"))
@@ -335,6 +353,10 @@ def to_mwmanager():
 
     ref_path = REF / "SOURCE_MANIFEST.json"
     ref, rfmt = load_manifest(ref_path)
+    seen = [e["Path"] for e in ref["Files"] if is_dummy(e["Path"])]
+    if seen:
+        ref["Files"] = [e for e in ref["Files"] if e["Path"] not in seen]
+        changed += ["SOURCE_MANIFEST.json: dropped %d dummy entr%s" % (len(seen), "y" if len(seen) == 1 else "ies")]
     gone, have = [], set()
     for e in ref["Files"]:
         kind, rest = e["Path"].split("/", 1)
@@ -365,6 +387,8 @@ def to_mwmanager():
 
     mods = suite_mods()                                     # new suite mods and files join the snapshot
     for rel in git(REPO, "ls-files", "-z"):
+        if is_dummy(rel):
+            continue
         if rel.startswith(SUITE):
             rest = rel[len(SUITE):]
             mine = "/" in rest and rest.split("/", 1)[0] in mods

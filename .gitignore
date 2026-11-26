@@ -108,5 +108,8 @@ deploy.ini.tmp
 sync.ini
 sync.ini.tmp
 
+# The optional tes3conv converter (Greatness7, MIT): downloaded by hand for tes3diff.py and the golden tests, never committed
+.devtools/
+
 # Private helper: pulls Lua edited in the Steam install back into the repo. Never committed or deployed.
 gather_steam_lua.py

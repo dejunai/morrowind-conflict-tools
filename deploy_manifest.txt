@@ -7,12 +7,16 @@
 #   exclude <glob>                  never ship these (an exclude always wins over an include)
 # Globs: '*' stays inside one folder, '**' crosses folders ("lua tools/**" is everything below "lua tools").
 # deploy.py also refuses on its own, whatever this file says: tests, .git and CI files, deploy.py and its
-# deploy.ini/manifest, doc_scan.py, sync.py, audits, backups, docs/dev and personal notes (see NEVER in deploy.py).
+# deploy.ini/manifest, doc_scan.py, sync.py, tes3diff.py, the dummy stand-in folder (generated at run time), generated
+# records, audits, backups, docs/dev and personal notes (see NEVER in deploy.py).
 
 # The tools: the Python modules and launchers at the project root
 include *.py
 exclude doc_scan.py                     # dev: verifies documented switches against the code
 exclude sync.py                         # dev: repository -> MWManager; never writes to an install
+exclude tes3diff.py                     # dev: record-level plugin diff through the optional tes3conv
+exclude dummy assets/**                 # stand-ins are made in code or copied out of Morrowind.bsa at run time:
+exclude **/dummy/**                     # never shipped (they live in <tools>\generated\dummy\)
 include *.bat
 exclude Play Morrowind.bat              # the game-folder launcher: it lives beside Morrowind.exe, not in conflict-tools
 

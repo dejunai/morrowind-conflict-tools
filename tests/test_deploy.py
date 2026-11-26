@@ -16,7 +16,7 @@ DEPLOY = os.path.join(SRC, "deploy.py")
 pytestmark = pytest.mark.skipif(not os.path.isfile(DEPLOY) or shutil.which("git") is None,
                                 reason="deploy.py is not vendored here (MWManager), or git is missing")
 DEV = ("tests/", "diag/", ".git", ".github/", "deploy.py", "deploy.ini", "deploy_manifest.txt", "doc_scan.py", "sync.py",
-       "agents.md", "_backup/", "backups/", "docs/dev/")
+       "tes3diff.py", "generated/", "dummy", "agents.md", "_backup/", "backups/", "docs/dev/")
 
 
 def load():
@@ -95,7 +95,9 @@ def test_rules_in_the_manifest_cannot_ship_a_never_file(tmp_path):
     dep = load()
     rules = [("include", "**", None)]
     tracked = ["tests/test_x.py", "a/tests/b.py", ".gitignore", ".github/x.yml", "deploy.py", "sync.py",
-               "CODEX_AUDIT-1.MD", "_backup/n.txt", "backups/b.zip", "docs/dev/TODO.md", "mwdialog_x.py"]
+               "CODEX_AUDIT-1.MD", "_backup/n.txt", "backups/b.zip", "docs/dev/TODO.md", "mwdialog_x.py",
+               "tes3diff.py", "dummy assets/mwdialog_dummy.nif", "generated/dummy/mwdialog_dummy.nif", "x/dummy/y.nif",
+               "generated/mwdialog_play_hashes.json"]
     assert [d for _r, d in dep.ship_list(tracked, rules)] == ["mwdialog_x.py"]
 
 

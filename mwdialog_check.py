@@ -85,7 +85,7 @@ from mwdialog_tes3 import (  # noqa: E402,F401
 from mwdialog_bsa import (  # noqa: E402,F401
     _bsa_directory, _bsa_file_names, bsa_file_names, _bsa_index, bsa_index, _BSA_MEMO, _bsa_memo)
 from mwdialog_media import (  # noqa: E402,F401
-    DDS_BLOCK_FOURCC, DDS_DXGI_BLOCK, DDS_DXGI_BPP, dds_info, dds_level_size, dds_reduce, DUMMY_DIR, DUMMY_KF, dummy_path,
+    DDS_BLOCK_FOURCC, DDS_DXGI_BLOCK, DDS_DXGI_BPP, dds_info, dds_level_size, dds_reduce, DUMMY_DIR, DUMMY_KF, dummy_dir, dummy_path,
     DUMMY_NIF, mp3_first_frame, _NIF_EXT_RE, nif_is_empty, _NIF_TEX_CHARS, _NIF_TEX_OK, nif_text_keys_lf,
     nif_texture_names, nif_texture_refs, placeholder_dds, placeholder_icon, silent_audio, sound_file_problem, _SOUND_PROBLEMS,
     SOUND_ROOTS, stand_in_bytes, TEXT_KEY_TAG, TEXTURE_MAX_EDGE)
@@ -1391,7 +1391,7 @@ class World:
                     try:
                         src = dummy_path(dummy)
                     except OSError:
-                        src = os.path.join(DUMMY_DIR, dummy)     # not there: no stand-in (checked below)
+                        src = os.path.join(dummy_dir(), dummy)     # not there: no stand-in (checked below)
                     what = {DUMMY_MARKER_NIF: "the invisible editor marker", DUMMY_ANIM_NIF: "the default skeleton",
                             DUMMY_NIF: "a small coin"}[dummy]
                 else:

@@ -248,3 +248,31 @@ def test_the_audit_hook_would_see_a_read_of_the_install(tmp_path):
         del _watch[:]
     assert {e for e, _p in _touched} >= {"open", "os.listdir"}
     del _touched[:]
+
+def test_a_dummy_or_generated_folder_is_never_carried_and_its_manifest_entries_are_dropped(world, capsys):
+    repo, mwm, steam = world
+    up = mwm / "tools" / "steam-upstream"
+    for rel in ("dummy assets/mwdialog_dummy.nif", "generated/dummy/mwdialog_dummy.kf", "tests/dummy/stand_in.nif"):
+        put(repo, rel, "stand-in\n")
+    git(repo, "add", "-A", "-f")
+    git(repo, "commit", "-q", "-m", "tracked by mistake")
+    put(up, "dummy assets/mwdialog_dummy.nif", "old copy\n")                          # one MWManager already has
+    man = json.load(open(up / "COPY_MANIFEST.json"))
+    man["Files"].append({"RelativePath": "dummy assets\\mwdialog_dummy.nif", "Source": "x", "Bytes": 9,
+                         "SHA256": sha("old copy\n"), "SourceModified": ""})
+    manifest(up / "COPY_MANIFEST.json", man)
+    rc, out = run(world, capsys=capsys)
+    assert rc == 0
+    assert not (up / "generated").exists() and not (up / "tests" / "dummy").exists()   # never copied in
+    assert (up / "dummy assets" / "mwdialog_dummy.nif").read_text() == "old copy\n"       # left alone on disk
+    listed = [e["RelativePath"] for e in json.load(open(up / "COPY_MANIFEST.json"))["Files"]]
+    assert not [r for r in listed if "dummy" in r or "generated" in r]                 # and no longer listed
+    assert "DROPPED dummy assets\\mwdialog_dummy.nif from COPY_MANIFEST.json" in out
+    assert not [l for l in out.splitlines() if l.startswith("    tools/") and ("dummy" in l or "generated" in l)]   # nor copied
+
+
+def test_is_dummy_matches_the_stand_in_and_generated_folders_only():
+    for rel in ("dummy assets/a.nif", "generated/dummy/a.nif", "tools/generated/x.json", "tests/dummy/a.nif", "Dummy/a.nif"):
+        assert S.is_dummy(rel), rel
+    for rel in ("mwdialog_dummy.py", "tests/test_dummy_dir.py", "lua tools/MWSE/mods/mwsuite/dummyfix/main.lua", "docs/dummy.md"):
+        assert not S.is_dummy(rel), rel

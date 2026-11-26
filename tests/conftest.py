@@ -100,6 +100,40 @@ def records_of(path):
         return list(m.iter_records(f.read()))
 
 
+class _Tes3conv:
+    """The optional tes3conv converter for golden tests (see tes3diff.py): plugins to JSON records and a normalized
+    record-level diff as text."""
+
+    def __init__(self, tes3diff, exe):
+        self.T, self.exe = tes3diff, exe
+
+    def records(self, plugin_path):
+        return self.T.to_records(str(plugin_path), self.exe)
+
+    def diff(self, old_path, new_path, limit=0):
+        lines, counts = self.T.diff_plugins(str(old_path), str(new_path), self.exe, limit)
+        return "\n".join(lines + ["Summary: " + self.T.summary(counts)])
+
+    def write(self, records, out_path):
+        return self.T.write_plugin(records, str(out_path), self.exe)
+
+
+@pytest.fixture(scope="session")
+def tes3conv():
+    """tes3conv (Greatness7, MIT, pinned v0.4.1) found through tes3diff.find_tes3conv: TES3CONV, PATH, then an
+    untracked dev tools folder. Optional: a test that uses it skips when it is not found, or when tes3diff.py is not
+    vendored (MWManager). A program that is not the pinned release gets a warning."""
+    import warnings
+    if not os.path.isfile(os.path.join(SRC, "tes3diff.py")):
+        pytest.skip("tes3diff.py is a repository-only dev tool, not vendored here")
+    t = _load("tes3diff")
+    exe = t.find_tes3conv()
+    if exe is None:
+        pytest.skip("tes3conv not found (optional: set TES3CONV, or see 'Developer Tools' in the README)")
+    t.checked(exe, warn=lambda msg: warnings.warn(msg))
+    return _Tes3conv(t, exe)
+
+
 @pytest.fixture(autouse=True)
 def _fresh_caches():
     if hasattr(m, "_READ_CACHE"):
@@ -135,6 +169,13 @@ def _play_hash_record_in_tmp(tmp_path, monkeypatch):
     """mwdialog_hashes keeps the --play hash record beside the tools for a game they are not installed in, and a
     test's game is one: each test gets its own folder for it instead (never the checkout's generated\\)."""
     monkeypatch.setenv("MWDIALOG_PLAY_HASHES_DIR", str(tmp_path / "play-hashes"))
+
+
+@pytest.fixture(autouse=True)
+def _dummy_standins_in_tmp(tmp_path, monkeypatch):
+    """The stand-in files copied out of a test's Morrowind.bsa go to the test's folder, never to the repository's
+    generated\\dummy (tests of the default place delete this variable)."""
+    monkeypatch.setenv("MWDIALOG_DUMMY_DIR", str(tmp_path / "dummy-standins"))
 
 
 @pytest.fixture(autouse=True)

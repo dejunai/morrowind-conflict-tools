@@ -131,7 +131,7 @@ def broken_models_notice(out=None):
 def _is_stand_in(b, m, rel):
     try:
         return b == m.stand_in_bytes(rel)
-    except OSError:                         # no "dummy assets" folder: no stand-in was ever put anywhere
+    except OSError:                         # no dummy folder: no stand-in was ever put anywhere
         return False
 
 

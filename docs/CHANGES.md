@@ -1,3 +1,30 @@
+# Stand-in files move to generated\dummy, created on first use; never shipped or synced (2026-11-26)
+
+- `mwdialog_media.dummy_path` kept the stand-ins (the Dwemer coin, an animation, the editor marker: the game's own
+  files, copied out of `Morrowind.bsa` when first needed) in a `dummy assets` folder next to the script. They now go
+  to `<tools>\generated\dummy\` (`conflict-tools\generated\` when installed), made only when the first one is
+  written. A caller can choose the folder with `mwdialog_media.DUMMY_DIR` or the `MWDIALOG_DUMMY_DIR` environment
+  variable, or route it through `mwdialog_paths.state_path(game, "dummy")` (MWManager: `outputs\dummy`); a route
+  into the game folder is ignored. An old `dummy assets` folder is left where it is and no longer used.
+- `deploy.py` never ships a `dummy`, `dummy assets` or `generated` folder, `tes3diff.py` or `gather_steam_lua.py`
+  (also excluded in `deploy_manifest.txt`); `sync.py` skips any path in such a folder and drops a manifest entry for
+  one (the file in MWManager is left alone). Tests: `tests/test_dummy_dir.py`, `tests/test_deploy.py`,
+  `tests/test_sync.py`; the suite keeps the stand-ins in each test's own folder (`conftest.py`).
+
+# tes3diff.py: record-level plugin diffs and golden tests through the optional tes3conv (2026-11-26)
+
+- New dev tool `tes3diff.py` (repository only: `deploy_manifest.txt` excludes it, documented under "Developer Tools").
+  It converts two plugins to JSON with Greatness7's tes3conv (https://github.com/Greatness7/tes3conv, MIT; pinned to
+  v0.4.1) and prints a normalized record-level diff (records matched by type and id, `path: old -> new` per changed
+  field). tes3conv is optional everywhere: found through `--tes3conv`, the `TES3CONV` environment variable (`off`
+  disables it), `PATH`, then an untracked dev tools folder beside the repository (`.devtools\`, `_devtools\`). The
+  program's SHA-256 is compared with the official v0.4.1 release asset's and a warning is printed on a mismatch. It
+  may lag the tes3 library, so newer records or fields may not round-trip. No shipped tool uses it.
+- `tests/test_tes3conv_golden.py`: golden tests on plugins vortex_tidy (a shortened model path edits one field of the
+  .esp) and mwdialog_check (the ESM patch, a text-fix patch, `write_patch`) write, built from fixtures; they use the
+  new `tes3conv` fixture in `conftest.py` and skip when the program is not found. `tests/test_tes3diff.py` tests the
+  lookup, the pin check and the diff without it.
+
 # sync.py is a repository tool, one way: repository -> MWManager (2026-11-26)
 
 - `sync.py` moved from the Steam install into the repository (dev only: `deploy_manifest.txt` excludes it, `deploy.py`

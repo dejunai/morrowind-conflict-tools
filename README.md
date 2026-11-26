@@ -38,6 +38,7 @@ The suite is engineered for massive, complex mod lists (hundreds of plugins, ten
   - [deploy.py](#deploypy)
   - [doc_scan.py](#doc_scanpy)
   - [sync.py](#syncpy)
+  - [tes3diff.py](#tes3diffpy)
 - [License](#license)
 
 ---
@@ -518,7 +519,31 @@ python sync.py -h | --help
 | `--dry-run` | *(flag)* | Report everything a real run would do (copies, retirements, manifest and `UPSTREAM.json` changes) and write nothing at all (not even `sync.ini`). Run this first. |
 | `-h`, `--help` | *(flag)* | Print the full help and exit. |
 
-The source is the repository's working tree (the files git tracks, as they are on disk); tracked files with uncommitted changes are listed in a warning, and `UPSTREAM.json` names `HEAD`, so commit and run it again. The destination is MWManager's `tools\steam-upstream\` (the entries in `COPY_MANIFEST.json`, plus the repository's tests and the suite Lua, which always go along), its root copies of the upstream modules, `reference\mwse-lua-guards\` and `reference\mwmanager-menu\`; the sizes and hashes in both manifests follow the copied bytes. A mod gone from the repository is removed from MWManager after a backup to `<MWManager's parent>\_deploy_backups\mwmanager-retired-<stamp>\` (`SHA256SUMS.txt`, a relative `ROLLBACK.ps1`). No-downgrade: a `lua tools\` file is never put over a newer one in MWManager; it is skipped with one warning line and the rest goes on (other files are simply overwritten). MWManager's files are read only to compare versions. Before a real run, back up what it will change; it commits and pushes nothing. Exit codes: `0` done, `1` refused, `2` an unknown switch.
+The source is the repository's working tree (the files git tracks, as they are on disk); tracked files with uncommitted changes are listed in a warning, and `UPSTREAM.json` names `HEAD`, so commit and run it again. The destination is MWManager's `tools\steam-upstream\` (the entries in `COPY_MANIFEST.json`, plus the repository's tests and the suite Lua, which always go along), its root copies of the upstream modules, `reference\mwse-lua-guards\` and `reference\mwmanager-menu\`; the sizes and hashes in both manifests follow the copied bytes. A mod gone from the repository is removed from MWManager after a backup to `<MWManager's parent>\_deploy_backups\mwmanager-retired-<stamp>\` (`SHA256SUMS.txt`, a relative `ROLLBACK.ps1`). No-downgrade: a `lua tools\` file is never put over a newer one in MWManager; it is skipped with one warning line and the rest goes on (other files are simply overwritten). MWManager's files are read only to compare versions. Nothing inside a `dummy`, `dummy assets` or `generated` folder is ever carried (stand-ins are made in code or copied out of `Morrowind.bsa` at run time into `<tools>\generated\dummy\`); a manifest entry for one is dropped. Before a real run, back up what it will change; it commits and pushes nothing. Exit codes: `0` done, `1` refused, `2` an unknown switch.
+
+### tes3diff.py
+
+A record-level diff of two plugins, for reading what `vortex_tidy` or `mwdialog_check` wrote, and the helper behind the golden tests in `tests\test_tes3conv_golden.py`. It reads both plugins and writes nothing. It uses the optional converter **tes3conv** by Greatness7 (https://github.com/Greatness7/tes3conv, MIT License), which turns a plugin into JSON and back. tes3conv is not bundled, not deployed and not needed by any shipped tool; the tests that use it skip when it is not found.
+
+```text
+python tes3diff.py OLD NEW [--tes3conv PATH] [--limit N]
+python tes3diff.py --check [--tes3conv PATH]
+python tes3diff.py -h | --help
+```
+
+| Switch | Argument | Description |
+| :--- | :--- | :--- |
+| `OLD` `NEW` | `<PLUGIN>` | The two plugins (`.esp` / `.esm`) to compare. |
+| `--check` | *(flag)* | Find tes3conv, verify it against the pinned release and report; compares nothing. |
+| `--tes3conv` | `<PATH>` | The tes3conv program, or a folder holding it. |
+| `--limit` | `<N>` | At most `N` changed fields per record (default 20; `0` for all). |
+| `-h`, `--help` | *(flag)* | Print the full help and exit. |
+
+It prints one line per record added (`+`), removed (`-`) or changed (`~`), each changed field as `path: old -> new`, and a summary. Records are matched by type and id (a cell by name and grid), so a record that only moved is not a difference. Exit codes: `0` no differences, `1` differences, `2` an unknown switch, `3` tes3conv not found or failed.
+
+Finding tes3conv: `--tes3conv`, then the `TES3CONV` environment variable (`TES3CONV=off` switches the rest of the lookup off, to see the tests skip), then `PATH`, then an untracked dev tools folder relative to the repository: `.devtools\tes3conv\` in it (in `.gitignore`) or `_devtools\tes3conv\` beside it. Nothing is ever put in a game install or in the user profile. To set it up, download the official **v0.4.1** Windows asset `windows-latest.zip` from https://github.com/Greatness7/tes3conv/releases/tag/v0.4.1, check its SHA-256 (`2783e835efdd4e28e9d31d63674c9c036f1332ef948707d581af33e7618a87a9`, GitHub's digest for that asset) and unpack `tes3conv.exe` into one of those folders.
+
+The version is pinned to v0.4.1. tes3conv has no way to print its version, so the check is the SHA-256 of `tes3conv.exe` (`3c259868c9deca42a658ff6c69cbc8578f8eeee99ebab5342bdb73beef650b40`, from that asset); another program, or a platform with no pinned hash, gets a warning and the run goes on. **The binary may lag the tes3 library it is built on: newer record types or fields may not round-trip.** A diff shows what the converter understands, not proof of byte-for-byte equality.
 
 ---
 
@@ -534,4 +559,4 @@ For the architecture of all 36 modules, the switches that trigger each subsystem
 
 Created by dej (dejunai).
 
-This project is licensed under the **MIT License**. See [LICENSE](LICENSE) for details. Bundled tools in `tools/` maintain their respective open-source licenses (see [tools/README.md](tools/README.md)).
+This project is licensed under the **MIT License**. See [LICENSE](LICENSE) for details. Bundled tools in `tools/` maintain their respective open-source licenses (see [tools/README.md](tools/README.md)). The optional developer helper `tes3diff.py` and its golden tests use [tes3conv](https://github.com/Greatness7/tes3conv) by Greatness7 (MIT License, pinned to v0.4.1); it is not included in this project or in any deploy.
