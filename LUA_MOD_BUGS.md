@@ -333,6 +333,8 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
   `[More Console Commands | data.lua:908 | ERROR] Attempt to create existing command ... Use modify() instead.`
 * **Fix**:
   Added an idempotent guard (`local mccRegistered = false`) and an existence check against `interop.data.commands[cmd.name:lower()]` before registering commands, preventing duplicate registrations.
+* **Status (2026-11-25)**:
+  `mweffectinspector` has been removed from the suite. `showeffects` and `cleareffects` now belong to `mwconsole`, which registers them once. This entry is kept as history.
 
 ---
 

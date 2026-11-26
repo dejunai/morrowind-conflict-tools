@@ -8,6 +8,7 @@ local registry = require("mwconsole.registry")
 local index = require("mwconsole.complete.index")
 local toggles = require("mwconsole.toggles")
 local window = require("mwconsole.effects.window")
+local panel = require("mwconsole.selection.panel")
 local user = require("mwconsole.user.commands")
 local store = require("mwconsole.user.store")
 local console_ui = require("mwconsole.console_ui")
@@ -106,7 +107,7 @@ function mcm.build(main)
             end)
         end })
 
-    local sel = page:createCategory("Selection panel")
+    local sel = page:createCategory("Selection details")
     sel:createOnOffButton({ label = "Show details of the selected object",
         description = "Opens a panel next to the console with the selected object's files, owner, script values and more.",
         variable = var(config.panel, "on") })
@@ -126,10 +127,14 @@ function mcm.build(main)
         description = "Lets the panel's effects button inspect stuck glows on non-living objects (doors, containers, lights).",
         variable = var(config.panel, "objectVfx") })
 
+    sel:createKeyBinder({ label = "Selection details hotkey",
+        description = "Press in game (outside menus) to open the selection details window for the console selection, else what you are looking at, else yourself. Its Show Effects button opens the effect inspector. Default Alt+I.",
+        variable = var(config.panel, "hotkey"), allowCombinations = true })
+    sel:createButton({ buttonText = "Show my details now", label = "Selection details",
+        description = "Opens the selection details window on your character. Needs a loaded game.",
+        callback = function() guard.run("open the selection details", panel.openDetails, tes3.player) end })
+
     local eff = page:createCategory("Effect inspector")
-    eff:createKeyBinder({ label = "Effect inspector hotkey",
-        description = "Press in game to inspect your target (or yourself). Default Alt+I. Not used while mweffectinspector is on.",
-        variable = var(config.effects, "hotkey"), allowCombinations = true })
     eff:createOnOffButton({ label = "List spells and abilities",
         description = "The inspector lists the target's spells, abilities, diseases and blight.",
         variable = var(config.effects, "showSpells") })

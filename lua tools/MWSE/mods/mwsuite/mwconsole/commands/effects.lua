@@ -1,4 +1,4 @@
---[[ mwconsole commands: the effect inspector family (same names and aliases as mweffectinspector). ]]
+--[[ mwconsole commands: the effect inspector family (showeffects, cleareffects and their aliases). ]]
 local window = require("mwconsole.effects.window")
 
 return function(add)

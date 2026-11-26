@@ -1,6 +1,11 @@
 --[[
-    mwconsole selection panel: shows details of the reference selected in the console, next to the console.
-    Never takes focus from the console and never enters menu mode itself. Built and closed through guard.
+    mwconsole selection details, shown two ways, both built and closed through guard:
+    * the panel next to the console for the console selection. Never takes focus from the console and never
+      enters menu mode itself; it goes away with the console.
+    * the details window (the hotkey, default Alt+I): the same rows on the console selection, else the crosshair
+      target, else the player. It enters menu mode and has a Close button; Esc, a save load and closing menu
+      mode close it.
+    Both have a Show Effects button that opens the effect inspector on the shown reference (greyed on non-actors).
 ]]
 local config = require("mwconsole.config")
 local guard = require("mwconsole.guard")
@@ -10,6 +15,7 @@ local window = require("mwconsole.effects.window")
 
 local panel = {}
 panel.ID = "mwconsole:SelectionPanel"
+panel.DETAILS_ID = "mwconsole:SelectionDetails"
 
 local collapsed = {}        -- section -> true, for this session
 
@@ -33,11 +39,11 @@ function panel.effectsButtonMode(ref)
     return "disabled"
 end
 
-function panel.showEffects(ref)
+function panel.showEffects(ref, win)
     local mode = panel.effectsButtonMode(ref)
     if mode == "invalid" then
         out("Selection is no longer available")
-        panel.refresh()
+        if win and win.id == panel.DETAILS_ID then win:close("stale") else panel.refresh() end
         return nil
     elseif mode == "actor" then
         return window.open(ref)
@@ -62,16 +68,24 @@ local function runAction(ref, row)
     end
 end
 
-local function build(menu, win, ref)
+local function build(menu, win, ref, standalone)
     win.ref = ref
     local vw, vh = tes3ui.getViewportSize()
     menu.width = math.floor(vw * (config.panel.widthPct or 35) / 100)
     menu.maxHeight = math.floor(vh * (config.panel.heightPct or 75) / 100)
     menu.autoHeight = true
-    menu.alpha = config.panel.alpha or 0.85
-    menu.absolutePosAlignX = config.panel.right and 0.98 or 0.02
-    menu.absolutePosAlignY = 0.05
     menu.flowDirection = "top_to_bottom"
+    if standalone then
+        menu.absolutePosAlignX = 0.5
+        menu.absolutePosAlignY = 0.5
+    else
+        menu.alpha = config.panel.alpha or 0.85
+        menu.absolutePosAlignX = config.panel.right and 0.98 or 0.02
+        menu.absolutePosAlignY = 0.05
+    end
+    local function rebuild()
+        if standalone then panel.openDetails(ref) else panel.refresh() end
+    end
 
     local rows = collect.rows(ref)
 
@@ -96,7 +110,7 @@ local function build(menu, win, ref)
     end
     btn:register("mouseClick", function()
         if btn.disabled then return end
-        guard.run("open the effect inspector", panel.showEffects, ref)
+        guard.run("open the effect inspector", panel.showEffects, ref, win)
     end)
     win.effectsButton = btn
 
@@ -107,6 +121,10 @@ local function build(menu, win, ref)
             copy(table.concat(collect.asText(collect.rows(ref)), "\n"), "all rows")
         end)
     end)
+    if standalone then
+        local close = head:createButton({ text = "Close" })
+        close:register("mouseClick", function() win:close("button") end)
+    end
 
     local scroll = menu:createVerticalScrollPane({})
     scroll.widthProportional = 1.0
@@ -124,7 +142,7 @@ local function build(menu, win, ref)
             header.borderTop = 4
             header:register("mouseClick", function()
                 collapsed[sec] = not collapsed[sec]
-                panel.refresh()
+                guard.run("show the selection details", rebuild)
             end)
         end
         if not collapsed[row.section] then
@@ -141,11 +159,7 @@ local function build(menu, win, ref)
         end
     end
 
-    -- the panel goes away with the console (menu mode ends) and before a save loads (guard)
-    if not win.menuExitHooked then
-        win.menuExitHooked = true
-        win:on("menuExit", function() win:close("console closed") end)
-    end
+    -- guard closes both kinds when menu mode ends (the console closing, or anything else) and before a save loads
 end
 
 --- show, refresh or hide the panel for the current console selection
@@ -163,6 +177,31 @@ function panel.refresh()
     })
     guard.focusConsole()          -- the panel never keeps keyboard focus
     return win
+end
+
+--- what the hotkey shows: the console selection, else the crosshair target, else the player
+function panel.hotkeyTarget()
+    local ref = tes3ui.getConsoleReference()
+    if ref and effects.isValid(ref) then return ref end
+    local target = tes3.getPlayerTarget()
+    if target and effects.isValid(target) then return target end
+    return tes3.player
+end
+
+--- the details window (the hotkey and the MCM button). Needs a loaded game; refreshes in place if already open.
+function panel.openDetails(ref)
+    if not config.enabled then return nil end
+    if not guard.isGameLoaded() then return guard.needGame() end
+    ref = ref or panel.hotkeyTarget()
+    if not ref or not effects.isValid(ref) then
+        out("Selection is no longer available")
+        return nil
+    end
+    return guard.openWindow({
+        id = panel.DETAILS_ID, title = "Selection details (mwconsole)", where = "open the selection details",
+        modal = true, dragFrame = true,
+        build = function(menu, win) build(menu, win, ref, true) end,
+    })
 end
 
 function panel.close(reason)

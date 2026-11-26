@@ -21,9 +21,9 @@ local defaults = {
     console = { startLua = false },
     complete = { on = true, live = true, minChars = 2, prebuild = false, topics = false, runtimeObjects = false },
     panel = { on = true, requireCtrl = false, right = true, alpha = 0.85, objectVfx = false,
-              widthPct = 35, heightPct = 75 },
+              widthPct = 35, heightPct = 75,
+              hotkey = { keyCode = 23, isShiftDown = false, isAltDown = true, isControlDown = false } },  -- Alt+I
     effects = {
-        hotkey = { keyCode = 23, isShiftDown = false, isAltDown = true, isControlDown = false },  -- Alt+I
         showSpells = true, showEquipment = true, showVFX = true,
         vfxWords = "vfx, magic, shield, spell, aura, effect",
         logToMWSE = false,
@@ -35,6 +35,13 @@ local defaults = {
 }
 
 local config = mwse.loadConfig(CONFIG_NAME, deepCopy(defaults)) or deepCopy(defaults)
+
+-- the first build kept the hotkey under effects; it now opens the selection details window
+if type(config.effects) == "table" and type(config.effects.hotkey) == "table" then
+    if type(config.panel) ~= "table" then config.panel = {} end
+    if config.panel.hotkey == nil then config.panel.hotkey = config.effects.hotkey end
+    config.effects.hotkey = nil
+end
 
 -- mwse.loadConfig merges only the top level: fill missing keys of the nested tables too
 local function fill(dst, src)

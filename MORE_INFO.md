@@ -480,9 +480,9 @@ The first-party MWSE modules live in `lua tools\MWSE\mods\mwsuite\` and are depl
 | :--- | :--- | :--- |
 | `mwcollide` | Hides doubled objects as cells load (two unrelated plugins placing things in the same spot) | `mwcollide_data.json` (`--cell-conflicts`, `--fix`) |
 | `mwcompanions` | Following, warping and follower combat in one place | |
+| `mwconsole` | Console commands (More Console Commands compatible), Tab completion, selection details (panel next to the console; Alt+I window with a Show Effects button) and the effect inspector; off by default | |
 | `mwcriminal` | Sneaking, theft and door locks in one place | |
 | `mwcustomclasspersistence` | Saves custom classes from the Create Class menu for later games | |
-| `mweffectinspector` | Magic effect, ability, enchantment and VFX inspector with console commands, hotkey and dispel tools | |
 | `mwexitguard` | Clean fast exit: avoids the on-exit freeze and the renderer unloading crash | |
 | `mwfloatfix` | Settles floating loose items as cells load; puts back people a save left under water | `mwfloatfix_data.json`, `mwfloatfix_rescue.json` (`--fix`) |
 | `mwguard` | Passive profiler and issue logger for MWSE Lua mods (priorities, per-frame costs, log spam); `EnableLogTimestamps` | |

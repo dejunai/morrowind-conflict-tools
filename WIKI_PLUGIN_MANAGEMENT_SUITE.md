@@ -219,7 +219,7 @@ Located in `Data Files/MWSE/mods/`, these 19 Lua plugins provide real-time runti
 | `mwcustomclasspersistence`| UI / Mechanics | Custom class memory. Saves custom character classes created during Character Generation to `savedCustomClasses.json`, allowing them to be chosen directly in future playthroughs. |
 | `mwcriminal` (Plain Paper) | UI Quality-of-Life | Activating blank scroll paper places it directly into the player inventory instead of opening an empty scroll window. |
 | `mwpersonaleffects` | Quest Fix | Standalone, opt-in Lua replacement for Personal Effects' Census and Excise scripts; retains the required ESP records. |
-| `mweffectinspector` | Developer Tools | Console debugger (`inspecteffects`, `showeffects`) allowing real-time inspection of active magic effects, modifiers, and sources on any actor. |
+| `mwconsole` | Developer Tools | Console commands (More Console Commands compatible), Tab completion, selection details (a panel next to the console, and a window on Alt+I) and the effect inspector (`showeffects`, `cleareffects`) for active magic effects, abilities, enchantments and leftover visuals on any actor. Off until switched on in its MCM. |
 | `mwpluginpatches` | Bug Fixes | Bundles micro-patches for common mod script bugs (Jiub delay, Ysmir shield fix, guard response scripts) directly in Lua. |
 | `mwwarnsuppression` | Log Cleanup | Suppresses repetitive, benign engine warning spam (missing optional body parts, trivial Morrowind.ini warnings) in `Warnings.txt`. |
 

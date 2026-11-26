@@ -5,7 +5,10 @@
     * openWindow{...}: the only way mwconsole opens a window. Each window has one close(reason) path that is
       idempotent, unregisters what the window registered, destroys its elements, leaves menu mode once and only
       if this window entered it, and gives the console input focus back.
-    * Every open window is closed when a save starts loading (and so before the main menu can come back).
+    * Every open window is closed when a save starts loading (and so before the main menu can come back), and when
+      menu mode ends (a window can't be used without the cursor).
+    * Esc closes only the window on top (the one opened last), so Esc in the effect inspector opened from the
+      selection details window leaves the details window open.
 ]]
 local log = require("mwconsole.log")
 
@@ -17,13 +20,14 @@ local gameLoaded = false
 local windows = {}          -- id -> window record
 local loadHandlerOn = false
 local lastError = {}        -- where -> { time, suppressed }
+local openSeq = 0           -- opening order, for "the window on top"
 
 local function now() return os.clock() end
 
 function guard.setLoaded(v) gameLoaded = v and true or false end
 
 --- a character is in the world: the player and its mobile exist and `loaded` has fired since the last `load`.
---- (tes3.onMainMenu() isn't used: it can't tell a loaded save from character generation; see mweffectinspector.)
+--- (tes3.onMainMenu() isn't used: it can't tell a loaded save from character generation.)
 function guard.isGameLoaded()
     return gameLoaded and tes3.player ~= nil and tes3.mobilePlayer ~= nil
 end
@@ -153,7 +157,8 @@ function guard.openWindow(spec)
         pcall(tes3ui.moveMenuToFront, existing.menu)
         return existing
     end
-    local win = setmetatable({ id = spec.id, build = spec.build, onClose = spec.onClose, events = {},
+    openSeq = openSeq + 1
+    local win = setmetatable({ id = spec.id, build = spec.build, onClose = spec.onClose, events = {}, seq = openSeq,
                                callbacks = {}, elements = {}, closed = false, enteredMenuMode = false }, Window)
     windows[spec.id] = win
     updateLoadHandler()
@@ -169,9 +174,16 @@ function guard.openWindow(spec)
             tes3ui.enterMenuMode(spec.id)
             win.enteredMenuMode = not wasMenuMode
         end
-        win:on("keyDown", function()
-            if not win.closed then win:close("escape") end
+        win:on("keyDown", function(e)
+            if win.closed or (type(e) == "table" and e.mwconsoleEscape) then return end
+            if guard.topWindow() ~= win then return end
+            if type(e) == "table" then e.mwconsoleEscape = true end     -- one window per Esc press
+            win:close("escape")
         end, { filter = tes3.scanCode.escape })
+        -- unregistered before this window leaves menu mode itself, so this only sees someone else leaving it
+        win:on("menuExit", function()
+            if not win.closed then win:close("menu mode ended") end
+        end)
     end)
     if not ok then
         win:close("error")
@@ -181,6 +193,15 @@ function guard.openWindow(spec)
 end
 
 function guard.getWindow(id) return windows[id] end
+
+--- the open window opened last (the one Esc closes)
+function guard.topWindow()
+    local top
+    for _, w in pairs(windows) do
+        if not w.closed and (not top or w.seq > top.seq) then top = w end
+    end
+    return top
+end
 
 function guard.closeAll(reason)
     local list = {}

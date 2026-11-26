@@ -5,7 +5,10 @@
       api.unregisterCommand(name)            only the mod that registered it
       api.registerCompletion(kind, provider(prefix) -> list)   a new ID kind for argKind
       api.openWindow{ id, build(menu, win), onClose?, modal = true, needsGame = true }   follows mwconsole's
-                                             window rules (game check, error capture, one close path)
+                                             window rules (game check, error capture, one close path; Esc closes
+                                             the window on top; every window closes when menu mode ends)
+      mwconsole's built-ins (showeffects, cleareffects and their aliases among them) can't be taken: a name or
+      alias that is already mwconsole's is refused on both routes, override included.
       api.isGameLoaded(), api.version
     Events: "mwconsole:selectionRows" { reference, rows } (append rows), "mwconsole:commandRun" { name, source, ok }.
     The owning mod is read from the calling file's folder (call the API directly, not as `return api.x(...)`).

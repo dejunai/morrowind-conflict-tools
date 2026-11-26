@@ -117,11 +117,9 @@ end
 
 local function onKeyDown(e)
     if not config.enabled then return end
-    -- the effect inspector hotkey (outside menus); mweffectinspector keeps its own while it is on
-    local mei = package.loaded["mweffectinspector.config"]
-    if not (type(mei) == "table" and mei.enabled) and not tes3.menuMode()
-        and tes3.isKeyEqual({ actual = e, expected = config.effects.hotkey }) then
-        if guard.isGameLoaded() then window.open(tes3.getPlayerTarget() or tes3.player) end
+    -- the selection details hotkey (outside menus): console selection, else the crosshair target, else the player
+    if not tes3.menuMode() and tes3.isKeyEqual({ actual = e, expected = config.panel.hotkey }) then
+        guard.run("open the selection details", panel.openDetails)
     end
 end
 
