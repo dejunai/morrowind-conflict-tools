@@ -99,7 +99,7 @@ The suite is engineered for massive, complex mod lists (hundreds of plugins, ten
    - Moves stranded actors to the nearest stable, dry footing or relocates them to matching moved land. This runs as part of `--fix` (`fix_cell_winners`).
 5. **Automated Patch Generation**:
    - **AutoMerge (`--auto-merge`)**: Finds active `.esp` plugins with no cell, land, or pathgrid edits that can move together without changing what wins against any other plugin, merges them into `mwdialog_check AutoMerge.esp` (or `--merge-name`), and deactivates the inputs.
-   - **Multipatch (`--multipatch`)**: Builds `mwdialog_check Multipatch.esp` like tes3cmd multipatch: merged leveled lists, fog-bugged cells (illegal fog density 0 is set to 0.01), and reverted cell names, plus objects several mods change, merged field by field, unless `--no-merge-objects` is passed. Beast-race NPCs (the winning race record's beast flag) with no model or a humanoid skeleton (`base_anim.nif`, `base_anim_female.nif`) get the beast skeleton `base_animkna.nif`, unless `--no-beast-skeleton`. Load it last.
+   - **Multipatch (`--multipatch`)**: Builds `mwdialog_check Multipatch.esp` like tes3cmd multipatch: merged leveled lists, fog-bugged cells (illegal fog density 0 is set to 0.01), and reverted cell names, plus objects several mods change, merged field by field, unless `--no-merge-objects` is passed. Beast-race NPCs (the winning race record's beast flag) with no model or a humanoid skeleton (`base_anim.nif`, `base_anim_female.nif`) get the beast skeleton `base_animkna.nif`, and those with a mod's pose model that lacks the beast bones (toes, tail) get a copy of the pose with them grafted, unless `--no-beast-skeleton`. Load it last.
    - **Doubled performers**: no plugin is built for them. The `mwperformers` MWSE module lets one performer per inn perform, in the game, and removes no one. A `mwdialog_check Performers Patch.esp` left by an earlier version is set aside (kept as a backup) and taken out of the load order by `--fix`.
    - **SoundFix**: Recompiles problematic audio scripts using `MWRecompile` into `mwdialog_check - MWSoundFix.esp`, replacing broken `GetSoundPlaying` polling loops with state variables. `--fix` rebuilds this patch unless `--no-soundfix` is passed. `--soundfix` runs that step on its own.
 6. **Load-Order Sorter (`--sort`)**:
@@ -230,7 +230,7 @@ The suite is engineered for massive, complex mod lists (hundreds of plugins, ten
 | `--no-follow-up`, `--no-follow-fix` | *(flag)* | Don't run the usual follow-ups (`--fix --multipatch` after `--auto-merge` or a `--sort` that changed the order, and so on). |
 | `--multipatch` | *(flag)* | Generates `mwdialog_check Multipatch.esp` (merged leveled lists, fog, cell names, and merged objects unless `--no-merge-objects`). |
 | `--no-merge-objects` | *(flag)* | With `--multipatch`: don't merge objects several mods change. |
-| `--no-beast-skeleton` | *(flag)* | With `--multipatch`: don't give beast-race NPCs with no model or a humanoid skeleton the beast skeleton. |
+| `--no-beast-skeleton` | *(flag)* | With `--multipatch`: don't give beast-race NPCs with no model or a humanoid skeleton the beast skeleton, nor graft the beast bones into a copy of a pose model that lacks them. |
 
 #### Sound Repair & SoundFix
 | Switch | Argument | Description |
@@ -371,7 +371,7 @@ When multiple mods edit the same worldspace, landscape vertices and exterior obj
 
 ### AutoMerge & Multipatch
 - **AutoMerge (`mwdialog_check AutoMerge.esp`)**: Frees plugin slots by merging active `.esp` files that have no cell, land, or pathgrid edits and can move together without changing what wins against any other plugin. The inputs are deactivated and recorded so `--unmerge` can put them back.
-- **Multipatch (`mwdialog_check Multipatch.esp`)**: Like tes3cmd multipatch: merged leveled lists, illegal fog density `0.0` set to `0.01`, and reverted exterior cell names. By default it also merges objects several mods change, field by field (like TES3Merge), unless `--no-merge-objects` is passed. Beast-race NPCs (the winning race record's beast flag) with no model or a humanoid skeleton (`base_anim.nif`, `base_anim_female.nif`) get the beast skeleton `base_animkna.nif`, unless `--no-beast-skeleton`.
+- **Multipatch (`mwdialog_check Multipatch.esp`)**: Like tes3cmd multipatch: merged leveled lists, illegal fog density `0.0` set to `0.01`, and reverted exterior cell names. By default it also merges objects several mods change, field by field (like TES3Merge), unless `--no-merge-objects` is passed. Beast-race NPCs (the winning race record's beast flag) with no model or a humanoid skeleton (`base_anim.nif`, `base_anim_female.nif`) get the beast skeleton `base_animkna.nif`; beast-race NPCs whose pose model lacks the beast bones get a copy with them grafted (`Meshes\mwdialog_beastpose\`), unless `--no-beast-skeleton`.
 
 ### Audio Script Recompilation (--soundfix)
 A notorious Morrowind engine quirk causes `GetSoundPlaying` to return `0` for certain object sounds. Scripts written as `if ( GetSoundPlaying == 0 ) PlayLoopSound3D ...` execute every single frame, choking the audio channel and causing severe stutter.

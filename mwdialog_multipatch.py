@@ -12,16 +12,19 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from mwdialog_backup import index_dir  # noqa: E402
 from mwdialog_bsa import bsa_file_names  # noqa: E402
 from mwdialog_console import print  # noqa: E402
-from mwdialog_datatree import ModelAssets  # noqa: E402
-from mwdialog_loadorder import read_load_order, set_game_files  # noqa: E402
+from mwdialog_datatree import GENERATED_RECORD, ModelAssets  # noqa: E402
+from mwdialog_footing import model_reader  # noqa: E402
+from mwdialog_loadorder import default_ini, read_ini_sections, read_load_order, set_game_files  # noqa: E402
 from mwdialog_media import nif_is_empty  # noqa: E402
 from mwdialog_patchfile import next_free_date, write_patch  # noqa: E402
 from mwdialog_records import merge_levlist, merge_object  # noqa: E402
 from mwdialog_redundant import OUR_PATCHES  # noqa: E402
-from mwdialog_state import read_merge_record  # noqa: E402
+from mwdialog_state import read_generated_record, read_merge_record, write_generated_record  # noqa: E402
 from mwdialog_tes3 import (  # noqa: E402
     FormatError, cstr, first_sub, iter_records, iter_subs, pack_str, pack_sub,
     read_header_masters, read_plugin_bytes)
+import mwdialog_footing as NB  # noqa: E402
+import mwdialog_paths as MPATH  # noqa: E402
 import mwdialog_text as MT  # noqa: E402
 
 MULTI_PATCH_NAME = "mwdialog_check Multipatch.esp"
@@ -277,7 +280,7 @@ def _set_modl(body, value):
     return b"".join(pack_sub(n, d) for n, d in out)
 
 
-def beast_skeleton_fixes(plugins, merged=None):
+def beast_skeleton_fixes(plugins, merged=None, poses=None):
     """NPCs of a beast race (the winning RACE record's RADT beast flag, not a list of ids) whose winning NPC_
     record has no model or a plain humanoid skeleton (HUMAN_SKELETONS): they get the beast skeleton. Any other
     model is left alone: a beast skeleton (is_beast_skeleton) or a mod's own model (a sitting/working/dead pose
@@ -286,6 +289,8 @@ def beast_skeleton_fixes(plugins, merged=None):
     one); otherwise the vanilla BEAST_SKELETON. Vanilla uses the same file for women and men.
     plugins: the load order [(name, path)]; the Multipatch itself is not read. merged: {npc id lower: NPC_
     record bytes} the Multipatch already writes (its object merge); such a record is the one patched.
+    poses: a list that gets each beast-race NPC left alone for its own (pose) model, as
+    {"id", "plugin", "race", "before", "flags", "body"} (see beast_pose_fixes).
     Returns [{"id", "plugin", "race", "before", "after", "record"}], "before" None when there was no MODL."""
     merged = merged or {}
     races, npcs = {}, {}
@@ -343,6 +348,9 @@ def beast_skeleton_fixes(plugins, merged=None):
             md = first_sub(body, b"MODL")
             before = cstr(md) if md is not None else None
             if before and model_key(before) and model_key(before) not in HUMAN_SKELETONS:
+                if poses is not None and not is_beast_skeleton(before):
+                    poses.append({"id": cstr(first_sub(body, b"NAME")), "plugin": n, "race": race,
+                                  "before": before, "flags": fl, "body": body})
                 continue                             # a beast skeleton, or the mod's own model: left alone
             after = skeleton_of(n, race)
             nb = _set_modl(body, after)
@@ -351,6 +359,158 @@ def beast_skeleton_fixes(plugins, merged=None):
         out.append({"id": cstr(first_sub(body, b"NAME")), "plugin": n, "race": race, "before": before,
                     "after": after, "record": b"NPC_" + struct.pack("<III", len(nb), 0, fl) + nb})
     return out
+
+
+# Beast bones in a mod's pose model (rule approved by dej / dejunai, 2026-11-26)
+BEAST_POSE_DIR = "mwdialog_beastpose"   # under Meshes: the Multipatch's copies of pose models, bones grafted
+BEAST_POSE_SUFFIX = "_animkna"          # the copy's name carries 'animkna': is_beast_skeleton skips it next time
+HUMAN_SKELETON = "base_anim.nif"
+
+
+def game_archives(args):
+    """The BSAs the game loads: Morrowind.bsa, then Morrowind.ini's [Archives] (paths that exist)."""
+    ini = default_ini(args)
+    try:
+        listed = read_ini_sections(ini).get("archives", []) if os.path.isfile(ini) else []
+    except OSError:
+        listed = []
+    lookup = index_dir(os.path.abspath(args.data_dir))
+    names = ["Morrowind.bsa"] + [v for k, v in listed if k.lower().startswith("archive")]
+    return [lookup[n.lower()] for n in names if n.lower() in lookup]
+
+
+def actor_model_names(model):
+    """(model, its x-file, its x .kf) under Meshes for an NPC/creature MODL: the game draws the x-file
+    (x<name>.nif) when there is one, else the model itself, and animates it from x<name>.kf."""
+    k = model_key(model)
+    d, f = k.rsplit("\\", 1) if "\\" in k else ("", k)
+    pre = d + "\\" if d else ""
+    return k, pre + "x" + f, pre + "x" + os.path.splitext(f)[0] + ".kf"
+
+
+def beast_bones(read):
+    """{bone name lower} beast body parts are skinned to and a humanoid skeleton lacks: the nodes (not shapes,
+    not the root) of the vanilla beast skeleton that the vanilla humanoid one doesn't have (Bip01 L/R Toe0,
+    Bip01 Tail..Tail3, Tail). Read from the game's own files, so nothing is a fixed list. None when either
+    can't be read."""
+    ref, hum = read(BEAST_SKELETON), read(HUMAN_SKELETON)
+    if not ref or not hum:
+        return None
+    try:
+        r, h = NB.read_nif(ref), NB.read_nif(hum)
+    except NB.NifError:
+        return None
+    roots = set(r["roots"])
+    human = NB.skeleton(h)
+    return {nd["name"].lower() for i, nd in r["nodes"].items()
+            if i not in roots and nd["type"] in NB.PARENT_TYPES and nd["name"]
+            and nd["name"].lower() not in human}
+
+
+def beast_pose_copy_name(model):
+    """The Multipatch's copy of pose model `model` for beast-race NPCs: BEAST_POSE_DIR\\<its folder>\\<name>
+    BEAST_POSE_SUFFIX.nif (its x-file and .kf named to match, see actor_model_names)."""
+    k = model_key(model)
+    stem, _ext = os.path.splitext(k)
+    return BEAST_POSE_DIR + "\\" + stem + BEAST_POSE_SUFFIX + ".nif"
+
+
+def beast_pose_fixes(poses, read):
+    """For beast-race NPCs left alone with a mod's pose model (beast_skeleton_fixes' `poses`): when the file the
+    game draws for it (its x-file, else the model: actor_model_names) lacks beast bones (beast_bones), a copy of
+    the pose with the missing bones grafted from the beast skeleton at their bind transforms (mwdialog_footing
+    .graft_bones), and the NPC pointed at the copy (beast_pose_copy_name). The mod's files are never changed and
+    other NPCs using the same pose (humanoids) keep it. A pose that has every beast bone, or can't be read, is
+    left alone. read: model path under Meshes -> bytes or None (mwdialog_footing.model_reader).
+    Returns (fixes, report): fixes [{"id", "plugin", "race", "before", "after", "record", "files": {path under
+    Meshes: bytes}, "grafted": {path under Meshes: [bone names]}}]; report {model: {"npcs", "lacks", "note"}}."""
+    need = beast_bones(read) if poses else None
+    if not poses or not need:
+        return [], {}
+    ref = read(BEAST_SKELETON)
+    plans, report = {}, {}
+    for p in poses:
+        k = model_key(p["before"])
+        if k not in plans:
+            plans[k] = _beast_pose_plan(k, read, ref, need)
+            report[k] = {"npcs": 0, "lacks": plans[k][2], "note": plans[k][3]}
+        report[k]["npcs"] += 1
+    out = []
+    for p in poses:
+        k = model_key(p["before"])
+        files, grafted, _lacks, _note = plans[k]
+        if not files:
+            continue
+        after = beast_pose_copy_name(k)
+        nb = _set_modl(p["body"], after)
+        out.append({"id": p["id"], "plugin": p["plugin"], "race": p["race"], "before": p["before"], "after": after,
+                    "record": b"NPC_" + struct.pack("<III", len(nb), 0, p["flags"]) + nb,
+                    "files": files, "grafted": grafted})
+    return out, report
+
+
+def _beast_pose_plan(k, read, ref, need):
+    """(files, grafted, lacks, note) for pose model k: see beast_pose_fixes. files {} when nothing is done."""
+    nif, xnif, xkf = actor_model_names(k)
+    plain, xdata = read(nif), read(xnif)
+    drawn = xdata if xdata else plain
+    if not drawn:
+        return {}, {}, [], "missing"
+    try:
+        have = NB.skeleton(NB.read_nif(drawn))
+    except NB.NifError as e:
+        return {}, {}, [], f"not read ({e})"
+    lacks = sorted(need - set(have))
+    if not lacks:
+        return {}, {}, [], "has every beast bone"
+    cnif, cxnif, cxkf = actor_model_names(beast_pose_copy_name(k))
+    files, grafted = {}, {}
+    try:
+        dst = cxnif if xdata else cnif
+        files[dst], grafted[dst] = NB.graft_bones(drawn, ref, need)
+    except NB.NifError as e:
+        return {}, {}, lacks, f"bones not grafted ({e})"
+    if xdata:                                        # the model itself (the editor's file) gets them too
+        try:
+            files[cnif], grafted[cnif] = NB.graft_bones(plain, ref, need) if plain else (files[cxnif], grafted[cxnif])
+        except NB.NifError:
+            files[cnif], grafted[cnif] = files[cxnif], grafted[cxnif]
+    kf = read(xkf)
+    if kf:
+        files[cxkf] = kf                             # the animation, unchanged, named to match the copy
+    return files, grafted, lacks, "bones grafted"
+
+
+def write_beast_pose_files(data_dir, fixes):
+    """Write the copies beast_pose_fixes planned under Data Files\\Meshes (only when changed) and record them
+    for --remove-generated under the Multipatch. Returns the paths (under Data Files) written."""
+    want = {}
+    for f in fixes:
+        for rel, data in f["files"].items():
+            want["meshes\\" + rel] = data
+    made = []
+    for rel, data in sorted(want.items()):
+        full = os.path.join(data_dir, rel)
+        try:
+            with open(full, "rb") as fh:
+                if fh.read() == data:
+                    made.append(rel)
+                    continue
+        except OSError:
+            pass
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        tmp = full + ".tmp"
+        with open(tmp, "wb") as fh:
+            fh.write(data)
+        os.replace(tmp, full)
+        made.append(rel)
+    if made:
+        rec_path = MPATH.state_path(os.path.dirname(os.path.abspath(data_dir)), GENERATED_RECORD)
+        entries = read_generated_record(rec_path)
+        for rel in made:
+            entries[rel.lower()] = (rel, str(len(want[rel])), MULTI_PATCH_NAME)
+        write_generated_record(rec_path, entries)
+    return made
 
 
 def run_multipatch(args, plugins, world):
@@ -432,7 +592,7 @@ def run_multipatch(args, plugins, world):
         merged_objects(plugins, known, file_ok=merge_file_check(args, world),
                        merged_inputs=merged_inputs_of(os.path.dirname(os.path.abspath(args.data_dir)),
                                                       args.data_dir))
-    beasts = []
+    beasts, poses, pose_fixes, pose_report = [], [], [], {}
     if not getattr(args, "no_beast_skeleton", False):
         mnpc = {}
         for i, r in enumerate(mrecs):
@@ -440,24 +600,43 @@ def run_multipatch(args, plugins, world):
                 nm = first_sub(r[16:], b"NAME")
                 if nm:
                     mnpc[cstr(nm).lower()] = i
-        beasts = beast_skeleton_fixes(plugins, {k: mrecs[i] for k, i in mnpc.items()})
-        for b in beasts:
+        beasts = beast_skeleton_fixes(plugins, {k: mrecs[i] for k, i in mnpc.items()}, poses)
+        if poses:
+            pose_fixes, pose_report = beast_pose_fixes(
+                poses, model_reader(os.path.abspath(args.data_dir), game_archives(args)))
+        for b in beasts + pose_fixes:
             i = mnpc.get(b["id"].lower())
             if i is not None:
                 mrecs[i] = b["record"]               # the merged record gets the skeleton too
             else:
                 mrecs.append(b["record"])
-            mnotes.append(f"NPC_ {b['id']} ({b['race']}, {b['plugin']}): beast skeleton '{b['after']}' "
+            what = "pose with the beast bones" if b in pose_fixes else "beast skeleton"
+            mnotes.append(f"NPC_ {b['id']} ({b['race']}, {b['plugin']}): {what} '{b['after']}' "
                           f"(was {repr(b['before']) if b['before'] is not None else 'no model'})")
     recs += mrecs
     notes += mnotes
     print(f"  {len(renamed)} cell name(s) protected, {len(world.fogcells)} fog-bugged cell(s), "
           f"{counts['LEVC']} creature and {counts['LEVI']} item list(s) merged, {len(mrecs)} object(s) several "
           f"mods change merged, {len(beasts)} beast-race NPC(s) given the beast skeleton")
+    if pose_report:
+        lacking = {k: r for k, r in pose_report.items() if r["lacks"]}
+        print(f"  Beast-race NPCs with a mod's pose model: {len(poses)} using {len(pose_report)} pose file(s); "
+              f"{len(pose_report) - len(lacking)} have every beast bone, {len(lacking)} lack some "
+              f"({len(pose_fixes)} NPC(s) pointed at a copy with the bones grafted)")
     if args.dry_run:
         for b in beasts:
             print(f"    {b['plugin']}: {b['id']} ({b['race']}) "
                   f"{repr(b['before']) if b['before'] is not None else 'no model'} -> '{b['after']}'")
+        for k, r in sorted(pose_report.items()):
+            print(f"    pose {k}: {r['npcs']} beast NPC(s), {r['note']}"
+                  + (f" (lacks {', '.join(r['lacks'])})" if r["lacks"] else ""))
+        planned = {}
+        for b in pose_fixes:
+            print(f"    {b['plugin']}: {b['id']} ({b['race']}) '{b['before']}' -> '{b['after']}'")
+            planned.update(b["grafted"])
+            planned.update({rel: None for rel in b["files"] if rel not in b["grafted"]})
+        for rel, g in sorted(planned.items()):
+            print(f"      would write Meshes\\{rel}" + (f": grafted {', '.join(g)}" if g else " (copied)"))
     if args.dry_run:
         print("Dry run: no files were changed.")
         return
@@ -466,6 +645,9 @@ def run_multipatch(args, plugins, world):
     if is_new and not recs:
         print("  No patching necessary; the multipatch was not created.")
         return
+    if pose_fixes:
+        made = write_beast_pose_files(args.data_dir, pose_fixes)
+        notes.append(f"{len(made)} pose model copies with the beast bones under Meshes\\{BEAST_POSE_DIR}")
     write_patch(path, [], [], [], extra=recs,
                 description="Merged leveled lists, fog bug and cell name fixes (tes3cmd multipatch), "
                             "generated by mwdialog_check.py. Load this LAST.")

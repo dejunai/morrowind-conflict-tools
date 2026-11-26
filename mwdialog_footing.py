@@ -6,6 +6,8 @@ nobody (perhaps someone a quest needs) is left cut off on the seabed. When the l
 unchanged a few cells away (a mod moved the island), they go to the same spot there. Someone moved into another
 cell is moved there (MVRF), as the CS does when a reference is dragged across a cell border.
 Footing is worked out from the land heights and the collision triangles of the models.
+The 4.0.0.2 model reading here also serves the Multipatch: a model's node tree (read_nif, skeleton) and a copy
+with missing bones grafted (graft_bones), for beast-race NPCs whose pose model lacks the beast bones.
 """
 from collections import defaultdict
 import functools
@@ -622,3 +624,185 @@ def write_rescue_data(data_dir, rescue, left):
     with open(path + ".tmp", "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=1)
     os.replace(path + ".tmp", path)
+
+
+# Skeletons: the node tree of a model and grafting missing bones into a copy (the Multipatch's beast bones in
+# a mod's pose model, rule approved by dej / dejunai, 2026-11-26). A 4.0.0.2 file has no block sizes: blocks
+# are found as above (each starts with its type name), node blocks are read field by field, and links are
+# block numbers. A bone is grafted as a new NiNode appended after the last block, linked from its parent's
+# child list; nothing else in the file moves or changes.
+NIF_HEADER = b"NetImmerse File Format, Version 4.0.0.2\n"
+NIF_VERSION = 0x04000002
+BONE_NODE = b"NiNode"
+# node types that can carry children (a shape's links are its data and skin, not children)
+PARENT_TYPES = frozenset(t for t in NODE_TYPES if t != SHAPE)
+
+
+class NifError(ValueError):
+    """The model can't be read as a 4.0.0.2 node tree."""
+
+
+def _u32(b, p):
+    return struct.unpack_from("<I", b, p)[0]
+
+
+def read_nif(b):
+    """{"count", "blocks": [(type, start)], "footer": offset, "roots": [..], "nodes": {i: node}} of a 4.0.0.2
+    model, where `start` is the offset of the block's type name and a node is {"type", "name", "flags",
+    "transform" (13 floats: translation, rotation 3x3, scale), "kids" ([] for a shape), "kids_at" (offset of
+    the child count; None for a shape)}. NifError when it can't be read."""
+    try:
+        return _read(b)
+    except (IndexError, struct.error, UnicodeDecodeError, OverflowError) as e:
+        raise NifError(f"model can't be read ({e})") from None
+
+
+def _read(b):
+    if not b.startswith(NIF_HEADER) or _u32(b, len(NIF_HEADER)) != NIF_VERSION:
+        raise NifError("not a Morrowind (4.0.0.2) model")
+    count = _u32(b, len(NIF_HEADER) + 4)
+    first = len(NIF_HEADER) + 8
+    footer = None
+    for n in range(1, 9):                            # the footer: root count, then that many block numbers
+        at = len(b) - 4 - 4 * n
+        if at >= first and _u32(b, at) == n:
+            footer = at
+            break
+    if footer is None:
+        raise NifError("no footer")
+    blocks, after = [], None
+    for found in BLOCK_RE.finditer(b, first, footer):
+        size, word = _u32(b, found.start()), found.group(2)
+        if size > len(word) or found.start() == after:
+            continue                                 # the latter: a node's name spelt like a type
+        if blocks and found.start() < blocks[-1][2]:
+            continue                                 # inside the previous node's fields
+        after = found.start() + 4 + size
+        blocks.append((word[:size], found.start(), after))
+        if word[:size] in NODE_TYPES:                # a node's fields are known: skip past them
+            blocks[-1] = blocks[-1][:2] + (_node(b, word[:size], after)["end"],)
+    if len(blocks) != count or (blocks and blocks[0][1] != first):
+        raise NifError(f"{len(blocks)} of {count} blocks found")
+    nodes = {}
+    for i, (kind, start, _end) in enumerate(blocks):
+        if kind in NODE_TYPES:
+            nodes[i] = _node(b, kind, start + 4 + len(kind))
+    roots = list(struct.unpack_from(f"<{_u32(b, footer)}i", b, footer + 4))
+    return {"count": count, "blocks": [(k, s) for k, s, _e in blocks], "footer": footer, "roots": roots,
+            "nodes": nodes}
+
+
+def _node(b, kind, p):
+    name_len = _u32(b, p)
+    if name_len > 1024:
+        raise NifError("node name out of range")
+    name = b[p + 4:p + 4 + name_len].decode("latin-1")
+    p += 4 + name_len + 8                            # name, extra data, controller
+    flags = struct.unpack_from("<H", b, p)[0]
+    transform = struct.unpack_from("<13f", b, p + 2)
+    p += 2 + 52 + 12                                 # flags, transform, velocity
+    p += 4 + 4 * _u32(b, p)                          # properties
+    p += 4 + (64 if _u32(b, p) else 0)               # bounding box
+    if kind == SHAPE:
+        return {"type": kind, "name": name, "flags": flags, "transform": transform, "kids": [],
+                "kids_at": None, "end": p + 8}
+    n = _u32(b, p)
+    if n > 100000:
+        raise NifError("child count out of range")
+    kids = list(struct.unpack_from(f"<{n}i", b, p + 4))
+    kids_at = p
+    p += 4 + 4 * n
+    p += 4 + 4 * _u32(b, p)                          # effects
+    return {"type": kind, "name": name, "flags": flags, "transform": transform, "kids": kids,
+            "kids_at": kids_at, "end": p}
+
+
+def skeleton(info):
+    """{bone name lower: (block number, parent block number or None)} for every named node in the model."""
+    parent = {}
+    for i, nd in info["nodes"].items():
+        for k in nd["kids"]:
+            if k in info["nodes"] and k not in parent:
+                parent[k] = i
+    out = {}
+    for i, nd in sorted(info["nodes"].items()):
+        key = nd["name"].lower()
+        if key and key not in out:
+            out[key] = (i, parent.get(i))
+    return out
+
+
+def bone_names(data):
+    """The lowercase names of every node in a model (a set), or None when it can't be read."""
+    try:
+        return set(skeleton(read_nif(data)))
+    except NifError:
+        return None
+
+
+def missing_bones(pose, ref, need):
+    """Which of `need` (lowercase bone names, all in the reference skeleton) a pose model lacks, with the
+    ancestors (in the reference) they need that it lacks too, parents first: [name lower]. pose/ref: read_nif."""
+    have, rs = skeleton(pose), skeleton(ref)
+    rname = {i: n for n, (i, _p) in rs.items()}
+    want = set()
+    for n in need:
+        while n and n in rs and n not in have and n not in want:
+            want.add(n)
+            par = rs[n][1]
+            n = rname.get(par) if par is not None else None
+    depth = {}
+
+    def d(n):
+        if n not in depth:
+            par = rs[n][1]
+            depth[n] = 0 if par is None or rname.get(par) is None else d(rname[par]) + 1
+        return depth[n]
+    return sorted(want, key=lambda n: (d(n), rs[n][0]))
+
+
+def _new_node(name, flags, transform, kids):
+    nm = name.encode("latin-1")
+    return (struct.pack("<I", len(BONE_NODE)) + BONE_NODE + struct.pack("<I", len(nm)) + nm
+            + struct.pack("<iiH", -1, -1, flags) + struct.pack("<13f", *transform) + struct.pack("<3f", 0, 0, 0)
+            + struct.pack("<II", 0, 0) + struct.pack(f"<I{len(kids)}i", len(kids), *kids) + struct.pack("<I", 0))
+
+
+def graft_bones(data, ref_data, need):
+    """A copy of model `data` with the bones of `need` (lowercase names) it lacks added from the reference
+    model `ref_data` (the beast skeleton): each a plain NiNode with the reference's name, flags and local (bind)
+    transform, under the parent it has in the reference (found in the pose by name, else grafted too).
+    Returns (new bytes, [grafted names as the reference spells them]); (the same bytes, []) when none is
+    missing. NifError when either model can't be read or a bone has no parent to hang from."""
+    pose, ref = read_nif(data), read_nif(ref_data)
+    todo = missing_bones(pose, ref, need)
+    if not todo:
+        return data, []
+    have, rs = skeleton(pose), skeleton(ref)
+    rname = {i: n for n, (i, _p) in rs.items()}
+    new_index = {n: pose["count"] + k for k, n in enumerate(todo)}
+    new_kids = {n: [] for n in todo}
+    add_to = {}                                      # pose block number -> [new block numbers]
+    for n in todo:
+        par = rs[n][1]
+        pn = rname.get(par) if par is not None else None
+        if pn is None:
+            raise NifError(f"bone '{n}' is a root in the reference")
+        if pn in new_index:
+            new_kids[pn].append(new_index[n])
+        elif pn in have and pose["nodes"][have[pn][0]]["type"] in PARENT_TYPES:
+            add_to.setdefault(have[pn][0], []).append(new_index[n])
+        else:
+            raise NifError(f"bone '{n}': its parent '{pn}' can't hold it")
+    out = bytearray(data)
+    for i in sorted(add_to, key=lambda i: pose["nodes"][i]["kids_at"], reverse=True):
+        nd = pose["nodes"][i]
+        at, extra = nd["kids_at"], add_to[i]
+        end = at + 4 + 4 * len(nd["kids"])
+        out[end:end] = struct.pack(f"<{len(extra)}i", *extra)
+        struct.pack_into("<I", out, at, len(nd["kids"]) + len(extra))
+    footer = pose["footer"] + sum(4 * len(v) for v in add_to.values())
+    out[footer:footer] = b"".join(_new_node(ref["nodes"][rs[n][0]]["name"], ref["nodes"][rs[n][0]]["flags"],
+                                            ref["nodes"][rs[n][0]]["transform"], new_kids[n]) for n in todo)
+    struct.pack_into("<I", out, len(NIF_HEADER) + 4, pose["count"] + len(todo))
+    return bytes(out), [ref["nodes"][rs[n][0]]["name"] for n in todo]
