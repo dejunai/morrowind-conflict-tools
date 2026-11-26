@@ -16,11 +16,13 @@
     Decisions are written to Data Files\MWSE\logs\mwperformers.log.
 
     While it is on, a bard also stops singing while you talk to them, and holds their lute (Weapon
-    Sheathing showed it on the back, as it is a shield).
+    Sheathing showed it on the back, as it is a shield). The performing animation (the lute) stops at the same
+    moment, for any performer, and comes back when the dialogue ends; Animated Dialogue is not patched, it
+    just finds the plain animation where it would have found the lute.
 ]]
 
 local CONFIG_NAME = "mwperformers"
-local config = mwse.loadConfig(CONFIG_NAME, { enabled = false, log = true })
+local config = mwse.loadConfig(CONFIG_NAME, { enabled = false, log = true, dialogueAnimation = true })
 
 local ANIM_PATTERNS = { "bard", "lute", "drum", "perform", "musician" }
 local SCRIPT_PATTERNS = { "bard", "lute", "drum", "perform", "musician", "minstrel" }
@@ -294,6 +296,125 @@ local function endQuiet()
     event.unregister(tes3.event.enterFrame, keepQuiet)
 end
 
+-- The performing animation. The lute is not the script's doing: it is the NPC's own animation (an animation mesh such
+-- as Animated Morrowind's, loaded into MWSE's "override layer"). The game freezes animations in menu mode, but
+-- Animated Dialogue's "Preserve Custom NPC Animations" keeps an override animation going on purpose (it steps the
+-- skeleton through that animation's own loop every frame of the dialogue), so cutting the song left the bard playing.
+-- When the singing is cut, the performer is given the plain animation (the one a stopped performer stands with) and
+-- an idle; our uiActivated handler has a higher priority than Animated Dialogue's, so it begins with that plain
+-- animation and keeps it going. When the dialogue ends the performer gets its own animation back, and the groups it
+-- was playing. Nothing of Animated Dialogue is touched: only its events are listened to, last in line.
+local AD_STARTED = "tauer.animatedDialogue.dialogueStarted"
+local AD_ENDED = "tauer.animatedDialogue.dialogueEnded"
+local AD_INTERRUPTED = "tauer.animatedDialogue.dialogueInterrupted"
+local AD_LAST = -5000                         -- after everything Animated Dialogue does at the end of a dialogue
+local BACKSTOP = 1.5                          -- seconds: the animation comes back even if that mod's end never arrives
+
+local pendingAnim                             -- { handle, plain, groups, ad }: the performer whose animation is stopped
+local backstop                                -- real-time timer for the above
+
+local function idleGroup() return tes3.animationGroup and tes3.animationGroup.idle or 0 end
+
+-- a group that is really playing something: 0 is the neutral idle, 255 "nothing" (the shield arm), 150 and up unused
+local function active(group)
+    if type(group) == "number" and group > 0 and group < 150 then return group end
+    return nil
+end
+
+-- what each body section is playing: lower, upper, shield (the order of tes3.playAnimation's parameters)
+local function currentGroups(ref)
+    local data = ref.animationData
+    local cur = data and data.currentAnimGroups
+    if not cur then return nil end
+    return { cur[1], cur[2], cur[3] }
+end
+
+local function cancelBackstop()
+    if backstop then
+        pcall(function() backstop:cancel() end)
+        backstop = nil
+    end
+end
+
+local function stopAnimation(ref)
+    if animStopped[ref] or held[ref] then return nil end     -- already standing plainly: nothing to stop or give back
+    local data = ref.animationData
+    if not (ref.sceneNode and data) then return nil end
+    local base = baseOf(ref)
+    local groups = currentGroups(ref)
+    local plain = hasPerformingAnim(base) or data.hasOverrideAnimations == true
+    local performing = groups and (active(groups[1]) or active(groups[2]) or active(groups[3]))
+    if not plain and not performing then return nil end      -- a script performer between songs: nothing playing
+    local state = { handle = tes3.makeSafeObjectHandle(ref), groups = groups }
+    if plain then
+        if not pcall(tes3.loadAnimation, { reference = ref, file = plainAnim(base) }) then return nil end
+        state.plain = true
+    end
+    pcall(tes3.playAnimation, { reference = ref, group = idleGroup() })
+    -- the dialogue is a menu mode, where nothing steps the animation: draw the first frame of the idle now
+    pcall(function() ref.animationData.actorNode:update({ controllers = true, children = true, time = 0 }) end)
+    return state
+end
+
+local function restoreAnimation()
+    local state = pendingAnim
+    pendingAnim = nil
+    cancelBackstop()
+    if not state or not state.handle:valid() then return end
+    local ref = state.handle:getObject()
+    if not ref or ref.disabled or ref.deleted or not ref.sceneNode then return end   -- gone: its animation goes with it
+    local mobile = ref.mobile
+    if ref.isDead == true or (mobile and mobile.isDead) then return end
+    if state.plain then pcall(tes3.loadAnimation, { reference = ref }) end           -- its own performing animation again
+    local g = state.groups or {}
+    local lower, upper, shield = active(g[1]), active(g[2]), active(g[3])
+    local p = { reference = ref, shield = shield }
+    if lower and lower == upper then
+        p.group = lower
+    else
+        p.lower, p.upper = lower, upper
+    end
+    if not (lower or upper or shield) then
+        if not state.plain then return end
+        p.group = idleGroup()                                                       -- restarts the idle, now the lute
+    end
+    if not (mobile and mobile.inCombat) then pcall(tes3.playAnimation, p) end       -- a fight is the AI's to animate
+    log("%s: performing animation restored after the dialogue", describe(ref))
+end
+
+local function sameRef(state, ref)
+    return state and state.handle:valid() and state.handle:getObject() == ref
+end
+
+local function beginAnimation(ref)
+    if not config.dialogueAnimation or sameRef(pendingAnim, ref) then return end
+    restoreAnimation()                                   -- another's, if one is still stopped
+    local ok, state = pcall(stopAnimation, ref)
+    if not ok then
+        log("%s: stopping the performing animation failed: %s", describe(ref), tostring(state))
+    elseif state then
+        pendingAnim = state
+        log("%s: performing animation stopped for the dialogue%s", describe(ref), state.plain and " (plain animation)" or "")
+    end
+end
+
+-- the dialogue is over: now, or once Animated Dialogue has taken its last picture of the pose (it eases out of it)
+local function onMenuExitAnimation()
+    local state = pendingAnim
+    if not state then return end
+    if not state.ad then return restoreAnimation() end
+    cancelBackstop()
+    pcall(function()
+        backstop = timer.start({ type = timer.real, duration = BACKSTOP, callback = restoreAnimation })
+    end)
+end
+
+event.register(AD_STARTED, function() if pendingAnim then pendingAnim.ad = true end end, { priority = AD_LAST })
+event.register(AD_ENDED, restoreAnimation, { priority = AD_LAST })
+event.register(AD_INTERRUPTED, restoreAnimation, { priority = AD_LAST })
+event.register(tes3.event.cellChanged, restoreAnimation)
+event.register(tes3.event.loaded, function() pendingAnim = nil cancelBackstop() end)    -- the old references are gone
+
 local function onMenuDialogActivated(e)
     local target = tes3ui.getServiceActor()
     if not target then
@@ -302,15 +423,17 @@ local function onMenuDialogActivated(e)
     end
     local ref = target and target.reference
     endQuiet()
+    if pendingAnim and not (ref and sameRef(pendingAnim, ref)) then restoreAnimation() end
     if not config.enabled or not ref or not isBardRef(ref) then return end
     quietBard = tes3.makeSafeObjectHandle(ref)
     skipScriptFrame(ref)                 -- first, or the script starts the next song
     tes3.removeSound({ reference = ref })
     event.register(tes3.event.enterFrame, keepQuiet)
     log("%s: singing paused for the dialogue", describe(ref))
+    beginAnimation(ref)                  -- before Animated Dialogue (priority), so it starts from the plain animation
 end
-event.register(tes3.event.uiActivated, onMenuDialogActivated, { filter = "MenuDialog" })
-event.register(tes3.event.menuExit, endQuiet)
+event.register(tes3.event.uiActivated, onMenuDialogActivated, { filter = "MenuDialog", priority = 100 })
+event.register(tes3.event.menuExit, function() endQuiet() onMenuExitAnimation() end)
 event.register(tes3.event.loaded, endQuiet)
 
 -- Mod Config menu ---------------------------------------------------------------------------------
@@ -331,6 +454,12 @@ event.register(tes3.event.modConfigReady, function()
         description = "Only one performer plays in each building. Off: everyone performs again as you visit each place.",
         variable = mwse.mcm.createTableVariable({ id = "enabled", table = config }),
         callback = function() if tes3.player then settleActive() end end,
+    })
+    page:createOnOffButton({
+        label = "Performers stop playing in dialogue",
+        description = "While you talk to a performer, the lute (or drum) animation stops along with the singing, and "
+            .. "it is back when the dialogue ends. Off: only the singing stops.",
+        variable = mwse.mcm.createTableVariable({ id = "dialogueAnimation", table = config }),
     })
     page:createButton({
         buttonText = "Pick again here now",

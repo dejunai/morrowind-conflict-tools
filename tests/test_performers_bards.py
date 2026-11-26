@@ -2,8 +2,9 @@
 (whichever mod added it or made it perform) one picked at random performs, the pick kept on the player; the
 others' song scripts are held through scriptExecute (filtered by script), their song stops and a performing
 animation goes back to the plain one; nobody is disabled, and bards an older version hid come back. In dialogue the bard's script is kept on its own
-one-frame skip (`if ( state )`, none of them has a MenuMode check) and the song is cut. AM_Lute is a shield, so
-Weapon Sheathing hung it on his back and hid the hand: lute shields go on that mod's exclusion list."""
+one-frame skip (`if ( state )`, none of them has a MenuMode check) and the song is cut, and the performing (lute)
+animation is stopped at the same moment, before Animated Dialogue begins, and given back when the dialogue ends.
+AM_Lute is a shield, so Weapon Sheathing hung it on his back and hid the hand: lute shields go on that mod's exclusion list."""
 import os
 import subprocess
 
@@ -217,5 +218,190 @@ print("ok")
 
 def test_one_performer_per_inn_without_disabling_anyone():
     script = CELL_SCRIPT.replace("[[MOD]]", "[[" + MOD + "]]")
+    out = subprocess.run([LUAJIT, "-"], input=script, capture_output=True, text=True, timeout=60)
+    assert out.returncode == 0 and out.stdout.strip().endswith("ok"), out.stderr + out.stdout
+
+
+ANIM_SCRIPT = r"""
+-- an event system with priorities, as MWSE has: higher first, then the order registered
+local handlers = {}
+local seq = 0
+event = {
+  register = function(name, fn, opts)
+    seq = seq + 1
+    handlers[name] = handlers[name] or {}
+    table.insert(handlers[name], { fn = fn, p = opts and opts.priority or 0, n = seq })
+  end,
+  unregister = function(name, fn)
+    for i = #(handlers[name] or {}), 1, -1 do if handlers[name][i].fn == fn then table.remove(handlers[name], i) end end
+  end,
+}
+local function fire(name, e)
+  local list = {}
+  for i, h in ipairs(handlers[name] or {}) do list[i] = h end
+  table.sort(list, function(a, b) if a.p ~= b.p then return a.p > b.p end return a.n < b.n end)
+  for _, h in ipairs(list) do h.fn(e or {}) end
+end
+local AD_START, AD_END, AD_INT = "tauer.animatedDialogue.dialogueStarted", "tauer.animatedDialogue.dialogueEnded", "tauer.animatedDialogue.dialogueInterrupted"
+local calls, speaker = {}, nil
+local timers = {}
+timer = { real = 2, delayOneFrame = function() end,
+          start = function(t) local h = { cb = t.callback, cancelled = false }
+                              h.cancel = function() h.cancelled = true end
+                              timers[#timers + 1] = h return h end }
+local function fireTimers() local l = timers timers = {} for _, h in ipairs(l) do if not h.cancelled then h.cb() end end end
+tes3 = { objectType = { npc = 1, armor = 2 }, armorSlot = { shield = 8 }, animationGroup = { idle = 0 },
+         event = setmetatable({}, { __index = function(_, k) return k end }),
+         getActiveCells = function() return {} end,
+         iterateObjects = function() return function() end end,
+         makeSafeObjectHandle = function(r) return { valid = function() return not r.gone end, getObject = function() return r end } end,
+         removeSound = function() end,
+         loadAnimation = function(p) calls[#calls + 1] = "load:" .. tostring(p.file or "own") end,
+         playAnimation = function(p)
+           local s = "play"
+           for _, k in ipairs({ "group", "lower", "upper", "shield" }) do if p[k] ~= nil then s = s .. " " .. k .. "=" .. p[k] end end
+           calls[#calls + 1] = s
+         end }
+tes3ui = { getServiceActor = function() return speaker end, findMenu = function() end }
+include = function() end
+local seen = {}                              -- another mod's handler (Animated Dialogue's), registered before ours
+event.register("uiActivated", function() seen[#seen + 1] = calls[1] end)
+mwse = { loadConfig = function(_, d) d.enabled = true; d.log = false; d.dialogueAnimation = DIALOGUE_ANIMATION; return d end, saveConfig = function() end }
+dofile([[MOD]])
+local function check(ok, what) if not ok then error(what .. " / " .. table.concat(calls, ", "), 2) end end
+local function last() return calls[#calls] end
+
+local function performer(mesh, script, groups, override, extra)
+  local base = { objectType = 1, id = "bard", mesh = mesh, script = script and { id = script } }
+  local ref = { object = { id = "bard", baseObject = base, objectType = 1 }, context = { state = 0, positiononce = 1 },
+                sceneNode = {}, animationData = { currentAnimGroups = groups, hasOverrideAnimations = override,
+                  actorNode = { update = function(_, o) calls[#calls + 1] = "update" .. (o.time and (" t=" .. o.time) or "") end } },
+                mobile = {} }
+  for k, v in pairs(extra or {}) do ref[k] = v end
+  return { reference = ref }
+end
+local function reset() calls = {} timers = {} end
+
+fire("initialized")
+
+-- 1. a lute player with Animated Dialogue: stopped before it starts, given back once its dialogue has ended
+speaker = performer("am\\anim_lute.nif", nil, { 0, 0, 255 }, true)
+fire("uiActivated")
+check(calls[1] == "load:base_anim.nif" and calls[2] == "play group=0" and calls[3] == "update t=0", "stopped to the plain animation, idle")
+local n = #calls
+fire(AD_START, {})                          -- Animated Dialogue begins: it finds the plain animation
+check(#calls == n, "the start of Animated Dialogue changes nothing")
+fire("uiActivated")                         -- back from barter
+check(#calls == n, "a second activation of the same dialogue does not stop it again")
+fire("menuExit")
+check(#calls == n and #timers == 1, "with Animated Dialogue the end is left to it, with a backstop timer")
+fire(AD_END, {})
+check(calls[n + 1] == "load:own" and calls[n + 2] == "play group=0" and #calls == n + 2, "its own animation back, idle restarted: " .. tostring(calls[n + 1]))
+fireTimers()
+check(#calls == n + 2, "the backstop does nothing once it is back")
+
+-- 2. no Animated Dialogue (or it isn't handling this one): back when the menu closes
+reset()
+speaker = performer("am\\anim_lute.nif", nil, { 0, 0, 255 }, true)
+fire("uiActivated")
+fire("menuExit")
+check(calls[1] == "load:base_anim.nif" and calls[4] == "load:own", "restored at menuExit")
+local n2 = #calls
+fire("menuExit")
+check(#calls == n2, "once")
+
+-- 3. the backstop restores it if Animated Dialogue never ends
+reset()
+speaker = performer("am\\anim_lute.nif", nil, { 0, 0, 255 }, true)
+fire("uiActivated"); fire(AD_START, {}); fire("menuExit")
+local n3 = #calls
+fireTimers()
+check(calls[n3 + 1] == "load:own", "backstop restores")
+
+-- 4. a script performer playing a group (no override animation): idle, then the same groups
+reset()
+speaker = performer("base_anim.nif", "DM_Bard_script", { 5, 5, 255 }, false)
+fire("uiActivated")
+check(calls[1] == "play group=0" and not calls[1]:find("load"), "no animation file is swapped for a group player")
+fire(AD_START, {}); fire(AD_END, {})
+check(last() == "play group=5", "the same group again: " .. last())
+reset()
+speaker = performer("base_anim.nif", "DM_Bard_script", { 0, 7, 3 }, false)
+fire("uiActivated"); fire("menuExit")
+check(last() == "play upper=7 shield=3", "body sections kept apart: " .. last())
+
+-- 5. a script performer between songs, nothing playing: left alone
+reset()
+speaker = performer("base_anim.nif", "DM_Bard_script", { 0, 0, 255 }, false)
+fire("uiActivated"); fire("menuExit")
+check(#calls == 0, "nothing playing, nothing touched")
+
+-- 6. edge cases: dead, gone, a fight, another dialogue, load
+reset()
+speaker = performer("am\\anim_lute.nif", nil, { 0, 0, 255 }, true)
+fire("uiActivated")
+speaker.reference.mobile.isDead = true
+local n6 = #calls
+fire("menuExit")
+check(#calls == n6, "a performer who died is not given anything")
+reset()
+speaker = performer("am\\anim_lute.nif", nil, { 0, 0, 255 }, true)
+fire("uiActivated")
+speaker.reference.gone = true
+n6 = #calls
+fire("menuExit")
+check(#calls == n6, "a performer who is gone is not touched")
+reset()
+speaker = performer("am\\anim_lute.nif", nil, { 4, 4, 255 }, true)
+fire("uiActivated")
+speaker.reference.mobile.inCombat = true
+fire("menuExit")
+check(calls[4] == "load:own" and #calls == 4, "in a fight his own animation is back, but nothing is started for him")
+reset()
+speaker = performer("am\\anim_lute.nif", nil, { 0, 0, 255 }, true)
+fire("uiActivated")
+local other = performer("base_anim.nif", "guard_script", { 0, 0, 255 }, false)
+speaker = other
+fire("uiActivated")
+check(calls[4] == "load:own", "talking to someone else gives the first his animation back")
+reset()
+speaker = performer("am\\anim_lute.nif", nil, { 0, 0, 255 }, true)
+fire("uiActivated"); fire("loaded")
+local n7 = #calls
+fire("menuExit"); fire(AD_END, {}); fireTimers()
+check(#calls == n7, "loading a save forgets it")
+reset()
+speaker = performer("am\\anim_lute.nif", nil, { 0, 0, 255 }, true)
+fire("uiActivated"); fire("cellChanged")
+check(calls[4] == "load:own", "a cell change gives it back")
+
+-- 7. someone who doesn't perform
+reset()
+speaker = performer("base_anim.nif", "guard_script", { 0, 0, 255 }, false)
+fire("uiActivated"); fire("menuExit")
+check(#calls == 0, "not a performer: untouched")
+
+-- 8. the order: Animated Dialogue's uiActivated handler (priority 0, registered before or after ours) finds the
+-- plain animation already in place
+reset()
+seen = {}
+speaker = performer("am\\\\anim_lute.nif", nil, { 0, 0, 255 }, true)
+fire("uiActivated")
+check(seen[1] == "load:base_anim.nif", "ours ran before another mod's uiActivated handler")
+print("ok")
+"""
+
+
+@pytest.mark.parametrize("on", ["true", "false"])
+def test_performing_animation_stops_in_dialogue_and_comes_back(on):
+    script = ANIM_SCRIPT.replace("DIALOGUE_ANIMATION", on).replace("[[MOD]]", "[[" + MOD + "]]")
+    if on == "false":
+        script = script.split("fire(\"initialized\")")[0] + """fire("initialized")
+speaker = { reference = { object = { id = "bard", baseObject = { objectType = 1, id = "bard", mesh = "am\\\\anim_lute.nif" }, objectType = 1 },
+  context = { state = 0, positiononce = 1 }, sceneNode = {}, animationData = { currentAnimGroups = { 0, 0, 255 }, hasOverrideAnimations = true } } }
+fire("uiActivated"); fire("menuExit")
+if #calls ~= 0 then error("switched off: no animation touched / " .. table.concat(calls, ", ")) end
+print("ok")
+"""
     out = subprocess.run([LUAJIT, "-"], input=script, capture_output=True, text=True, timeout=60)
     assert out.returncode == 0 and out.stdout.strip().endswith("ok"), out.stderr + out.stdout
