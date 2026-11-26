@@ -19,7 +19,7 @@ tes3.player = { id = "player" }
 tes3.mobilePlayer = { reference = tes3.player }
 event.trigger("loaded", {})
 assert(BARD.present() and BARD.enabled())
-assert(BARD.stats().bookends == 9130, "runtime work runs on loaded")
+assert(BARD.stats().bookends == 9000, "runtime work runs on loaded")
 BARD.setWanted(false)
 assert(not BARD.enabled() and BARD.stats().bookends == nil, "in-game off removes the bookends")
 tes3.player, tes3.mobilePlayer = nil, nil

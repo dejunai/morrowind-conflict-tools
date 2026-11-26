@@ -257,7 +257,8 @@ if WBSR_FILE then
 local voiceoverRef
 local function saveBlock() return false end
 local function addTempSoundHP(e)
-  if voiceoverRef or not e.path:lower():find("^vo[\\/]") then return end
+  local lc = e.path and e.path:lower() or ""
+  if voiceoverRef or not (e.isVoiceover or lc:find("vo[\\/]")) then return end
   voiceoverRef = e.reference
   if not event.isRegistered("save", saveBlock) then event.register("save", saveBlock, { priority = 9147 }) end
 end
@@ -282,7 +283,7 @@ def wbsr_harness(file=True, cfg="nil"):
 def test_wbsr_bard_lets_saves_through_while_a_bard_sings_but_not_for_a_speech(tmp_path):
     run(tmp_path, wbsr_harness() + r'''
 assert(BARD and BARD.present() and BARD.enabled(), "on by default with WBSR there")
-assert(BARD.stats().bookends == 9130, "placed around WBSR's own addTempSound handler")
+assert(BARD.stats().bookends == 9000, "bookends around stock and luafix WBSR addTempSound priorities")
 local raflod = { id = "raflod the braggart00000000", object = { name = "Raflod the Braggart", id = "raflod the braggart" } }
 -- a bard song: WBSR takes it as its voiceover and blocks saving; the block is lifted at once
 event.trigger("addTempSound", { path = "Vo\\Bard\\Red Diamond.mp3", reference = raflod, isVoiceover = true })
@@ -330,3 +331,92 @@ for _, l in ipairs(logged) do print(l) end
 print("OK")
 ''')
     assert "wbsr_bard" not in out
+
+@need_lua
+def test_wbsr_bard_lifts_a_block_wbsr_defers_until_enter_frame(tmp_path):
+    """WBSR disableSave registers saveBlock on enterFrame (9147) when isSavingOrLoading;
+    the intercept must lift it on that same frame, not only during addTempSound."""
+    run(tmp_path, wbsr_harness() + r"""
+-- Replace the immediate stub HP with WBSR's deferred disableSave (enterFrame 9147).
+do
+  local stubHP
+  for _, h in ipairs(getEventTable("addTempSound")) do
+    local src = (debug.getinfo(h, "S").source or ""):lower()
+    if src:find("abot[/\\]wbsr[/\\]") then stubHP = h break end
+  end
+  assert(stubHP, "WBSR stub HP should be registered")
+  event.unregister("addTempSound", stubHP)
+  WBSR = load([=[
+local voiceoverRef
+local function saveBlock() return false end
+local function registerSaveBlock()
+  if not event.isRegistered("save", saveBlock) then
+    event.register("save", saveBlock, { priority = 9147 })
+  end
+end
+local function enterFrameLS()
+  if tes3.dataHandler and tes3.dataHandler.nonDynamicData and tes3.dataHandler.nonDynamicData.isSavingOrLoading then
+    return
+  end
+  event.unregister("enterFrame", enterFrameLS)
+  registerSaveBlock()
+end
+local function addTempSoundHP(e)
+  if voiceoverRef then return end
+  local lc = e.path and e.path:lower() or ""
+  if not (e.isVoiceover or lc:find("vo[\\/]")) then return end
+  voiceoverRef = e.reference
+  if tes3.dataHandler and tes3.dataHandler.nonDynamicData and tes3.dataHandler.nonDynamicData.isSavingOrLoading then
+    event.register("enterFrame", enterFrameLS, { priority = 9147 })
+    return
+  end
+  registerSaveBlock()
+end
+event.register("addTempSound", addTempSoundHP, { priority = 9130 })
+return { done = function() voiceoverRef = nil event.unregister("save", saveBlock) end,
+         blocking = function() return event.isRegistered("save", saveBlock) end }
+]=], "@Data Files\\MWSE\\mods\\abot\\WBSR\\main.lua")()
+end
+
+local raflod = { id = "raflod the braggart00000000", object = { name = "Raflod the Braggart", id = "raflod the braggart" } }
+tes3.dataHandler = { nonDynamicData = { isSavingOrLoading = true } }
+event.trigger("addTempSound", { path = "Vo\\Bard\\Red Diamond.mp3", reference = raflod, isVoiceover = true })
+assert(not WBSR.blocking(), "WBSR has not registered yet while a save/load is in progress")
+event.trigger("enterFrame", {})
+assert(not WBSR.blocking(), "still deferred while isSavingOrLoading")
+tes3.dataHandler.nonDynamicData.isSavingOrLoading = false
+-- The stub trigger walks the live table; enterFrameLS unregisters itself before our 9146
+-- callback, which would skip the lift on this one tick. MWSE copies the list first, so
+-- in game both run on the same frame. A second trigger is the stub equivalent.
+event.trigger("enterFrame", {})
+event.trigger("enterFrame", {})
+assert(not WBSR.blocking(), "the delayed save block is lifted once WBSR registers it")
+event.trigger("save", { filename = "quiksave", name = "Quicksave" })
+nextFrame()
+for _, l in ipairs(logged) do assert(not l:find("swallowed"), l) end
+print("OK")
+""")
+    log = own_log(tmp_path, "mwsaveguard.log")
+    assert "Released WBSR's save block for a bard song: Raflod the Braggart" in log
+    assert "Vo\\Bard\\Red Diamond.mp3" in log
+
+
+@need_lua
+def test_wbsr_bard_recognizes_sound_prefix_paths_and_leaves_a_speech_blocked(tmp_path):
+    run(tmp_path, wbsr_harness() + r"""
+assert(BARD.isBardVoiceover("Vo\\Bard\\Red Diamond.mp3", nil, true))
+assert(BARD.isBardVoiceover("Sound\\Vo\\Bard\\bathmar\\song.mp3", nil, false), "Sound\\ prefix must still count as a bard song")
+assert(BARD.isBardVoiceover("sound/vo/bard/Red Diamond.mp3", nil, 1))
+assert(not BARD.isBardVoiceover("Vo\\D\\m\\Azura speech.mp3", { object = { id = "azura" } }, true))
+
+local raflod = { id = "raflod the braggart00000000", object = { name = "Raflod the Braggart", id = "raflod the braggart" } }
+event.trigger("addTempSound", { path = "Sound\\Vo\\Bard\\Red Diamond.mp3", reference = raflod, isVoiceover = true })
+assert(not WBSR.blocking(), "a Sound\\Vo\\Bard path is lifted")
+
+WBSR.done()
+event.trigger("addTempSound", { path = "Vo\\D\\m\\Azura speech.mp3", reference = { object = { id = "azura" } }, isVoiceover = true })
+assert(WBSR.blocking(), "a speech still blocks saving")
+print("OK")
+""")
+    log = own_log(tmp_path, "mwsaveguard.log")
+    assert "Sound\\Vo\\Bard\\Red Diamond.mp3" in log
