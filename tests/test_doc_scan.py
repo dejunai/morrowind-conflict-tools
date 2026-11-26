@@ -5,9 +5,14 @@ import textwrap
 
 import pytest
 
-from conftest import SRC
+from conftest import SRC, _load
 
-import doc_scan as DS
+# doc_scan.py is a repository-only developer tool: deploy.py never ships it and MWManager does not vendor it, so
+# where it is missing these tests skip (as test_deploy.py does for deploy.py) instead of failing to import.
+DOC_SCAN = os.path.join(SRC, "doc_scan.py")
+pytestmark = pytest.mark.skipif(not os.path.isfile(DOC_SCAN),
+                                reason="doc_scan.py is a repository-only dev tool, not vendored here (MWManager)")
+DS = _load("doc_scan") if os.path.isfile(DOC_SCAN) else None
 
 
 def write(root, rel, text):

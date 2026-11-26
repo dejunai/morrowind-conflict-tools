@@ -3745,34 +3745,75 @@ def _journal_begin(aj, d, root, candidates):
         return False
 
 
+def _lp_key(rel):
+    return rel.replace("/", "\\").replace(os.sep, "\\").strip().lower().lstrip("\\")
+
+
+def _follow_moves(root, fixes, lines, lp_plan, fs):
+    """The repairs of files a long-path move just took to their short path, made there in the same run: each fix
+    of a moved file (or of one of its animation twins) is pointed at the short path, keeping the plan line it was
+    reviewed under (lines[i] is fixes[i]'s). The short path is what the mod deploys, so its original goes to
+    Off\\<plugin>\\<reason>\\<short path> (a long original path there would be over MAX_PATH again). An ASCII
+    rename of a moved file is settled by the move (short names are plain ASCII): it is only marked done. A file
+    whose move failed keeps its repair for the next run (still listed). Returns (fixes, lines, settled lines)."""
+    moved, gone = {}, set()
+    for lp in lp_plan:
+        pairs = [(lp["orig"], lp["short"])] + [tuple(t) for t in (lp.get("twins") or [])]
+        here = os.path.exists(_xp(os.path.join(root, fs(lp["short"]))))
+        for old, short in pairs:
+            gone.add(_lp_key(old))
+            if here:
+                moved[_lp_key(old)] = short
+    out, out_lines, settled = [], [], []
+    for f, a in zip(fixes, lines):
+        k = _lp_key(f[2])
+        if k not in gone:
+            out.append(f)
+            out_lines.append(a)
+        elif k in moved:
+            if f[0] == "ascii":
+                settled.append(a)
+                continue
+            rel = fs(moved[k])
+            out.append((f[0], os.path.join(root, rel), rel) + tuple(f[3:]))
+            out_lines.append(a)
+    return out, out_lines, settled
+
+
 def _repair(ares, d, root, fixes, lp_plan, plug):
-    """Make one mod's repairs and mark each one that worked in ares["done"]."""
+    """Make one mod's repairs and mark each one that worked in ares["done"] (under the plan line it was reviewed
+    as). Long-path moves come first; the repairs of the files they moved are made at the short path (see
+    _follow_moves), so a file both too long and broken is fixed in one --apply."""
     m, ah, game_dir = ares["m"], ares["ah"], ares["game_dir"]
+    lines = asset_action_lines({"fixes": fixes, "lp_plan": []})
     if lp_plan:
         lpm = m.longpaths_module()
+        fs = lpm.fs if hasattr(lpm, "fs") else (lambda r: r.replace("\\", os.sep).replace("/", os.sep))
         n = lpm.apply_mod(root, lp_plan, m, game_dir, plug, log=print)
         for lp, a in zip(lp_plan, asset_action_lines({"fixes": [], "lp_plan": lp_plan})):
-            if os.path.exists(os.path.join(root, lpm.fs(lp["short"]) if hasattr(lpm, "fs") else lp["short"])):
+            if os.path.exists(_xp(os.path.join(root, fs(lp["short"])))):
                 ares["done"].add((d, a))
         print(f"    -> {n} file(s) moved to a short path (listed in mwdialog_longpaths.json; "
               f"mwdialog_check --longpaths-undo puts them back)")
-        gone = {lp["orig"].lower() for lp in lp_plan} | {t[0].lower() for lp in lp_plan for t in lp["twins"]}
-        fixes = [f for f in fixes if f[2].replace("/", "\\").lower() not in gone]   # moved: next run
+        fixes, lines, settled = _follow_moves(root, fixes, lines, lp_plan, fs)
+        for a in settled:
+            ares["done"].add((d, a))
+    line_of = {id(f): a for f, a in zip(fixes, lines)}
     dfixes = [f for f in fixes if f[0] == "dummy"]
     renamed = {f[1]: f[3] for f in fixes if f[0] == "ascii" and isinstance(f[3], str)}
     fixes = [f for f in fixes if f[0] != "dummy"]
     if fixes:
         done, skipped = ah.apply_folder(root, fixes, m, game_dir, plug)
-        for f, a in zip(fixes, asset_action_lines({"fixes": fixes, "lp_plan": []})):
+        for f in fixes:
             if not any(sk.startswith(f[2] + " (") for sk in skipped):
-                ares["done"].add((d, a))
+                ares["done"].add((d, line_of[id(f)]))
         print(f"    -> {done} file(s) repaired (originals in Off\\{plug}\\)"
               + (f"; {len(skipped)} skipped, e.g. {skipped[0]}" if skipped else ""))
     if dfixes:
         done, skipped = make_dummies(root, dfixes, m, plug, renamed)
-        for f, a in zip(dfixes, asset_action_lines({"fixes": dfixes, "lp_plan": []})):
+        for f in dfixes:
             if not any(sk.startswith(renamed.get(f[1], f[2]) + " (") or sk.startswith(f[2] + " (") for sk in skipped):
-                ares["done"].add((d, a))
+                ares["done"].add((d, line_of[id(f)]))
         print(f"    -> {done} broken file(s) moved to Off\\<plugin>\\broken\\, a dummy put in each one's place"
               + (f"; {len(skipped)} skipped, e.g. {skipped[0]}" if skipped else ""))
 

@@ -33,7 +33,8 @@ def test_first_run_records_the_core_files_and_a_second_run_matches(game):
     root, data = game
     first = MH.verify(str(data))
     assert sorted(first["recorded"]) == sorted(MH.CORE) and not MH.failed(first)
-    assert os.path.isfile(root / MH.RECORD)                 # beside Data Files here; generated\ when installed
+    assert os.path.isfile(MH.record_path(str(data)))         # the test's own folder (conftest); never the game's
+    assert not os.path.exists(root / MH.RECORD) and not os.path.exists(data / MH.RECORD)
     second = MH.verify(str(data))
     assert second["checked"] == 6 and not second["recorded"] and not MH.failed(second)
     assert any("6 file(s) match" in line for _e, line in MH.report(second))
@@ -66,11 +67,11 @@ def test_missing_tribunal_and_bloodmoon_are_skipped_quietly_but_morrowind_is_req
 def test_our_patch_is_recorded_when_written_and_a_later_edit_is_a_mismatch(game):
     root, data = game
     path = write_our_patch(data)
-    rec, _err = MH.read_record(str(root / MH.RECORD))
+    rec, _err = MH.read_record(MH.record_path(str(data)))
     assert rec["patches"]["mwdialog_check Multipatch.esp"]["sha256"] == MH.sha256_file(path)
     # a mod's own plugin written the same way is not ours: not recorded
     T.write_plugin_bytes(str(data / "SomeMod.esp"), open(path, "rb").read().replace(b"mwdialog_check", b"someone_else__"))
-    rec, _err = MH.read_record(str(root / MH.RECORD))
+    rec, _err = MH.read_record(MH.record_path(str(data)))
     assert "SomeMod.esp" not in rec["patches"]
     assert not MH.failed(MH.verify(str(data)))
     with open(path, "ab") as f:
@@ -90,7 +91,7 @@ def test_a_recorded_patch_gone_from_data_files_is_missing_only_while_listed(game
     assert res["missing"] == [("mwdialog_check Multipatch.esp", "patch")] and MH.failed(res)
     res = MH.verify(str(data), listed=["Morrowind.esm"])
     assert res["forgotten"] == ["mwdialog_check Multipatch.esp"] and not MH.failed(res)
-    rec, _err = MH.read_record(str(root / MH.RECORD))
+    rec, _err = MH.read_record(MH.record_path(str(data)))
     assert rec["patches"] == {}
 
 
@@ -145,7 +146,10 @@ def test_rebaseline_accepts_the_files_as_they_are(game, capsys):
 
 def test_an_unreadable_record_fails_until_rebaselined(game):
     root, data = game
-    (root / MH.RECORD).write_text("{not json")
+    rp = MH.record_path(str(data))
+    os.makedirs(os.path.dirname(rp), exist_ok=True)
+    with open(rp, "w") as f:
+        f.write("{not json")
     res = MH.verify(str(data))
     assert MH.failed(res) and res["error"]
     MH.rebaseline(str(data))
@@ -155,9 +159,73 @@ def test_an_unreadable_record_fails_until_rebaselined(game):
 def test_rebaseline_picks_up_a_patch_built_before_the_record_existed(game):
     root, data = game
     path = write_our_patch(data)
-    os.remove(root / MH.RECORD)                               # as if built by a version without the record
+    os.remove(MH.record_path(str(data)))                      # as if built by a version without the record
     (data / "SomeMod.esp").write_bytes(open(path, "rb").read().replace(b"mwdialog_check", b"someone_else__"))
     lines = MH.rebaseline(str(data))
     assert any(line.startswith("  mwdialog_check Multipatch.esp: recorded") for line in lines)
-    rec, _err = MH.read_record(str(root / MH.RECORD))
+    rec, _err = MH.read_record(MH.record_path(str(data)))
     assert list(rec["patches"]) == ["mwdialog_check Multipatch.esp"]
+
+
+# ------------------------------------------------------------------------------- where the record is kept
+def _valid_record(path):
+    MH.write_record(path, dict(MH.empty_record(), core={"Morrowind.esm": MH._entry("0" * 64, 1)}))
+
+
+def test_a_game_the_tools_are_not_installed_in_gets_a_record_beside_the_tools_never_in_the_game(
+        game, tmp_path, monkeypatch):
+    root, data = game
+    monkeypatch.delenv(MH.RECORD_DIR_ENV, raising=False)
+    monkeypatch.setattr(MH.MP, "GENERATED_DIR", str(tmp_path / "tools" / "generated"))
+    rp = MH.record_path(str(data))
+    assert os.path.dirname(rp) == str(tmp_path / "tools" / "generated")
+    assert os.path.basename(rp) == MH.keyed_name(str(root)) != MH.RECORD
+    MH.verify(str(data))
+    write_our_patch(data)
+    assert os.path.isfile(rp)
+    assert not os.path.exists(root / MH.RECORD) and not os.path.exists(data / MH.RECORD)
+    other = tmp_path / "Other Game" / "Data Files"                  # one record per game
+    other.mkdir(parents=True)
+    assert MH.record_path(str(other)) != rp
+
+
+def test_a_record_an_older_version_left_in_the_game_folder_is_moved_and_still_used(game, tmp_path, monkeypatch):
+    root, data = game
+    monkeypatch.delenv(MH.RECORD_DIR_ENV, raising=False)
+    monkeypatch.setattr(MH.MP, "GENERATED_DIR", str(tmp_path / "tools" / "generated"))
+    _valid_record(str(root / MH.RECORD))
+    rp = MH.record_path(str(data))
+    assert not os.path.exists(root / MH.RECORD) and os.path.isfile(rp)
+    rec, err = MH.read_record(rp)
+    assert err is None and rec["core"]["Morrowind.esm"]["sha256"] == "0" * 64
+    res = MH.verify(str(data))                                      # the old baseline is the one compared with
+    assert [c[0] for c in res["changed"]] == ["Morrowind.esm"]
+
+
+def test_a_caller_that_routes_state_path_keeps_its_place_and_gets_the_old_record(game, tmp_path, monkeypatch):
+    root, data = game                                               # MWManager routes it to its outputs folder
+    monkeypatch.delenv(MH.RECORD_DIR_ENV, raising=False)
+    outputs = tmp_path / "outputs"
+    monkeypatch.setattr(MH.MP, "state_path", lambda base, name: os.path.join(str(outputs), name))
+    _valid_record(str(root / MH.RECORD))
+    rp = MH.record_path(str(data))
+    assert rp == str(outputs / MH.RECORD) and os.path.isfile(rp) and not os.path.exists(root / MH.RECORD)
+
+
+def test_installed_in_the_game_the_record_stays_in_conflict_tools_generated(game, tmp_path, monkeypatch):
+    root, data = game
+    monkeypatch.delenv(MH.RECORD_DIR_ENV, raising=False)
+    gen = root / "conflict-tools" / "generated"
+    monkeypatch.setattr(MH.MP, "state_path", lambda base, name: os.path.join(str(gen), name)
+                        if os.path.normcase(base) == os.path.normcase(str(root)) else os.path.join(base, name))
+    assert MH.record_path(str(data)) == str(gen / MH.RECORD)
+
+
+def test_a_caller_can_choose_the_folder(game, tmp_path, monkeypatch):
+    root, data = game
+    monkeypatch.delenv(MH.RECORD_DIR_ENV, raising=False)
+    monkeypatch.setattr(MH, "RECORD_DIR", str(tmp_path / "mine"))
+    assert MH.record_path(str(data)) == str(tmp_path / "mine" / MH.RECORD)
+    monkeypatch.setattr(MH, "RECORD_DIR", None)
+    monkeypatch.setenv(MH.RECORD_DIR_ENV, str(tmp_path / "env"))
+    assert MH.record_path(str(data)) == str(tmp_path / "env" / MH.RECORD)

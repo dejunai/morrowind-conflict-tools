@@ -6,9 +6,13 @@ What is checked (all in Data Files):
   * every plugin these tools generate (the patches, AutoMerge and --merge outputs), recorded by the code that
     writes it, once the file is final. A rebuild records the new hash: that is expected.
 
-The baseline is recorded the first time a file is seen (never shipped, never in the repository) in
-mwdialog_play_hashes.json, in the tools' generated folder (state_path: <game>\\conflict-tools\\generated\\ when
-installed in the game). Later --play runs compare against it. A file that changed, or a recorded patch that is
+The baseline is recorded the first time a file is seen (never shipped, never in the repository), in the tools'
+own generated folder, never in the game folder (record_path): installed in the game it is
+<game>\\conflict-tools\\generated\\mwdialog_play_hashes.json; for another game (the tools run from elsewhere) it is
+generated\\mwdialog_play_hashes-<game folder>-<8 hex>.json beside this script, one record per game. A caller can
+choose the folder (RECORD_DIR, or the MWDIALOG_PLAY_HASHES_DIR environment variable), and a caller that routes
+mwdialog_paths.state_path (MWManager: its outputs folder) keeps its routing. A record an older version left in the
+game folder is moved to the new place the first time. Later --play runs compare against it. A file that changed, or a recorded patch that is
 gone from Data Files while the load order still lists it, makes --play refuse to start the game (exit 4) with
 one line per file; --play-force prints the same warning and starts it anyway. --rebaseline-hashes accepts the
 current files as the new baseline.
@@ -19,6 +23,8 @@ import datetime
 import hashlib
 import json
 import os
+import re
+import shutil
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -34,6 +40,8 @@ OUR_AUTHOR = b"mwdialog_check"          # the TES3 header author of every plugin
 CHUNK = 1 << 20
 SHORT = 12                              # hex digits of a hash shown in messages
 REFUSED = 4                             # --play's exit code when the hash check fails
+RECORD_DIR = None                       # a caller's folder for the record (else MWDIALOG_PLAY_HASHES_DIR, else below)
+RECORD_DIR_ENV = "MWDIALOG_PLAY_HASHES_DIR"
 
 
 def sha256_file(path):
@@ -58,9 +66,61 @@ def find(data_dir, name):
     return None
 
 
+def _same(a, b):
+    return os.path.normcase(os.path.abspath(a)) == os.path.normcase(os.path.abspath(b))
+
+
+def keyed_name(game_dir):
+    """The record's name in the tools' generated folder for a game they are not installed in: one per game."""
+    game = os.path.abspath(game_dir)
+    tag = re.sub(r"[^A-Za-z0-9_-]+", "_", os.path.basename(game.rstrip("\\/")) or "game").strip("_")[:32] or "game"
+    h = hashlib.sha1(os.path.normcase(game).encode("utf-8")).hexdigest()[:8]
+    return f"{os.path.splitext(RECORD)[0]}-{tag}-{h}.json"
+
+
+def _move_into(target, olds):
+    """Move the first existing older record in olds to target (when target has none). A record that can't be
+    moved is copied; one that can't be copied either is left, and its path is returned to be read where it is."""
+    if os.path.exists(target):
+        return target
+    for old in olds:
+        if not old or _same(old, target) or not os.path.isfile(old):
+            continue
+        try:
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            try:
+                os.replace(old, target)
+            except OSError:
+                shutil.copy2(old, target)
+                try:
+                    os.remove(old)
+                except OSError:
+                    pass
+            print(f"  (the --play hash record moved from {old} to {target})", file=sys.stderr)
+        except OSError as e:
+            print(f"  (the --play hash record in {old} could not be moved ({e}); read where it is)", file=sys.stderr)
+            return old
+        break
+    return target
+
+
 def record_path(data_dir):
-    """Where the baseline is kept: the tools' generated folder for this game (never Data Files)."""
-    return MP.state_path(os.path.dirname(os.path.abspath(data_dir)), RECORD)
+    """Where the baseline for the game of data_dir is kept: never the game folder nor Data Files.
+    1. RECORD_DIR or $MWDIALOG_PLAY_HASHES_DIR (a caller's choice): <that folder>\\mwdialog_play_hashes.json.
+    2. mwdialog_paths.state_path(<game>, RECORD) when it points outside the game folder: installed in the game,
+       <game>\\conflict-tools\\generated\\; or wherever a caller routes it (MWManager: its outputs folder).
+    3. Otherwise (the tools run from elsewhere): the generated folder beside this script, keyed_name(<game>).
+    A record an older version wrote in the game folder (or at a place used before) is moved to the chosen one."""
+    game = os.path.dirname(os.path.abspath(data_dir))
+    in_game = os.path.join(game, RECORD)
+    fallback = os.path.join(MP.GENERATED_DIR, keyed_name(game))
+    chosen = RECORD_DIR or os.environ.get(RECORD_DIR_ENV)
+    if chosen:
+        return _move_into(os.path.join(os.path.abspath(chosen), RECORD), (in_game, fallback))
+    routed = MP.state_path(game, RECORD)
+    if not _same(os.path.dirname(routed), game):
+        return _move_into(routed, (in_game, fallback))
+    return _move_into(fallback, (in_game,))
 
 
 def empty_record():

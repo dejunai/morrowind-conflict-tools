@@ -4278,10 +4278,20 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
                 except (L.LuaSyntaxError, RecursionError) as e:
                     ent["error"] = f"can't be parsed ({e}); left alone"
                     continue
-                old = {(f["rule"], f["line"], f["what"]): f["conf"] for f in ent["findings"]}
+                # F1 is decided per mod above (shim or not, and the fix text naming the budgets, the log and why):
+                # the fresh analysis only has the analyser's defaults ("log shim"), so each F1 finding takes the
+                # decided conf and fix, and one the per-mod pass dropped (a logger without the shim) stays out.
+                # Otherwise a cached file's plan line differs from an uncached one and --apply refuses the plan.
+                old = {(f["rule"], f["line"], f["what"]): f for f in ent["findings"] if f["rule"] == "F1"}
+                kept = []
                 for f in a.findings:
                     if f["rule"] == "F1":
-                        f["conf"] = old.get((f["rule"], f["line"], f["what"]), f["conf"])
+                        was = old.get((f["rule"], f["line"], f["what"]))
+                        if was is None:
+                            continue
+                        f["conf"], f["fix"] = was["conf"], was["fix"]
+                    kept.append(f)
+                a.findings[:] = kept
                 ent["findings"] = _drop_load_like(a.findings, loadlike) + [
                     f for f in ent["findings"] if f["rule"] in ("H5", "H7", "T1")]
             images = image_findings(a.src, roots)

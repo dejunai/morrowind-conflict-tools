@@ -627,3 +627,61 @@ def test_a_version_6_shim_is_upgraded_to_the_one_with_io(tmp_path):
     e, _ = plan(tmp_path, {"main.lua": "--[[localpatch 5: F1]] " + v6 + "print('x')\n"})
     t = e["main.lua"]["patch"]["text"]
     assert e["main.lua"]["patch"]["ok"] and "S.v == 7" in t and "S.v == 6" not in t and t.count(lf.SHIM_END) == 1
+
+
+# ------------------------------------------------------------------------- plan, then --apply (cached second read)
+class MemCache:
+    """The asset cache's get/put, JSON round-tripped like the real one, in memory."""
+
+    def __init__(self):
+        self.d = {}
+
+    def get(self, key, stamp):
+        hit = self.d.get(key)
+        return json.loads(hit[1]) if hit and hit[0] == stamp else None
+
+    def put(self, key, stamp, result):
+        self.d[key] = (stamp, json.dumps(result))
+
+
+@pytest.fixture
+def mem_cache(monkeypatch):
+    from conftest import ah
+    cache = MemCache()
+    monkeypatch.setattr(lf, "_cache", lambda game_dir: (ah, cache))
+    return cache
+
+
+@pytest.mark.parametrize("src,scope", [(SPAM, None), (SPAM, "off"), (LOGGER, None), (LOGGER, "off")])
+def test_a_cached_second_read_plans_the_same_f1_lines_as_the_first(tmp_path, mem_cache, src, scope):
+    data, _root = mod_tree(tmp_path, {"main.lua": src})
+
+    def lines():
+        rep = lf.check_paths([str(data)], CFG, checker=OkChecker(), use_cache=True, data_dir=str(tmp_path / "none"),
+                             log_scope=scope)
+        return lf.format_report(rep, indent="  ")[0]
+
+    first = lines()
+    assert mem_cache.d                                               # the second read comes from the cache
+    assert lines() == first
+    f1 = [ln for ln in first if " F1 " in ln]
+    assert f1 and all("-> log shim" not in ln or "-> log shim:" in ln for ln in f1)
+
+
+def test_plan_then_apply_round_trip_with_the_shim_is_not_refused(tmp_path, mem_cache, monkeypatch, capsys):
+    game = tmp_path / "game"
+    (game / "Data Files").mkdir(parents=True)
+    data, root = mod_tree(tmp_path, {"main.lua": SPAM})
+    monkeypatch.setattr(lf, "HERE", str(game))
+    monkeypatch.setattr(lf, "JOURNAL", str(tmp_path / "luafix_journal.jsonl"))
+    monkeypatch.setattr(lf, "BACKUP_ROOT", str(tmp_path / "backups"))
+    monkeypatch.setattr(lf, "find_checker", lambda explicit=None, game_dir=None: OkChecker())
+    monkeypatch.setattr(lf, "load_config", lambda game_dir=None, data_dir=None: dict(CFG, _sources=[]))
+    assert lf.main([str(data)]) == 0                                 # plan: the file is read and cached
+    plan = open(lf.PLAN_FILE, encoding="utf-8").read()
+    assert "-> log shim: past its first" in plan
+    capsys.readouterr()
+    assert lf.main([str(data), "--apply", "--yes"]) == 0             # --apply: the same plan from the cache
+    out = capsys.readouterr().out
+    assert "REFUSED" not in out and "The plan matches the one you reviewed." in out
+    assert lf.SHIM_END in (root / "main.lua").read_text(encoding="latin-1")

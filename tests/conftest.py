@@ -131,6 +131,13 @@ def _no_local_rename_map(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _play_hash_record_in_tmp(tmp_path, monkeypatch):
+    """mwdialog_hashes keeps the --play hash record beside the tools for a game they are not installed in, and a
+    test's game is one: each test gets its own folder for it instead (never the checkout's generated\\)."""
+    monkeypatch.setenv("MWDIALOG_PLAY_HASHES_DIR", str(tmp_path / "play-hashes"))
+
+
+@pytest.fixture(autouse=True)
 def _plan_audit_in_tmp(tmp_path, monkeypatch):
     """Plan-file audit copies of --apply runs never land in the source tree."""
     monkeypatch.setattr(vt, "AUDIT_ROOT", str(tmp_path / "audit"))

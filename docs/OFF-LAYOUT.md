@@ -117,6 +117,11 @@ copy under `Off\<plugin>\...` would exceed MAX_PATH stays listed, so tidy and th
 is idempotent). A run that finds nothing new rewrites nothing, and the file is removed when nothing is too long any more. A folder with such a file inside is
 moved piece by piece; the rest of it moves.
 
+A file that is too long once deployed and also broken (a model that does not parse, for example) is shortened and
+repaired in the same `--apply`: it moves to its short path, and the dummy is made there, so the original goes to
+`Off\<plugin>\broken\<short path>` (its long path under `Off` would be over MAX_PATH again). The plan shows both
+lines for the original path, and both are done; if the move fails, the repair stays for the next run.
+
 ## 7. Journal and undo
 
 Every move, including the migration, is journaled before it is made (`vortex_tidy_journal.jsonl`) and one

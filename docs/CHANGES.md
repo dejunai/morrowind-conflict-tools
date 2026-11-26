@@ -1,3 +1,24 @@
+# GUI stress test fixes: long-path repairs, cached log-shim plans, play-hash record, doc_scan test (2026-11-26)
+
+- vortex_tidy: a file both too long once deployed and broken (MWManager's test mod "Zz Deep Path") had its repair
+  dropped after the long-path move ("moved: next run"), so the plan's repair line stayed pending and the first
+  `--apply` exited 1. The repair now follows the move: the dummy is made at the short path in the same run, the
+  original goes to `Off\<plugin>\broken\<short path>`; an ASCII rename of a moved file is settled by the move; a
+  failed move keeps the repair for the next run. Off layout and `max_path_too_long.txt` unchanged; `--undo` puts
+  it all back. Test: `tests/test_tidy_longpath_repair.py`.
+- luafix (log shim v7): the plan wrote each F1 line's full text ("log shim: past its first N+M lines, ...") but a
+  cached second read (as in `--apply`) kept only the default "log shim", so `--apply` saw a different plan and
+  refused for every F1 mod. A cache hit now keeps the whole cached F1 finding (and drops one the cache did not
+  have, as the first read did). Tests: plan-then-`--apply` round trip and cache miss vs hit in
+  `tests/test_logshim.py`.
+- mwdialog_hashes: tools run from outside the game wrote `mwdialog_play_hashes.json` to the game folder. The record
+  now always lives with the tools: `generated\` (per game, `mwdialog_play_hashes-<name>-<hash>.json`, when run from
+  outside the game), or where the caller routes state (MWManager: `outputs\`), or a folder set with
+  `mwdialog_hashes.RECORD_DIR` / `MWDIALOG_PLAY_HASHES_DIR`. A record in the old place is moved on first read.
+  Tests keep it in pytest's folder (`conftest.py`).
+- `tests/test_doc_scan.py` skips cleanly where `doc_scan.py` is not vendored (MWManager), like `test_deploy.py`
+  does for `deploy.py`, instead of failing at import; the test still runs in the repository.
+
 # Log shim v7: every redirected log is new in each game session (2026-11-26)
 
 - Cause: Enchantment Animation 2.3.6 (and Graphic Herbalism) write their own log with `io.open(path, "a")`, which
