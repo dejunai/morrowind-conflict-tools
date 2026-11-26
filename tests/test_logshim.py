@@ -511,4 +511,119 @@ def test_lifecycle_cap_writes_one_hand_off_line_naming_the_mod_log():
 
 def test_bare_start_is_no_longer_a_lifecycle_pattern():
     assert "start" not in lf.LIFECYCLE_PATTERNS and "start" not in CFG["log"]["keepPatterns"]
-    assert lf.SHIM_V == 6 and "S.v == 6" in lf.log_shim("testmod", CFG)
+    assert lf.SHIM_V == 7 and "S.v == 7" in lf.log_shim("testmod", CFG)
+
+# ------------------------------------------------------------------------------------------ fresh logs each session
+OWN = "Data Files\\MWSE\\logs\\Own Mod.log"
+OWN_OLD = "Data Files\\MWSE\\logs\\Own Mod.old.log"
+OPEN_OWN = "local P = [[" + OWN + "]] "
+
+
+def seed(r, path, text, mtime=None):
+    r.run("FILES[ [[" + path + "]] ] = '" + text + "\\n'" + (f" ATTR[ [[{path}]] ] = {mtime}" if mtime else ""))
+
+
+@need_lua
+def test_a_mods_own_appended_log_starts_new_in_a_session_and_is_kept_as_old():
+    r = Rt(budgetInit=0)
+    seed(r, OWN, "last session", 1)
+    r.load(OPEN_OWN + "local f = io.open(P, 'a') f:write('first\\n') f:close() "
+           "local g = io.open(P, 'a') g:write('second\\n') io.open(P, 'a'):write('third\\n')")
+    assert r.file(OWN) == ["first", "second", "third"]           # new once, then appended for the rest of the session
+    assert r.file(OWN_OLD) == ["last session"]                  # the previous session is kept, like the shim's own log
+    r.load(OPEN_OWN + "io.open(P, 'a'):write('another file of the mod\\n')", path="testmod\\util.lua")
+    assert r.file(OWN)[-1] == "another file of the mod" and len(r.file(OWN)) == 4     # one session: not new again
+
+
+@need_lua
+def test_an_own_log_already_written_this_session_or_not_there_is_appended_to():
+    r = Rt(budgetInit=0)
+    seed(r, OWN, "written by another mod just now", 2000)
+    r.load(OPEN_OWN + "io.open(P, 'a'):write('mine\\n')")
+    assert r.file(OWN) == ["written by another mod just now", "mine"] and not r.has(OWN_OLD)
+    r = Rt(budgetInit=0)
+    r.load(OPEN_OWN + "io.open(P, 'a'):write('first ever\\n')")
+    assert r.file(OWN) == ["first ever"] and not r.has(OWN_OLD)
+
+
+@need_lua
+def test_keep_old_zero_deletes_the_previous_own_log():
+    r = Rt(budgetInit=0, keepOld=0)
+    seed(r, OWN, "last session", 1)
+    r.load(OPEN_OWN + "io.open(P, 'a'):write('fresh\\n')")
+    assert r.file(OWN) == ["fresh"] and not r.has(OWN_OLD)
+
+
+@need_lua
+def test_only_append_opens_of_logs_under_mwse_logs_are_touched():
+    cfgfile = "Data Files\\MWSE\\config\\Own Mod.json"
+    outside = "Data Files\\Own Mod.log"
+    olderlog = "Data Files\\MWSE\\logs\\Other Mod.old.log"
+    r = Rt(budgetInit=0)
+    for path in (OWN, cfgfile, outside, olderlog):
+        seed(r, path, "keep", 1)
+    r.run("io.lines = function() return 'passed through' end")
+    r.load("io.open([[" + OWN + "]], 'r') io.open([[" + cfgfile + "]], 'a'):write('x\\n') "
+           "io.open([[" + outside + "]], 'a'):write('x\\n') io.open([[" + olderlog + "]], 'a'):write('x\\n') "
+           "SEEN = io.lines()")
+    assert r.file(cfgfile) == ["keep", "x"] and r.file(outside) == ["keep", "x"] and r.file(olderlog) == ["keep", "x"]
+    assert r.file(OWN) == ["keep"] and not r.has(OWN_OLD)       # a read-mode open does not start a session either
+    assert r.eval("SEEN == 'passed through'")                  # everything else of io is still there
+
+
+@need_lua
+def test_forward_slash_paths_count_as_the_same_log():
+    slash, slash_old = "Data Files/MWSE/logs/Own Mod.log", "Data Files/MWSE/logs/Own Mod.old.log"
+    r = Rt(budgetInit=0)
+    seed(r, slash, "last", 1)
+    r.load("local P = [[" + slash + "]] io.open(P, 'a'):write('a\\n') io.open(P, 'a'):write('b\\n')")
+    assert r.file(slash) == ["a", "b"] and r.file(slash_old) == ["last"]
+
+
+@need_lua
+def test_a_log_from_an_earlier_session_is_set_aside_at_initialized_when_nothing_wrote_it():
+    r = Rt(budgetInit=5)
+    seed(r, LOG, "ancient", 1)
+    seed(r, OLD, "older")
+    r.load("print('[Mod] hello')")                               # inside the allowance: the log is never opened
+    assert r.file() == ["ancient"]
+    r.run("fire('initialized')")
+    assert not r.has(LOG) and r.file(OLD) == ["ancient"]        # one generation back, like MWSE.log's restart
+    r = Rt(budgetInit=5)
+    seed(r, LOG, "written this session", 2000)
+    r.load("print('x')")
+    r.run("fire('initialized')")
+    assert r.file() == ["written this session"] and not r.has(OLD)
+
+
+@need_lua
+def test_the_shims_own_log_is_not_set_aside_twice_in_a_session():
+    r = Rt(budgetInit=0)
+    seed(r, LOG, "last session", 1)
+    r.load("print('first')")
+    r.run("fire('initialized')")
+    r.load("print('second')", path="testmod\\late.lua")
+    r.run("package.loaded['localpatch_logshim:testmod'].flush()")
+    assert r.file(OLD) == ["last session"] and r.file()[-2:] == ["first", "second"]
+
+
+def test_a_file_that_appends_to_its_own_log_gets_the_shim_with_its_io(tmp_path):
+    src = "local P = 'Data Files\\\\MWSE\\\\logs\\\\x.log'\nlocal f = io.open(P, 'a')\nf:write('x')\n"
+    e, _ = plan(tmp_path / "a", {"main.lua": src})
+    t = e["main.lua"]["patch"]["text"]
+    assert e["main.lua"]["patch"]["ok"]
+    assert t.startswith(f"--[[localpatch {lf.VERSION}: F1]] local print, mwse, localpatch_log, io =")
+    assert "io.open(P, 'a')" in t                               # the mod's own line is not touched
+    e, _ = plan(tmp_path / "b", {"main.lua": "local f = io.open('Data Files\\\\x.txt', 'r')\n"})
+    assert e["main.lua"]["patch"] is None                       # reading, or no logging at all: no shim
+
+
+def test_a_version_6_shim_is_upgraded_to_the_one_with_io(tmp_path):
+    v7 = lf.log_shim("testmod", CFG)
+    assert "localpatch_log, io = (function" in v7
+    v6 = v7.replace("localpatch_log, io = (function", "localpatch_log = (function").replace("S.v == 7", "S.v == 6")
+    v6 = v6.replace("return S.print, S.mwse, S, S.io", "return S.print, S.mwse, S")
+    assert lf.SHIM_RE.search(v6)
+    e, _ = plan(tmp_path, {"main.lua": "--[[localpatch 5: F1]] " + v6 + "print('x')\n"})
+    t = e["main.lua"]["patch"]["text"]
+    assert e["main.lua"]["patch"]["ok"] and "S.v == 7" in t and "S.v == 6" not in t and t.count(lf.SHIM_END) == 1

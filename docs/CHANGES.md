@@ -1,3 +1,18 @@
+# Log shim v7: every redirected log is new in each game session (2026-11-26)
+
+- Cause: Enchantment Animation 2.3.6 (and Graphic Herbalism) write their own log with `io.open(path, "a")`, which
+  luafix's shim (it wraps `print`, `mwse.log` and the mod's `mwse.Logger`) never saw, so `Enchantment Animation.log`
+  only grew (227 KB over many sessions). The shim's own log, `lsmods.enchantment animation.log`, was already
+  rotated each session.
+- `SHIM_V` 7: the shim hands its file a local `io` whose `open` starts a `*.log` under `MWSE\logs\` new on the first
+  append-mode open in a session (old one to `<name>.old.log`, or deleted with `keepOld` 0), unless the file was
+  already written this session; later opens append. The shim's own log is also set aside at `initialized` when it
+  is from an earlier session and nothing wrote it this one. A file that appends to a log now counts as logging, so
+  `--lua-log all` gives it the shim. Third-party code is not edited beyond the shim's header; old shims are
+  upgraded on the next luafix run.
+- Not covered: `Core\Map Update` (mapfix.log; core mods are outside luafix). `LUA-DEBUGGING.md`'s logger example
+  now opens with `"w"`.
+
 # --play hash check: core files and our patches (2026-11-26)
 
 - `mwdialog_hashes.py`: `--play` hashes (SHA-256) Morrowind/Tribunal/Bloodmoon `.esm` and `.bsa` in Data Files

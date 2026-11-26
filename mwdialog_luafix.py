@@ -2249,13 +2249,19 @@ class FileAnalysis:
                 self.add("F1", c, f"the {ev} handler logs ({ev} fires often)", "log shim", "trigger")
 
     def log_calls(self):
-        """How many print / mwse.log calls reach the global functions (not a local of the same name)."""
+        """How many print / mwse.log calls reach the global functions (not a local of the same name), plus
+        append-mode io.open calls (a log the mod keeps itself: the shim's io starts it new each session)."""
         n = 0
         for c in self.calls:
             if c.func.kind == "Name" and c.func.id == "print" and getattr(c.func, "binding", None) is None:
                 n += 1
             elif c.func.kind == "Index" and L.dotted(c.func) == "mwse.log" and \
                     getattr(c.func.obj, "binding", None) is None:
+                n += 1
+        for c in self.calls:                       # io.open(path, "a"): a log kept by the mod itself
+            if c.func.kind == "Index" and L.dotted(c.func) == "io.open" and getattr(c.func.obj, "binding", None) is None \
+                    and len(c.args) > 1 and c.args[1].kind == "String" \
+                    and (L.string_value(c.args[1].raw) or "").startswith("a"):
                 n += 1
         return n + len(self.logger_creations())
 
@@ -3565,13 +3571,13 @@ LIFECYCLE_PATTERNS = frozenset({
 # the version-1 shim (print / mwse.log only, no cap, no logger wrap): replaced by the current one on sight
 SHIM_V1_RE = re.compile(r"local print, mwse = \(function\(_p, _m\) local fmt, find, lower, sub = string\.format, "
                         r"[^\n]*?\{ __index = _m, __newindex = _m \}\) end\)\(print, mwse\) ")
-SHIM_V = 6
-SHIM_RE = re.compile(r"local print, mwse, localpatch_log = \(function\(_p, _m\).*?" +
+SHIM_V = 7
+SHIM_RE = re.compile(r"local print, mwse, localpatch_log(?:, io)? = \(function\(_p, _m\).*?" +
                      re.escape(SHIM_END) + r" ")
 LOG_SHIM_LUA = r"""
-local print, mwse, localpatch_log = (function(_p, _m)
+local print, mwse, localpatch_log, io = (function(_p, _m)
 local S = package.loaded[@KEY@]
-if type(S) == "table" and S.v == @V@ then return S.print, S.mwse, S end
+if type(S) == "table" and S.v == @V@ then return S.print, S.mwse, S, S.io end
 S = { v = @V@, redirected = 0, dropped = 0, collapsed = 0 }
 package.loaded[@KEY@] = S
 local C = @CFG@
@@ -3625,6 +3631,17 @@ end
 local function flushAll()
 if f then pending() if dirty then dirty = false f:flush() end end
 end
+local realIo = io
+local function oldOf(p)
+return sub(p, 1, -5) .. ".old.log"
+end
+local function stale(p)
+local ok, m = pcall(function() return lfs.attributes(p, "modification") end)
+return ok and type(m) == "number" and m < t0
+end
+local function setAside(p, o)
+if C.keepOld > 0 then os.remove(o) os.rename(p, o) else os.remove(p) end
+end
 local function rotate()
 if f then pcall(f.close, f) f = nil end
 if C.keepOld > 0 then os.remove(oldPath) os.rename(path, oldPath) else os.remove(path) end
@@ -3665,6 +3682,14 @@ end
 S.start = function()
 if started then return end
 started = true
+if not f then
+pcall(function()
+for _, n in ipairs({ C.name, C.name .. ".routine" }) do
+local p = dir .. "\\" .. n .. ".log"
+if stale(p) then setAside(p, oldOf(p)) end
+end
+end)
+end
 pcall(flushAll)
 startFlush()
 end
@@ -3783,6 +3808,30 @@ pcall(wrap, lg)
 end
 return lg
 end
+S.fresh = {}
+local function ownLog(p)
+if type(p) ~= "string" then return nil end
+local k = gsub(p, "/", "\\")
+k = lower(k)
+if sub(k, -4) == ".log" and sub(k, -8) ~= ".old.log" and find(k, "mwse\\logs\\", 1, true) then return k end
+return nil
+end
+local function openOwn(p, mode, ...)
+if type(mode) == "string" and sub(mode, 1, 1) == "a" then
+local k = ownLog(p)
+if k and not S.fresh[k] then
+S.fresh[k] = true
+local ok, old = pcall(stale, p)
+if ok and old then
+pcall(setAside, p, oldOf(p))
+local ok2, h = pcall(realIo.open, p, "w" .. sub(mode, 2))
+if ok2 and h then return h end
+end
+end
+end
+return realIo.open(p, mode, ...)
+end
+S.io = setmetatable({ open = openOwn }, { __index = realIo, __newindex = realIo })
 S.flush = flushAll
 S.stats = function() return { init = init, run = run, redirected = redirected, dead = dead, path = path, fails = fails, started = started } end
 pcall(function()
@@ -3795,20 +3844,26 @@ local p = newproxy(true)
 getmetatable(p).__gc = function() pcall(flushAll) end
 S.gc = p
 end)
-return S.print, S.mwse, S
+return S.print, S.mwse, S, S.io
 end)(print, mwse) --[[/localpatch_logshim]]
 """
 
 
 def log_shim(mod_key, cfg):
-    """The log shim, on one line (so no line number moves): local print, mwse and localpatch_log for this file
+    """The log shim, on one line (so no line number moves): local print, mwse, localpatch_log and io for this file
     only (nothing global changes). The state lives in package.loaded, one per mod, built by whichever of the
     mod's files loads first. Like the old mwguard's log-spam guard: the first budgetInit lines (budget more after
     the initialized event), errors and the first few start-up lines of each kind reach MWSE.log, with no
     line of this tool's own; the rest go to
     Data Files\\MWSE\\logs\\<mod>.log (<mod>.routine.log when something else wrote that file this session),
     with identical lines collapsed, a per-second cap and rotation at maxMB. trace/debug/info of the mod's own
-    loggers (wrapped where it creates them) are sent through the same route; warn/error are left alone. Every
+    loggers (wrapped where it creates them) are sent through the same route; warn/error are left alone.
+    Fresh logs: every log is new in each game session, like MWSE.log. The shim's own log is set aside as
+    <mod>.old.log (replacing an older one; with keepOld 0 it is deleted) the first time it is opened in a
+    session, and a log from an earlier session that nothing wrote to this session is set aside when the
+    initialized event fires. The shim's io.open does the same for a log the mod keeps itself: the first
+    append-mode open of a *.log under MWSE\\logs\\ in a session starts the file new (the old one goes to
+    <name>.old.log) unless it was already written this session; later opens append. Every
     file operation is pcall'd or returns nil; ten internal errors and it passes everything through."""
     lc = cfg["log"]
     keep = ", ".join(lua_str(p) for p in lc["keepPatterns"] if p not in LIFECYCLE_PATTERNS)

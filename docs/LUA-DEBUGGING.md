@@ -13,7 +13,7 @@ When an error occurs, consult log files in this order:
 | **`MWSE.log`** | `Morrowind\MWSE.log` | Lua stack traces, runtime errors, MCM registrations, mod initialization banners. |
 | **`Warnings.txt`** | `Morrowind\Warnings.txt` | Engine-level animation note problems, missing textures/meshes, broken script commands. |
 | **`mwhangwatch.log`** | `Data Files\MWSE\logs\mwhangwatch.log` | Frame rate drops, memory usage, open UI menus at the exact moment of a freeze. |
-| **Mod Logs** | `Data Files\MWSE\logs\<Mod>.log` | Dedicated debug traces for redirected mods (Graphic Herbalism, Enchantment Animation, etc.). |
+| **Mod Logs** | `Data Files\MWSE\logs\<Mod>.log` (previous session: `<Mod>.old.log`) | Dedicated debug traces for redirected mods, and for mods that keep their own log (Graphic Herbalism, Enchantment Animation, etc.). New in each game session. |
 
 ---
 
@@ -235,7 +235,7 @@ local function log(message, ...)
     local formatted = select("#", ...) > 0 and string.format(message, ...) or tostring(message)
     if not logFile then
         pcall(function() lfs.mkdir(LOG_DIR) end)
-        logFile = io.open(LOG_PATH, "a")
+        logFile = io.open(LOG_PATH, "w")   -- "w": a new log each game session, like MWSE.log ("a" would grow forever)
     end
     if logFile then
         logFile:write(string.format("[%s] [%s] %s\n", os.date("%Y-%m-%d %H:%M:%S"), MOD_NAME, formatted))
