@@ -82,6 +82,7 @@ def tidy(tmp_path, monkeypatch):
     monkeypatch.setattr(vt, "CONVERTER_HOME", str(home))
     monkeypatch.setattr(vt, "CONVERTER", dict(vt.CONVERTER))                # main() sets it; never leaks
     monkeypatch.setattr(vt, "vortex_info", lambda d: {})                      # never read the real Vortex state
+    monkeypatch.setattr(vt, "interpreter_version", lambda cmd: (3, 11))       # the stub runs on any Python; tests below override
     monkeypatch.setattr(vt, "HERE", str(game))
     monkeypatch.setattr(vt, "CORE_MISSING", {})
     monkeypatch.setattr(vt, "JOURNAL", str(tmp_path / "journal.jsonl"))
@@ -157,7 +158,7 @@ def test_hybrid_mod_with_mwse_lua_is_never_converted(tidy):
     assert tidy.run() == 0
     plan = tidy.plan()
     assert "convert with omw2mwse" not in plan and tidy.calls() == []
-    off = os.path.join("Off", "OpenMW", vt.mod_name(mod.name))
+    off = os.path.join("Off", "Hybrid", "OpenMW")                       # Off\\<plugin>\\OpenMW
     assert "Hybrid.omwscripts  ->  " + os.path.join(off, "Hybrid.omwscripts") in plan
     assert "scripts  ->  " + os.path.join(off, "scripts") in plan
 
@@ -259,3 +260,80 @@ def test_a_converted_mod_is_never_converted_again(tidy):
     put(mod / "MWSE" / "mods" / "mwsuite" / "openmw" / "Lights" / "main.lua", HEADER)
     assert tidy.run() == 0
     assert "convert with omw2mwse" not in tidy.plan() and tidy.calls() == []
+
+
+# ------------------------------------------------------------------------------------------ the Python gate
+# omw2mwse 0.2.3 needs Python 3.11+ (tomllib); these tools stay 3.9+. Tidy runs the converter only on a Python that
+# meets that; otherwise it is treated as missing (one WARNING, the mod's whole package to Off\\<plugin>\\OpenMW\\).
+
+def test_the_converter_python_minimum_is_3_11_and_the_check_reads_the_interpreter(monkeypatch):
+    assert vt.CONVERTER_MIN_PYTHON == (3, 11)
+    monkeypatch.setattr(vt, "interpreter_version", lambda cmd: (3, 10))
+    assert vt.converter_python_problem(["python", "x"]) == "omw2mwse needs Python 3.11+, but it would run on Python 3.10"
+    monkeypatch.setattr(vt, "interpreter_version", lambda cmd: (3, 11))
+    assert vt.converter_python_problem(["python", "x"]) == ""
+    monkeypatch.setattr(vt, "interpreter_version", lambda cmd: None)         # a launcher whose Python can't be told
+    assert vt.converter_python_problem(["omw2mwse.cmd"]) == ""
+
+
+def test_the_interpreter_that_runs_the_converter_is_probed(monkeypatch):
+    assert vt.interpreter_version([sys.executable, "x"]) == tuple(sys.version_info[:2])
+    assert vt.interpreter_version(["omw2mwse.cmd"]) is None and vt.interpreter_version([]) is None
+    seen = []
+
+    class R:
+        returncode, stdout, stderr = 0, b"3.9\r\n", b""
+    monkeypatch.setattr(vt.subprocess, "run", lambda argv, **kw: seen.append(argv) or R())
+    assert vt.interpreter_version(["/opt/python3.9", "x"]) == (3, 9)
+    assert seen and seen[0][0] == "/opt/python3.9" and "sys.version_info" in seen[0][2]
+
+
+def test_a_declared_minimum_replaces_the_constant(tmp_path, monkeypatch):
+    monkeypatch.setattr(vt, "interpreter_version", lambda cmd: (3, 10))
+    tools = tmp_path / "conv" / "tools" / "omw2mwse"
+    tools.mkdir(parents=True)
+    (tmp_path / "conv" / "pyproject.toml").write_text('[project]\nrequires-python = ">=3.9"\n')
+    assert vt.declared_python(str(tools)) == (3, 9)
+    assert vt.converter_python_problem(["python"], str(tools)) == ""            # it declares 3.9: the constant is not used
+    (tmp_path / "conv" / "pyproject.toml").write_text('[project]\nrequires-python = ">=3.12"\n')
+    assert vt.converter_python_problem(["python"], str(tools)).startswith("omw2mwse needs Python 3.12+")
+    assert vt.converter_python_problem(["python"], str(tools), requires=">=3.9") == ""      # --json's field wins
+
+
+def test_a_too_old_python_makes_the_converter_missing_one_warning_the_package_goes_to_off(tidy, monkeypatch, capsys):
+    tidy.stub()
+    monkeypatch.setattr(vt, "interpreter_version", lambda cmd: (3, 10))
+    openmw_mod(tidy.staging, "Bad")
+    openmw_mod(tidy.staging, "Worse")
+    assert tidy.run() == 0
+    plan = " ".join(tidy.plan().split())
+    assert plan.count("WARNING: omw2mwse needs Python 3.11+, but it would run on Python 3.10, so it is not used: "
+                      "2 OpenMW-only mod(s) get their whole package moved to Off") == 1
+    assert "was not found" not in plan and "convert with omw2mwse" not in plan and tidy.calls() == []
+    assert tidy.run("--apply", "--yes") == 0
+    assert sorted(os.listdir(tidy.staging / "Bad-1-0")) == ["Off"] and tidy.calls() == []
+    assert (tidy.staging / "Bad-1-0" / "Off" / "Bad" / "OpenMW" / "Bad.omwscripts").exists()
+    assert vt.undo() == 0
+    assert sorted(os.listdir(tidy.staging / "Bad-1-0")) == ["Bad.omwaddon", "Bad.omwscripts", "readme.txt", "scripts"]
+
+
+def test_a_new_enough_python_runs_the_converter_as_before(tidy, monkeypatch):
+    tidy.stub()
+    monkeypatch.setattr(vt, "interpreter_version", lambda cmd: (3, 11))
+    openmw_mod(tidy.staging, "Lights")
+    assert tidy.run() == 0
+    assert "convert with omw2mwse" in tidy.plan() and "needs Python" not in tidy.plan()
+    assert tidy.run("--apply", "--yes") == 0 and tidy.calls()
+
+
+def test_the_converter_naming_its_own_python_minimum_in_json_is_honoured(tidy, monkeypatch):
+    (tidy.home / "tools" / "omw2mwse.py").write_text(STUB.replace('"dryRun": dry,', '"dryRun": dry, "requiresPython": ">=99.1",'))
+    openmw_mod(tidy.staging, "Bad")
+    openmw_mod(tidy.staging, "Worse")
+    assert tidy.run() == 0
+    plan = " ".join(tidy.plan().split())
+    assert plan.count("WARNING: omw2mwse needs Python 99.1+") == 1 and "convert with omw2mwse" not in plan
+    assert "2 OpenMW-only mod(s) get their whole package" in plan
+    assert [c for c in tidy.calls() if "--dry-run" not in c] == []                 # nothing was really run
+    assert tidy.run("--apply", "--yes") == 0
+    assert sorted(os.listdir(tidy.staging / "Worse-1-0")) == ["Off"]

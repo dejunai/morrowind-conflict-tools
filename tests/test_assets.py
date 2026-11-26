@@ -197,7 +197,7 @@ def test_tidy_moves_a_broken_model_out_and_announces_it(tmp_path, capsys):
     assert [(f[0], f[2]) for f in fixes] == [("brokenout", "Meshes\\x\\bad.nif")]
     ah.apply_folder(str(mod), fixes, m, str(tmp_path), "mod")
     assert not (mod / "Meshes" / "x" / "bad.nif").exists()                  # no stand-in: the next mod's copy wins
-    assert (mod / "Off" / "broken" / "mod" / "Meshes" / "x" / "bad.nif").read_bytes() == _nif(2, 7)
+    assert (mod / "Off" / "mod" / "broken" / "Meshes" / "x" / "bad.nif").read_bytes() == _nif(2, 7)
     ah.broken_models_notice()
     err = capsys.readouterr().err
     assert "1 broken model(s)" in err and "Meshes\\x\\bad.nif" in err and not ah.BROKEN_MODELS
@@ -211,9 +211,9 @@ def test_tidy_removes_the_stand_in_fix_put_over_a_broken_model(tmp_path, monkeyp
     rel = os.path.join("Meshes", "x", "bad.nif")
     (mod / "Meshes" / "x").mkdir(parents=True)
     (mod / rel).write_bytes(m.stand_in_bytes(rel))
-    (mod / "Off" / "broken" / "mod" / "Meshes" / "x").mkdir(parents=True)
-    (mod / "Off" / "broken" / "mod" / rel).write_bytes(_nif(2, 7))
+    (mod / "Off" / "mod" / "broken" / "Meshes" / "x").mkdir(parents=True)
+    (mod / "Off" / "mod" / "broken" / rel).write_bytes(_nif(2, 7))
     issues, fixes = ah.check_folder(str(mod), m, str(tmp_path / "Data Files"))
     assert [(f[0], f[3]) for f in fixes] == [("brokenout", "stand-in")]
     ah.apply_folder(str(mod), fixes, m, str(tmp_path), "mod")
-    assert not (mod / rel).exists() and (mod / "Off" / "broken" / "mod" / rel).read_bytes() == _nif(2, 7)
+    assert not (mod / rel).exists() and (mod / "Off" / "mod" / "broken" / rel).read_bytes() == _nif(2, 7)

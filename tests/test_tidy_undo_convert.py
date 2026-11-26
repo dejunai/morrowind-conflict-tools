@@ -221,6 +221,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setenv("PATH", str(tmp_path / "empty-path"))
     monkeypatch.setattr(vt, "CONVERTER_HOME", str(home))
     monkeypatch.setattr(vt, "CONVERTER", dict(vt.CONVERTER))
+    monkeypatch.setattr(vt, "interpreter_version", lambda cmd: (3, 11))       # the stub runs on any Python
     monkeypatch.setattr(vt, "HERE", str(game))
     monkeypatch.setattr(vt, "CORE_MISSING", {})
     monkeypatch.setattr(vt, "vortex_info", lambda d: {})                   # never reads the real Vortex state
@@ -855,7 +856,7 @@ def test_a_mod_with_real_mwse_lua_is_unchanged_only_its_openmw_files_go_to_off(e
     assert env.calls() == []                                                          # never converted
     for rel in ("MWSE/mods/hyb/main.lua", "meshes/Hyb.nif", "textures/tx_hyb.dds", "Hyb.esp"):
         assert os.path.join(*rel.split("/")) in after, rel                            # stay put
-    pk = os.path.join("Off", "OpenMW", vt.mod_name("Hyb-1-0"))
+    pk = os.path.join("Off", "Hyb", "OpenMW")
     assert os.path.join(pk, "Hyb.omwscripts") in after and os.path.join(pk, "scripts", "Hyb", "g.lua") in after
     assert not any(k.startswith(pk) and ("meshes" in k or "textures" in k or k.endswith(".esp")) for k in after)
     assert vt.undo() == 0

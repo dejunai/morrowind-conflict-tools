@@ -189,7 +189,7 @@ def test_tidy_moves_in_the_mod_edits_esp_lists_esm_and_check_writes_the_patch(ga
     mshort = short[f"meshes\\{LONGDIR}\\sub\\thing.nif".lower()]
     assert field(mod / "LongMod.esp", "MISC", "lm", "MODL") == lp.under_top(mshort)
     assert (mod / "LongBase.esm").read_bytes() == esm_before
-    assert (mod / "Off/longpaths/LongMod/LongMod.esp").exists()                 # the .esp's original
+    assert (mod / "Off/LongBase/shortened paths/LongMod.esp").exists()           # the .esp's original (owner: the first plugin)
     tshort = short[f"textures\\{LONGDIR}\\textures_of_it\\tx_long.dds".lower()]
     assert m.nif_texture_refs((mod / lp.fs(mshort)).read_bytes()) == [lp.under_top(tshort).lower()]
     assert lp.check_mod(str(mod), str(df), m, str(g))[1] == []                  # nothing left to shorten

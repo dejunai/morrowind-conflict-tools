@@ -16,14 +16,15 @@ Checks, and what --fix does:
   stereo sound under Sound\\ (3D sounds must be mono) ..... WARN   down-mixed to mono (ffmpeg)
   sound at an unusual sample rate (or over 48 kHz) ....... WARN   resampled to 44.1 kHz (ffmpeg)
   x*.kf animation without its x*.nif ..................... WARN   report only
-  texture or sound nothing refers to ..................... INFO   moved to the mod's Off\\unused\\ (not deployed)
-Originals of changed files go to <mod>\\Off\\<plugin>\\<path> (backup_asset_original). Unused files are moved
+  texture or sound nothing refers to ..................... INFO   moved to the mod's Off\\<plugin>\\unused assets\\ (not deployed)
+Originals of changed files go to <mod>\\Off\\<plugin>\\<reason>\\<path> (backup_asset_original). Unused files are moved
 (not copied) and listed in mwdialog_unused_assets.txt, which --restore-unused uses to put them back.
 Not checked: mesh vertex counts (the 4.0.0.2 format can't exceed 65535) and folder-name case duplicates
 (the same folder on Windows)."""
 import os, re, struct, shutil, subprocess, sys, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mwdialog_backup as MB  # noqa: E402
+import mwdialog_offlayout as OL  # noqa: E402
 import mwdialog_paths as MP  # noqa: E402
 import mwdialog_text as MT  # noqa: E402
 print = MT.printer()  # noqa: A001
@@ -135,12 +136,11 @@ def _is_stand_in(b, m, rel):
 
 
 def _broken_original(root, rel):
-    """True when <mod>\\Off\\broken\\<plugin>\\<rel> keeps a model with links past its end: the file at rel is
-    then the stand-in --fix put in its place."""
-    base = os.path.join(root, "Off", "broken")
-    for name in (os.listdir(base) if os.path.isdir(base) else ()):
+    """True when <mod>\\Off\\<plugin>\\broken\\<rel> (or an older layout's) keeps a model with links past its end:
+    the file at rel is then the stand-in --fix put in its place."""
+    for base in OL.reason_dirs(root, "broken"):
         try:
-            with open(os.path.join(base, name, rel), "rb") as f:
+            with open(os.path.join(base, rel), "rb") as f:
                 if nif_links_past_end(f.read()):
                     return True
         except OSError:
@@ -526,12 +526,13 @@ def kf_model_name(rel):
     return rel[:-3] + ".nif"
 
 
-FEATURE_OF = {"snd": "sound", "tex": "textures", "keys": "text keys", "abs": "texture paths",
-              "broken": "broken", "orphan": "orphaned", "unused": "unused", "splash": "splash screens"}
+FEATURE_OF = {"snd": "converted sounds", "tex": "converted textures", "keys": "fixed text keys",
+              "abs": "fixed texture paths", "broken": "broken", "orphan": "orphaned animations",
+              "unused": "unused assets", "splash": "converted splash screens"}     # Off reasons (OFF-LAYOUT.md)
 
 
 def broken_dest(root_or_mod, rel, sub="broken", plugin=None):
-    """<mod>\\Off\\<sub: broken, orphaned...>\\<plugin name>\\<rel>."""
+    """<mod>\\Off\\<plugin>\\<reason: broken, orphaned animations...>\\<rel>."""
     import mwdialog_check as _m
     return _m.off_dest(root_or_mod, sub, plugin, rel)
 
@@ -1461,7 +1462,7 @@ def check(world, m):
             r.add("INFO", "Data Files", "", "", f"{rel}: animation without its model, but something names it; kept")
             continue
         r.add("WARN", "Data Files", "", "", f"{rel}: orphaned animation (no {os.path.basename(kf_model_name(rel))} "
-                                            f"anywhere); --fix moves it to Off\\...\\orphaned\\")
+                                            f"anywhere); --fix moves it to Off\\...\\orphaned animations\\")
         fixes.append(("orphan", full, rel, "orphaned animation"))
     gone = {u[0] for u in unused}
     fixes[:] = [f for f in fixes if f[2] not in gone]  # nothing to repair in a file that is moved out
@@ -1469,7 +1470,7 @@ def check(world, m):
         mb = sum(u[2] for u in unused) / 1048576
         r.add("INFO", "Data Files", "", "", f"{len(unused)} texture/sound file(s) ({mb:.0f} MB) that no plugin, model, "
                                             f"script, Lua mod or config names; --fix moves them to their mod's "
-                                            f"Off\\unused\\ (listed in {UNUSED_RECORD}; --restore-unused puts them back)")
+                                            f"Off\\<plugin>\\unused assets\\ (listed in {UNUSED_RECORD}; --restore-unused puts them back)")
         for rel, full, size in unused:
             fixes.append(("unused", full, rel, "nothing names it"))
     world.asset_health = fixes
@@ -1584,7 +1585,7 @@ def apply(fixes, data_dir, game_dir, m, log, dry=False):
                 log.append(("Data Files", f"'{rel}' ({job})", f"moved to {dest}"))
                 done["unused"] += 1
                 continue
-            bak = m.backup_asset_original(data_dir, rel, feature=FEATURE_OF.get(kind, "converted"))
+            bak = m.backup_asset_original(data_dir, rel, feature=FEATURE_OF.get(kind, OL.REPAIRED))
             m.replace_asset_in_place(full, new)
             done[kind] += 1
             log.append(("Data Files", f"'{rel}' ({kind})", f"repaired (original: {bak})"))
@@ -1604,7 +1605,8 @@ def apply(fixes, data_dir, game_dir, m, log, dry=False):
 
 
 # <mod>\Off\<unused|orphaned|broken>\... (any case, either slash): a file these tools took out of a mod
-OFF_MARKER_RE = re.compile(r"[\\/]off[\\/](?:unused|orphaned|broken)[\\/]", re.IGNORECASE)
+OFF_MARKER_RE = re.compile(r"[\\/]off[\\/](?:[^\\/]+[\\/])?(?:unused assets|orphaned animations|unused|orphaned|broken)[\\/]",
+                           re.IGNORECASE)
 
 
 def restore_unused(game_dir, data_dir):
@@ -1623,7 +1625,9 @@ def restore_unused(game_dir, data_dir):
             continue
         rel, dest = parts[1], parts[2]
         if not os.path.exists(dest):
-            continue
+            dest = OL.relocated(dest)                # moved by vortex_tidy to the Off\\<plugin>\\<reason> layout
+            if not dest:
+                continue
         try:
             m = OFF_MARKER_RE.search(dest)
             if m:                                    # from a Vortex mod: back into the mod, linked into Data Files
@@ -1970,7 +1974,7 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None, stats=None):
                                            f"it to Off\\...\\broken\\; then Deploy in Vortex so another mod's copy "
                                            f"wins (with none, objects using it show no model)"))
                 continue
-            if low.endswith(".nif") and os.path.isdir(os.path.join(root, "Off", "broken")) \
+            if low.endswith(".nif") and OL.reason_dirs(root, "broken") \
                     and _is_stand_in(b, m, rel) and _broken_original(root, rel):
                 issues.append(("ERROR", rel, "stand-in --fix put in place of a broken model -> removed; Deploy in "
                                              "Vortex so another mod's copy wins"))
@@ -1994,7 +1998,7 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None, stats=None):
                     (bsa_meshes is not None and twin_low in bsa_meshes)
                 named = os.path.splitext(os.path.basename(low))[0].encode("latin1", "replace") in own_text
                 if not elsewhere and not named:
-                    issues.append(("WARN", rel, "orphaned animation (its model is nowhere) -> Off\\...\\orphaned\\"))
+                    issues.append(("WARN", rel, "orphaned animation (its model is nowhere) -> Off\\...\\orphaned animations\\"))
                     fixes.append(("orphan", full, rel, "orphaned animation"))
         elif top in SOUND_DIRS and low.endswith((".wav", ".mp3")):
             try:
@@ -2055,21 +2059,14 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None, stats=None):
 FIX_ORDER = {"ascii": 0, "broken": 1, "brokenout": 1, "orphan": 2, "snd": 3, "keys": 4, "abs": 5, "tex": 6, "splash": 6}
 
 
-def _backup_in_mod(root, rel, full, plugin_name, feature="converted"):
-    """The original into <mod>\\Off\\<feature>\\<plugin name>\\<rel>, once: not when one is kept already
-    (by any feature, or where earlier versions put it: Off\\<plugin name>\\<rel>) - unless the file now there
-    is a new original (a mod update): then that is kept too, with a date added (see keep_new_original)."""
+def _backup_in_mod(root, rel, full, plugin_name, feature="repaired originals"):
+    """The original into <mod>\\Off\\<plugin>\\<reason>\\<rel>, once: not when one is kept already (under any
+    reason, in any older Off layout) - unless the file now there is a new original (a mod update): then that
+    is kept too, with a date added (see keep_new_original)."""
     import mwdialog_check as _m
-    off = os.path.join(root, "Off")
-    if os.path.isdir(off):
-        for f in os.listdir(off):
-            fp = os.path.join(off, f)
-            if os.path.exists(os.path.join(fp, rel)):
-                return _m.keep_new_original(os.path.join(fp, rel), full)     # old layout
-            if os.path.isdir(fp) and f.lower() not in ("broken", "orphaned", "unused"):
-                for d in os.listdir(fp):
-                    if os.path.exists(os.path.join(fp, d, rel)):
-                        return _m.keep_new_original(os.path.join(fp, d, rel), full)
+    kept = OL.find_original(root, rel)
+    if kept:
+        return _m.keep_new_original(kept, full)
     dest = _m.off_dest(root, feature, plugin_name, rel)
     if not os.path.exists(dest):
         os.makedirs(os.path.dirname(dest), exist_ok=True)
@@ -2112,16 +2109,16 @@ def rename_ascii(root, full, rel, new_rel, log):
         os.replace(full, new_full)
     elif os.path.exists(full):
         # renamed before (the ASCII copy is there, maybe repaired since): the old-named file is the
-        # untouched original; it goes to Off\names\<mod>\<old path>, out of the way
+        # untouched original; it goes to Off\<plugin>\ascii\<old path>, out of the way
         import mwdialog_check as _m
-        keep = _m.off_dest(root, "names", None, rel)
+        keep = _m.off_dest(root, "ascii", None, rel)
         os.makedirs(os.path.dirname(keep), exist_ok=True)
         if os.path.exists(keep):
             _m.keep_new_original(keep, full)       # an update's file is a new original; raises if it can't be kept
             os.remove(full)
         else:
             os.replace(full, keep)
-        log(f"{rel}: already renamed {new_rel} by an earlier run; the old-named original moved to Off\\names\\")
+        log(f"{rel}: already renamed {new_rel} by an earlier run; the old-named original moved to Off\\<plugin>\\ascii\\")
     # drop the old folders when emptied
     d = os.path.dirname(full)
     while os.path.normcase(d) != os.path.normcase(root) and os.path.isdir(d) and not os.listdir(d):
@@ -2155,7 +2152,7 @@ def rename_ascii(root, full, rel, new_rel, log):
             log(f"{pf}: not changed ({e})")
             continue
         if hits:
-            bak = _m.off_dest(root, "names", pf, pf)     # Off\\names\\<plugin>\\<plugin file>, once
+            bak = _m.off_dest(root, "ascii", pf, pf)     # Off\\<plugin>\\ascii\\<plugin file>, once
             if not os.path.exists(bak):
                 os.makedirs(os.path.dirname(bak), exist_ok=True)
                 shutil.copy2(pp, bak)
@@ -2352,7 +2349,7 @@ def apply_folder(root, fixes, m, game_dir, plugin_name):
                 if os.path.exists(mp3):
                     skipped.append(f"{rel} (an MP3 of that name exists already)")
                     continue
-                _backup_in_mod(root, orig_rel.get(full, rel), full, plugin_name, FEATURE_OF.get(kind, "converted"))
+                _backup_in_mod(root, orig_rel.get(full, rel), full, plugin_name, FEATURE_OF.get(kind, OL.REPAIRED))
                 m.replace_asset_in_place(mp3, new)
                 os.remove(full)
                 done += 1
@@ -2363,7 +2360,7 @@ def apply_folder(root, fixes, m, game_dir, plugin_name):
                 continue
             # only the original is kept: a backup that exists already (an earlier fix of this run, or a run
             # before) is never overwritten; a renamed file's original is kept under its original name
-            _backup_in_mod(root, orig_rel.get(full, rel), full, plugin_name, FEATURE_OF.get(kind, "converted"))
+            _backup_in_mod(root, orig_rel.get(full, rel), full, plugin_name, FEATURE_OF.get(kind, OL.REPAIRED))
             m.replace_asset_in_place(full, new)
             done += 1
         except OSError as e:

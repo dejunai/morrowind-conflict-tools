@@ -42,7 +42,7 @@ def test_I7_model_named_normal_map_moves_too(tmp_path, monkeypatch):
     mod = _mod(tmp_path, ["tx_wall_nm.dds", "tx_wall.dds"])
     plan = _plan(mod)
     assert [n for n, _d, _w in plan] == ["tx_wall_nm.dds"]
-    assert os.path.join("Off", "normal maps", "Signs", "textures", "tx_wall_nm.dds") in plan[0][1]
+    assert os.path.join("Off", "Signs", "normal maps", "textures", "tx_wall_nm.dds") in plan[0][1]
 
 
 def test_I7_orphan_normal_map_is_left_in_place(tmp_path, monkeypatch):

@@ -1,3 +1,33 @@
+# One Off layout for every tool: Off\<plugin>\<reason>\<path>, tidy migrates the older ones, MAX_PATH files are listed, never moved (2026-11-26)
+
+- Decided by dej (dejunai): everything the tools set aside in a staged mod goes to `Off\<plugin>\<reason>\<path relative to the
+  mod>`. `docs/OFF-LAYOUT.md` is the spec: `<plugin>` (the mod's first plugin, else its first `.omwscripts` stem as omw2mwse
+  names it, else the mod's name; sanitised the converter's way), the fixed list of reasons with a one-line meaning each,
+  no nested reasons, collisions (" (2)", folders merge), journal and undo. New shared module `mwdialog_offlayout.py`.
+- Reasons renamed to say what they hold: `names` -> `ascii`, `longpaths` -> `shortened paths`, `sound` -> `converted sounds`,
+  `textures` -> `converted textures`, `text keys` -> `fixed text keys`, `texture paths` -> `fixed texture paths`,
+  `added masters` -> `plugin repairs`, `unused` -> `unused assets`, `orphaned` -> `orphaned animations`,
+  `converted` -> `repaired originals`, `Damaged assets` -> `broken`... The migration maps every older spelling (MWManager's too).
+- `mwdialog_generated.off_dest`, `backup_asset_original`, the asset check, the sound/text-key/long-path/plugin repairs and tidy
+  (broken dummies, normal maps, the hybrid OpenMW move, whole-package moves) all write the new layout; what finds an
+  original, a broken file or an unused-assets record also finds the older layouts.
+- vortex_tidy plans (one plan, one journal, `--undo` reverses it byte for byte) the migration of loose files in `Off\`,
+  `Off\<reason>\<plugin>\`, `Off\OpenMW\<mod>\`, `Off\<path>` and `Off\<name>\...`. Idempotent. Never touches what an
+  omw2mwse manifest lists, never touches a folder already in the layout, leaves the unrecognised alone with one NOTE.
+- MAX_PATH: a file whose path is over 259 characters, or would be after the move, is never moved (moving it would make it
+  worse). `Off\<plugin>\max_path_too_long.txt` lists them, one path per line relative to the mod's folder, deduped,
+  refreshed, removed when empty; journaled (`write` ops), `--undo` restores the previous text or removes the file.
+- Merging an `Off\OpenMW\<mod>\` package into an existing one merges folders instead of numbering them.
+- The OpenMW converter needs Python 3.11+ (omw2mwse 0.2.3 imports `tomllib` in sidecar.py and build.py; no pyproject, no
+  machine-readable minimum yet), these tools stay 3.9+: `setup_converter` probes the interpreter that would run it
+  (`interpreter_version`: this Python, or a python executable asked for its version; an .exe/.cmd launcher is not judged)
+  against `CONVERTER_MIN_PYTHON = (3, 11)`; older = the converter is treated as missing, one WARNING (`needs Python 3.11+,
+  but it would run on Python 3.x`), the mod's whole package goes to `Off\\<plugin>\\OpenMW\\`. A `requires-python` in the
+  converter's pyproject.toml or a `requiresPython` in its `--json` replaces the constant. Tests: gate, probe, declared minimum,
+  JSON field, one warning for several mods, apply + undo.
+- Tests: `tests/test_off_layout.py` (reasons, owner rule, every legacy layout, idempotence, undo, collisions, manifest
+  protection, the MAX_PATH list, Python 3.9 syntax); expected paths in six older tests updated.
+
 # vortex_tidy: a mod its author excluded from conversion is set aside with a plain WARNING; the tracked blacklist file is removed (2026-11-26)
 
 - A mod whose original author asked to be excluded from mwsuite's conversion utility (omw2mwse 8367f55: it writes

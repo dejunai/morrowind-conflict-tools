@@ -138,7 +138,8 @@ import re                                                              # noqa: E
 SECTION_HEADS = ("LUA CHECK", "ASSET CHECK")
 _DATED_HEAD = re.compile(r"\bplan\b.*\d{4}-\d\d-\d\d")
 _FINDING = re.compile(r"^[A-Z]\d+ (high|medium)\s")
-_ACTION_START = ("remove empty", "=> patch ready", "repair ", "shorten ", "convert with omw2mwse")
+_ACTION_START = ("remove empty", "=> patch ready", "repair ", "shorten ", "convert with omw2mwse",
+                 "write  ", "remove  ")        # a max_path_too_long.txt list written / removed
 
 
 def sections(text):

@@ -11,6 +11,7 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import mwdialog_offlayout as OL  # noqa: E402
 import mwdialog_paths as MP  # noqa: E402
 from mwdialog_backup import (  # noqa: E402
     backup_root)
@@ -27,22 +28,18 @@ from mwdialog_tes3 import (  # noqa: E402
 
 
 def off_dest(mod, feature, plugin, rel):
-    """<mod folder>\\Off\\<feature>\\<plugin name>\\<rel>: where an original goes when <feature> (the part of
-    these tools that did it: sound, textures, broken, unused...) changes or takes it out. Off is never
-    deployed. plugin: the mod's plugin (its name without the extension), or the mod's own name."""
-    if plugin:
-        name = os.path.splitext(os.path.basename(plugin))[0]
-    else:
-        own = sorted(e for e in os.listdir(mod) if e.lower().endswith((".esp", ".esm"))) if os.path.isdir(mod) else []
-        name = os.path.splitext(own[0])[0] if own else \
-            re.split(r"-\d+-|\s+\d{4,}\s", os.path.basename(mod.rstrip("\\/")))[0].strip()
-    return os.path.join(mod, "Off", feature, name, rel)
+    """<mod folder>\\Off\\<plugin>\\<reason>\\<rel>: where an original goes when <feature> (an Off reason, any
+    spelling: see mwdialog_offlayout.REASONS and docs\\OFF-LAYOUT.md) changes or takes it out. Off is never
+    deployed. <plugin> is the mod's own plugin (offlayout.owner_name; `plugin` is only a hint for a mod with
+    none), sanitised like the converter's mod name."""
+    fallback = re.split(r"-\d+-|\s+\d{4,}\s", os.path.basename(mod.rstrip("\\/")))[0].strip()
+    return OL.off_path(mod, feature, rel, hint=plugin, fallback=fallback)
 
 
-def backup_asset_original(data_dir, rel, plugin=None, feature="converted", track_new=True):
-    """Before an asset file is replaced: keep the original in <its Vortex mod folder>\\Off\\<feature>\\<plugin
-    name>\\<rel> (Off is never deployed). Not from Vortex: <backups folder>\\asset_originals\\<feature>\\<rel>.
-    An original kept already (here, or where earlier versions put it: Off\\<plugin name>\\<rel>) is never
+def backup_asset_original(data_dir, rel, plugin=None, feature="repaired originals", track_new=True):
+    """Before an asset file is replaced: keep the original in <its Vortex mod folder>\\Off\\<plugin>\\<reason>\\<rel>
+    (Off is never deployed). Not from Vortex: <backups folder>\\asset_originals\\<reason>\\<rel>.
+    An original kept already (here, or in any older Off layout: see mwdialog_offlayout.find_original) is never
     replaced. But when the file now there is neither that original nor a repair these tools made of it (a mod
     update put a new file there), it is kept too, next to the first one with a date added
     (<name>.YYYYMMDD-HHMMSS<ext>); track_new=False keeps only the first one, as before.
@@ -52,16 +49,11 @@ def backup_asset_original(data_dir, rel, plugin=None, feature="converted", track
     mod, owner_plugin = asset_owner_folder(data_dir, rel)
     if mod:
         dest = off_dest(mod, feature, plugin or owner_plugin, rel)
-        old = os.path.join(mod, "Off", os.path.splitext(os.path.basename(plugin or owner_plugin or ""))[0], rel)
-        if (plugin or owner_plugin) and os.path.exists(old):
-            return keep(old, current)
-        off = os.path.join(mod, "Off")
-        for f in (os.listdir(off) if os.path.isdir(off) else ()):          # any feature kept it already
-            for d in (os.listdir(os.path.join(off, f)) if os.path.isdir(os.path.join(off, f)) else ()):
-                if os.path.exists(os.path.join(off, f, d, rel)) and f.lower() not in ("broken", "orphaned", "unused"):
-                    return keep(os.path.join(off, f, d, rel), current)
+        kept = OL.find_original(mod, rel)             # any reason, any layout: one original is kept, once
+        if kept:
+            return keep(kept, current)
     else:
-        dest = os.path.join(backup_root(os.path.dirname(os.path.abspath(data_dir))), "asset_originals", feature, rel)
+        dest = os.path.join(backup_root(os.path.dirname(os.path.abspath(data_dir))), "asset_originals", OL.reason_for(feature), rel)
     if not os.path.exists(dest):
         os.makedirs(os.path.dirname(dest), exist_ok=True)
         shutil.copy2(current, dest)

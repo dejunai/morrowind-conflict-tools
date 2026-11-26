@@ -492,7 +492,7 @@ def apply(world, m, data_dir, log):
             if not new:
                 continue
             rel = os.path.relpath(mfull, data_dir)
-            m.backup_asset_original(data_dir, rel, feature="longpaths")
+            m.backup_asset_original(data_dir, rel, feature="shortened paths")
             m.replace_asset_in_place(mfull, new)
             for e in rec.moves:
                 if any(v == e["short"] for _t, v in _l) and mfull not in e.setdefault("nif", []):
@@ -616,7 +616,7 @@ def check_mod(root, data_dir, m, game_dir=None):
 
 def apply_mod(root, plan, m, game_dir, plugin_name=None, log=print):
     """Do one mod's moves (in its folder), point its .esp files and its models at the new paths (originals
-    in <mod>\\Off\\longpaths\\), and list everything in mwdialog_longpaths.json (an .esm of the mod is listed:
+    in <mod>\\Off\\<plugin>\\shortened paths\\), and list everything in mwdialog_longpaths.json (an .esm of the mod is listed:
     mwdialog_check --fix writes the corrected records into its ESM patch). Returns the number moved."""
     if not plan:
         return 0
@@ -659,7 +659,7 @@ def apply_mod(root, plan, m, game_dir, plugin_name=None, log=print):
         if pf.lower().endswith(".esm"):
             esm_names.append(pf)                         # never edited: the ESM patch corrects its records
             continue
-        bak = m.off_dest(root, "longpaths", pf, pf)
+        bak = m.off_dest(root, "shortened paths", pf, pf)
         if not os.path.exists(bak):
             os.makedirs(os.path.dirname(bak), exist_ok=True)
             shutil.copy2(pp, bak)
@@ -683,7 +683,7 @@ def apply_mod(root, plan, m, game_dir, plugin_name=None, log=print):
             if not new:
                 continue
             rel = os.path.relpath(nf.replace("\\\\?\\", ""), root)
-            bak = m.off_dest(root, "longpaths", plugin_name, rel)
+            bak = m.off_dest(root, "shortened paths", plugin_name, rel)
             if not os.path.exists(ext_path(bak)):
                 os.makedirs(ext_path(os.path.dirname(bak)), exist_ok=True)
                 shutil.copy2(nf, ext_path(bak))

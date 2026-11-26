@@ -85,7 +85,7 @@ def test_the_plan_says_a_dummy_goes_in_each_broken_files_place(env):
 
 def test_apply_moves_the_original_to_off_and_puts_a_marked_dummy_in_place(env):
     apply(env)
-    off = env.root / "Off" / "broken" / "Bits"
+    off = env.root / "Off" / "Bits" / "broken"
     assert (off / "textures" / "empty.tga").read_bytes() == b""
     assert (off / "textures" / "fake.dds").read_bytes() == FAKE_DDS
     assert (off / "sound" / "bad.mp3").read_bytes() == BAD_MP3

@@ -6,9 +6,9 @@ For each mod folder in Vortex's Morrowind staging folder (from Vortex's settings
   * Game folders stay where they are: meshes, textures, icons, sound, music, bookart, splash, fonts,
     video, distantland; and support folders: MWSE, MGE3, shaders (MGE XE's XEshaders), grass, mcpatch.
     Plugins (.esp/.esm/.omwaddon), .bsa archives and MWSE's *-metadata.toml files at the root stay too.
-    So do the folders this script makes or keeps: Docs, Extras, OpenMW, and your Off folders (plugins and
-    files you put aside to disable them), which are never moved, renamed or looked inside - in a mod or at
-    the top of the staging folder.
+    So do the folders this script makes or keeps: Docs, Extras, OpenMW, and the Off folder of every mod
+    (everything the tools set aside, in ONE layout - Off\\<plugin>\\<reason>\\<path>, see docs\\OFF-LAYOUT.md;
+    older layouts in it are migrated, below). An Off folder at the top of the staging folder is never touched.
   * Images at the root (.jpg, .png, .gif, .bmp, .webp) go to Screenshots\\, renamed "<mod name> - <file>";
     a mod's own Screenshots folder stays, and its pictures get the same prefix.
   * Documents at the root (readme.txt, changelog.md, manual.pdf...) go to Docs\\, renamed
@@ -22,7 +22,7 @@ For each mod folder in Vortex's Morrowind staging folder (from Vortex's settings
     and --apply stops at it, lets you open its folder, and offers to delete it (it is moved to
     "<staging> - deleted by vortex_tidy" beside the staging folder, so --undo can bring it back).
   * Normal maps (textures\\...\\*_n / *_nm / *_normal / *_nrm, .dds/.tga/.bmp) all go to
-    Off\\normal maps\\<mod name>\\ (never deployed): vanilla Morrowind with MGE XE doesn't use them (only OpenMW
+    Off\\<plugin>\\normal maps\\ (never deployed): vanilla Morrowind with MGE XE doesn't use them (only OpenMW
     does). If a model names one, mwdialog_check.py --fix puts a flat stand-in normal map in its place, so
     the game shows no missing-texture warnings. Only normal maps whose diffuse texture exists move (tx_wall.dds
     for tx_wall_n.dds: beside it, at the same path under textures\\ in any mod in staging, loose in Data Files,
@@ -32,8 +32,17 @@ For each mod folder in Vortex's Morrowind staging folder (from Vortex's settings
     the pack as not applicable to classic Morrowind.
   * MGE XE grass plugins (only statics and cells, nearly all grass/groundcover) go to Grass\\, where MGE
     XE's distant land generator reads them; the game itself never loads them.
-  * OpenMW-only content goes to Off\\OpenMW\\<mod name>\\ (never deployed): *.omwscripts files and the scripts, l10n,
+  * OpenMW-only content goes to Off\\<plugin>\\OpenMW\\ (never deployed): *.omwscripts files and the scripts, l10n,
     animations and playlists folders; an OpenMW\\ folder an earlier run made at the root is moved there too.
+  * The Off layout: <plugin> is the mod's first plugin's name (else its first .omwscripts' stem, as omw2mwse names
+    it, else the mod's name), <reason> one of a fixed list (docs\\OFF-LAYOUT.md: broken, ascii, unused assets...).
+    Every older layout in a mod's Off folder is moved into it in the same plan and journal (so --undo reverses
+    it): loose files directly in Off\\, Off\\<reason>\\<plugin>\\ (MWManager's and the older tools' spellings are
+    mapped to the new reason names), Off\\OpenMW\\<mod>\\, Off\\<path>. A name taken is never overwritten (" (2)"),
+    omw2mwse's own output (listed in its manifest) is never moved, and what is not recognised stays, with one NOTE.
+    A file whose path is over MAX_PATH (259), or would be after the move, is never moved (it would only get
+    worse): it is listed in Off\\<plugin>\\max_path_too_long.txt, one path per line relative to the mod's folder
+    (refreshed, never duplicated; --undo puts back what was there).
   * An OpenMW-only mod (OpenMW scripts - an *.omwscripts file at its root, in OpenMW\\ or set aside under Off\\ -
     and no MWSE Lua of its own) is converted for MWSE instead: --apply runs the OpenMW converter, omw2mwse
     --convert-omwscripts=<mode> <mod> --json (found on PATH or beside these tools; hardcode by default, with
@@ -41,12 +50,16 @@ For each mod folder in Vortex's Morrowind staging folder (from Vortex's settings
     neither), which lays the mod out itself, so nothing else in it moves that run; the plan shows a dry-run
     preview. A conflict (exit 4) or other failure is one WARNING line, the run goes on, and the mod is treated as
     not convertible (below). A mod with real MWSE Lua (a .lua under MWSE\\ that omw2mwse didn't generate) is
-    MWSE-first: its OpenMW files go to Off\\OpenMW\\ as above and are never converted. An OpenMW-only mod that
+    MWSE-first: its OpenMW files go to Off\\<plugin>\\OpenMW\\ as above and are never converted. An OpenMW-only mod that
     is not converted (no converter, a failed or blocked conversion, --no-convert-omwscripts) has its ENTIRE
     package moved to Off\\<plugin name>\\OpenMW\\ (omw2mwse's own place and name: the first .omwscripts' stem, e.g.
     Off\\wildlife_attacks_npc\\OpenMW\\) - plugins, scripts, data folders, Docs\\, Screenshots\\ - so the staging root
     keeps only Off\\ (and Vortex's marker file) and that is all it deploys; an Off\\OpenMW\\<mod>\\ folder from an
-    earlier tidy run is moved there too; --undo puts each file back. Without the converter: one WARNING line.
+    earlier tidy run is moved there too (and merged with what is there); --undo puts each file back. Without the converter: one WARNING line.
+    The converter needs Python 3.11+ (omw2mwse 0.2.3 imports tomllib; these tools stay 3.9+): tidy probes the Python that
+    would run it (find_converter's command; a requires-python in its pyproject.toml or a requiresPython in its --json
+    replaces the 3.11 default) and, when it is older, treats the converter as missing - one WARNING saying it needs
+    Python 3.11+, and the mod's whole package goes to Off\\<plugin>\\OpenMW\\ - instead of letting it die on an ImportError.
     --undo reverses a conversion: it journals what omw2mwse reported, deletes
     the files omw2mwse wrote (its manifest's list, each only if it still has the hash the manifest gives; an edited
     one stays, with one WARNING line) and puts the original package from Off\\<Mod>\\OpenMW\\ back at its
@@ -85,7 +98,7 @@ NIFZER0EDIT built in, plus the folder names in vortex_tidy_blacklist.txt (one pe
     <backups folder>\\luafix), --undo puts them back. --no-lua skips this, --lua-only does only this.
 
   * Broken asset files the asset check can't repair (empty, not the format their name says, truncated, a model
-    the game crashes on, an MP3 with no audio) go to <mod>\\Off\\broken\\<plugin>\\<path>, and a small valid
+    the game crashes on, an MP3 with no audio) go to <mod>\\Off\\<plugin>\\broken\\<path>, and a small valid
     file of the same format takes their place, so what names them still finds a file. Made in code: a 4x4
     placeholder texture (DDS, TGA, BMP, PNG; an 8x8 JPEG; a 32x32 icon under icons\\), silence (WAV, MP3). A
     model (NIF) gets the game's Dwemer coin, read out of Morrowind.bsa, so the gap is easy to spot; with
@@ -135,6 +148,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mwdialog_backup as MB                     # noqa: E402
 import mwdialog_planfile as PF                   # noqa: E402
+import mwdialog_offlayout as OL                  # noqa: E402
 import mwdialog_paths as MP                      # noqa: E402
 import mwdialog_text as MT                       # noqa: E402
 print = MT.printer()                             # noqa: A001
@@ -253,6 +267,13 @@ def existing(root, wanted):
     return wanted
 
 
+def _spelled(base, *names):
+    """base\\names..., each level in the spelling the folder already has (a new one: as given)."""
+    for n in names:
+        base = os.path.join(base, existing(base, n) if os.path.isdir(base) else n)
+    return base
+
+
 def free_path(path, taken):
     """`path`, or "name (2).ext" ... if it exists or another move in this plan already goes there."""
     base, ext = os.path.splitext(path)
@@ -272,6 +293,11 @@ def files_under(path):
 
 
 NOTES = []             # plan-wide warnings (shown at the top of the plan, and again by --apply)
+OWNER = {}             # mod folder -> its Off\\<plugin> folder name in this plan (mwdialog_offlayout.owner_name)
+MIG_NOTES = {}         # mod folder -> what the Off migration left alone (one NOTE per mod)
+LIST_TEXT = {}         # normcased path of a max_path_too_long.txt -> the text --apply writes (None: removes it)
+LIST_WRITE = "write the list of %d path(s) too long for Windows (MAX_PATH %d): those files were not moved"
+LIST_REMOVE = "remove the list: no path is too long any more"
 NO_DIFFUSE_WARNING = "no matching diffuse texture anywhere, check it's really a normal map; --undo puts it back"
 # 'Normal Maps' / 'normal_map' / 'NormalMap' / 'normal.maps' folder or mod: an add-on normal-map pack
 NORMAL_PACK_RE = re.compile(r"(?i)(?<![a-z])normal[\s_\-.]*maps?(?![a-z])")
@@ -417,7 +443,13 @@ def whole_package_moves(mod_dir, entries, name=None):
         return os.path.join(pd, existing(pd, "OpenMW") if os.path.isdir(pd) else "OpenMW")
 
     def move(src, pname, rel):
-        moves.append((src, free_path(os.path.join(package_dir(pname), rel), taken), why))
+        dst = os.path.join(package_dir(pname), rel)
+        if os.path.isdir(src) and (os.path.isdir(dst) or dst.lower() in taken):     # a folder is merged, not renamed
+            for x in sorted(os.listdir(src)):
+                move(os.path.join(src, x), pname, os.path.join(rel, x))
+            moves.append((src, None, "remove the emptied folder"))
+            return
+        moves.append((src, free_path(dst, taken), why))
 
     for e in sorted(entries):
         el, src = e.lower(), os.path.join(mod_dir, e)
@@ -432,13 +464,17 @@ def whole_package_moves(mod_dir, entries, name=None):
             continue                                     # omw2mwse's own output: removed by its undo, never moved
         move(src, root_name, e)
     for folder in legacy:                                 # migration: Off\OpenMW\<x>\ -> Off\<plugin>\OpenMW\
-        pname = package_name(folder)
+        pname = package_name(folder) if _has_omwscripts(folder) else root_name   # one owner per mod
         for x in sorted(os.listdir(folder)):
             move(os.path.join(folder, x), pname, x)
         moves.append((folder, None, "remove the emptied folder"))
     if legacy:
         moves.append((os.path.join(off, existing(off, "OpenMW")), None, "remove the emptied folder"))
-    return moves
+    OWNER[mod_dir] = root_name
+    mig = OL.plan_migration(mod_dir, root_name, taken=taken, skip_openmw=True)   # the rest of Off\\: its layouts
+    if mig.notes:
+        MIG_NOTES[mod_dir] = mig.notes
+    return moves + mig.moves
 
 
 def plan_mod(mod_dir):
@@ -449,6 +485,7 @@ def plan_mod(mod_dir):
                                   if os.path.isfile(os.path.join(mod_dir, e))):
         return "installs into the game folder (exe/dll/Data Files at its root)"
     name = mod_name(os.path.basename(mod_dir))
+    owner = OWNER[mod_dir] = OL.owner_name(mod_dir, fallback=name)      # <plugin> of Off\\<plugin>\\<reason>\\
     oms = openmw_only(mod_dir, entries)              # OpenMW-only (no MWSE Lua): omw2mwse converts it
     if oms:
         if CONVERTER["mode"] and CONVERTER["cmd"]:   # it lays the mod out itself, so nothing else moves now
@@ -478,7 +515,7 @@ def plan_mod(mod_dir):
     shots = os.path.join(mod_dir, existing(mod_dir, "Screenshots"))
     extras = os.path.join(mod_dir, existing(mod_dir, "Extras"), name)
     off = os.path.join(mod_dir, existing(mod_dir, "Off"))
-    openmw = os.path.join(off, existing(off, "OpenMW") if os.path.isdir(off) else "OpenMW", name)
+    openmw = _spelled(off, owner, "OpenMW")           # Off\\<plugin>\\OpenMW\\
     moves, taken = [], set()
 
     def move(src, dst, why):
@@ -501,7 +538,7 @@ def plan_mod(mod_dir):
     old_openmw = next((e for e in entries if e.lower() == "openmw" and os.path.isdir(os.path.join(mod_dir, e))), None)
     if old_openmw:                                   # where earlier runs put it: into Off\OpenMW\ now
         for x in sorted(os.listdir(os.path.join(mod_dir, old_openmw))):
-            move(os.path.join(mod_dir, old_openmw, x), os.path.join(openmw, x), "OpenMW-only -> Off\\OpenMW\\")
+            move(os.path.join(mod_dir, old_openmw, x), os.path.join(openmw, x), "OpenMW-only -> Off\\<plugin>\\OpenMW\\")
     for e in rename_addons:
         move(os.path.join(mod_dir, e), os.path.join(mod_dir, os.path.splitext(e)[0] + ".esp"),
              "OpenMW plugin without scripts: renamed .esp so Morrowind can load it")
@@ -545,7 +582,7 @@ def plan_mod(mod_dir):
                 if pack:
                     why += "; from a normal-map add-on pack (OpenMW only)"
                     NORMAL_PACKS[os.path.basename(mod_dir)] = NORMAL_PACKS.get(os.path.basename(mod_dir), 0) + 1
-                move(p, os.path.join(mod_dir, "Off", "normal maps", name, rel), why)
+                move(p, os.path.join(_spelled(off, owner, "normal maps"), rel), why)
             continue
         if el in GAME_DIRS or el in SUPPORT_DIRS:
             continue
@@ -579,7 +616,10 @@ def plan_mod(mod_dir):
             moves.append((src, None, "remove the emptied folder"))
             continue
         move(src, os.path.join(extras, e), "not a game folder")
-    return moves
+    mig = OL.plan_migration(mod_dir, owner, taken=taken)          # older Off layouts -> Off\\<plugin>\\<reason>\\
+    if mig.notes:
+        MIG_NOTES[mod_dir] = mig.notes
+    return moves + mig.moves
 
 
 REVIEW = {}            # mod folder -> (its .omwaddon files, the OpenMW scripts that make it OpenMW-only)
@@ -589,7 +629,9 @@ PREVIEW = {}           # converted-to-be mod folder -> (ok, summary line) of omw
 BLOCKED_PLAN = []      # warning texts: mods omw2mwse's dry run judged blocked (they get the usual Off\\ move)
 CONVERT_MODES = ("hardcode", "normal")          # omw2mwse's own --convert-omwscripts modes
 CONVERT_ACTION = "convert with omw2mwse"
-CONVERTER = {"mode": None, "cmd": None, "env": None, "why": ""}   # set by main(): the mode, how to run it
+CONVERTER = {"mode": None, "cmd": None, "env": None, "why": "", "python": ""}   # set by main(): the mode, how to run it
+CONVERTER_MIN_PYTHON = (3, 11)    # omw2mwse 0.2.3 imports tomllib (3.11+) at the top of sidecar.py and build.py; on
+                                  # 3.9/3.10 it dies with an ImportError. These tools stay 3.9+; the converter needs this.
 CONVERTER_HOME = os.path.dirname(os.path.abspath(__file__))       # where sibling copies are looked for
 CONVERTER_TIMEOUT = 600
 
@@ -698,11 +740,73 @@ def find_converter(home=None):
     return None, None, ""
 
 
+def _version_of(text):
+    """(major, minor) from "3.11", ">=3.11", "3.11+", ">=3.11.2,<4" ...; None when there is none."""
+    m = re.search(r"(\d+)\.(\d+)", str(text or ""))
+    return (int(m.group(1)), int(m.group(2))) if m else None
+
+
+def interpreter_version(cmd):
+    """(major, minor) of the Python that `cmd` runs the converter with: this one when cmd starts with it, another
+    python executable asked for its own version; None when it can't be known (an .exe/.cmd/.bat launcher)."""
+    if not cmd:
+        return None
+    exe = cmd[0]
+    if os.path.normcase(os.path.abspath(exe)) == os.path.normcase(os.path.abspath(sys.executable)):
+        return tuple(sys.version_info[:2])
+    if not os.path.basename(exe).lower().startswith(("python", "py.")) and os.path.basename(exe).lower() != "py":
+        return None
+    try:
+        r = subprocess.run([exe, "-c", "import sys; print('%d.%d' % sys.version_info[:2])"], stdout=subprocess.PIPE,
+                           stderr=subprocess.PIPE, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return _version_of(r.stdout.decode("utf-8", "replace")) if r.returncode == 0 else None
+
+
+def declared_python(where):
+    """The minimum Python the converter declares: requires-python in a pyproject.toml in or above the folder
+    `where` points into (up to three levels), else None (omw2mwse 0.2.3 has none)."""
+    d = os.path.abspath(where) if where else ""
+    d = d if os.path.isdir(d) else os.path.dirname(d)
+    for _ in range(4):
+        pp = os.path.join(d, "pyproject.toml")
+        if d and os.path.isfile(pp):
+            try:
+                with open(pp, encoding="utf-8", errors="replace") as f:
+                    m = re.search(r"^\s*requires-python\s*=\s*[\"']([^\"']+)[\"']", f.read(), re.M)
+            except OSError:
+                m = None
+            if m and _version_of(m.group(1)):
+                return _version_of(m.group(1))
+        up = os.path.dirname(d)
+        if up == d:
+            break
+        d = up
+    return None
+
+
+def converter_python_problem(cmd, where="", requires=None):
+    """"" when the Python that would run the converter is new enough, else one sentence saying so. The minimum is
+    what the converter declares (`requires`: the requiresPython field of its --json; else requires-python in its
+    pyproject.toml), else CONVERTER_MIN_PYTHON. A launcher whose interpreter can't be told is not judged."""
+    need = _version_of(requires) or declared_python(where) or CONVERTER_MIN_PYTHON
+    have = interpreter_version(cmd)
+    if have is None or have >= need:
+        return ""
+    return "omw2mwse needs Python %d.%d+, but it would run on Python %d.%d" % (need + have)
+
+
 def setup_converter(mode):
-    """main(): mode None (--no-convert-omwscripts) or one of CONVERT_MODES; finds the converter."""
-    CONVERTER.update(mode=mode, cmd=None, env=None, why="")
+    """main(): mode None (--no-convert-omwscripts) or one of CONVERT_MODES; finds the converter, and treats it as
+    missing (CONVERTER["python"] says why) when the Python that would run it is too old."""
+    CONVERTER.update(mode=mode, cmd=None, env=None, why="", python="")
     if mode:
         CONVERTER["cmd"], CONVERTER["env"], CONVERTER["why"] = find_converter()
+        if CONVERTER["cmd"]:
+            CONVERTER["python"] = converter_python_problem(CONVERTER["cmd"], CONVERTER["why"])
+            if CONVERTER["python"]:
+                CONVERTER["cmd"] = None
 
 
 _VORTEX_INFO = {}       # mod folder name -> what Vortex knows (read once per run)
@@ -1145,6 +1249,8 @@ def move_lines(d, res, staging):
         rs = os.path.relpath(src, base)
         if dst is None:
             out.append(f"    remove empty  {rs}")
+        elif src == dst:                                   # a max_path_too_long.txt list
+            out.append(f"    {'write' if why.startswith('write') else 'remove'}  {rs}   ({why})")
         else:
             out.append(f"    {rs}  ->  {os.path.relpath(dst, base)}   ({why})")
     return out
@@ -1171,6 +1277,9 @@ def run_plan(args):
     lines, all_moves, skipped, touched = [], [], [], 0
     ORPHAN_NORMALS.clear()
     NORMAL_PACKS.clear()
+    OWNER.clear()
+    MIG_NOTES.clear()
+    LIST_TEXT.clear()
     CONVERTED.clear()
     CONVERT.clear()
     _VORTEX_INFO.clear()
@@ -1191,8 +1300,17 @@ def run_plan(args):
         full = os.path.join(args.staging, d)
         if full in CONVERT:
             code, data, err = run_converter(full, CONVERTER["mode"], dry_run=True)   # a preview: nothing is written
+            late = converter_python_problem(CONVERTER["cmd"], CONVERTER["why"], (data or {}).get("requiresPython"))
+            if late:                                 # the converter says what it needs (a newer omw2mwse): as missing
+                CONVERTER["python"], CONVERTER["cmd"] = late, None
+                CONVERTER["missed"] = CONVERTER.get("missed", 0) + 1
+                del CONVERT[full]
+                res = unconverted_moves(full)
+                data = None
             blocked = [(n, blocked_says(n, m), blocked_then(m)) for n, v, m in preview_verdicts(data) if v == "blocked"]
-            if blocked:                              # omw2mwse would write an active loader that can't work
+            if late:
+                pass
+            elif blocked:                              # omw2mwse would write an active loader that can't work
                 del CONVERT[full]
                 BLOCKED_PLAN.append(f"{d}: {blocked[0][1]}{blocked[0][2]}not converted, "
                                     f"its whole package goes to Off\\<plugin>\\OpenMW\\")
@@ -1206,6 +1324,17 @@ def run_plan(args):
                 touched += 1
                 lines += convert_lines(d, CONVERT[full], CONVERTER["mode"])
                 continue
+        res, too_long = OL.guard_moves(res, full)    # a path over MAX_PATH is never moved (it would get longer)
+        listed = OL.list_update(full, OWNER.get(full) or OL.owner_name(full, fallback=mod_name(d)), too_long)
+        if listed:
+            LIST_TEXT[os.path.normcase(listed[0])] = listed[1]
+            res = res + [(listed[0], listed[0], (LIST_WRITE % (sum(1 for ln in listed[1].splitlines() if ln), OL.MAX_PATH_CHARS))
+                          if listed[1] else LIST_REMOVE)]
+        if too_long:
+            NOTES.append(f"{d}: {len(too_long)} file(s) not moved because their path is already too long (or the new "
+                         f"one would be); they are listed in Off\\{OWNER.get(full, '<plugin>')}\\{OL.LIST_NAME}")
+        for note in MIG_NOTES.pop(full, []):
+            NOTES.append(f"{d}: {note}")
         if not res:
             continue
         touched += 1
@@ -1215,7 +1344,10 @@ def run_plan(args):
             f"{sum(1 for m in all_moves if m[1])} move(s); {len(skipped)} left alone"]
     for d, why in skipped:
         head.append(f"  - left alone: {d} ({why})")
-    if CONVERTER.get("missed"):                      # one line: the converter isn't there
+    if CONVERTER.get("missed") and CONVERTER.get("python"):    # one line: the converter can't run here
+        head.append(f"  - WARNING: {CONVERTER['python']}, so it is not used: "
+                    f"{CONVERTER['missed']} OpenMW-only mod(s) get their whole package moved to Off\\<plugin>\\OpenMW\\ instead")
+    elif CONVERTER.get("missed"):                    # one line: the converter isn't there
         head.append(f"  - WARNING: omw2mwse (the OpenMW converter) was not found on PATH or beside these tools: "
                     f"{CONVERTER['missed']} OpenMW-only mod(s) get their whole package moved to Off\\<plugin>\\OpenMW\\ instead")
     for text in BLOCKED_PLAN:
@@ -1254,6 +1386,40 @@ def run_plan(args):
     return all_moves
 
 
+def _read_text(path):
+    try:
+        with open(_xp(path), encoding="utf-8", newline="") as f:
+            return f.read()
+    except OSError:
+        return None
+
+
+def _put_text(path, text):
+    """Make `path` hold `text` (None: remove it); the text's lines end the way Windows' do."""
+    if text is None:
+        try:
+            os.remove(_xp(path))
+        except FileNotFoundError:
+            pass
+        return
+    os.makedirs(_xp(os.path.dirname(path)), exist_ok=True)
+    with open(_xp(path), "w", encoding="utf-8", newline="") as f:
+        f.write(text.replace("\r\n", "\n").replace("\n", "\r\n"))
+
+
+def _write_list(j, path, progress, i):
+    """Write (or remove) a max_path_too_long.txt, journaled first with what was there before."""
+    after = LIST_TEXT.get(os.path.normcase(path))
+    before = _read_text(path)
+    j.write(json.dumps({"write": path, "before": before, "after": None if after is None else
+                        after.replace("\n", "\r\n")}) + "\n")
+    j.flush()
+    os.fsync(j.fileno())
+    _put_text(path, after)
+    if progress is not None:
+        progress.append(i)
+
+
 def apply(moves, staging, progress=None, head_extra=None):
     """Make the moves, journaling each. progress (a list) gets the index of every move done, as it is done,
     so an interrupted run knows what is left. Returns the moves that failed."""
@@ -1273,6 +1439,10 @@ def apply(moves, staging, progress=None, head_extra=None):
                             j.flush()
                     if progress is not None:
                         progress.append(i)
+                    continue
+                if src == dst:                                   # a max_path_too_long.txt list (written or removed)
+                    _write_list(j, src, progress, i)
+                    done += 1
                     continue
                 os.makedirs(os.path.dirname(dst), exist_ok=True)
                 # journaled (on disk) before the move: a crash between the two never leaves a move --undo can't see
@@ -1407,6 +1577,20 @@ def undo(force=False):
                     print("  " + msg, file=sys.stderr)
                     left.append(op)
                 continue
+            if "write" in op:                         # a max_path_too_long.txt: back to what it was (or removed)
+                cur = _read_text(op["write"])
+                if cur != op.get("after") and not force:
+                    print(f"  not put back (changed since vortex_tidy wrote it; --undo --force overwrites): "
+                          f"{op['write']}", file=sys.stderr)
+                    left.append(op)
+                    continue
+                try:
+                    _put_text(op["write"], op.get("before"))
+                    back += 1
+                except OSError as e:
+                    print(f"  could not put back {op['write']}: {e}", file=sys.stderr)
+                    left.append(op)
+                continue
             if "omw_convert" in op:                   # undone above; one that could not be stays for another try
                 if id(op) in conv_failed:
                     left.append(op)
@@ -1432,7 +1616,8 @@ def undo(force=False):
                 left.append(op)
         top = r["head"].get("staging")            # an old journal without it: no folder is removed
         top = os.path.normcase(os.path.abspath(top)) if top else None
-        for d in {os.path.dirname(op["dst"]) for op in r["ops"] if "dst" in op} if top else ():   # emptied folders
+        for d in {os.path.dirname(op["dst"] if "dst" in op else op["write"]) for op in r["ops"]
+                  if "dst" in op or "write" in op} if top else ():   # emptied folders
             try:
                 # only folders inside the staging folder: never the staging folder itself or anything above it
                 while d and os.path.normcase(os.path.abspath(d)).startswith(top + os.sep) \
@@ -2687,20 +2872,20 @@ def _sha256_bytes(b):
 
 def tidy_dummies(root):
     """{path key: sha} of the files in the mod that are tidy's dummies, unchanged since they were put there."""
-    base = os.path.join(root, "Off", "broken")
     out = {}
-    for dp, _ds, fns in (os.walk(_xp(base)) if os.path.isdir(_xp(base)) else ()):
-        for fn in fns:
-            if not fn.endswith(DUMMY_MARK):
-                continue
-            try:
-                with open(os.path.join(dp, fn), encoding="utf-8") as f:
-                    mark = json.load(f)
-                p = os.path.join(root, mark["rel"].replace("\\", os.sep))
-                if os.path.isfile(_xp(p)) and _sha256(p) == mark["sha"]:
-                    out[_rk(mark["rel"])] = mark["sha"]
-            except (OSError, ValueError, KeyError, TypeError):
-                continue
+    for base in OL.reason_dirs(root, "broken"):          # Off\\<plugin>\\broken (and the older Off\\broken\\<plugin>)
+        for dp, _ds, fns in os.walk(_xp(base)):
+            for fn in fns:
+                if not fn.endswith(DUMMY_MARK):
+                    continue
+                try:
+                    with open(os.path.join(dp, fn), encoding="utf-8") as f:
+                        mark = json.load(f)
+                    p = os.path.join(root, mark["rel"].replace("\\", os.sep))
+                    if os.path.isfile(_xp(p)) and _sha256(p) == mark["sha"]:
+                        out[_rk(mark["rel"])] = mark["sha"]
+                except (OSError, ValueError, KeyError, TypeError):
+                    continue
     return out
 
 
@@ -2788,7 +2973,7 @@ def apply_dummy_rule(root, m, ah, data_dir, bsa_meshes, issues, fixes, stats=Non
 
 
 def make_dummies(root, dfixes, m, plug, renamed=None):
-    """Put each broken file's original in <mod>\\Off\\broken\\<plugin>\\<path> (a different file there already: a
+    """Put each broken file's original in <mod>\\Off\\<plugin>\\broken\\<path> (a different file there already: a
     dated name beside it), write its dummy in place (a Vortex hard link stays one) and mark it. Returns (done,
     [skipped notes])."""
     done, skipped = 0, []
@@ -3096,7 +3281,7 @@ def _repair(ares, d, root, fixes, lp_plan, plug):
         for f, a in zip(dfixes, asset_action_lines({"fixes": dfixes, "lp_plan": []})):
             if not any(sk.startswith(renamed.get(f[1], f[2]) + " (") or sk.startswith(f[2] + " (") for sk in skipped):
                 ares["done"].add((d, a))
-        print(f"    -> {done} broken file(s) moved to Off\\broken\\{plug}\\, a dummy put in each one's place"
+        print(f"    -> {done} broken file(s) moved to Off\\<plugin>\\broken\\, a dummy put in each one's place"
               + (f"; {len(skipped)} skipped, e.g. {skipped[0]}" if skipped else ""))
 
 
@@ -3136,7 +3321,7 @@ def main():
                     help="OpenMW-only mods (OpenMW scripts, no MWSE Lua) are converted for MWSE by omw2mwse, found "
                          "on PATH or beside these tools, in this mode: hardcode (the default; hard-coded values "
                          "become MCM settings) or normal. Mods with MWSE Lua are never converted: their OpenMW "
-                         "files go to Off\\OpenMW\\. An OpenMW-only mod that is not converted gets its whole "
+                         "files go to Off\\<plugin>\\OpenMW\\. An OpenMW-only mod that is not converted gets its whole "
                          "package moved to Off\\<plugin name>\\OpenMW\\")
     ap.add_argument("--no-convert-omwscripts", dest="convert_omwscripts", action="store_const", const=None,
                     help="don't convert: OpenMW-only mods get their whole package moved to Off\\<plugin name>\\OpenMW\\")
