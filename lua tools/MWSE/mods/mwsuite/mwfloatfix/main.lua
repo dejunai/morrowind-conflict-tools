@@ -104,6 +104,12 @@ local function log(fmt, ...)
     logFile:flush()
 end
 
+local function atPos(ref)
+    local p = ref and (ref.startingPosition or ref.position)
+    if not p then return "" end
+    return string.format(" (at %.0f, %.0f, %.0f)", p.x, p.y, p.z)
+end
+
 local function checkRefValid(r)
     return not r.disabled and not r.deleted and r.sceneNode ~= nil and r.position ~= nil
 end
@@ -136,7 +142,7 @@ local function isCandidate(ref)
         pcall(function()
             if ref.startingPosition and ref.position.z < (ref.startingPosition.z - 0.5) then
                 ref.position = tes3vector3.new(ref.startingPosition.x, ref.startingPosition.y, ref.startingPosition.z)
-                log("restored blacklisted %s to starting position in %s", ref.object.id, ref.cell and ref.cell.editorName or "?")
+                log("restored blacklisted %s to starting position in %s%s", ref.object.id, ref.cell and ref.cell.editorName or "?", atPos(ref))
             end
         end)
         checkedThisSession[ref] = true
@@ -351,7 +357,7 @@ local function logSkip(ref, why)
     if skipLines >= SKIP_LOG_MAX then return end
     skipLines = skipLines + 1
     pcall(function()
-        log("left %s in %s: %s", ref.object.id, ref.cell and ref.cell.editorName or "?", why)
+        log("left %s in %s: %s%s", ref.object.id, ref.cell and ref.cell.editorName or "?", why, atPos(ref))
     end)
     if skipLines == SKIP_LOG_MAX then log("(no more skip lines this session)") end
 end
@@ -475,7 +481,7 @@ local function applyBlacklist(ref)
     if not blackIds[baseId] and not blackIds[ref.object.id:lower()] then return false end
     if not blackKeys[refKey(ref)] then return false end
     ref:disable()
-    log("hid blacklisted %s in %s", ref.object.id, cellKey(ref.cell))
+    log("hid blacklisted %s in %s%s", ref.object.id, cellKey(ref.cell), atPos(ref))
     return true
 end
 
@@ -704,8 +710,8 @@ local function rescue(ref)
                                orientation = { o.x, o.y, o.z } }) then return end
     done[best.key] = true
     saved[RESCUE_KEY] = done
-    log("rescued %s from under water (%.0f) to %.0f, %.0f, %.0f", ref.baseObject.id, was,
-        best.to[1], best.to[2], best.to[3])
+    log("rescued %s in %s from under water (%.0f) to %.0f, %.0f, %.0f", ref.baseObject.id,
+        ref.cell and ref.cell.editorName or "?", was, best.to[1], best.to[2], best.to[3])
 end
 
 local function runRescues()
@@ -794,7 +800,7 @@ event.register(tes3.event.simulate, function()
         queued[ref] = nil
         if isRefValid(ref) then
             local ok, err = pcall(settle, ref)
-            if not ok then log("error checking %s: %s", tostring(ref.object and ref.object.id), tostring(err)) end
+            if not ok then log("error checking %s%s: %s", tostring(ref.object and ref.object.id), atPos(ref), tostring(err)) end
         end
     end
     if qHead > #queue then queue, qHead, sorted = {}, 1, false end
@@ -809,7 +815,7 @@ local function restoreBlacklistedInActiveCells()
                     if config.blacklist and config.blacklist[id] then
                         if ref.position.z < (ref.startingPosition.z - 0.5) then
                             ref.position = tes3vector3.new(ref.startingPosition.x, ref.startingPosition.y, ref.startingPosition.z)
-                            log("restored blacklisted %s to starting position in %s", ref.object.id, ref.cell and ref.cell.editorName or "?")
+                            log("restored blacklisted %s to starting position in %s%s", ref.object.id, ref.cell and ref.cell.editorName or "?", atPos(ref))
                         end
                     end
                 end
