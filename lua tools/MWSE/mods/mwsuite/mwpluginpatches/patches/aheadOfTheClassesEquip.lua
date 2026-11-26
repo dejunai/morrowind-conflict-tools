@@ -216,7 +216,7 @@ end
 
 onSimulate = function(e)
     if not armed then
-        stopWatching()
+        intercept.afterDispatch(stopWatching)
         return
     end
     if charGenPending() then
@@ -225,12 +225,16 @@ onSimulate = function(e)
         return
     end
     if not sawPending then
-        disarm("chargen already finished; equip intercept not kept loaded.")
+        intercept.afterDispatch(function()
+            if armed then disarm("chargen already finished; equip intercept not kept loaded.") end
+        end)
         return
     end
     afterChargen = (afterChargen or 0) + (type(e) == "table" and tonumber(e.delta) or 0)
     if afterChargen >= AFTER_CHARGEN then
-        disarm("chargen ended and its equip timer did not run; intercept removed.")
+        intercept.afterDispatch(function()
+            if armed then disarm("chargen ended and its equip timer did not run; intercept removed.") end
+        end)
     end
 end
 

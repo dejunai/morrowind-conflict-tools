@@ -1,6 +1,13 @@
+-- Trainer Log: the 27 training topics are added once per loaded game (on load, or when the first trainer is
+-- talked to), and UI Expansion's training menu icons are scaled every time that menu opens. The topic hook on
+-- MenuDialog is one-shot: it is registered only while the topics are still to be added and comes off once they
+-- are. The icon scaling stays (it runs whenever a training menu opens). By dej (dejunai).
+
 local config = require("mwpluginpatches.config")
+local intercept = require("mwpluginpatches.intercept")
 
 local trainerLogUnlock = {}
+local dialogHooked = false
 
 local TRAINING_TOPICS = {
     "Training - Acrobatics",
@@ -68,6 +75,18 @@ local function onMenuServiceTraining(e)
     menu:updateLayout()
 end
 
+local onMenuDialog
+
+local function hookDialog(on)
+    if on and not dialogHooked then
+        dialogHooked = true
+        event.register(tes3.event.uiActivated, onMenuDialog, { filter = "MenuDialog" })
+    elseif not on and dialogHooked then
+        dialogHooked = false
+        event.unregister(tes3.event.uiActivated, onMenuDialog, { filter = "MenuDialog" })
+    end
+end
+
 local function unlockTopics()
     if unlocked then return end
     for _, topic in ipairs(TRAINING_TOPICS) do
@@ -77,16 +96,19 @@ local function unlockTopics()
     mwse.log("[mwpluginpatches] Trainer Log: auto-unlocked 27 training topics.")
 end
 
-local function onMenuDialog(e)
+onMenuDialog = function(e)
     if unlocked then return end
     local serviceActor = tes3ui.getServiceActor()
     if serviceActor and serviceActor.reference and serviceActor.reference.baseObject then
         local ai = serviceActor.reference.baseObject.aiConfig
         if ai and ai.offersTraining then
             unlockTopics()
+            intercept.afterDispatch(function() if unlocked then hookDialog(false) end end)
         end
     end
 end
+
+function trainerLogUnlock.dialogHooked() return dialogHooked end   -- for tests
 
 function trainerLogUnlock.init()
     if not config.trainerLogUnlockEnabled or not config.isTrainerLogActive() then
@@ -98,9 +120,9 @@ function trainerLogUnlock.init()
         if config.trainerLogAutoUnlockOnLoad then
             unlockTopics()
         end
+        hookDialog(not unlocked)
     end)
 
-    event.register(tes3.event.uiActivated, onMenuDialog, { filter = "MenuDialog" })
     event.register(tes3.event.uiActivated, onMenuServiceTraining, { filter = "MenuServiceTraining", priority = -10 })
     mwse.log("[mwpluginpatches] Trainer Log topic unlock and training icon scaling patches active.")
 end

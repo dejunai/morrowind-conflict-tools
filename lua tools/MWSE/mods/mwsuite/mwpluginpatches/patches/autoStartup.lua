@@ -1,6 +1,13 @@
+-- AutoStartup answers Morrowind Comes Alive's and Ebonheart Underworks' setup questions once per save from the
+-- MCM settings. Its popup and cell-change handlers are only registered while the loaded game still needs that
+-- setup (MCA_Loaded not 1 or an invalid party size of 3; dd19rebirthConfig not 1), and come off once it is done.
+-- The loaded hook stays so another save or a new game in the same session is checked again. By dej (dejunai).
+
 local config = require("mwpluginpatches.config")
+local intercept = require("mwpluginpatches.intercept")
 
 local autoStartup = {}
+local armed = false
 
 local function runScript(cmd)
     tes3.runLegacyScript({ command = cmd })
@@ -189,24 +196,80 @@ local function onMenuMessage(e)
     end
 end
 
+-- whether the loaded game still needs the setup this patch does (rule-based, from the mods' own globals)
+function autoStartup.pending()
+    if config.mcaEnabled and config.isMcaActive() then
+        local mcaLoaded = tes3.findGlobal("MCA_Loaded")
+        if mcaLoaded and mcaLoaded.value ~= 1 then return true end
+        local partySize = tes3.findGlobal("MCA_MoreEnemies")
+        if mcaLoaded and partySize and partySize.value == 3 and config.mcaPartySize ~= 3 then return true end
+    end
+    if config.euEnabled and config.isEbonheartUnderworksActive() then
+        local dd19cfg = tes3.findGlobal("dd19rebirthConfig")
+        if dd19cfg and dd19cfg.value ~= 1 then return true end
+    end
+    return false
+end
+
+local onMessageArmed, onCellChangedArmed
+
+local function disarm(reason)
+    if not armed then return end
+    armed = false
+    event.unregister(tes3.event.uiActivated, onMessageArmed, { filter = "MenuMessage" })
+    event.unregister(tes3.event.cellChanged, onCellChangedArmed)
+    if reason then mwse.log("[mwpluginpatches] AutoStartup: %s", reason) end
+end
+
+local function checkDone()
+    if armed and not autoStartup.pending() then
+        intercept.afterDispatch(function()
+            if armed and not autoStartup.pending() then disarm("setup done; handlers removed.") end
+        end)
+    end
+end
+
+onMessageArmed = function(e)
+    onMenuMessage(e)
+    checkDone()
+end
+
+onCellChangedArmed = function()
+    autoStartup.applyStartupConfig()
+    checkDone()
+end
+
+local function arm()
+    if armed then return end
+    armed = true
+    event.register(tes3.event.uiActivated, onMessageArmed, { filter = "MenuMessage" })
+    event.register(tes3.event.cellChanged, onCellChangedArmed)
+end
+
+autoStartup.isArmed = function() return armed end
+
 function autoStartup.init()
     if not config.mcaEnabled and not config.euEnabled then
         return
     end
 
-    event.register(tes3.event.uiActivated, onMenuMessage, { filter = "MenuMessage" })
-
     event.register(tes3.event.loaded, function()
         autoStartup.applyStartupConfig()
+        if not autoStartup.pending() then
+            disarm("setup already done in this save; handlers not kept loaded.")
+            return
+        end
+        arm()
         timer.start({
             type = timer.simulate,
             duration = 0.5,
             iterations = 5,
-            callback = autoStartup.applyStartupConfig,
+            callback = function()
+                autoStartup.applyStartupConfig()
+                if armed and not autoStartup.pending() then disarm("setup done; handlers removed.") end
+            end,
         })
     end)
-
-    event.register(tes3.event.cellChanged, autoStartup.applyStartupConfig)
     mwse.log("[mwpluginpatches] AutoStartup patch active (MCA: %s, Ebonheart Underworks: %s).",
         config.mcaEnabled and config.isMcaActive() and "enabled" or "disabled",
         config.euEnabled and config.isEbonheartUnderworksActive() and "enabled" or "disabled")

@@ -289,26 +289,48 @@ function personalEffectsFix.init()
         end })
     end
 
-    event.register(tes3.event.loaded, scheduleFacing)
-    event.register(tes3.event.cellChanged, scheduleFacing)
-
-    -- Continuous background check while player is in Census & Excise
-    -- MWSE cancels every timer just before `loaded`, so it is started again there
-    local function startBackgroundCheck()
-        timer.start({
+    -- Background check once a second, only while the player is in Census & Excise: started when the player is
+    -- there (a load or a cell change) and cancelled once they have left, so it is not kept running elsewhere.
+    -- MWSE cancels every timer just before `loaded`, so the handle is dropped there.
+    local backgroundTimer
+    local function inCensusOffice()
+        local cell = tes3.player and tes3.player.cell
+        return cell ~= nil and cell.id ~= nil and cell.id:lower():find("census and excise") ~= nil
+    end
+    local function stopBackgroundCheck()
+        if backgroundTimer then pcall(function() backgroundTimer:cancel() end) end
+        backgroundTimer = nil
+    end
+    local function syncBackgroundCheck()
+        if not inCensusOffice() then
+            stopBackgroundCheck()
+            return
+        end
+        if backgroundTimer then return end
+        backgroundTimer = timer.start({
             duration = 1.0,
             type = timer.real,
             iterations = -1,
             callback = function()
-                local cell = tes3.player and tes3.player.cell
-                if cell and cell.id:lower():find("census and excise") then
+                if inCensusOffice() then
                     restoreDoorGuardFacing()
+                else
+                    stopBackgroundCheck()
                 end
             end
         })
     end
-    startBackgroundCheck()
-    event.register(tes3.event.loaded, startBackgroundCheck)
+    personalEffectsFix.backgroundRunning = function() return backgroundTimer ~= nil end   -- for tests
+
+    event.register(tes3.event.loaded, function()
+        backgroundTimer = nil                       -- cancelled by MWSE before loaded
+        scheduleFacing()
+        syncBackgroundCheck()
+    end)
+    event.register(tes3.event.cellChanged, function()
+        scheduleFacing()
+        syncBackgroundCheck()
+    end)
 
     mwse.log("[mwpluginpatches] Personal Effects Sellus Gravius & Census Door Guard script overrides and facing fixes active.")
 end

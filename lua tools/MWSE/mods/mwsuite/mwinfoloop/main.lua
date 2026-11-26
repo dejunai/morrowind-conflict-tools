@@ -399,6 +399,7 @@ finishScan = function(reason)
     s.seen, s.pos, s.dials = nil, nil, {}
     for k in pairs(order) do order[k] = nil end
     flushLog()
+    if M.scanFinishedHook then M.scanFinishedHook() end
 end
 
 local function startScan(mainMenu, fp)
@@ -427,6 +428,33 @@ M.startScan = startScan
 local pendingFingerprint = nil
 local checkedThisSession = false
 
+-- The startup check is one-shot per session: its MenuOptions and load hooks come off once the session's check is
+-- settled (cached, done, ended early, or a game was loaded, after which it can't start), so they are not kept.
+local onOptionsMenu, onLoadDuringScan
+local menuHooked, loadHooked = false, false
+
+local function later(fn)          -- not from inside the event being handled: unregistering there can crash
+    local ok = type(timer) == "table" and type(timer.delayOneFrame) == "function"
+        and pcall(timer.delayOneFrame, fn, timer.real)
+    if not ok then fn() end
+end
+
+local function unhook(name, fn, options)
+    if type(event.unregister) == "function" then pcall(event.unregister, name, fn, options) end
+end
+
+local function retireStartupHooks()
+    if menuHooked then
+        menuHooked = false
+        unhook(tes3.event.uiActivated, onOptionsMenu, { filter = "MenuOptions" })
+    end
+    if loadHooked and not (scan and not scan.finished) then
+        loadHooked = false
+        unhook(tes3.event.load, onLoadDuringScan)
+    end
+end
+M.startupHooksActive = function() return menuHooked, loadHooked end   -- for tests
+
 event.register(tes3.event.initialized, function()
     if not config.enabled then return end
     local okF, fp = pcall(fingerprint)
@@ -440,23 +468,34 @@ event.register(tes3.event.initialized, function()
         if (cache.circular or 0) > 0 then
             pcall(mwse.log, "[mwinfoloop] %d circular topic(s) from the cache are guarded", cache.circular)
         end
+        retireStartupHooks()
     else
         pendingFingerprint = fp or ""
     end
     flushLog()
 end)
 
-event.register(tes3.event.uiActivated, function(e)
+onOptionsMenu = function(e)
     if checkedThisSession or tes3.player or not config.enabled then return end
     checkedThisSession = true
-    if not config.startupCheck or not pendingFingerprint then return end
-    startScan(e.element, pendingFingerprint)
-end, { filter = "MenuOptions" })
+    if config.startupCheck and pendingFingerprint then
+        startScan(e.element, pendingFingerprint)
+    end
+    later(retireStartupHooks)
+end
+menuHooked = true
+event.register(tes3.event.uiActivated, onOptionsMenu, { filter = "MenuOptions" })
 
--- a save loaded before the check finished (quick-load mods): stop it and restore everything
-event.register(tes3.event.load, function()
+-- a save loaded before the check finished (quick-load mods): stop it and restore everything. After any load the
+-- check can't start this session, so both startup hooks come off.
+onLoadDuringScan = function()
     if scan and not scan.finished then finishScan("game loaded") end
-end)
+    later(retireStartupHooks)
+end
+loadHooked = true
+event.register(tes3.event.load, onLoadDuringScan)
+
+M.scanFinishedHook = function() if checkedThisSession then later(retireStartupHooks) end end
 
 ---------------------------------------------------------------------------------------------------------------
 -- live guard

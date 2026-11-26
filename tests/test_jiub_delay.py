@@ -41,6 +41,7 @@ local config = {
 }
 table.insert(package.loaders, 2, function(name)
   if name == "mwpluginpatches.config" then return function() return config end end
+  if name == "mwpluginpatches.intercept" then return assert(loadfile("MOD/intercept.lua")) end
 end)
 local patch = assert(loadfile("MOD/patches/jiubDelay.lua"))()
 local function armed()

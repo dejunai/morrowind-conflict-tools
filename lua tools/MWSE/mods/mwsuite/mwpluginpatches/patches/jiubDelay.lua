@@ -9,6 +9,7 @@
 -- same session can re-arm. Appearance is synced once more as the handlers come off. By dej (dejunai).
 
 local config = require("mwpluginpatches.config")
+local intercept = require("mwpluginpatches.intercept")
 
 local jiubDelay = {}
 
@@ -130,7 +131,9 @@ onSimulate = function(e)
             mwse.log("[mwpluginpatches] Post-census delay of %s minutes reached. Jiub companion rumor is now eligible to appear.",
                 config.jiubDelayMinutes)
         end
-        unload("delay reached; handlers removed.")
+        intercept.afterDispatch(function()
+            if armed then unload("delay reached; handlers removed.") end
+        end)
     end
 end
 
@@ -175,8 +178,10 @@ onInfoFilter = function(e)
         return
     end
 
-    -- the delay is already reached; this call is allowed, and the handlers come off
-    unload("delay already reached; handlers removed.")
+    -- the delay is already reached; this call is allowed, and the handlers come off after this event
+    intercept.afterDispatch(function()
+        if armed then unload("delay already reached; handlers removed.") end
+    end)
 end
 
 onMobileActivated = function(e)

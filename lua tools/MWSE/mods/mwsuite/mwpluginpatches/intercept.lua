@@ -62,6 +62,7 @@ local function wrapFunction(mod, rule)
     end
     wrappedFns[guarded] = true
     mod[rule.fn] = guarded
+    rule.wrappedModule, rule.original, rule.guarded = mod, original, guarded
     return true
 end
 
@@ -105,6 +106,26 @@ local function applyErrorToLog(rule)
         local loaders = package.loaders or package.searchers
         table.insert(loaders, 1, searcher)
         searcherInstalled = true
+    end
+    return true
+end
+
+-- takes an errorToLog rule off again: the function is put back if our guard is still the one in place (otherwise
+-- the guard stays where it is, as a pass-through that logs), and the searcher goes once no rule needs it
+local function removeErrorToLog(rule)
+    if type(rule) ~= "table" then return false end
+    local mod = rule.wrappedModule
+    if type(mod) == "table" and rule.guarded ~= nil and mod[rule.fn] == rule.guarded then
+        mod[rule.fn] = rule.original
+    end
+    rule.wrappedModule, rule.original, rule.guarded = nil, nil, nil
+    if searchers[rule.module] == rule then searchers[rule.module] = nil end
+    if searcherInstalled and next(searchers) == nil then
+        local loaders = package.loaders or package.searchers
+        for i = #loaders, 1, -1 do
+            if loaders[i] == searcher then table.remove(loaders, i) end
+        end
+        searcherInstalled = false
     end
     return true
 end
@@ -157,6 +178,19 @@ local function applyMessageBoxDrop(rule)
     if not nativeMessageBox then
         nativeMessageBox = tes3.messageBox
         tes3.messageBox = filteredMessageBox
+    end
+    return true
+end
+
+-- takes a messageBoxDrop rule off again; with no rule left, tes3.messageBox is put back if ours is still the one
+-- in place (if another wrapper went on after ours, ours stays under it and passes every message through)
+local function removeMessageBoxDrop(rule)
+    for i = #drops, 1, -1 do
+        if drops[i] == rule then table.remove(drops, i) end
+    end
+    if #drops == 0 and nativeMessageBox and tes3.messageBox == filteredMessageBox then
+        tes3.messageBox = nativeMessageBox
+        nativeMessageBox = nil
     end
     return true
 end
@@ -326,11 +360,24 @@ end
 
 --------------------------------------------------------------------------------------------
 
+-- run fn after the event being handled has finished: unregistering a handler from inside an event is left to
+-- the next frame (two handlers doing that inside one event can crash). Runs at once when there are no timers.
+local function afterDispatch(fn)
+    if type(timer) == "table" and type(timer.delayOneFrame) == "function" then
+        local ok = pcall(timer.delayOneFrame, fn, timer.real)
+        if ok then return end
+    end
+    fn()
+end
+
 intercept.wrapHandlers = applyWrapHandlers
 intercept.throttle = applyThrottle
 intercept.skipWhen = applySkipWhen
 intercept.errorToLog = applyErrorToLog
 intercept.messageBoxDrop = applyMessageBoxDrop
 intercept.calledFrom = calledFrom
+intercept.removeMessageBoxDrop = removeMessageBoxDrop
+intercept.removeErrorToLog = removeErrorToLog
+intercept.afterDispatch = afterDispatch
 
 return intercept
