@@ -132,6 +132,7 @@ def find_mwrecompile(game_dir=None, explicit=None):
 LUA_MANIFEST = "mwdialog_lua_manifest.json"         # what --play last deployed from lua tools (a record: state_path)
 LUA_MANIFEST_SCHEMA = "mwdialog-lua-deploy-manifest"
 LUA_MANIFEST_VERSION = 1
+LUA_HISTORY_KEEP = 16                                # per file: the earlier SHA-256s --play deployed (lineage)
 LUA_PRUNE_DIR = "lua prune"                          # <backups>\\lua prune\\<date>\\: what a prune removed + journal
 LUA_PRUNE_JOURNAL = "journal.jsonl"
 # Suite mods taken out of lua tools before --play kept a manifest. Each is pruned once (then listed in the
@@ -185,6 +186,73 @@ def _sha256(path):
         for chunk in iter(lambda: f.read(1 << 20), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def git_blob_ids(data):
+    """The git blob ids `data` can be stored under: its own bytes and, with CRLF line ends, the LF bytes
+    core.autocrlf stores. Places a file in a repo's history without reading the history's contents."""
+    return {hashlib.sha1(b"blob %d\0" % len(d) + d).hexdigest() for d in (data, data.replace(b"\r\n", b"\n"))}
+
+
+def git_path_history(repo, rel):
+    """The blob ids path `rel` (relative to `repo`) has had in any ref of the repo's history, newest first;
+    [] when git can't tell (no git, not a repo, never committed)."""
+    import subprocess
+    try:
+        r = subprocess.run(["git", "-C", str(repo), "log", "--all", "--format=", "--raw", "--no-abbrev",
+                            "--no-renames", "--", str(rel).replace("\\", "/")],
+                           capture_output=True, check=False, timeout=120)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    if r.returncode:
+        return []
+    out = []
+    for line in r.stdout.decode("utf-8", "replace").splitlines():
+        f = line.split()
+        if line.startswith(":") and len(f) >= 5:
+            for blob in (f[3], f[2]):                 # the commit's version, then the one it replaced
+                if blob.strip("0") and blob not in out:
+                    out.append(blob)
+    return out
+
+
+def downgrade_reason(src_ids, dst_ids, history, src_mtime, dst_mtime, src_history=()):
+    """Why copying a source over a destination with different content would put an older version over a newer
+    one, or None when it wouldn't. src_ids / dst_ids: the ids each file's content goes by (sets: SHA-256, git
+    blob ids); history: the ids the destination has held, newest first (--play's deploy record, or the git log
+    of the destination path); src_history: ids the source has held (its own repo's log), when known.
+
+    Hash lineage decides whenever it can: a destination that already held the source's content and has changed
+    since has moved past it ("lineage"). A destination whose content a record knows (history or src_history)
+    is a recorded older version: replaced. Only content no record knows, an edit made outside the tools, falls
+    back to modification times ("mtime": the destination is at least as new as the source). Version fields in
+    the metadata tomls are not used: most have none and none has ever been bumped."""
+    def rank(ids):
+        hits = [i for i, h in enumerate(history) if h in ids]
+        return min(hits) if hits else None
+    rs, rd = rank(src_ids), rank(dst_ids)
+    if rs is not None and (rd is None or rs > rd):
+        return "lineage"
+    if rd is not None or set(dst_ids) & set(src_history):
+        return None
+    return "mtime" if dst_mtime >= src_mtime else None
+
+
+def deployed_history(prev):
+    """The SHA-256s a manifest entry says --play deployed for a file, newest first."""
+    if not isinstance(prev, dict):
+        return []
+    out = [prev["sha256"]] if isinstance(prev.get("sha256"), str) else []
+    hist = prev.get("history")
+    return out + [h for h in (hist if isinstance(hist, list) else []) if isinstance(h, str) and h not in out]
+
+
+def lua_newer_line(rel, why, src_dir=None):
+    """The one warning line --play prints for a deployed Lua file it left alone because it is the newer one."""
+    how = ("lua tools has a version --play deployed before it" if why == "lineage"
+           else "changed outside --play, after lua tools' copy")
+    return (f"--play: WARNING: kept {os.path.join('Data Files', rel)}, newer than lua tools' copy ({how}); copy it "
+            f"into {src_dir or LUA_TOOLS_DIR}, or delete it so --play deploys lua tools' copy.")
 
 
 def _is_config(rel):
@@ -415,9 +483,10 @@ def _lua_tools_files(src):
 def deploy_lua_tools(data_dir, src=None, backup_dir=None, manifest_path=None, prune=True, prune_dir=None):
     """Bring Data Files up to date with the suite's Lua mods in lua tools\\ (laid out like Data Files), where
     every edit to them is made. A file Data Files lacks is copied in. A deployed file that differs from its
-    lua tools copy is replaced when lua tools' copy is the newer one, or when the deployed one is still what
-    --play put there; the deployed one goes to backup_dir first (default <backups>\\lua deploy\\<date>). A
-    deployed copy newer than lua tools' is left alone and listed: an edit made there belongs in lua tools.
+    lua tools copy is replaced unless that would put an older version over a newer one (downgrade_reason: hash
+    lineage from the manifest's SHA-256s, modification times only for content no record knows); the deployed
+    one goes to backup_dir first (default <backups>\\lua deploy\\<date>). A deployed copy newer than lua
+    tools' is left alone and listed ("newer", why in "newer_why"): an edit made there belongs in lua tools.
     MWSE\\config\\ holds the player's settings: only a missing file is copied there. Outside the suite's own
     files (another mod's folder, MWSE\\mods\\<mod>\\), a file --play didn't put there is never
     replaced ("foreign").
@@ -431,7 +500,7 @@ def deploy_lua_tools(data_dir, src=None, backup_dir=None, manifest_path=None, pr
     src = src or LUA_TOOLS_DIR
     data_dir = os.path.abspath(data_dir)
     manifest_path = manifest_path or lua_manifest_path(data_dir)
-    res = {"copied": [], "updated": [], "newer": [], "retired": [], "foreign": [], "backup": None,
+    res = {"copied": [], "updated": [], "newer": [], "newer_why": {}, "retired": [], "foreign": [], "backup": None,
            "manifest": manifest_path, "manifest_error": None,
            "pruned": [], "edited": [], "kept": [], "prune_backup": None, "journal": None, "retired_done": []}
     old, err = read_lua_manifest(manifest_path)
@@ -462,6 +531,10 @@ def deploy_lua_tools(data_dir, src=None, backup_dir=None, manifest_path=None, pr
         cfg = _is_config(rel)
         if cfg:
             ent["config"] = True
+        else:
+            lineage = [h for h in deployed_history(prev) if h != src_sha][:LUA_HISTORY_KEEP]
+            if lineage:
+                ent["history"] = lineage
 
         def record(e=ent):
             mods.setdefault(mod, {"suite": suite, "configs": [], "files": {}})["files"][_mrel(rel)] = e
@@ -486,10 +559,16 @@ def deploy_lua_tools(data_dir, src=None, backup_dir=None, manifest_path=None, pr
         if not suite and not ours:
             res["foreign"].append(rel)                # another mod's file: not --play's to replace
             continue
-        if not ours and os.path.getmtime(s) <= os.path.getmtime(dest):
+        why = downgrade_reason({src_sha}, {dest_sha}, deployed_history(prev),
+                               os.path.getmtime(s), os.path.getmtime(dest))
+        if why:                                       # never an older version over a newer one
             res["newer"].append(rel)
+            res["newer_why"][rel] = why
+            ent.pop("history", None)
             if prev:
                 ent["sha256"], ent["size"] = prev.get("sha256", src_sha), prev.get("size", ent["size"])
+                if deployed_history(prev)[1:]:
+                    ent["history"] = deployed_history(prev)[1:LUA_HISTORY_KEEP + 1]
             ent["kept"] = "newer"
             record()
             continue

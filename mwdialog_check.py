@@ -3083,12 +3083,8 @@ def launch_game(args):
               f"(the old ones are in {dep['backup']}):")
         for rel in dep["updated"]:
             print("    " + rel)
-    if dep and dep["newer"]:
-        print(f"--play: {len(dep['newer'])} deployed Lua file(s) are newer than lua tools' copy and were left "
-              f"alone. Edits belong in {MP.LUA_TOOLS_DIR}; copy them there, or delete the deployed file:",
-              file=sys.stderr)
-        for rel in dep["newer"]:
-            print("    " + rel, file=sys.stderr)
+    for rel in (dep or {}).get("newer", []):          # one line each: never deployed over, said what to do
+        print(MP.lua_newer_line(rel, dep.get("newer_why", {}).get(rel)), file=sys.stderr)
     if dep and dep["retired"]:
         print(f"--play: {len(dep['retired'])} file(s) in the suite's folder aren't in lua tools, and no --play run "
               f"recorded deploying them (left by an old install or put there by hand); the game still loads any "

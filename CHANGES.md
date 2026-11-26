@@ -1,3 +1,14 @@
+# --play never deploys an older lua tools file over a newer one (2026-11-25)
+
+- A deployed Lua file is only replaced when that isn't a downgrade. Hash lineage decides: the deploy record
+  (`generated\mwdialog_lua_manifest.json`) now keeps, per file, the SHA-256s --play deployed before
+  (`history`, newest first, up to 16), so a lua tools copy that is a version Data Files already had and moved
+  past is left alone. A deployed file whose content no record knows (edited by hand) is dated by modification
+  time, as before. Identical files are a no-op; a file never deployed, with nothing newer, deploys as usual.
+- Each file left alone gets one warning line naming it and what to do (copy it into lua tools, or delete it so
+  --play deploys lua tools' copy), instead of a header and a list.
+- `mwdialog_paths`: `downgrade_reason`, `git_blob_ids`, `git_path_history` (the same rule for sync.py's hops,
+  against each destination repo's git log).
 # Vortex folders found again after Vortex compacts its settings (2026-11-25)
 
 - Vortex's settings (`%APPDATA%\Vortex\state.v2`) are read as the LevelDB they are: sorted tables (`.ldb`, keys
