@@ -34,6 +34,9 @@ The suite is engineered for massive, complex mod lists (hundreds of plugins, ten
 - [OpenMW Converter (experimental)](#openmw-converter-experimental)
 - [Installation & Directory Layout](#installation--directory-layout)
 - [Requirements & Bundled Binaries](#requirements--bundled-binaries)
+- [Developer Tools (repository only)](#developer-tools-repository-only)
+  - [deploy.py](#deploypy)
+  - [doc_scan.py](#doc_scanpy)
 - [License](#license)
 
 ---
@@ -459,6 +462,41 @@ When the tools are not installed inside the game folder, their records go straig
   - `tools\7z\7z.exe`: Archive inspection for download master verification (LGPL / unRAR). Optional: `--no-archive-lookup` skips it.
   - `tools\luajit\luajit.exe`: Bytecode syntax verification of patched Lua mods (MIT).
   - `tools\MWRecompile\MWRecompile.exe`: Recompiles rewritten sound scripts for `--soundfix`.
+
+---
+
+## Developer Tools (repository only)
+
+These two scripts are for working on the tools. They are in the repository and are never deployed into an install.
+
+### deploy.py
+
+Copies the runtime files and docs (git-tracked, chosen by `deploy_manifest.txt`) from the repository to an install, usually `<Morrowind>\conflict-tools\`.
+
+```text
+python deploy.py [TARGET] [--backups DIR] [--dry-run]
+python deploy.py -h | --help
+```
+
+| Switch | Argument | Description |
+| :--- | :--- | :--- |
+| `TARGET` | `<PATH>` | The folder to deploy into. Saved in `deploy.ini` beside `deploy.py` (machine-specific, never committed); with no `TARGET` the saved one is used. |
+| `--backups` | `<DIR>` | Where the backup of every file a deploy overwrites goes, also as `--backups=DIR` (saved in `deploy.ini` too). Default: a `_deploy_backups` folder beside the repository. Never inside `TARGET` or inside a game install. Each deploy gets `conflict-tools-deploy-<stamp>\` with `SHA256SUMS.txt`, `NEW_FILES.txt` and a relative `ROLLBACK.ps1`. |
+| `--dry-run` | *(flag)* | Report what a real run would copy, skip and back up, and write nothing (not even `deploy.ini`). |
+| `-h`, `--help` | *(flag)* | Print the full help and exit. |
+
+A real run into a Morrowind install (`TARGET` is, or is inside, a folder holding `Morrowind.exe` or `Data Files`) refuses while Morrowind or MWManager is running; it never stops them. Any other target is not checked for running programs. Exit codes: `0` done, `1` refused or a copy failed its hash check, `2` an unknown switch or no target.
+
+### doc_scan.py
+
+Checks that the docs and the code agree on command-line switches. It never edits anything.
+
+```text
+python doc_scan.py [DIR]
+python doc_scan.py -h | --help
+```
+
+It reads `README.md` and `docs\*.md` (not `docs\CHANGES.md`, which keeps removed names on purpose, and not `docs\dev\`), and the switches the tools define (argparse calls and hand-written parsers). It prints one line per documented switch the code doesn't have (file, line, and the tool it was checked against) and one per switch the code has that no doc mentions, then a summary. A switch hidden with `help=argparse.SUPPRESS` (retired or internal) is not listed as undocumented. Switches of other programs (`omw2mwse`, `luajit`, `git`...) written after that program's name are left out. `DIR` checks another copy of the project. Exit codes: `0` clean, `1` something to fix, `2` an unknown switch.
 
 ---
 

@@ -1,3 +1,12 @@
+# doc_scan clean on the repository; deploy.py's running-game check only for a game install (2026-11-26)
+
+- deploy.py: the running Morrowind/MWManager check applies only when TARGET is, or is inside, a folder holding
+  `Morrowind.exe` or `Data Files`; `main(probe=...)` takes the process probe, so tests never see live processes.
+  README gets a "Developer Tools (repository only)" section documenting deploy.py (with `--backups`) and doc_scan.py.
+- MORE_INFO: the Performers Patch note no longer spells its removed switches as live ones (the names stay here in
+  CHANGES.md); the `--preserve-saves` abbreviation note uses the full name. `doc_scan.py` now exits 0 on the
+  repository, and `tests/test_doc_scan.py` keeps it that way.
+
 # doc_scan.py: verify documented switches still exist in the code (2026-11-26)
 
 - New dev tool `doc_scan.py` (not shipped). It reads README.md and docs/*.md except CHANGES.md and

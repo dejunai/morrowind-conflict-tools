@@ -110,26 +110,13 @@ def test_unknown_switch_exits_2_and_help_exits_0(tmp_path, capsys):
     assert "doc_scan.py" in capsys.readouterr().out
 
 
-# Leftovers in the current docs / undeclared in the current code, reported rather than silently
-# edited. The test allows this set to shrink; it fails if a new stale or undocumented switch appears.
-KNOWN_STALE = {
-    ("docs/MORE_INFO.md", "--performers-patch"),
-    ("docs/MORE_INFO.md", "--no-performers"),
-    ("docs/MORE_INFO.md", "--preserve"),
-}
-KNOWN_UNDOC = {
-    ("deploy.py", "--backups"),
-}
-
-
-def test_the_real_repo_scan_reports_only_the_known_leftovers(capsys):
+def test_the_real_repo_scans_clean(capsys):
+    """The docs and the code agree: every documented switch exists and every switch is documented (or hidden
+    with help=argparse.SUPPRESS). A new stale or undocumented switch fails here."""
     rc = DS.main([SRC])
     out = capsys.readouterr().out
     tools, mentions, (stale, undoc) = DS.scan(SRC)
     assert tools and mentions
-    got_stale = {(path, flag) for path, _n, flag, _d in stale}
-    got_undoc = set(undoc)
-    assert got_stale <= KNOWN_STALE, "new documented switch(es) not in the code: %s" % sorted(got_stale - KNOWN_STALE)
-    assert got_undoc <= KNOWN_UNDOC, "new undocumented switch(es): %s" % sorted(got_undoc - KNOWN_UNDOC)
-    assert rc == (1 if stale or undoc else 0)
-    assert "mod-staging-sanitizer" not in out  # TOC anchors must not be read as switches
+    assert not stale, "documented switch(es) not in the code: %s" % sorted((p, f) for p, _n, f, _d in stale)
+    assert not undoc, "undocumented switch(es): %s" % sorted(undoc)
+    assert rc == 0 and out.startswith("OK:")

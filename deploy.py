@@ -42,7 +42,9 @@ project's git history knows and the project has moved past it, it is replaced; i
 committed version than the project's, or content no commit knows (an edit made in TARGET) that is newer than the
 project's file, it is skipped with one WARNING line saying what to do, and the rest goes on.
 
-A real run refuses while Morrowind or MWManager is running (their files may be in use; it never stops them).
+A real run into a Morrowind install (TARGET is, or is inside, a folder holding Morrowind.exe or Data Files)
+refuses while Morrowind or MWManager is running (their files may be in use; it never stops them). Any other
+TARGET is not a game install, so running programs don't matter there.
 Line endings alone are not a change (git may check out CRLF)."""
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -204,12 +206,11 @@ def _inside(path, folder):
 
 
 def game_install(path):
-    """The Morrowind install `path` is in (an ancestor, or itself, holding Morrowind.exe or a Data Files folder
-    with Morrowind.esm), else None."""
+    """The Morrowind install `path` is in (an ancestor, or itself, holding Morrowind.exe or a Data Files folder),
+    else None."""
     d = os.path.abspath(path)
     while True:
-        if os.path.isfile(os.path.join(d, "Morrowind.exe")) or os.path.isfile(os.path.join(d, "Data Files",
-                                                                                            "Morrowind.esm")):
+        if os.path.isfile(os.path.join(d, "Morrowind.exe")) or os.path.isdir(os.path.join(d, "Data Files")):
             return d
         up = os.path.dirname(d)
         if up == d:
@@ -408,7 +409,9 @@ def show(title, items, limit=60):
         print(f"    ... and {len(items) - limit} more")
 
 
-def main(argv=None, project=None, ini=None):
+def main(argv=None, project=None, ini=None, probe=None):
+    """probe: what lists the running game/MWManager processes (default busy); asked only when the target is in
+    a Morrowind install."""
     target_arg, backups_arg, dry = parse_args(sys.argv[1:] if argv is None else argv)
     project = os.path.abspath(project or HERE)
     ini = ini or INI
@@ -452,7 +455,7 @@ def main(argv=None, project=None, ini=None):
         if target_arg and target_arg != saved.get("target"):
             print(f"(--dry-run: {target} would be saved in {ini})")
         return 0
-    running = busy()
+    running = (probe or busy)() if game else []      # only a game install's files can be in use by them
     if running:
         print(f"deploy.py: {', '.join(running)} is running; close it first (deploy.py never stops it). Nothing was "
               f"done.", file=sys.stderr)

@@ -272,3 +272,30 @@ def test_every_relative_markdown_link_in_the_shipped_docs_resolves(tmp_path, mon
                 if not os.path.exists(want):
                     missing.append(f"{src}:{line} ({label}) {rel} -> {os.path.relpath(want, root)}")
     assert missing == [], "relative markdown links that do not resolve:\n  " + "\n  ".join(missing)
+
+def test_a_target_outside_any_game_install_never_asks_what_is_running(proj):
+    p, dep, tmp = proj
+
+    def probe():
+        raise AssertionError("the running-game check is only for a target in a Morrowind install")
+    assert dep.main([str(tmp / "t"), "--backups", str(tmp / "bk")], project=str(p), ini=str(p / "deploy.ini"),
+                    probe=probe) == 0
+    assert (tmp / "t" / "vortex_tidy.py").is_file()
+
+
+@pytest.mark.parametrize("marker", ["Morrowind.exe", "Data Files"])
+def test_a_target_in_a_game_install_refuses_while_the_game_runs(proj, capsys, marker):
+    p, dep, tmp = proj
+    game = tmp / "Morrowind"
+    if marker == "Data Files":
+        (game / "Data Files").mkdir(parents=True)
+    else:
+        put(game / marker, b"MZ")
+    target = game / "conflict-tools"
+    argv = [str(target), "--backups", str(tmp / "bk")]
+    kw = {"project": str(p), "ini": str(p / "deploy.ini")}
+    assert dep.main(argv, probe=lambda: ["Morrowind.exe"], **kw) == 1
+    assert "Morrowind.exe is running" in capsys.readouterr().err
+    assert not target.exists()
+    assert dep.main(argv, probe=lambda: [], **kw) == 0
+    assert (target / "vortex_tidy.py").is_file()
