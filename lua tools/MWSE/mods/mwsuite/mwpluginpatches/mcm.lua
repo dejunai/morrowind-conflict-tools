@@ -35,7 +35,9 @@ Active Plugin Status:
   • Clean Tales of Seyda Neen: %s
   • Trainer Log: %s
   • Personal Effects: %s
-  • Animated Containers addons: %s]],
+  • Animated Containers addons: %s
+  • Watch the Skies: %s
+  • Party Alchemy: %s]],
     config.isMcaActive() and "Active" or "Not Active",
     config.isEbonheartUnderworksActive() and "Active" or "Not Active",
     config.isPAndSActive() and "Active" or "Not Active",
@@ -46,7 +48,9 @@ Active Plugin Status:
     config.isTalesOfSeydaNeenActive() and "Active" or "Not Active",
     config.isTrainerLogActive() and "Active" or "Not Active",
     config.isPersonalEffectsActive() and "Active" or "Not Active",
-    config.isMwcaConsumerActive() and "Active" or "Not Active"),
+    config.isMwcaConsumerActive() and "Active" or "Not Active",
+    config.isWatchTheSkiesInstalled() and "Active" or "Not Active",
+    config.isPartyAlchemyInstalled() and "Active" or "Not Active"),
 })
 
 -- SECTION 1: FRIENDS & FRENS (JIUB COMPANION DELAY)
@@ -361,6 +365,29 @@ mwcaCategory:createYesNoButton({
         .. "when they load; without it they do nothing. Official MWCA's own animator is not used, and a real "
         .. "MWCA/interop.lua already in Data Files is left alone. Off unless one of those mods is installed. Needs a restart.",
     variable = mwse.mcm.createTableVariable({ id = "mwcaInteropEnabled", table = config }),
+})
+
+local wtsCategory = page:createCategory(string.format("Watch the Skies: Missing Metadata%s",
+    getStatusText(config.isWatchTheSkiesInstalled())))
+
+wtsCategory:createYesNoButton({
+    label = "Log Missing-Metadata Error Instead of Stopping",
+    description = "If Watch the Skies can't find its Watch the Skies-metadata.toml, it shows a message and then "
+        .. "throws a Lua error that stops it starting. With this on, you still see the message, but the error is "
+        .. "written to MWSE.log and the rest of the mod keeps going. Its files are not edited. Off unless Watch the "
+        .. "Skies is installed. Needs a restart.",
+    variable = mwse.mcm.createTableVariable({ id = "wtsMetadataLogEnabled", table = config }),
+})
+
+local partyAlchemyCategory = page:createCategory(string.format("Party Alchemy: Module Message%s",
+    getStatusText(config.isPartyAlchemyInstalled())))
+
+partyAlchemyCategory:createYesNoButton({
+    label = "Hide 'Switched to module' Message",
+    description = "Party Alchemy shows a 'Switched to module: [...]' debug message at the main menu every time the "
+        .. "game starts. This hides only that message, and only when it comes from Party Alchemy; its other messages "
+        .. "and its log line are kept. Its files are not edited. Off unless Party Alchemy is installed. Needs a restart.",
+    variable = mwse.mcm.createTableVariable({ id = "partyAlchemyModuleBoxEnabled", table = config }),
 })
 
 local voicesCategory = page:createCategory(string.format("Voices of Vvardenfell: Console%s",

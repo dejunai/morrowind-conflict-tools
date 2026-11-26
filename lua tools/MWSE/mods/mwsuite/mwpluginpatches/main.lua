@@ -16,12 +16,23 @@ local aiVoicesConsole = require("mwpluginpatches.patches.aiVoicesConsole")
 local uiExpansionTopics = require("mwpluginpatches.patches.uiExpansionTopics")
 local personalEffects = require("mwpluginpatches.patches.personalEffects")
 local mwcaInterop = require("mwpluginpatches.patches.mwcaInterop")
+local wtsMetadataLog = require("mwpluginpatches.patches.wtsMetadataLog")
+local partyAlchemyModuleBox = require("mwpluginpatches.patches.partyAlchemyModuleBox")
 
 -- OAAB and Garden of Dreams call include("MWCA.interop") at file scope when their
 -- main.lua is loaded. That is after this file (load-priority 4500) and before
 -- initialized, so the stub has to be in package.loaded now, not in onInitialized.
 if config.enabled and config.mwcaInteropEnabled and config.isMwcaConsumerActive() then
     mwcaInterop.init()
+end
+
+-- Watch the Skies requires its util module, and Party Alchemy shows its module message on
+-- initialized, both after this file loads; the intercepts go in now so they see both.
+for _, patch in ipairs({ wtsMetadataLog, partyAlchemyModuleBox }) do
+    local ok, err = pcall(patch.init)
+    if not ok then
+        mwse.log("[mwpluginpatches] An intercept failed to start: %s", tostring(err))
+    end
 end
 
 local function onInitialized()

@@ -105,6 +105,16 @@ function config.isMwcaConsumerActive()
     )) or false
 end
 
+-- Intercepts for tweaks that used to be hand edits (patches/wtsMetadataLog.lua, patches/partyAlchemyModuleBox.lua). These run when
+-- mwpluginpatches loads, before the load order is readable, so they look for the mod's own Lua file.
+function config.isWatchTheSkiesInstalled()
+    return (lfs and lfs.fileexists and lfs.fileexists("Data Files/MWSE/mods/tew/Watch the Skies/util.lua")) or false
+end
+
+function config.isPartyAlchemyInstalled()
+    return (lfs and lfs.fileexists and lfs.fileexists("Data Files/MWSE/mods/partyAlchemy/main.lua")) or false
+end
+
 local function getDynamicDefaults()
     local mca = config.isMcaActive()
     local eu = config.isEbonheartUnderworksActive()
@@ -206,6 +216,10 @@ local function getDynamicDefaults()
 
         -- MWCA interop stub for Animated Containers Rewritten and OAAB / Garden of Dreams addons
         mwcaInteropEnabled = config.isMwcaConsumerActive(),
+
+        -- Intercepts that replace old hand edits (patches/wtsMetadataLog.lua, patches/partyAlchemyModuleBox.lua)
+        wtsMetadataLogEnabled = config.isWatchTheSkiesInstalled(),
+        partyAlchemyModuleBoxEnabled = config.isPartyAlchemyInstalled(),
     }
 end
 
