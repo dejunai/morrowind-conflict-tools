@@ -15,7 +15,7 @@ from conftest import SRC
 DEPLOY = os.path.join(SRC, "deploy.py")
 pytestmark = pytest.mark.skipif(not os.path.isfile(DEPLOY) or shutil.which("git") is None,
                                 reason="deploy.py is not vendored here (MWManager), or git is missing")
-DEV = ("tests/", "diag/", ".git", ".github/", "deploy.py", "deploy.ini", "deploy_manifest.txt", "sync.py",
+DEV = ("tests/", "diag/", ".git", ".github/", "deploy.py", "deploy.ini", "deploy_manifest.txt", "doc_scan.py", "sync.py",
        "agents.md", "_backup/", "backups/", "docs/dev/")
 
 

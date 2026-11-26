@@ -52,7 +52,7 @@ LUA = "lua tools/"
 BACKUP_PREFIX = "conflict-tools-deploy-"
 # Never shipped, whatever deploy_manifest.txt says (matched case-insensitively against the project path)
 NEVER = ("tests/**", "**/tests/**", ".git*", "**/.git*", ".github/**", ".gitlab-ci.yml", ".pytest_cache/**",
-         "**/__pycache__/**", "*.pyc", "deploy.py", "deploy.ini", "deploy_manifest.txt", "sync.py", "conftest.py",
+         "**/__pycache__/**", "*.pyc", "deploy.py", "deploy.ini", "deploy_manifest.txt", "doc_scan.py", "sync.py", "conftest.py",
          "*audit*", "**/*audit*", "backups/**", "_backup/**", "_deploy_backups/**", "diag/**", "docs/dev/**", "AGENTS.md",
          "*.prev.txt", "*plan_reviewed.txt", "*plan_enacted.txt", "mwdialog.lock")
 BUSY = ("morrowind", "mwmanager")        # process names (start) that mean the game or MWManager is running

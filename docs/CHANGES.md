@@ -1,3 +1,11 @@
+# doc_scan.py: verify documented switches still exist in the code (2026-11-26)
+
+- New dev tool `doc_scan.py` (not shipped). It reads README.md and docs/*.md except CHANGES.md and
+  docs/dev/, and checks every documented command-line switch against the flags the CLIs define
+  (ast of argparse, and pattern matching of hand-rolled parsers). It also lists switches the code
+  defines that no doc mentions. Exit 1 if either list is not empty. Retired or dev-only flags are
+  marked in the code with `help=argparse.SUPPRESS`, not in a side list.
+
 # Ship the bundled LuaJIT README with the tools (2026-11-26)
 
 - `tools/luajit/README.md` (the local build note already in the Steam install) is now tracked, so
