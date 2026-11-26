@@ -97,6 +97,14 @@ function config.isGraphicHerbalismActive()
         or false
 end
 
+function config.isMwcaConsumerActive()
+    return (lfs and lfs.fileexists and (
+        lfs.fileexists("Data Files/MWSE/mods/herbert100/animated containers/main.lua")
+        or lfs.fileexists("Data Files/MWSE/mods/oaab/mwca/main.lua")
+        or lfs.fileexists("Data Files/MWSE/mods/x32/mwca/main.lua")
+    )) or false
+end
+
 local function getDynamicDefaults()
     local mca = config.isMcaActive()
     local eu = config.isEbonheartUnderworksActive()
@@ -195,6 +203,9 @@ local function getDynamicDefaults()
         -- Graphic Herbalism Respawn Delay (days)
         graphicHerbalismRespawnEnabled = config.isGraphicHerbalismActive(),
         herbRespawnDays = 3,
+
+        -- MWCA interop stub for Animated Containers Rewritten and OAAB / Garden of Dreams addons
+        mwcaInteropEnabled = config.isMwcaConsumerActive(),
     }
 end
 

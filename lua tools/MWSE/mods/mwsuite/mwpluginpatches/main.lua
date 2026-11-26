@@ -15,6 +15,14 @@ local bardicInstruments = require("mwpluginpatches.patches.bardicInstruments")
 local aiVoicesConsole = require("mwpluginpatches.patches.aiVoicesConsole")
 local uiExpansionTopics = require("mwpluginpatches.patches.uiExpansionTopics")
 local personalEffects = require("mwpluginpatches.patches.personalEffects")
+local mwcaInterop = require("mwpluginpatches.patches.mwcaInterop")
+
+-- OAAB and Garden of Dreams call include("MWCA.interop") at file scope when their
+-- main.lua is loaded. That is after this file (load-priority 4500) and before
+-- initialized, so the stub has to be in package.loaded now, not in onInitialized.
+if config.enabled and config.mwcaInteropEnabled and config.isMwcaConsumerActive() then
+    mwcaInterop.init()
+end
 
 local function onInitialized()
     if not config.enabled then

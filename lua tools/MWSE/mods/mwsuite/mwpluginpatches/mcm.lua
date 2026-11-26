@@ -34,7 +34,8 @@ Active Plugin Status:
   • Mabrigash Distribution: %s
   • Clean Tales of Seyda Neen: %s
   • Trainer Log: %s
-  • Personal Effects: %s]],
+  • Personal Effects: %s
+  • Animated Containers addons: %s]],
     config.isMcaActive() and "Active" or "Not Active",
     config.isEbonheartUnderworksActive() and "Active" or "Not Active",
     config.isPAndSActive() and "Active" or "Not Active",
@@ -44,7 +45,8 @@ Active Plugin Status:
     config.isMabrDistActive() and "Active" or "Not Active",
     config.isTalesOfSeydaNeenActive() and "Active" or "Not Active",
     config.isTrainerLogActive() and "Active" or "Not Active",
-    config.isPersonalEffectsActive() and "Active" or "Not Active"),
+    config.isPersonalEffectsActive() and "Active" or "Not Active",
+    config.isMwcaConsumerActive() and "Active" or "Not Active"),
 })
 
 -- SECTION 1: FRIENDS & FRENS (JIUB COMPANION DELAY)
@@ -347,6 +349,18 @@ personalEffectsCategory:createYesNoButton({
         .. "your class's starting chest is unlocked and filled once, Sellus Gravius and the door guard keep facing the "
         .. "right way, and duplicate chests or copies of your character are cleaned up. Needs a restart.",
     variable = mwse.mcm.createTableVariable({ id = "personalEffectsEnabled", table = config }),
+})
+
+local mwcaCategory = page:createCategory(string.format("Animated Containers: MWCA Interop%s",
+    getStatusText(config.isMwcaConsumerActive())))
+
+mwcaCategory:createYesNoButton({
+    label = "Enable MWCA Interop Stub",
+    description = "Puts an empty MWCA.interop table on the MWSE load path so Animated Containers Rewritten can import "
+        .. "mesh replacements from the OAAB and Garden of Dreams container addons. Those addons write into that table "
+        .. "when they load; without it they do nothing. Official MWCA's own animator is not used, and a real "
+        .. "MWCA/interop.lua already in Data Files is left alone. Off unless one of those mods is installed. Needs a restart.",
+    variable = mwse.mcm.createTableVariable({ id = "mwcaInteropEnabled", table = config }),
 })
 
 local voicesCategory = page:createCategory(string.format("Voices of Vvardenfell: Console%s",

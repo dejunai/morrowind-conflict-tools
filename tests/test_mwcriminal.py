@@ -583,6 +583,7 @@ local function element()
     return button
   end
   function e:getContentElement() return self end
+  function e:updateLayout() end
   function e:register(name, callback) self.handlers[name] = callback end
   function e:destroy() self.destroyed = true end
   return e
@@ -591,7 +592,16 @@ package.preload["mwcriminal.config"] = function()
   return { companionBlacklist = {}, blacklistAllCreatures = false }
 end
 package.preload["mwcriminal.interop"] = function() return {} end
-tes3 = { getObject = function() return nil end }
+tes3 = {
+  getObject = function() return nil end,
+  player = {},
+  mobilePlayer = {},
+  messageBox = function() end,
+  event = { menuExit = "menuExit", load = "load", keyDown = "keyDown" },
+  scanCode = { escape = 1 },
+}
+event = { register = function() end, unregister = function() end }
+mwse = { log = function() end, saveConfig = function() end }
 local inMenuMode, leaveCount = false, 0
 tes3ui = {
   registerID = function(id) return id end,
