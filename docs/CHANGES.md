@@ -1,3 +1,8 @@
+# Ship the bundled LuaJIT README with the tools (2026-11-26)
+
+- `tools/luajit/README.md` (the local build note already in the Steam install) is now tracked, so
+  `deploy_manifest.txt`'s `include tools/**` ships it with `luajit.exe`.
+
 # Off layout: reduced textures reason; BSA packing may use a batch uuid (2026-11-26)
 
 - New reason `reduced textures`: the original of a texture that was downscaled or reduced, kept before
