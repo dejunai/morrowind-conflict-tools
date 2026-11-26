@@ -58,20 +58,25 @@ for src in pk:
     off = "Off/%s/OpenMW" % name
     tree = "MWSE/mods/mwsuite/openmw/%s" % name
     present = {rel.lower() for rel, _ in originals}
+    obsolete = {k for k, v in json.loads(os.environ.get("STUB_STATUS", "{}")).items() if v == "obsolete"}   # root plugins kept only in Off/
     for rel, p in originals:
         data = open(p, "rb").read()
         put(off + "/" + rel, data)
         top = rel.split("/")[0].lower()
         if top in GAME:
             put(rel, data)
+        if rel.lower().endswith((".omwaddon", ".omwgame", ".esp", ".esm")) and "/" in rel:     # a subfolder plugin
+            new = rel.rsplit(".", 1)[0] + (".esp" if rel.lower().endswith((".omwaddon", ".esp")) else ".esm")
+            put("Extras/%s/%s" % (name, new), data)
+            continue
         if rel.lower().endswith(".omwaddon"):
             new = rel[:-len(".omwaddon")] + ".esp"
             if new.lower() in present:
                 alerts.append({"level": "warning", "code": "plugin-rename-clash",
                                "message": "%s not renamed: the package also ships %s; %s is kept only under Off/" % (rel, new, rel)})
-            else:
+            elif new not in obsolete:
                 put(new, data)
-        if "/" not in rel and rel.lower().endswith((".esp", ".esm")):
+        if "/" not in rel and rel.lower().endswith((".esp", ".esm")) and rel not in obsolete:
             put(rel, data)
         if rel.lower().endswith((".omwscripts", ".lua", ".yaml")):
             put(tree + "/omw/" + rel, data)
@@ -83,17 +88,28 @@ for src in pk:
     for rel, data in RUNTIME.items():
         put(rel, data)
     plugins = []
-    optional = json.loads(os.environ.get("STUB_OPTIONAL", "{}"))          # {plugin name: reason} the stub calls optional
+    status = json.loads(os.environ.get("STUB_STATUS", "{}"))              # {plugin name: required|undetermined|obsolete}
+    why = json.loads(os.environ.get("STUB_REASON", "{}"))
+    old_optional = json.loads(os.environ.get("STUB_OLD_OPTIONAL", "{}"))   # omw2mwse 0.2.2: {name: reason}, no placement
     for rel, _p in originals:
         low = rel.lower()
-        if "/" in rel or not low.endswith((".omwaddon", ".esp", ".esm")):
+        if not low.endswith((".omwaddon", ".omwgame", ".esp", ".esm")):
             continue
-        new = rel[:-len(".omwaddon")] + ".esp" if low.endswith(".omwaddon") else rel
-        if low.endswith(".omwaddon") and new.lower() in present:
+        kind = "esp" if low.endswith((".omwaddon", ".esp")) else "esm"
+        new = rel.rsplit(".", 1)[0] + "." + kind
+        if "/" not in rel and low.endswith(".omwaddon") and new.lower() in present:
             continue                                                     # the clash: the .omwaddon is not installed
-        plugins.append({"name": new, "source": rel, "kind": new[-3:].lower(),
-                        "optional": new in optional,
-                        "reason": optional.get(new) or "hosted Lua references getGlobalScript(\"x\")"})
+        base = new.rsplit("/", 1)[-1]
+        st = status.get(base, "undetermined" if "/" in rel else "required")
+        place = "extras" if "/" in rel else ("off" if st == "obsolete" else "root")
+        path = {"extras": "Extras/%s/%s" % (name, new), "off": "%s/%s" % (off, rel), "root": new}[place]
+        if old_optional:
+            plugins.append({"name": base, "source": rel, "kind": kind, "optional": base in old_optional,
+                            "reason": old_optional.get(base) or "hosted Lua references getGlobalScript(\"x\")"})
+        else:
+            plugins.append({"name": base, "source": rel.rsplit("/", 1)[-1], "sourceRel": rel, "kind": kind,
+                            "placement": place, "status": st, "path": path,
+                            "reason": why.get(base) or "hosted Lua references getGlobalScript(\"x\")"})
     verdict = json.loads(os.environ.get("STUB_VERDICT", "{}")).get(name, "ready")
     if not dry:
         verdict = json.loads(os.environ.get("STUB_VERDICT_REAL", "{}")).get(name, verdict)
@@ -119,7 +135,8 @@ for src in pk:
     open(mp, "w").write(json.dumps(man, indent=1, sort_keys=True) + "\n")
     moved = []
     for rel, p in originals:
-        if is_root and (rel.split("/")[0].lower() in GAME or ("/" not in rel and rel.lower().endswith((".esp", ".esm")))):
+        if is_root and (rel.split("/")[0].lower() in GAME or ("/" not in rel and rel.lower().endswith((".esp", ".esm"))
+                                                                 and rel not in obsolete)):
             continue
         if os.path.realpath(p) != os.path.realpath(os.path.join(d, *(off + "/" + rel).split("/"))):
             os.remove(p)
@@ -516,59 +533,81 @@ def test_vortex_mod_info_reads_the_state_keys_and_prefers_the_page_name(tmp_path
     assert P.vortex_mod_info("Other-2-0") == {}
 
 
-OPT = "hosted Lua does not reference a record this plugin defines (ll_fight_token, ll_getfight)"
+OBS = ('hosted Lua references record id "ll_fight_token" only inside a dead API_REVISION branch; no live '
+       'reference to this plugin\'s records (ll_fight_token, ll_getfight)')
+EXT = "hosted Lua does not reference a record this plugin defines (extra_s)"
 
 
 def plugin_fixture(env):
+    """omw2mwse 0.2.3's three placements: No Fires (root, required), wildlife_getfight (root, obsolete: the
+    converter keeps it only under Off/) and optional/Extra.esp (a subfolder plugin: Extras/<Mod>/)."""
     mod = root_mod(env.staging, "Foo")
-    put(mod / "wildlife_getfight.esp", b"TES3 optional")                 # a plugin the package ships at its root
+    put(mod / "wildlife_getfight.esp", b"TES3 obsolete")
     put(mod / "No Fires in Bad Weather.esp", b"TES3 required")
+    put(mod / "optional" / "Extra.esp", b"TES3 extra")
+    env.mp.setenv("STUB_STATUS", json.dumps({"wildlife_getfight.esp": "obsolete"}))
+    env.mp.setenv("STUB_REASON", json.dumps({"wildlife_getfight.esp": OBS, "Extra.esp": EXT}))
     return mod
 
 
-def test_optional_plugins_come_from_the_converters_flag_one_note_each_never_enabled_or_renamed(env, capsys):
+def test_non_root_plugins_get_one_note_each_with_where_and_why_and_tidy_moves_nothing(env, capsys):
     mod = plugin_fixture(env)
     before = snap(mod)
-    env.mp.setenv("STUB_OPTIONAL", json.dumps({"wildlife_getfight.esp": OPT}))
     env.apply()
     out = " ".join(capsys.readouterr().out.split())
-    one = f"Foo: wildlife_getfight.esp is optional ({OPT}): tidy leaves it where it is and never enables it"
-    assert out.count("NOTE: " + one) == 1                                 # at --apply, one line
-    assert "No Fires in Bad Weather.esp is optional" not in out           # required: no note
-    assert "Foo.esp is optional" not in out
-    assert "did not make from an .omwaddon" not in out                    # the old heuristic is not used
-    assert (mod / "wildlife_getfight.esp").read_bytes() == b"TES3 optional"
-    assert (mod / "No Fires in Bad Weather.esp").read_bytes() == b"TES3 required"
-    assert sorted(p.name for p in mod.iterdir() if p.suffix == ".esp") == [
-        "Foo.esp", "No Fires in Bad Weather.esp", "wildlife_getfight.esp"]      # nothing renamed or added
-    assert vt.undo() == 0
+    off = "Off/Foo/OpenMW/wildlife_getfight.esp"
+    ext = "Extras/Foo/optional/Extra.esp"
+    assert out.count(f"NOTE: Foo: wildlife_getfight.esp was placed by omw2mwse at {off} (placement off, status "
+                     f"obsolete; {OBS}): it is not enabled by default, and tidy does not move, rename or enable it") == 1
+    assert out.count(f"NOTE: Foo: Extra.esp was placed by omw2mwse at {ext} (placement extras, status undetermined; "
+                     f"{EXT}): it is not enabled by default") == 1
+    assert out.count("was placed by omw2mwse") == 2                        # the root plugins get no note
+    assert "No Fires in Bad Weather.esp was placed" not in out and "Foo.esp was placed" not in out
+    assert "did not make from an .omwaddon" not in out and "is optional" not in out
+    after, _ = snap(mod)
+    root = sorted(k for k in after if "/" not in k.replace(os.sep, "/") and k.endswith(".esp"))
+    assert root == ["Foo.esp", "No Fires in Bad Weather.esp"]               # only root placements are at the root
+    assert (mod / "Extras" / "Foo" / "optional" / "Extra.esp").read_bytes() == b"TES3 extra"
+    assert (mod / "Off" / "Foo" / "OpenMW" / "wildlife_getfight.esp").read_bytes() == b"TES3 obsolete"
+    assert all("omw_convert" in o or "run" in o for o in env.journal())     # tidy journaled no move of its own
+    assert vt.undo() == 0                                                  # the manifest restores all of it
     assert snap(mod) == before
+    assert not (mod / "Extras").exists()
 
 
-def test_a_dry_run_says_nothing_about_plugins_the_note_comes_once_at_apply(env, capsys):
+def test_the_note_follows_placement_not_status_or_name(env, capsys):
+    mod = root_mod(env.staging, "Foo")
+    put(mod / "optional_looking.esp", b"TES3")                              # a root plugin: required, no note
+    put(mod / "legacy.esp", b"TES3")                                        # root, undetermined: still enabled, no note
+    env.mp.setenv("STUB_STATUS", json.dumps({"legacy.esp": "undetermined"}))
+    env.apply()
+    assert "was placed by omw2mwse" not in capsys.readouterr().out
+
+
+def test_a_dry_run_says_nothing_about_plugins_the_notes_come_once_at_apply(env, capsys):
     plugin_fixture(env)
-    env.mp.setenv("STUB_OPTIONAL", json.dumps({"wildlife_getfight.esp": OPT}))
     env.mp.setattr(vt.sys, "argv", ["vortex_tidy.py", "--staging", str(env.staging), "--no-lua", "--no-assets"])
     assert vt.main() == 0
-    assert "is optional" not in capsys.readouterr().out
-
-
-def test_optional_is_the_flag_not_the_name(env, capsys):
-    plugin_fixture(env)
-    env.mp.setenv("STUB_OPTIONAL", json.dumps({"No Fires in Bad Weather.esp": "the package marks it optional"}))
-    env.apply()
-    out = " ".join(capsys.readouterr().out.split())
-    assert out.count("is optional") >= 1 and "No Fires in Bad Weather.esp is optional (the package marks it optional)" in out
-    assert "wildlife_getfight.esp is optional" not in out                 # same kind of file, not flagged: no note
+    assert "was placed by omw2mwse" not in capsys.readouterr().out
 
 
 def test_plugins_are_read_from_the_manifest_when_the_json_has_none(env, capsys):
     plugin_fixture(env)
-    env.mp.setenv("STUB_OPTIONAL", json.dumps({"wildlife_getfight.esp": OPT}))
     env.mp.setenv("STUB_NO_PLUGINS_IN_JSON", "1")
     env.apply()
     out = " ".join(capsys.readouterr().out.split())
-    assert out.count(f"NOTE: Foo: wildlife_getfight.esp is optional ({OPT})") == 1
+    assert out.count("was placed by omw2mwse") == 2 and "(placement extras, status undetermined" in out
+
+
+def test_the_old_optional_boolean_counts_as_not_root(env, capsys):
+    mod = plugin_fixture(env)
+    env.mp.setenv("STUB_OLD_OPTIONAL", json.dumps({"wildlife_getfight.esp": "old reason"}))
+    env.apply()
+    out = " ".join(capsys.readouterr().out.split())
+    assert out.count("NOTE: Foo: wildlife_getfight.esp is optional (old reason): tidy leaves it where it is and "
+                     "never enables it") == 1
+    assert "was placed by omw2mwse" not in out and out.count("is optional") == 1
+    assert (mod / "No Fires in Bad Weather.esp").exists()
 
 
 def test_a_mod_with_no_root_plugin_has_no_plugin_notes(env, capsys):
@@ -586,8 +625,8 @@ def test_an_older_manifest_with_no_plugins_key_falls_back_to_the_shipped_plugin_
     before = snap(mod)
     env.apply()
     out = " ".join(capsys.readouterr().out.split())
-    assert "wildlife_getfight.esp" in out and "No Fires in Bad Weather.esp" in out
-    assert "tidy does not rename or enable them" in out and "is optional" not in out
+    assert "No Fires in Bad Weather.esp" in out and "plugin(s) at its root" in out    # the manifest's file list
+    assert "tidy does not rename or enable them" in out and "is optional" not in out and "was placed" not in out
     assert vt.undo() == 0
     assert snap(mod) == before
 
@@ -810,4 +849,57 @@ def test_a_mod_with_real_mwse_lua_is_unchanged_only_its_openmw_files_go_to_off(e
     assert os.path.join(pk, "Hyb.omwscripts") in after and os.path.join(pk, "scripts", "Hyb", "g.lua") in after
     assert not any(k.startswith(pk) and ("meshes" in k or "textures" in k or k.endswith(".esp")) for k in after)
     assert vt.undo() == 0
+    assert snap(mod) == before
+
+
+# ---------------------------------------------- converter-placed files and tidy's own Off\\ / Extras\\ conventions
+def test_a_blocked_mod_with_converter_placed_plugins_is_undone_then_set_aside_whole(env, capsys):
+    mod = plugin_fixture(env)
+    before = snap(mod)
+    env.mp.setenv("STUB_VERDICT_REAL", json.dumps({"Foo": "blocked"}))             # the preview said ready
+    env.apply()
+    after, _ = snap(mod)
+    assert not any(k.startswith(("Extras", "MWSE")) for k in after)                # converter output is gone
+    assert not any(k.startswith(os.path.join("Off", "Foo")) for k in after)
+    top = {k.split(os.sep)[0] for k in after}
+    assert top == {"Off"}
+    pk = os.path.join("Off", "OpenMW", vt.mod_name("Foo-1-0"))
+    for rel in ("wildlife_getfight.esp", "No Fires in Bad Weather.esp", os.path.join("optional", "Extra.esp")):
+        assert os.path.join(pk, rel) in after, rel
+    assert "was placed by omw2mwse" not in capsys.readouterr().out                # a blocked mod is not converted
+    assert vt.undo() == 0
+    assert snap(mod) == before
+
+
+def test_tidy_leaves_the_converters_extras_and_off_folders_alone_on_a_later_run(env):
+    mod = plugin_fixture(env)
+    env.apply()
+    after, _ = snap(mod)
+    moves = vt.plan_mod(str(mod))
+    assert isinstance(moves, list)
+    for src, _dst, _why in moves:
+        rel = os.path.relpath(src, str(mod)).split(os.sep)[0].lower()
+        assert rel not in ("extras", "off", "mwse"), src                           # converter output: not tidy's
+    env.apply()                                                                    # a second run changes nothing
+    assert snap(mod)[0] == after
+
+
+def test_the_folder_names_of_tidy_and_the_converter_differ_and_both_undo_exactly(env):
+    """Tidy sets a package aside at Off\\OpenMW\\<mod name from its folder>; omw2mwse's own place is
+    Off\\<plugin name from the .omwscripts>\\OpenMW. It adopts the first layout and moves the package, and
+    --undo reverses both steps."""
+    mod = env.staging / "Wild Attacks-54448-1-9"
+    put(mod / "wan.omwscripts", "GLOBAL: scripts/wan/g.lua\n")
+    put(mod / "scripts" / "wan" / "g.lua", "return 1\n")
+    put(mod / "meshes" / "x.nif", b"nif")
+    before = snap(mod)
+    env.mp.setattr(vt, "CONVERTER_HOME", str(env.tmp / "nowhere"))                 # step 1: no converter
+    env.apply()
+    assert os.path.join("Off", "OpenMW", "Wild Attacks", "wan.omwscripts") in snap(mod)[0]
+    env.mp.setattr(vt, "CONVERTER_HOME", str(env.tmp / "tools-home"))              # step 2: the converter is back
+    env.apply()
+    after, _ = snap(mod)
+    assert os.path.join("Off", "wan", "OpenMW", "wan.omwscripts") in after          # its convention, not tidy's
+    assert not any(k.startswith(os.path.join("Off", "OpenMW")) for k in after)
+    assert vt.undo() == 0 and vt.undo() == 0
     assert snap(mod) == before

@@ -1,3 +1,21 @@
+# vortex_tidy follows omw2mwse 0.2.3's plugin placement (2026-11-26)
+
+- omw2mwse 3d372b3 replaced the `optional` boolean with `placement` (`root`, `extras`, `off`), `status` (`required`,
+  `undetermined`, `obsolete`), `path` and `sourceRel` on each entry of `mods[].plugins[]` (`--json`) and `plugins`
+  in `omw2mwse-manifest.json`. Tidy reads them, the JSON first, then the manifest on disk. Only placement `root` is
+  enabled by default; `extras` (`Extras\<Mod>\`) and `off` (`Off\<Mod>\OpenMW\`) are never auto-enabled.
+- At `--apply`, one NOTE per non-root plugin: where the converter put it and its reason. Dry runs stay quiet.
+  Tidy never moves, renames or enables a plugin, and never reads readmes or FOMOD text for this.
+- Fallbacks: the 0.2.2 boolean `optional: true` counts as not-root (the earlier NOTE); a manifest with no `plugins`
+  key falls back to the scan for root plugins with no `.omwaddon`/`.omwgame` source.
+- Converter-placed files in `Extras\<Mod>\` and `Off\<Mod>\OpenMW\` are listed in the manifest, so `--undo`
+  removes the copies (each only while its hash matches) and puts the obsolete root plugin back from `Off\`.
+  A blocked mod's conversion is undone first, then its whole package goes to tidy's `Off\OpenMW\<mod>\`.
+- Folder names differ by design: tidy sets a package aside at `Off\OpenMW\<mod name from the Vortex folder>\` and
+  keeps its own files in `Extras\<mod name>\`; omw2mwse uses `Off\<plugin name from the .omwscripts>\OpenMW\` and
+  `Extras\<plugin name>\`. The converter accepts tidy's layout and moves the package (the mod's `Docs\` stays
+  behind in tidy's folder); `--undo` reverses both steps exactly.
+
 # --cell-conflicts remembers who lost an INCOMPATIBLE choice (2026-11-25)
 
 - The plugin you turn off in an INCOMPATIBLE pair is recorded with the plugin it lost to, in the new

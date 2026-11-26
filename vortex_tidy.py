@@ -55,11 +55,13 @@ For each mod folder in Vortex's Morrowind staging folder (from Vortex's settings
     exits 0) is not shipped - the output is undone at once, the mod is treated as not convertible, its whole
     package goes to Off\\OpenMW\\ as above, one WARNING line, and the plan says so up front; partial counts as
     converted, with one NOTE. Plugins are never renamed or enabled by tidy: omw2mwse renames .omwaddon/.omwgame
-    to .esp/.esm itself (originals stay under Off\\). Tidy never enables or renames a converted mod's plugins; it
-    reads omw2mwse's own list (mods[].plugins[] in its JSON, plugins in omw2mwse-manifest.json: name, source, kind,
-    optional, reason) and prints one NOTE per optional plugin with the converter's reason. A manifest with no
-    plugins key (older omw2mwse) falls back to a scan for root plugins with no .omwaddon/.omwgame source.
-    plugin-rename-clash alerts get a NOTE too.
+    to .esp/.esm itself (originals stay under Off\\). omw2mwse also places plugins itself and reports each in
+    mods[].plugins[] of its JSON (else plugins in omw2mwse-manifest.json): placement root (enabled by default),
+    extras (Extras\\<Mod>\\) or off (Off\\<Mod>\\OpenMW\\), status required, undetermined or obsolete, path, reason.
+    Tidy never moves, renames or enables a plugin and never reads readmes or FOMOD text for this: at --apply it
+    prints one NOTE per non-root plugin (where it went, the converter's reason). An older converter's boolean
+    optional (true) counts as not-root; a manifest with no plugins key falls back to a scan for root plugins with
+    no .omwaddon/.omwgame source. plugin-rename-clash alerts get a NOTE too.
   * A bugreports\\ folder tidy made during a run that is empty at the end of it (--apply, a dry run or --undo)
     is removed again; one that was already there, or has anything in it, stays.
   * Everything else (screenshots, FOMOD option folders, meta.ini, .bak files...) goes to
@@ -761,8 +763,9 @@ def unconverted_moves(mod_dir):
 
 
 def converter_plugins(entry, manifest_path=None):
-    """The root plugins omw2mwse reports for one mod: [{name, source, kind, optional, reason}] from its JSON entry
-    ("plugins"), else from its manifest ("plugins"); None when neither has the key (an older omw2mwse)."""
+    """The plugins omw2mwse reports for one mod: [{name, source, sourceRel, kind, placement, status, path, reason}]
+    (0.2.2: optional instead of placement/status/path) from its JSON entry ("plugins"), else from its manifest
+    ("plugins"); None when neither has the key (an older omw2mwse)."""
     got = entry.get("plugins") if isinstance(entry, dict) else None
     if not isinstance(got, list) and manifest_path:
         try:
@@ -774,12 +777,25 @@ def converter_plugins(entry, manifest_path=None):
 
 
 def plugin_notes(mname, plugins):
-    """One NOTE text per optional plugin, with the converter's reason. Tidy never enables or renames a plugin:
-    optional is the converter's call (its Lua references none of the records the plugin defines, or the
-    package marks it optional), not a guess from the file name."""
-    return [f"{mname}: {p['name']} is optional ({p.get('reason') or 'no reason given'}): tidy leaves it where it "
-            f"is and never enables it; enable it in Vortex only if you want that option"
-            for p in plugins or [] if p.get("optional") is True]
+    """One NOTE text per plugin omw2mwse did not leave at the Data Files root, with the converter's reason. The
+    converter places the files itself (omw2mwse 0.2.3: placement root | extras | off, status required |
+    undetermined | obsolete, path relative to the mod); only placement root is enabled by default. Tidy never
+    moves, renames or enables a plugin, and never reads readmes or FOMOD text for this. An older converter's
+    boolean "optional" (true) counts as not-root. An entry with neither field counts as root: no note."""
+    out = []
+    for p in plugins or []:
+        place = str(p.get("placement") or "").lower()
+        why = p.get("reason") or "no reason given"
+        if not place and p.get("optional") is True:         # omw2mwse 0.2.2: optional, no placement
+            out.append(f"{mname}: {p['name']} is optional ({why}): tidy leaves it where it is and never enables it; "
+                       f"enable it in Vortex only if you want that option")
+        elif place and place != "root":
+            where = p.get("path") or p["name"]
+            status = p.get("status") or "unknown"
+            out.append(f"{mname}: {p['name']} was placed by omw2mwse at {where} (placement {place}, status "
+                       f"{status}; {why}): it is not enabled by default, and tidy does not move, rename or "
+                       f"enable it")
+    return out
 
 
 def shipped_plugins(files):
