@@ -82,14 +82,29 @@ for src in pk:
     put(name + "-metadata.toml", ("[tools.mwse]\nname = \"" + name + "\"\n").encode())
     for rel, data in RUNTIME.items():
         put(rel, data)
+    plugins = []
+    optional = json.loads(os.environ.get("STUB_OPTIONAL", "{}"))          # {plugin name: reason} the stub calls optional
+    for rel, _p in originals:
+        low = rel.lower()
+        if "/" in rel or not low.endswith((".omwaddon", ".esp", ".esm")):
+            continue
+        new = rel[:-len(".omwaddon")] + ".esp" if low.endswith(".omwaddon") else rel
+        if low.endswith(".omwaddon") and new.lower() in present:
+            continue                                                     # the clash: the .omwaddon is not installed
+        plugins.append({"name": new, "source": rel, "kind": new[-3:].lower(),
+                        "optional": new in optional,
+                        "reason": optional.get(new) or "hosted Lua references getGlobalScript(\"x\")"})
     verdict = json.loads(os.environ.get("STUB_VERDICT", "{}")).get(name, "ready")
     if not dry:
         verdict = json.loads(os.environ.get("STUB_VERDICT_REAL", "{}")).get(name, verdict)
     if verdict == "blocked":
         alerts.append({"level": "error", "code": "blocker", "message": "requires unsupported module openmw.ui"})
     if dry:
-        mods.append({"name": name, "source": off, "off": off, "status": "ok", "verdict": verdict, "rewrites": [],
-                     "conflicts": [], "files": {}, "alerts": alerts, "changed": True})
+        e = {"name": name, "source": off, "off": off, "status": "ok", "verdict": verdict, "rewrites": [],
+             "conflicts": [], "files": {}, "alerts": alerts, "changed": True}
+        if not os.environ.get("STUB_NO_PLUGINS"):
+            e["plugins"] = plugins
+        mods.append(e)
         continue
     for rel, data in plan.items():
         dst = os.path.join(d, *rel.split("/"))
@@ -98,6 +113,8 @@ for src in pk:
             open(dst, "wb").write(data)
     man = {"tool": "omw2mwse", "version": "0.2.2", "mod": name, "source": off, "mode": mode,
            "files": {rel: sha(data) for rel, data in sorted(plan.items())}}
+    if not os.environ.get("STUB_NO_PLUGINS"):
+        man["plugins"] = plugins
     mp = os.path.join(d, *tree.split("/"), "omw2mwse-manifest.json")
     open(mp, "w").write(json.dumps(man, indent=1, sort_keys=True) + "\n")
     moved = []
@@ -116,6 +133,8 @@ for src in pk:
         parent = os.path.dirname(parent)
     entry = {"name": name, "source": off, "off": off, "status": "ok", "verdict": verdict, "rewrites": [],
              "conflicts": [], "files": {}, "alerts": alerts, "changed": True}
+    if not os.environ.get("STUB_NO_PLUGINS") and not os.environ.get("STUB_NO_PLUGINS_IN_JSON"):
+        entry["plugins"] = plugins
     if moved:
         entry["relocatedFrom"] = src if is_root else os.path.relpath(src, d).replace(os.sep, "/")
         entry["relocated"] = moved
@@ -497,18 +516,92 @@ def test_vortex_mod_info_reads_the_state_keys_and_prefers_the_page_name(tmp_path
     assert P.vortex_mod_info("Other-2-0") == {}
 
 
-def test_the_converters_rename_clash_flag_is_honoured_and_shipped_plugins_are_not_touched(env, capsys):
+OPT = "hosted Lua does not reference a record this plugin defines (ll_fight_token, ll_getfight)"
+
+
+def plugin_fixture(env):
+    mod = root_mod(env.staging, "Foo")
+    put(mod / "wildlife_getfight.esp", b"TES3 optional")                 # a plugin the package ships at its root
+    put(mod / "No Fires in Bad Weather.esp", b"TES3 required")
+    return mod
+
+
+def test_optional_plugins_come_from_the_converters_flag_one_note_each_never_enabled_or_renamed(env, capsys):
+    mod = plugin_fixture(env)
+    before = snap(mod)
+    env.mp.setenv("STUB_OPTIONAL", json.dumps({"wildlife_getfight.esp": OPT}))
+    env.apply()
+    out = " ".join(capsys.readouterr().out.split())
+    one = f"Foo: wildlife_getfight.esp is optional ({OPT}): tidy leaves it where it is and never enables it"
+    assert out.count("NOTE: " + one) == 1                                 # at --apply, one line
+    assert "No Fires in Bad Weather.esp is optional" not in out           # required: no note
+    assert "Foo.esp is optional" not in out
+    assert "did not make from an .omwaddon" not in out                    # the old heuristic is not used
+    assert (mod / "wildlife_getfight.esp").read_bytes() == b"TES3 optional"
+    assert (mod / "No Fires in Bad Weather.esp").read_bytes() == b"TES3 required"
+    assert sorted(p.name for p in mod.iterdir() if p.suffix == ".esp") == [
+        "Foo.esp", "No Fires in Bad Weather.esp", "wildlife_getfight.esp"]      # nothing renamed or added
+    assert vt.undo() == 0
+    assert snap(mod) == before
+
+
+def test_a_dry_run_says_nothing_about_plugins_the_note_comes_once_at_apply(env, capsys):
+    plugin_fixture(env)
+    env.mp.setenv("STUB_OPTIONAL", json.dumps({"wildlife_getfight.esp": OPT}))
+    env.mp.setattr(vt.sys, "argv", ["vortex_tidy.py", "--staging", str(env.staging), "--no-lua", "--no-assets"])
+    assert vt.main() == 0
+    assert "is optional" not in capsys.readouterr().out
+
+
+def test_optional_is_the_flag_not_the_name(env, capsys):
+    plugin_fixture(env)
+    env.mp.setenv("STUB_OPTIONAL", json.dumps({"No Fires in Bad Weather.esp": "the package marks it optional"}))
+    env.apply()
+    out = " ".join(capsys.readouterr().out.split())
+    assert out.count("is optional") >= 1 and "No Fires in Bad Weather.esp is optional (the package marks it optional)" in out
+    assert "wildlife_getfight.esp is optional" not in out                 # same kind of file, not flagged: no note
+
+
+def test_plugins_are_read_from_the_manifest_when_the_json_has_none(env, capsys):
+    plugin_fixture(env)
+    env.mp.setenv("STUB_OPTIONAL", json.dumps({"wildlife_getfight.esp": OPT}))
+    env.mp.setenv("STUB_NO_PLUGINS_IN_JSON", "1")
+    env.apply()
+    out = " ".join(capsys.readouterr().out.split())
+    assert out.count(f"NOTE: Foo: wildlife_getfight.esp is optional ({OPT})") == 1
+
+
+def test_a_mod_with_no_root_plugin_has_no_plugin_notes(env, capsys):
+    mod = root_mod(env.staging, "Foo")
+    (mod / "Foo.omwaddon").unlink()
+    env.mp.setenv("STUB_OPTIONAL", json.dumps({"x.esp": "r"}))
+    env.apply()
+    out = capsys.readouterr().out
+    assert "is optional" not in out and "plugin(s)" not in out
+
+
+def test_an_older_manifest_with_no_plugins_key_falls_back_to_the_shipped_plugin_scan(env, capsys):
+    mod = plugin_fixture(env)
+    env.mp.setenv("STUB_NO_PLUGINS", "1")
+    before = snap(mod)
+    env.apply()
+    out = " ".join(capsys.readouterr().out.split())
+    assert "wildlife_getfight.esp" in out and "No Fires in Bad Weather.esp" in out
+    assert "tidy does not rename or enable them" in out and "is optional" not in out
+    assert vt.undo() == 0
+    assert snap(mod) == before
+
+
+def test_the_rename_clash_alert_is_still_honoured(env, capsys):
     mod = root_mod(env.staging, "Foo")
     (mod / "Foo.esp").write_bytes(b"TES3 shipped")                       # the package ships X.esp beside X.omwaddon
-    put(mod / "wildlife_getfight.esp", b"TES3 optional")                 # an optional plugin for old OpenMW
     before = snap(mod)
     env.apply()
     out = " ".join(capsys.readouterr().out.split())
     assert out.count("Foo.omwaddon not renamed: the package also ships Foo.esp") == 1
     assert "never enables it" in out
-    assert "wildlife_getfight.esp" in out and "tidy does not rename or enable them" in out   # by manifest, not by name
-    assert (mod / "wildlife_getfight.esp").read_bytes() == b"TES3 optional" and (mod / "Foo.esp").read_bytes() == b"TES3 shipped"
-    assert not [p for p in mod.iterdir() if p.suffix == ".esp" and p.name not in ("Foo.esp", "wildlife_getfight.esp")]
+    assert (mod / "Foo.esp").read_bytes() == b"TES3 shipped"
+    assert not [p for p in mod.iterdir() if p.suffix == ".esp" and p.name != "Foo.esp"]
     assert vt.undo() == 0
     assert snap(mod) == before
 

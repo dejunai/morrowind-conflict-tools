@@ -55,8 +55,11 @@ For each mod folder in Vortex's Morrowind staging folder (from Vortex's settings
     exits 0) is not shipped - the output is undone at once, the mod is treated as not convertible, its whole
     package goes to Off\\OpenMW\\ as above, one WARNING line, and the plan says so up front; partial counts as
     converted, with one NOTE. Plugins are never renamed or enabled by tidy: omw2mwse renames .omwaddon/.omwgame
-    to .esp/.esm itself (originals stay under Off\\); an optional plugin it flags (plugin-rename-clash) or a
-    plugin shipped at the mod root is only reported in a NOTE, not enabled.
+    to .esp/.esm itself (originals stay under Off\\). Tidy never enables or renames a converted mod's plugins; it
+    reads omw2mwse's own list (mods[].plugins[] in its JSON, plugins in omw2mwse-manifest.json: name, source, kind,
+    optional, reason) and prints one NOTE per optional plugin with the converter's reason. A manifest with no
+    plugins key (older omw2mwse) falls back to a scan for root plugins with no .omwaddon/.omwgame source.
+    plugin-rename-clash alerts get a NOTE too.
   * A bugreports\\ folder tidy made during a run that is empty at the end of it (--apply, a dry run or --undo)
     is removed again; one that was already there, or has anything in it, stays.
   * Everything else (screenshots, FOMOD option folders, meta.ini, .bak files...) goes to
@@ -757,9 +760,32 @@ def unconverted_moves(mod_dir):
     return res if isinstance(res, list) else []
 
 
+def converter_plugins(entry, manifest_path=None):
+    """The root plugins omw2mwse reports for one mod: [{name, source, kind, optional, reason}] from its JSON entry
+    ("plugins"), else from its manifest ("plugins"); None when neither has the key (an older omw2mwse)."""
+    got = entry.get("plugins") if isinstance(entry, dict) else None
+    if not isinstance(got, list) and manifest_path:
+        try:
+            with open(manifest_path, encoding="utf-8") as f:
+                got = json.load(f).get("plugins")
+        except (OSError, ValueError, AttributeError):
+            got = None
+    return [p for p in got if isinstance(p, dict) and p.get("name")] if isinstance(got, list) else None
+
+
+def plugin_notes(mname, plugins):
+    """One NOTE text per optional plugin, with the converter's reason. Tidy never enables or renames a plugin:
+    optional is the converter's call (its Lua references none of the records the plugin defines, or the
+    package marks it optional), not a guess from the file name."""
+    return [f"{mname}: {p['name']} is optional ({p.get('reason') or 'no reason given'}): tidy leaves it where it "
+            f"is and never enables it; enable it in Vortex only if you want that option"
+            for p in plugins or [] if p.get("optional") is True]
+
+
 def shipped_plugins(files):
-    """Root plugins (.esp/.esm) in a converter manifest's file list that the converter did not make from an
-    .omwaddon/.omwgame (no such file under its Off package): the package shipped them itself."""
+    """FALLBACK for a manifest with no "plugins" key (an older omw2mwse): root plugins (.esp/.esm) in its file
+    list that the converter did not make from an .omwaddon/.omwgame (no such file under its Off package): the
+    package shipped them itself."""
     keys = {k.replace("\\", "/") for k in files or {}}
     low = {k.lower() for k in keys}
     out = []
@@ -846,11 +872,15 @@ def convert_apply(staging, mods, mode, head_extra=None):
             for al in m.get("alerts") or []:
                 if al.get("code") == "plugin-rename-clash":
                     notes.append(f"{mname}: {al.get('message')}; tidy leaves it there and never enables it")
-            ship = shipped_plugins(op["files"])
-            if ship:
-                notes.append(f"{mname} also has plugin(s) at its root that omw2mwse did not make from an "
-                             f".omwaddon/.omwgame ({', '.join(ship)}): tidy does not rename or enable them; "
-                             f"enable one in Vortex only if you want that option")
+            plugins = converter_plugins(m, os.path.join(mod_dir, *(op["tree"].split("/") + [MP.OMW_MANIFEST])))
+            if plugins is not None:
+                notes += plugin_notes(mname, plugins)
+            else:                                    # older omw2mwse: no plugins list, so the manifest's files
+                ship = shipped_plugins(op["files"])
+                if ship:
+                    notes.append(f"{mname} also has plugin(s) at its root that omw2mwse did not make from an "
+                                 f".omwaddon/.omwgame ({', '.join(ship)}): tidy does not rename or enable them; "
+                                 f"enable one in Vortex only if you want that option")
         if ops:                                      # also from a result with a conflict in another mod
             journal_conversions(staging, ops, head_extra)
         if ok:

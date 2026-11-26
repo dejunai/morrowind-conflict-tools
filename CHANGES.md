@@ -1,3 +1,13 @@
+# vortex_tidy reads omw2mwse's optional-plugin flag (2026-11-25)
+
+- omw2mwse 166252b lists every root plugin it emits or leaves in `mods[].plugins[]` (`--json`) and under `plugins` in
+  `omw2mwse-manifest.json`: `{name, source, kind, optional, reason}`. Tidy reads the flag (JSON first, then the
+  manifest on disk) and prints one NOTE per optional plugin with the converter's reason; a required plugin gets no
+  note. Tidy still never enables or renames a converted mod's plugins. Checked against the real converter:
+  `wildlife_getfight.esp` is optional and `No Fires in Bad Weather.esp` is not.
+- The earlier guess (a root `.esp`/`.esm` with no `.omwaddon` source) is kept only as a fallback for a manifest
+  with no `plugins` key. `plugin-rename-clash` handling is unchanged.
+
 # omw2mwse verdicts, Vortex title and author, optional plugins, empty bugreports (2026-11-25)
 
 Follows f31470a (already pushed, so a second commit).
