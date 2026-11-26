@@ -125,4 +125,33 @@ blacklist:createCategory({
     end,
 })
 
+-- Credits: the mods whose ideas mwcriminal borrows or works with (listed with their authors and pages)
+local CREDITS = {
+    { mod = "Accidental Theft Protection", author = "Merlord",
+      idea = "Owned items and containers can only be taken or opened while sneaking, with a list of things that may be taken standing.",
+      url = "https://www.nexusmods.com/morrowind/mods/48264" },
+    { mod = "Door Locks (abotDoorLocks)", author = "abot",
+      idea = "Homes lock by time of day, place, faction and owner while public places stay open; knocking on a locked door and someone answering it; opening doors with keys kept on a keyring.",
+      url = "https://www.nexusmods.com/morrowind/mods/54754" },
+    { mod = "Modern Lockpicking (MWSE)", author = "Tauer",
+      idea = "Sneaking at a locked door or container starts its lockpicking minigame. mwcriminal only decides when it starts and works with it.",
+      url = "https://www.nexusmods.com/morrowind/mods/59374" },
+    { mod = "Stealth Overhaul 2", author = "Storm Atronach and Rhjelte",
+      idea = "Followers and blacklisted actors clear Stealth Overhaul's suspicion, through its interop.",
+      url = "https://www.nexusmods.com/morrowind/mods/57321" },
+    { mod = "Essential Indicators", author = "Anumaril21",
+      idea = "The crosshair tint over locked doors and containers, through its interop.",
+      url = "https://www.nexusmods.com/morrowind/mods/48267" },
+    { mod = "Attend Me Expanded MWSE", author = "drekar51 (MWSE port of Attend Me by urm)",
+      idea = "NPCs recruited with Attend Me count as followers for companion detection.",
+      url = "https://www.nexusmods.com/morrowind/mods/60810" },
+}
+local credits = template:createPage({ label = "Credits" })
+credits:createInfo({ text = "mwcriminal is by dejunai. It borrows ideas from, and works with, the mods below. Each link opens the original mod's page; please support their authors." })
+for _, c in ipairs(CREDITS) do
+    local cat = credits:createCategory(c.mod .. " - by " .. c.author)
+    cat:createInfo({ text = c.idea })
+    cat:createHyperlink({ text = c.url, url = c.url })
+end
+
 template:register()

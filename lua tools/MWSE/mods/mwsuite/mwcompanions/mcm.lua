@@ -93,4 +93,30 @@ template:createExclusionsPage({
     },
 })
 
+-- Credits: the mods whose ideas mwcompanions borrows or works with (listed with their authors and pages)
+local CREDITS = {
+    { mod = "Smart Companions", author = "abot",
+      idea = "Who counts as a follower; warping followers to you and moving them with you through doors; levitating and water walking with you; follower traits; no friendly fire; followers who collapse instead of dying; companions who join your fights; quiet followers after a cell change; not activating a follower while sneaking.",
+      url = "https://www.nexusmods.com/morrowind/mods/49848" },
+    { mod = "Easy Escort", author = "NullCascade",
+      idea = "Warping followers who fall far behind or get left in another cell, and the list of actors that are never followers (its ignore list was imported).",
+      url = "https://www.nexusmods.com/morrowind/mods/45712" },
+    { mod = "Attend Me Expanded MWSE", author = "drekar51 (MWSE port of Attend Me by urm)",
+      idea = "Spreading warped followers in an arc behind you; reading the companion variable safely so it cannot crash the game; recognizing NPCs recruited with its menu.",
+      url = "https://www.nexusmods.com/morrowind/mods/60810" },
+    { mod = "Attend Me (OpenMW)", author = "urm (uramer)",
+      idea = "The follower HUD and follower teleport that the MWSE version above ports.",
+      url = "https://www.nexusmods.com/morrowind/mods/51232" },
+    { mod = "More Attentive Guards", author = "Celediel",
+      idea = "Guards that follow you for a while because you were sneaking are never counted as followers, through its interop.",
+      url = "https://www.nexusmods.com/morrowind/mods/48622" },
+}
+local credits = template:createPage({ label = "Credits" })
+credits:createInfo({ text = "mwcompanions is by dejunai. It borrows ideas from, and works with, the mods below. Each link opens the original mod's page; please support their authors." })
+for _, c in ipairs(CREDITS) do
+    local cat = credits:createCategory(c.mod .. " - by " .. c.author)
+    cat:createInfo({ text = c.idea })
+    cat:createHyperlink({ text = c.url, url = c.url })
+end
+
 template:register()

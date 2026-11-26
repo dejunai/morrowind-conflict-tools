@@ -421,6 +421,7 @@ mwse.mcm = {
   createTemplate = function(p)
     return {
       createSideBarPage = function() return { createYesNoButton = function() end, createCategory = function() return { createYesNoButton = function() end, createSlider = function() end } end } end,
+      createPage = function() local c = { createInfo = function() end, createHyperlink = function() end }; c.createCategory = function() return c end; return c end,
       createExclusionsPage = function(_, p) registeredPage = p; return p end,
       register = function() end,
     }

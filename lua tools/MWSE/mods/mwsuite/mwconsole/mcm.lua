@@ -40,7 +40,8 @@ local function statusText()
         config.userScripts.on and string.format("Developer scripts: ON (%d commands)", users) or "Developer scripts: off",
         "",
         "Credits: by dejunai. Command API compatible with More Console Commands by JosephMcKean; ideas from Blue's "
-            .. "Smart Console (Safebox), Easy Console Commands (TribalLu) and Selection Details (NullCascade).",
+            .. "Smart Console (Safebox), Easy Console Commands (TribalLu) and Selection Details (NullCascade). "
+            .. "Links are on the Credits page.",
     }, "\n")
 end
 
@@ -234,6 +235,32 @@ function mcm.build(main)
 
     local listPage = template:createPage({ label = "Commands" })
     listPage:createInfo({ text = "", postCreate = function(self) self.elements.info.text = commandList() end })
+
+    -- Credits: the mods whose ideas mwconsole borrows or works with (listed with their authors and pages)
+    local CREDITS = {
+        { mod = "More Console Commands", author = "JosephMcKean",
+          idea = "The command API that other mods use to add console commands, and the set of everyday commands (money, coc, cure, levelup, spawn and the rest), reimplemented here.",
+          url = "https://www.nexusmods.com/morrowind/mods/52500" },
+        { mod = "Blue - Smart Console", author = "Safebox",
+          idea = "Console suggestions and Tab completion that know what each command expects.",
+          url = "https://www.nexusmods.com/morrowind/mods/53427" },
+        { mod = "Easy Console Commands", author = "TribalLu",
+          idea = "Keys for ResetActors, ToggleCollision and ToggleMenus.",
+          url = "https://www.nexusmods.com/morrowind/mods/54855" },
+        { mod = "Selection Details", author = "NullCascade",
+          idea = "Details of the selected object (ID, source, mesh, textures, scripts, ownership, Lua data) shown beside the console.",
+          url = "https://www.nexusmods.com/morrowind/mods/51095" },
+        { mod = "UI Expansion", author = "NullCascade and Hrnchamd",
+          idea = "The Lua console that mwconsole adds its completion, mode keys and details panel to.",
+          url = "https://www.nexusmods.com/morrowind/mods/46071" },
+    }
+    local credits = template:createPage({ label = "Credits" })
+    credits:createInfo({ text = "mwconsole is by dejunai. It borrows ideas from, and works with, the mods below. No code from them is used. Each link opens the original mod's page; please support their authors." })
+    for _, c in ipairs(CREDITS) do
+        local cat = credits:createCategory(c.mod .. " - by " .. c.author)
+        cat:createInfo({ text = c.idea })
+        cat:createHyperlink({ text = c.url, url = c.url })
+    end
 
     template:register()
     return template

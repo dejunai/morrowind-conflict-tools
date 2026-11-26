@@ -91,3 +91,18 @@ is still enabled.
 
 abot's scripted-door overrides (its per-door blacklist is replaced by ours, Shift+activate); abot's rotating greeting
 texts (one line kept); mwplainpaperfix's saved blank-id list; NAT fix "hidden" Take mode (red only, per the user's words).
+
+## 5. Credits
+
+mwcriminal is by dejunai. It borrows ideas from, and works with, the mods below. The same list is on the Credits page of its MCM.
+
+| Idea | Source mod | Author | Link |
+|---|---|---|---|
+| Owned things can only be taken or opened while sneaking; a list of things that may be taken standing (the door exemptions are our own addition) | Accidental Theft Protection | Merlord | <https://www.nexusmods.com/morrowind/mods/48264> |
+| Homes lock by time of day, place, faction and owner; public places stay open; knocking and the opener meeting you at the door; the knock sound; keys on a keyring open doors | Door Locks (abotDoorLocks) | abot | <https://www.nexusmods.com/morrowind/mods/54754> |
+| Sneaking at a locked door or container starts its minigame (mwcriminal only gates it) | Modern Lockpicking (MWSE) | Tauer | <https://www.nexusmods.com/morrowind/mods/59374> |
+| Followers and blacklisted actors clear its suspicion (interop) | Stealth Overhaul 2 | Storm Atronach and Rhjelte | <https://www.nexusmods.com/morrowind/mods/57321> |
+| Crosshair tint over locked things (interop) | Essential Indicators | Anumaril21 | <https://www.nexusmods.com/morrowind/mods/48267> |
+| NPCs recruited with it count as followers for companion detection | Attend Me Expanded MWSE | drekar51 (MWSE port of Attend Me by urm) | <https://www.nexusmods.com/morrowind/mods/60810> |
+
+Attend Me Expanded MWSE is a port and expansion of Attend Me by urm (uramer): <https://www.nexusmods.com/morrowind/mods/51232>.
