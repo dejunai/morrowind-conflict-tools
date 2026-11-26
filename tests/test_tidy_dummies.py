@@ -38,6 +38,7 @@ def env(tmp_path, monkeypatch):
     (tmp_path / "state").mkdir()
     monkeypatch.setattr(vt, "JOURNAL", str(tmp_path / "state" / "vortex_tidy_journal.jsonl"))
     monkeypatch.setattr(vt, "HERE", str(game))
+    monkeypatch.setattr(vt, "CORE_MISSING", {})
     monkeypatch.setattr(vt, "blacklist", lambda create=False: [])
     monkeypatch.setattr(m, "stand_in_bytes", lambda r: COIN)             # never used for a dummy any more
     staging = tmp_path / "staging"
@@ -263,9 +264,10 @@ def test_generated_sounds():
 
 def test_every_generated_type_needs_no_files(tmp_path, monkeypatch):
     monkeypatch.setattr(vt, "HERE", str(tmp_path / "nowhere"))
-    for ext in (".dds", ".tga", ".bmp", ".png", ".jpg", ".jpeg", ".wav", ".mp3", ".nif"):
+    for ext in (".dds", ".tga", ".bmp", ".png", ".jpg", ".jpeg", ".wav", ".mp3"):
         b, what = vt.dummy_bytes("textures\\a" + ext)
         assert b and what == vt.GENERATED[ext]
+    assert vt.dummy_bytes("meshes\\a.nif")[0] == vt.dummy_nif()               # no coin anywhere: the empty one
     assert vt.dummy_bytes("icons\\a.dds")[1] == "a 32x32 placeholder icon"
     assert vt.dummy_dds("a.dds") == m.placeholder_dds("a.dds")               # the old colours, made here
     assert vt.dummy_icon() == m.placeholder_icon()
@@ -293,6 +295,7 @@ def game(tmp_path, monkeypatch):
     data = g / "Data Files"
     data.mkdir(parents=True)
     monkeypatch.setattr(vt, "HERE", str(g))
+    monkeypatch.setattr(vt, "CORE_MISSING", {})
     vt._REF_TEXT.clear()
     (data / "Morrowind.bsa").write_bytes(_bsa([
         ("meshes\\a\\xused_door.kf", b"KF used"),
@@ -360,3 +363,184 @@ def test_a_font_dummy_prefers_the_core_font_it_replaces(game):
     assert vt.dummy_bytes("fonts\\magic_cards_regular.fnt")[0] == b"FNT core"
     b, what = vt.dummy_bytes("fonts\\my_font.fnt")
     assert b == b"FNT d" and "nothing in your plugins uses it" in what   # magic_cards is named by Morrowind.ini
+
+
+# ---------------------------------------------------------------- models: the Dwemer coin by default, --no-coins
+def _coin_bsa(env, with_coin=True):
+    files = [("meshes\\m\\misc_dwrv_coin00.nif", COIN)] if with_coin else [("meshes\\m\\other.nif", COIN)]
+    (env.game / "Data Files" / "Morrowind.bsa").write_bytes(_bsa(files))
+
+
+def _nif_fix(ent):
+    return next(f for f in ent["fixes"] if f[2] == rel("meshes", "bad.nif"))
+
+
+def test_by_default_a_broken_model_gets_the_dwemer_coin(env, monkeypatch):
+    monkeypatch.setattr(vt, "NO_COINS", False)
+    _coin_bsa(env)
+    ent = check(env)
+    fix = _nif_fix(ent)
+    assert fix[0] == "dummy" and fix[3]["dummy"] == "coin"
+    assert "Dwemer coin" in {r: msg for _s, r, msg in ent["issues"]}[rel("meshes", "bad.nif")]
+    apply(env)
+    assert (env.root / "meshes" / "bad.nif").read_bytes() == COIN                    # read out of Morrowind.bsa
+    assert not (env.tmp / "game" / "dummy assets").exists()
+
+
+def test_no_coins_gives_the_empty_invisible_model(env, monkeypatch):
+    monkeypatch.setattr(vt, "NO_COINS", True)
+    _coin_bsa(env)
+    fix = _nif_fix(check(env))
+    assert fix[3]["dummy"] == "empty"
+    apply(env)
+    assert (env.root / "meshes" / "bad.nif").read_bytes() == vt.dummy_nif()
+
+
+def test_without_the_coin_the_empty_model_is_used_and_the_plan_says_so(env, monkeypatch, capsys):
+    monkeypatch.setattr(vt, "NO_COINS", False)
+    _coin_bsa(env, with_coin=False)
+    st = {}
+    ent = vt.assets_check_mod(str(env.root), m, ah, str(env.game / "Data Files"), set(), str(env.game), st)
+    assert _nif_fix(ent)[3]["dummy"] == "empty" and st["no_coin"]
+    msg = {r: x for _s, r, x in ent["issues"]}[rel("meshes", "bad.nif")]
+    assert "empty, invisible model" in msg and vt.NO_COIN_NOTE in msg
+    ares = vt.assets_check(env.args)
+    assert vt.NO_COIN_NOTE in ares["body"]                                            # in the plan file's summary
+    vt.assets_apply(env.args, ares)
+    assert (env.root / "meshes" / "bad.nif").read_bytes() == vt.dummy_nif()
+
+
+@pytest.mark.parametrize("first,then", [(False, True), (True, False)])
+def test_switching_modes_leaves_existing_dummies_alone(env, monkeypatch, first, then):
+    _coin_bsa(env)
+    monkeypatch.setattr(vt, "NO_COINS", first)
+    apply(env)
+    once = tree(env.root)
+    monkeypatch.setattr(vt, "NO_COINS", then)
+    ent = check(env)
+    assert rel("meshes", "bad.nif") not in {f[2] for f in ent["fixes"]} | {r for _s, r, _m in ent["issues"]}
+    apply(env)
+    assert tree(env.root) == once
+
+
+def test_the_plan_line_names_the_kind_so_a_plan_from_the_other_mode_differs(env, monkeypatch):
+    _coin_bsa(env)
+    monkeypatch.setattr(vt, "NO_COINS", False)
+    coin = vt.asset_action_lines(check(env))
+    monkeypatch.setattr(vt, "NO_COINS", True)
+    empty = vt.asset_action_lines(check(env))
+    assert set(coin) != set(empty)
+    assert any('"dummy": "coin"' in x for x in coin) and any('"dummy": "empty"' in x for x in empty)
+
+
+def test_a_coin_the_plan_named_but_gone_at_apply_is_not_swapped_for_another_kind(env, monkeypatch):
+    full = str(env.root / "meshes" / "bad.nif")
+    done, skipped = vt.make_dummies(str(env.root), [("dummy", full, rel("meshes", "bad.nif"),
+                                                     {"why": "x", "dummy": "coin"})], m, "Bits")
+    assert done == 0 and skipped and (env.root / "meshes" / "bad.nif").read_bytes() == GARBAGE_NIF
+
+
+def test_help_lists_no_coins(monkeypatch, capsys):
+    monkeypatch.setattr(vt.sys, "argv", ["vortex_tidy.py", "--help"])
+    with pytest.raises(SystemExit):
+        vt.main()
+    assert "--no-coins" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------- core game files altered: one warning per run
+@pytest.fixture
+def whole(tmp_path, monkeypatch):
+    """vortex_tidy run whole (plan, then --apply) on one mod with a broken model, in tmp only."""
+    game = tmp_path / "game"
+    (game / "Data Files").mkdir(parents=True)
+    staging = tmp_path / "staging"
+    mod = staging / "Bits-1-1-0"
+    (mod / "meshes").mkdir(parents=True)
+    plugin(str(mod / "Bits.esp"), [], [])
+    (mod / "meshes" / "bad.nif").write_bytes(GARBAGE_NIF)
+    monkeypatch.setattr(vt, "HERE", str(game))
+    monkeypatch.setattr(vt, "CORE_MISSING", {})
+    monkeypatch.setattr(vt, "JOURNAL", str(tmp_path / "journal.jsonl"))
+    monkeypatch.setattr(vt, "PLAN", str(tmp_path / "vortex_tidy_plan.txt"))
+    monkeypatch.setattr(vt, "BLACKLIST_FILE", str(tmp_path / "bl.txt"))
+    monkeypatch.setattr(vt, "_tool_modules", lambda: (m, ah))
+    monkeypatch.setattr(m, "stand_in_bytes", lambda r: COIN)
+
+    def run(*extra):
+        monkeypatch.setattr(vt.sys, "argv", ["vortex_tidy.py", "--staging", str(staging), "--no-lua", *extra])
+        return vt.main()
+
+    def bsa(files):
+        (game / "Data Files" / "Morrowind.bsa").write_bytes(_bsa(files))
+    run.bsa, run.nif, run.data = bsa, mod / "meshes" / "bad.nif", game / "Data Files"
+    return run
+
+
+def _plan():
+    with open(vt.PLAN, encoding="utf-8") as f:
+        return f.read()
+
+
+def test_no_coin_in_morrowind_bsa_warns_once_that_the_core_files_were_altered(whole, capsys):
+    whole.bsa([("meshes\\m\\other.nif", COIN)])
+    assert whole() == 0                                                      # plan mode: same exit code
+    out = capsys.readouterr().out
+    assert out.count(vt.CORE_WARN_HEAD) == 1
+    assert "meshes\\m\\misc_dwrv_coin00.nif is not in Morrowind.bsa" in out and "Verify" in out
+    assert out.rstrip().endswith("!" * 78)                                   # last thing the run prints
+    plan = _plan()
+    assert vt.NO_COIN_NOTE in plan                                           # the per-plan note stays
+    assert ("# " + vt.CORE_WARN_HEAD) in plan and plan.rstrip().endswith("# " + "!" * 78)
+    assert whole("--apply", "--yes") == 0                                    # never blocks
+    out = capsys.readouterr().out
+    assert out.count(vt.CORE_WARN_HEAD) == 1 and "The plan matches" in out
+    assert whole.nif.read_bytes() == vt.dummy_nif()
+
+
+def test_a_normal_morrowind_bsa_gives_no_warning(whole, capsys):
+    whole.bsa([(vt.COIN_NIF, COIN)])
+    assert whole() == 0
+    out = capsys.readouterr().out
+    assert vt.CORE_WARN_HEAD not in out and vt.CORE_WARN_HEAD not in _plan()
+    assert whole("--apply", "--yes") == 0
+    assert vt.CORE_WARN_HEAD not in capsys.readouterr().out and whole.nif.read_bytes() == COIN
+
+
+def test_a_missing_morrowind_bsa_warns_too(whole, capsys):
+    assert whole() == 0
+    out = capsys.readouterr().out
+    assert out.count(vt.CORE_WARN_HEAD) == 1 and "Morrowind.bsa is missing from Data Files" in out
+
+
+def test_no_coins_never_looks_for_the_coin_so_no_warning(whole, capsys):
+    assert whole("--no-coins") == 0
+    assert vt.CORE_WARN_HEAD not in capsys.readouterr().out
+
+
+def test_no_data_files_at_all_is_not_an_altered_game(whole, capsys):
+    import shutil
+    shutil.rmtree(whole.data)
+    assert whole() == 0
+    assert vt.CORE_WARN_HEAD not in capsys.readouterr().out
+
+
+def test_the_kf_stand_in_missing_from_morrowind_bsa_warns_but_optional_archives_never_do(game):
+    (game.data / "Morrowind.bsa").write_bytes(_bsa([("meshes\\a\\xused_door.kf", b"KF used")]))
+    b, _what = vt.dummy_bytes("meshes\\mine\\xbroken.kf")
+    assert b == b"KF used"                                                   # still a dummy: never blocks
+    assert list(vt.CORE_MISSING) == [vt.KF_FALLBACK]                         # no Tribunal/Bloodmoon.bsa: fine
+    assert any("xin_dagoth_bridge00.kf is not in Morrowind.bsa" in ln for ln in vt.core_warning())
+
+
+def test_the_kf_stand_in_is_warned_about_even_when_another_unused_animation_is_used(game):
+    (game.data / "Morrowind.bsa").write_bytes(_bsa([("meshes\\a\\xused_door.kf", b"KF used"),
+                                                   ("meshes\\b\\xspare_thing.kf", b"KF spare, longer")]))
+    b, what = vt.dummy_bytes("meshes\\mine\\xbroken.kf")
+    assert b == b"KF spare, longer" and "nothing in your plugins uses it" in what
+    assert list(vt.CORE_MISSING) == [vt.KF_FALLBACK]
+
+
+def test_core_lookups_that_find_their_file_say_nothing(game):
+    vt.dummy_bytes("meshes\\mine\\xbroken.kf")
+    vt.dummy_bytes("meshes\\c\\shared.kf")
+    assert vt.CORE_MISSING == {} and vt.core_warning() == []

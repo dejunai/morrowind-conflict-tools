@@ -51,8 +51,11 @@ NIFZER0EDIT built in, plus the folder names in vortex_tidy_blacklist.txt (one pe
   * Broken asset files the asset check can't repair (empty, not the format their name says, truncated, a model
     the game crashes on, an MP3 with no audio) go to <mod>\\Off\\broken\\<plugin>\\<path>, and a small valid
     file of the same format takes their place, so what names them still finds a file. Made in code: a 4x4
-    placeholder texture (DDS, TGA, BMP, PNG; an 8x8 JPEG; a 32x32 icon under icons\\), silence (WAV, MP3), an
-    empty model (NIF). Any other type (.kf, .bik, .fnt, .tex...) gets a copy of a core game file of that type
+    placeholder texture (DDS, TGA, BMP, PNG; an 8x8 JPEG; a 32x32 icon under icons\\), silence (WAV, MP3). A
+    model (NIF) gets the game's Dwemer coin, read out of Morrowind.bsa, so the gap is easy to spot; with
+    --no-coins (or no coin in Morrowind.bsa, which the plan says, with a warning that the core game files were
+    altered: once per run, at the end of the output and of the plan) an empty, invisible model made in code. Any
+    other type (.kf, .bik, .fnt, .tex...) gets a copy of a core game file of that type
     (Morrowind/Tribunal/Bloodmoon.bsa, or the game's own loose Video and Fonts files): the one at the same path
     if there is one, else one no active plugin (nor Morrowind.ini) names, cached in vortex_tidy_dummy_sources.json.
     <original>.tidy-dummy beside the kept original marks the dummy, so a later run leaves it alone. A broken
@@ -1488,7 +1491,100 @@ def dummy_nif():
 
 GENERATED = {".dds": "a 4x4 placeholder texture", ".tga": "a 4x4 placeholder TGA", ".bmp": "a 4x4 placeholder BMP",
              ".png": "a 4x4 placeholder PNG", ".jpg": "an 8x8 placeholder JPEG", ".jpeg": "an 8x8 placeholder JPEG",
-             ".wav": "a silent WAV", ".mp3": "a silent MP3", ".nif": "an empty model (one empty node)"}
+             ".wav": "a silent WAV", ".mp3": "a silent MP3", ".nif": "an empty, invisible model (one empty node)"}
+
+# Models: by default a missing or broken mesh gets the game's Dwemer coin (the stand-in mwdialog_check --fix uses,
+# read out of the core Morrowind.bsa), so the gap is easy to spot in the game without its giant error marker.
+# --no-coins (NO_COINS) uses the empty, invisible model made in code instead; so does a game without the coin in
+# its Morrowind.bsa, and the plan says so. The plan line says which ({"dummy": "coin"} or "empty"), so --apply
+# refuses a plan made in the other mode. Either kind is marked the same way (.tidy-dummy, by its SHA-256), so a
+# later run in the other mode leaves the dummies already there alone.
+NO_COINS = False
+COIN_NIF = "meshes\\m\\misc_dwrv_coin00.nif"
+COIN_WHAT = "the game's Dwemer coin (misc_dwrv_coin00.nif from Morrowind.bsa)"
+NO_COIN_NOTE = "the Dwemer coin isn't in Morrowind.bsa here"
+
+
+# Core game files tidy looks for by name and expects as shipped: Morrowind.bsa itself, the coin in it and the
+# .kf stand-in in it. One that is missing or changed is collected here (CORE_MISSING: key -> [what is wrong,
+# [what tidy did instead]]) and shown once per run as a warning that the core files were altered (core_warning,
+# printed at the end of the run and written at the end of the plan file). It never stops anything. Tribunal.bsa
+# and Bloodmoon.bsa are optional sources (a copy may come from them when there): never warned about. Without a
+# Data Files folder at all tidy is simply not in a game folder: not warned about either (assets_check notes it).
+CORE_MISSING = {}
+CORE_WARN_HEAD = "WARNING: THE CORE MORROWIND GAME FILES HAVE BEEN ALTERED"
+
+
+def _core_missing(key, what, instead):
+    if os.path.isdir(_data_dir()):
+        got = CORE_MISSING.setdefault(key, [what, []])
+        if instead not in got[1]:
+            got[1].append(instead)
+
+
+def core_warning():
+    """The core-files warning (lines, no trailing newline), or [] when nothing core was found missing."""
+    if not CORE_MISSING:
+        return []
+    bar = "!" * 78
+    out = [bar, CORE_WARN_HEAD, ""]
+    for what, instead in CORE_MISSING.values():
+        out += [f"  - {what}", f"    ({'; '.join(instead)})"]
+    out += ["",
+            "  The game's own archives must stay exactly as shipped: mods override them, they never replace",
+            "  them. A modified, replaced or missing core file can break the game and every mod built on it,",
+            "  in ways no tool can detect. vortex_tidy carried on (nothing was blocked), but you should restore",
+            "  the original files now: in Steam, right-click Morrowind > Properties > Installed Files > Verify",
+            "  integrity of game files (GOG Galaxy: Manage installation > Verify / Repair), or reinstall the",
+            "  game's original Morrowind.bsa. Then run vortex_tidy again.",
+            bar]
+    return out
+
+
+def print_core_warning():
+    lines = core_warning()
+    if lines:
+        print("\n" + "\n".join(lines))
+
+
+def coin_nif():
+    """The Dwemer coin model out of the core Morrowind.bsa (nothing written anywhere), or None (and the core
+    files warning: the coin is a known core file)."""
+    import mwdialog_bsa as BSA
+    bsa = os.path.join(_data_dir(), "Morrowind.bsa")
+    instead = "broken models get the empty, invisible model instead of the Dwemer coin"
+    if not os.path.isfile(bsa):
+        _core_missing("Morrowind.bsa", "Morrowind.bsa is missing from Data Files", instead)
+        return None
+    try:
+        entry = BSA.bsa_index(bsa).get(COIN_NIF)
+        if entry is None:
+            _core_missing(COIN_NIF, f"{COIN_NIF} is not in Morrowind.bsa", instead)
+            return None
+        with open(bsa, "rb") as f:
+            f.seek(entry[0])
+            b = f.read(entry[1])
+    except (OSError, ValueError, struct.error, BSA.FormatError) as e:
+        _core_missing("Morrowind.bsa", f"Morrowind.bsa can't be read ({e})", instead)
+        return None
+    if len(b) == entry[1] and b.startswith(NIF_HEAD):
+        return b
+    _core_missing(COIN_NIF, f"{COIN_NIF} in Morrowind.bsa is not a Morrowind model any more", instead)
+    return None
+
+
+def nif_dummy(kind=None):
+    """(bytes, what, kind "coin"/"empty") of a model dummy: kind None follows NO_COINS (the coin, else - or
+    without one in Morrowind.bsa - the empty model); "coin" is the coin or (None, why, "coin")."""
+    want = kind or ("empty" if NO_COINS else "coin")
+    if want == "coin":
+        b = coin_nif()
+        if b is not None:
+            return b, COIN_WHAT, "coin"
+        if kind == "coin":
+            return None, f"{NO_COIN_NOTE} any more", "coin"
+        return dummy_nif(), f"{GENERATED['.nif']}, as {NO_COIN_NOTE}", "empty"
+    return dummy_nif(), GENERATED[".nif"], "empty"
 
 
 def generate_dummy(rel):
@@ -1571,14 +1667,22 @@ def _core_candidates(ext):
     """[(kind "bsa"/"loose", archive or "", path under Data Files, offset, size)] of the core files of a type."""
     import mwdialog_bsa as BSA
     data, out = _data_dir(), []
+    instead = f"a {ext} dummy is copied from the other core files, if any"
     for name in CORE_BSAS:
         p = os.path.join(data, name)
         if not os.path.isfile(p):
+            if name == "Morrowind.bsa":
+                _core_missing(name, "Morrowind.bsa is missing from Data Files", instead)
             continue
         try:
             idx = BSA.bsa_index(p)
-        except (OSError, ValueError, struct.error, BSA.FormatError):
+        except (OSError, ValueError, struct.error, BSA.FormatError) as e:
+            if name == "Morrowind.bsa":
+                _core_missing(name, f"Morrowind.bsa can't be read ({e})", instead)
             continue
+        if name == "Morrowind.bsa" and ext == ".kf" and KF_FALLBACK not in idx:
+            _core_missing(KF_FALLBACK, f"{KF_FALLBACK} is not in Morrowind.bsa",
+                          "a .kf dummy is copied from the other core animations, if any")
         out += [("bsa", name, n, off, size) for n, (off, size) in sorted(idx.items()) if n.endswith(ext) and size > 0]
     for top in (os.listdir(data) if os.path.isdir(data) else ()):
         if top.lower() not in CORE_LOOSE_DIRS:
@@ -1696,9 +1800,12 @@ def core_dummy(rel, staging=None):
     return b, _core_label(pick, how)
 
 
-def dummy_bytes(rel, m=None, staging=None):
-    """(bytes, what it is) of the dummy for a broken file at rel, or (None, why there is none): made in code
-    when the type allows (GENERATED), else a copy of a core game file. m is not used (kept for callers)."""
+def dummy_bytes(rel, m=None, staging=None, nif=None):
+    """(bytes, what it is) of the dummy for a broken file at rel, or (None, why there is none): a model gets the
+    coin or the empty model (nif_dummy; nif: the kind the plan named), another type one made in code when it
+    can be (GENERATED), else a copy of a core game file. m is not used (kept for callers)."""
+    if os.path.splitext(rel)[1].lower() == ".nif":
+        return nif_dummy(nif)[:2]
     got = generate_dummy(rel)
     if got:
         return got
@@ -1786,7 +1893,12 @@ def apply_dummy_rule(root, m, ah, data_dir, bsa_meshes, issues, fixes, stats=Non
                         stats.setdefault("no_dummy", set()).add(os.path.splitext(rel)[1].lower() or "(none)")
                 continue
             why = job if isinstance(job, str) else json.dumps(job, sort_keys=True)
-            out.append(("dummy", full, rel, {"why": why}))
+            job = {"why": why}
+            if os.path.splitext(rel)[1].lower() == ".nif":
+                job["dummy"] = nif_dummy()[2]
+                if job["dummy"] == "empty" and not NO_COINS and stats is not None:
+                    stats["no_coin"] = True
+            out.append(("dummy", full, rel, job))
             notes[k] = f"moved to Off\\...\\broken\\, {what} put in its place (a dummy, so what names it finds a file)"
             if kind == "brokenout":
                 bm = getattr(ah, "BROKEN_MODELS", None)
@@ -1819,11 +1931,12 @@ def make_dummies(root, dfixes, m, plug, renamed=None):
     dated name beside it), write its dummy in place (a Vortex hard link stays one) and mark it. Returns (done,
     [skipped notes])."""
     done, skipped = 0, []
-    for _kind, full, rel, _job in dfixes:
+    for _kind, full, rel, job in dfixes:
         if not os.path.isfile(_xp(full)) and renamed and full in renamed:
             rel = renamed[full]                       # renamed to its ASCII name by this run
             full = os.path.join(root, rel)
-        b, what = dummy_bytes(rel, m, os.path.dirname(os.path.abspath(root)))
+        b, what = dummy_bytes(rel, m, os.path.dirname(os.path.abspath(root)),
+                              job.get("dummy") if isinstance(job, dict) else None)   # the kind the plan named
         if b is None:
             skipped.append(f"{rel} ({what})")
             continue
@@ -1892,6 +2005,7 @@ def assets_check(args):
     if m is None:
         print("\n(asset check skipped: mwdialog_check.py / mwdialog_assets.py not found next to vortex_tidy.py)")
         return None
+    CORE_MISSING.clear()                              # once per run: what this check (and its --apply) finds
     game_dir = HERE
     mods = sorted(d for d in os.listdir(args.staging) if os.path.isdir(os.path.join(args.staging, d))
                   and d.lower() != "off")
@@ -1938,6 +2052,12 @@ def assets_check(args):
     if n_dummy:
         summary += (f"; {n_dummy} broken file(s) to move to Off\\...\\broken\\ with a dummy put in each one's "
                     f"place")
+    n_nif = sum(1 for ent in res["mods"].values() for f in ent["fixes"]
+                if f[0] == "dummy" and isinstance(f[3], dict) and "dummy" in f[3])
+    if n_nif:
+        summary += ("; models get " + ("the empty, invisible model (--no-coins)" if NO_COINS else
+                                       f"the empty, invisible model: {NO_COIN_NOTE}" if res["stats"].get("no_coin")
+                                       else "the Dwemer coin (--no-coins: an empty, invisible model)"))
     print(f"\n{summary}" + ("" if args.apply else " (run with --apply to repair them)"))
     st = res["stats"]
     if st.get("dummies"):
@@ -2146,7 +2266,12 @@ def main():
     ap.add_argument("--no-reduce-textures", action="store_true", help="don't reduce textures larger than 2048")
     ap.add_argument("--no-reduce-splash", action="store_true",
                     help="don't reduce splash screens wider than 2048 (they are still made 24-bit RLE TGA)")
+    ap.add_argument("--no-coins", action="store_true",
+                    help="a broken or missing model gets an empty, invisible model instead of the game's Dwemer "
+                         "coin (the default, so the gap is easy to spot)")
     args = ap.parse_args()
+    global NO_COINS
+    NO_COINS = args.no_coins
     if args.no_reduce_textures or args.no_reduce_splash:
         m, ah = _tool_modules()
         if ah is not None:
@@ -2164,9 +2289,13 @@ def main():
         return 2
     src = "--staging" if any(a == "--staging" or a.startswith("--staging=") for a in sys.argv[1:]) else "Vortex settings"
     print(f"Vortex staging: {args.staging}  (from {src})")
-    if not args.apply:
-        return plan_main(args)
-    return apply_main(args)
+    CORE_MISSING.clear()
+    try:
+        if not args.apply:
+            return plan_main(args)
+        return apply_main(args)
+    finally:
+        print_core_warning()                          # once per run, last, whatever happened
 
 
 def compose(moves_text, lua_body=None, asset_body=None):
@@ -2200,6 +2329,9 @@ def fresh_plan(args):
     parts = ["moves"] + ([] if args.no_lua else [LUA_HEAD]) + ([] if args.no_assets else [ASSET_HEAD])
     text = compose(args._moves_text, None if args.no_lua else (lres["body"] if lres else ""),
                    None if args.no_assets else (ares["body"] if ares else ""))
+    warn = core_warning()
+    if warn:                                          # "#" lines: not actions, so --apply compares the same
+        text += "\n" + "\n".join("# " + ln if ln else "#" for ln in warn) + "\n"
     return text, parts, moves, lres, ares
 
 

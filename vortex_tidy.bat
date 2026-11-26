@@ -4,6 +4,7 @@ rem   vortex_tidy.bat                   show the plan (nothing is changed; full 
 rem   vortex_tidy.bat --only "MUSE*"    the plan for some mods
 rem   vortex_tidy.bat --apply           do it (Purge in Vortex first, Deploy after)
 rem   vortex_tidy.bat --undo            put back what the last --apply changed (moves, Lua, original assets)
+rem   vortex_tidy.bat --no-coins        (with the others) broken models get an empty, invisible model, not the coin
 title vortex_tidy %*
 set "GAME=%~dp0"
 if exist "%~dp0..\Morrowind.ini" for %%I in ("%~dp0..") do set "GAME=%%~fI\"

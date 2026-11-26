@@ -362,7 +362,8 @@ def tidy_assets(tidy, monkeypatch):
 def test_tidy_asset_repairs_are_in_the_plan_and_applied_only_as_reviewed(tidy_assets):
     assert tidy_assets() == 0
     plan = open(vt.PLAN).read()
-    assert "\nASSET CHECK\n" in plan and "    repair dummy Meshes" in plan and 'empty.nif {"why": "empty"}' in plan
+    assert "\nASSET CHECK\n" in plan and "    repair dummy Meshes" in plan and "empty.nif {" in plan
+    assert '"why": "empty"' in plan and '"dummy": "empty"' in plan          # no coin in this test's game: empty
     assert tidy_assets.nif.stat().st_size == 0                              # plan mode changes nothing
     assert tidy_assets("--apply", "--yes") == 0
     assert tidy_assets.nif.stat().st_size > 0 and PF.state(vt.PLAN) == "applied"   # a dummy put there
