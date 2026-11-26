@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "ownMods": [
+    "mwcollide",
+    "mwcompanions",
+    "mwconsole",
+    "mwcriminal",
+    "mwcustomclasspersistence",
+    "mwexitguard",
+    "mwfloatfix",
+    "mwguard",
+    "mwhangwatch",
+    "mwinfoloop",
+    "mwmanager",
+    "mwmanagermenu",
+    "mwmouseguard",
+    "mwperformers",
+    "mwpersonaleffects",
+    "mwplainpaperfix",
+    "mwpluginpatches",
+    "mwquicktoggle",
+    "mwsaveguard",
+    "mwsoundfix",
+    "mwsoundguard",
+    "mwstranded",
+    "mwsuite",
+    "mwteleportguard",
+    "mwwarnsuppression"
+  ]
+}

@@ -58,14 +58,14 @@ Rules (thresholds come from MWSE\\config\\mwguard.json when it exists - the same
      number-first order errors every call) -> v * n, v + n, -v + n. Only flagged with vector evidence:
      a field or function MWSE documents as returning a vector, tes3vectorN.new, or a local set from one  fix
 
-Never touched: MWSE's own code except exact KNOWN_BUGS fingerprints in named core files, and
+Never touched: MWSE's own code except exact KNOWN_BUGS fingerprints in named core and lib files, and
 your own mods (the names in OWN_MODS, plus any in exemptMods) unless --include-own.
 
 Edits are made in place (the file is rewritten through the same handle, so Vortex's hard links between
 staging and Data Files keep sharing it). The file as it was is copied first to
 <backups folder>\\luafix\\<run>\\..., every write is journaled, and --undo puts the last run back. A file is
 only written when LuaJIT (or luac) compiles the patched text; an original that does not compile is left alone
-unless an exact Known Bugs repair makes it compile. Known Bugs fingerprints are part of the analysis cache key,
+unless an exact Known Bugs repair makes it compile (also when this tool's own parser rejects it). Known Bugs fingerprints are part of the analysis cache key,
 so adding a repair causes existing files to be rechecked.
 
     python mwdialog_luafix.py                        (plan for Data Files\\MWSE\\mods; nothing is changed)
@@ -109,19 +109,81 @@ KNOWN_BUG_REPORT = MP.state_path(HERE, "mwdialog_luafix_known_bugs.txt")
 VERSION = 5
 MARK = "localpatch"            # what is written into a mod never carries this tool's name
 
-OWN_MODS = {"mwcollide", "mwcompanions", "mwcriminal", "mwcustomclasspersistence",
-            "mweffectinspector", "mwexitguard", "mwfloatfix", "mwguard", "mwhangwatch", "mwinfoloop",
-            "mwmouseguard", "mwperformers", "mwpersonaleffects", "mwplainpaperfix", "mwpluginpatches",
-            "mwquicktoggle", "mwsaveguard", "mwsoundfix", "mwsoundguard", "mwstranded", "mwteleportguard",
-            "mwwarnsuppression", "mwmanager", "mwmanagermenu", "mwsuite"}
+# First-party MWSE mods, never patched unless --include-own. The live list is
+# Data Files\\MWSE\\mods\\mwsuite\\ownmods.json (ships with mwsuite). That is a different thing from
+# exemptMods (a user list in the settings / mwguard.json): ownMods is who we are, exemptMods is who the
+# user asked us to leave alone. Both skip the same way. OWN_MODS_FALLBACK is used when the file is
+# missing or unreadable, and a warning is printed.
+OWN_MODS_REL = "mods/mwsuite/ownmods.json"          # under Data Files\\MWSE
+OWN_MODS_FALLBACK = frozenset({
+    "mwcollide", "mwcompanions", "mwconsole", "mwcriminal", "mwcustomclasspersistence",
+    "mwexitguard", "mwfloatfix", "mwguard", "mwhangwatch", "mwinfoloop",
+    "mwmouseguard", "mwperformers", "mwpersonaleffects", "mwplainpaperfix", "mwpluginpatches",
+    "mwquicktoggle", "mwsaveguard", "mwsoundfix", "mwsoundguard", "mwstranded", "mwteleportguard",
+    "mwwarnsuppression", "mwmanager", "mwmanagermenu", "mwsuite"})
+OWN_MODS = OWN_MODS_FALLBACK                        # backward-compatible alias for the fallback list
+_OWN_MODS_WARNED = set()
 
 # under --include-own, first-party files (OWN_MODS and exemptMods) only get these rules applied
 OWN_FIX_RULES = frozenset({"A1", "A2", "A3", "A4", "A5", "F1"})
 
 
+def own_mods_path(data_dir):
+    """The ownMods file under data_dir (a Data Files folder), or None."""
+    if not data_dir:
+        return None
+    return os.path.join(data_dir, "MWSE", *OWN_MODS_REL.split("/"))
+
+
+def load_own_mods(data_dir=None, log=None):
+    """(frozenset of lowercase names, where they came from). Reads Data Files\\MWSE\\mods\\mwsuite\\ownmods.json
+    (schema: {"version": 1, "ownMods": [...]}). Falls back to OWN_MODS_FALLBACK when the file is missing,
+    unreadable, or not that schema. A warning is printed when the file should have been there (mwsuite is
+    present) or exists but cannot be used; a tree with no mwsuite folder stays quiet."""
+    path = own_mods_path(data_dir)
+    reason, expected = "no Data Files folder was given", False
+    if path:
+        expected = os.path.isdir(os.path.dirname(path))
+        try:
+            with open(path, encoding="utf-8") as f:
+                d = json.load(f)
+            if isinstance(d, dict) and d.get("version") == 1 and isinstance(d.get("ownMods"), list):
+                names = frozenset(str(m).lower().replace("\\", "/") for m in d["ownMods"] if str(m).strip())
+                if names:
+                    return names, path
+                reason, expected = f"{path} has an empty ownMods list", True
+            else:
+                reason, expected = f"{path} is not a version-1 ownMods file", True
+        except FileNotFoundError:
+            reason = f"{path} is missing"
+        except OSError as e:
+            reason, expected = f"{path} could not be read ({e})", True
+        except ValueError as e:
+            reason, expected = f"{path} is not valid JSON ({e})", True
+    if expected:
+        key = path or reason
+        if key not in _OWN_MODS_WARNED:
+            _OWN_MODS_WARNED.add(key)
+            (log or print)(f"warning: using the built-in first-party mod list; {reason}")
+    return OWN_MODS_FALLBACK, "built-in fallback"
+
+
+def ensure_own_mods(cfg, data_dir=None, log=None):
+    """Put _ownMods / _ownModsSource on cfg when they are not there yet."""
+    if cfg is None:
+        return
+    if cfg.get("_ownMods") is None:
+        names, src = load_own_mods(data_dir, log)
+        cfg["_ownMods"], cfg["_ownModsSource"] = names, src
+
+
 def own_mod_names(cfg=None):
-    """OWN_MODS plus any names in cfg['exemptMods'] (lowercase)."""
-    return set(OWN_MODS) | {str(m).lower() for m in ((cfg or {}).get("exemptMods") or [])}
+    """First-party names (from ownmods.json, or the built-in fallback) plus any names in cfg['exemptMods']
+    (lowercase). Call ensure_own_mods first when a Data Files folder is known."""
+    names = (cfg or {}).get("_ownMods")
+    if names is None:
+        names = OWN_MODS_FALLBACK
+    return set(names) | {str(m).lower() for m in ((cfg or {}).get("exemptMods") or [])}
 
 # defaults; mwguard.json (shared with the runtime guard) and mwdialog_luafix.json override them
 DEFAULTS = {
@@ -316,6 +378,7 @@ def load_config(game_dir=HERE, data_dir=None):
         if d:
             src.append(path + (f" [{section}]" if section else ""))
     cfg["_sources"] = src
+    ensure_own_mods(cfg, data_dir)
     return cfg
 
 
@@ -2620,6 +2683,33 @@ KNOWN_BUGS += [
      "'ambiguous syntax (function call x new statement)', preventing MUSE from loading"),
 ]
 
+
+KB51 = ("a newline between MUSE.DebugLog and its opening parenthesis is ambiguous syntax in LuaJIT "
+        "('function call x new statement'), so music/cell.lua, combat.lua, interior.lua and region.lua "
+        "never load and MUSE has no cell, combat, interior or region music (upstream in MUSE 2.02 and "
+        "the official Patch for MUSE 2 v2.02)")
+KNOWN_BUGS += [
+    ("KB51", "MUSE 2.02", "music/cell.lua",
+     "MUSE.DebugLog\n                (",
+     "MUSE.DebugLog(", KB51),
+    ("KB51", "MUSE 2.02", "music/combat.lua",
+     "MUSE.DebugLog\n                (",
+     "MUSE.DebugLog(", KB51),
+    ("KB51", "MUSE 2.02", "music/interior.lua",
+     "MUSE.DebugLog\n\t\t\t\t(",
+     "MUSE.DebugLog(", KB51),
+    ("KB51", "MUSE 2.02", "music/region.lua",
+     "MUSE.DebugLog\n\t\t\t\t\t\t(",
+     "MUSE.DebugLog(", KB51),
+    ("KB51", "MUSE 2.02", "music/region.lua",
+     "MUSE.DebugLog\n\t\t\t\t(",
+     "MUSE.DebugLog(", KB51),
+    ("KB51", "MUSE 2.02", "music/region.lua",
+     "MUSE.DebugLog\n\t\t\t(",
+     "MUSE.DebugLog(", KB51),
+]
+KNOWN_BUGS_WHOLE |= {"KB51"}
+
 KNOWN_BUGS += [
     ("KB6", "OpenUI - MWSE", "spammer/openui - mwse/mod.lua",
      "        weacon.widget.current = weapon.itemData.condition\n        weacon.widget.max = weapon.object.maxCondition\n        if weapon.itemData then",
@@ -2915,10 +3005,10 @@ KB16 = ("On cellChanged, Flies plays a looped 'Flies' sound on every qualifying 
         "(found reading mwsoundguard.log 2026-11-24)")
 KNOWN_BUGS += [
     ("KB16", "Flies", "spammer/flies/main.lua",
-     "            and (ref.data and ref.data.spa_fliesCountDown) < (tes3.getSimulationTimestamp() - 24) then\n"
+     "            and ref.data.spa_fliesCountDown < (tes3.getSimulationTimestamp() - 24) then\n"
      "            tes3.playSound { sound = \"Flies\", reference = ref, loop = true, volume = 0.5, pitch = 1.0 }\n"
      "        end",
-     "            and (ref.data and ref.data.spa_fliesCountDown) < (tes3.getSimulationTimestamp() - 24) then\n"
+     "            and ref.data.spa_fliesCountDown < (tes3.getSimulationTimestamp() - 24) then\n"
      "            -- local fix: don't stack loops on re-entry; soundguard skips NPC/creature sounds\n"
      "            if not (ref.data and ref.data.spa_Flies) and not tes3.getSoundPlaying { sound = \"Flies\", reference = ref } then\n"
      "                tes3.playSound { sound = \"Flies\", reference = ref, loop = true, volume = 0.5, pitch = 1.0 }\n"
@@ -3251,12 +3341,19 @@ KNOWN_BUGS += [
 ]
 KNOWN_BUGS_WHOLE |= {"KP1", "KR1", "KR2"}
 
+# KB20 and up: local hand repairs of third-party Lua (asset names, syntax, nil guards, handlers registered again on
+# every load), kept as exact text so the mod can go back to its released files and still get them.
+import mwdialog_luafix_kb as KBH                             # noqa: E402
+KNOWN_BUGS += KBH.RULES
+KNOWN_BUGS_WHOLE |= KBH.KB_WHOLE
+KB_ROOTS = ("core/", "lib/")    # rule paths under MWSE itself (MWSE's core, shared libraries), not under MWSE\mods
+
 
 
 def known_core_files(mwse_dir):
-    """The MWSE core files a Known Bugs rule names that exist under mwse_dir (a Data Files\\MWSE folder, or a
-    mod's MWSE folder)."""
-    rels = sorted({rel for _rule, _plugin, rel, _old, _new, _what in KNOWN_BUGS if rel.startswith("core/")})
+    """The MWSE core and lib files a Known Bugs rule names that exist under mwse_dir (a Data Files\\MWSE folder,
+    or a mod's MWSE folder)."""
+    rels = sorted({rel for _rule, _plugin, rel, _old, _new, _what in KNOWN_BUGS if rel.startswith(KB_ROOTS)})
     out = []
     for rel in rels:
         p = os.path.join(mwse_dir, *rel.split("/"))
@@ -3276,11 +3373,12 @@ def known_core_files(mwse_dir):
 
 
 def known_core_context(path):
-    """Return an explicitly authorized core file identity; every other MWSE core file remains excluded."""
+    """Return an explicitly authorized core or lib file identity; every other MWSE core and lib file remains
+    excluded. Such a file gets its Known Bugs repairs only."""
     norm = os.path.abspath(path).replace("\\", "/")
     low = norm.lower()
     for _rule, plugin, rel, _old, _new, _what in KNOWN_BUGS:
-        if rel.startswith("core/") and low.endswith("/mwse/" + rel):
+        if rel.startswith(KB_ROOTS) and low.endswith("/mwse/" + rel):
             return norm[:-(len(rel) + 1)], rel, plugin
     return None
 
@@ -3747,8 +3845,44 @@ def _cache(game_dir):
         return None, None
 
 
+def known_text_repair(src, rel, cfg=None):
+    """(text, findings): src with the Known Bugs rules for rel applied as plain text, for a file this tool's
+    parser rejects (a rule can be what repairs the syntax). Rules in KNOWN_BUGS_WHOLE apply only when every part
+    matches; skipKnown rules are left out. Each finding carries an empty edit, so the rule is recorded in the
+    patch header while the text itself is already repaired."""
+    rel = rel.lower()
+    skip = set((cfg or {}).get("skipKnown") or ())
+    groups = {}
+    for rule, plugin, path, old, new, what in KNOWN_BUGS:
+        if rel != path or rule in skip:
+            continue
+        if "\r\n" in src:
+            old, new = old.replace("\n", "\r\n"), new.replace("\n", "\r\n")
+        groups.setdefault(rule, []).append((plugin, old, new, what, src.count(old)))
+    out, found = src, []
+    for rule, got in groups.items():
+        if rule in KNOWN_BUGS_WHOLE and not all(n for *_x, n in got):
+            continue
+        for plugin, old, new, what, n in got:
+            if n:
+                found.append(Finding(rule=rule, line=src.count("\n", 0, src.find(old)) + 1,
+                                     what=f"{plugin}: {what}", fix=new, conf="high", edits=[(0, 0, "")],
+                                     needs=set()))
+                out = out.replace(old, new)
+    return out, found
+
+
 def _analyse(src, key, rel, cfg):
-    a = FileAnalysis(src, key, rel, cfg)
+    try:
+        a = FileAnalysis(src, key, rel, cfg)
+    except L.LuaSyntaxError:
+        fixed, found = known_text_repair(src, rel, cfg)
+        if not found:
+            raise
+        a = FileAnalysis(fixed, key, rel, cfg)    # still raises when the repair is not enough
+        a.run()
+        a.findings += found
+        return a
     a.run()
     return a
 
@@ -3770,7 +3904,8 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
     rep = Report()
     ah, cache = _cache(game_dir) if use_cache else (None, None)
     ch = cfg_hash(cfg)
-    by_mod = {}
+    ensure_own_mods(cfg, data_dir)
+    by_mod, kb_only = {}, set()                     # kb_only: MWSE core/lib files, which get Known Bugs repairs only
     for root in paths:
         for p in lua_files(root):
             core = known_core_context(p)
@@ -3780,6 +3915,7 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
                 continue
             if core:
                 mroot, rel, key = core
+                kb_only.add((mroot, key))
             else:
                 mroot, rel = mods_root_of(p)
                 key = mod_key_of(mroot, rel)
@@ -3797,7 +3933,7 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
                 ent["error"] = str(e)
                 continue
             ckey = "luafix1:" + os.path.normcase(os.path.abspath(p))
-            if cache is not None and key != "MWSE Core":     # a cached finding has no edits to patch with
+            if cache is not None and (mroot, key) not in kb_only:     # a cached finding has no edits to patch with
                 hit = cache.get(ckey, ah.stamp_of(st))
                 if hit is not None and hit.get("cfg") == ch and "mc" in hit and "ts" in hit and "ld" in hit:
                     ent.update(error=hit.get("err"), logs=hit.get("logs", 0), requires=hit.get("req", []),
@@ -3835,7 +3971,7 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
     _mark_dead(rep, by_mod, paths, data_dir)
     for (mroot, key), files in sorted(by_mod.items()):
         roots = [r for r in (data_dir, os.path.dirname(os.path.dirname(mroot)) if mroot else None) if r]
-        if key == "MWSE Core":
+        if (mroot, key) in kb_only:
             for p, rel in files:
                 ent = rep.files[p]
                 ent["findings"] = [f for f in ent["findings"] if f["rule"].startswith("KB")]
@@ -4037,13 +4173,14 @@ def _mark_dead(rep, by_mod, paths, data_dir):
 
 def verify_patch(old, new, rules, checker, key, rel, cfg, level, only_rules=None):
     """{"text", "rules", "ok", "why"}: the patched text parses, a second pass changes nothing more, and the
-    syntax checker compiles it. Only exact Known Bugs fixes may repair a non-compiling original."""
+    syntax checker compiles it. Only exact Known Bugs fixes may repair a non-compiling original: one must be among
+    the rules (others may come with it, e.g. the log shim), and the patched text must compile."""
     res = {"text": new, "rules": rules, "ok": False, "why": ""}
     if checker is not None:
         ok, msg = checker.check(old)
         known_rules = {rule for rule, *_ in KNOWN_BUGS}
-        known_only = bool(rules) and all(rule in known_rules for rule in rules)
-        if not ok and not known_only:
+        known_fix = any(rule in known_rules for rule in rules)
+        if not ok and not known_fix:
             res["why"] = f"the original doesn't compile ({msg[:200]}); left alone"
             res["orig_bad"] = True
             return res

@@ -1963,8 +1963,8 @@ event.register("cellChanged", function(e)
         if ref
             and ref.data
             and ref.isDead
-            and (ref.data and ref.data.spa_fliesCountDown)
-            and (ref.data and ref.data.spa_fliesCountDown) < (tes3.getSimulationTimestamp() - 24) then
+            and ref.data.spa_fliesCountDown
+            and ref.data.spa_fliesCountDown < (tes3.getSimulationTimestamp() - 24) then
             tes3.playSound { sound = "Flies", reference = ref, loop = true, volume = 0.5, pitch = 1.0 }
         end
     end
