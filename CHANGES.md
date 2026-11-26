@@ -1,3 +1,16 @@
+# vortex_tidy: a mod its author excluded from conversion is set aside with a plain WARNING; the tracked blacklist file is removed (2026-11-26)
+
+- A mod whose original author asked to be excluded from mwsuite's conversion utility (omw2mwse 8367f55: it writes
+  nothing, not even a manifest, answers verdict `blocked` and exits 0) is treated like any blocked mod: its whole package
+  goes to `Off\<plugin name>\OpenMW\` untouched. The one WARNING says, with the mod name, that the original mod author
+  has asked that the mod be excluded from mwsuite's conversion utility and to contact them for details. Tidy never shows
+  or logs the converter's code, file, line or message for it (not in the plan, the output or the journal).
+- Fixed: a `blocked` verdict with nothing written was skipped at `--apply` (it counted as converted and stayed put). Any
+  `blocked` entry now moves its package, with or without output to undo. A `reason` of any shape (a dict with missing or
+  odd keys, a string, a list, null) and alerts that aren't dicts no longer stop tidy; a missing manifest is fine.
+- The tracked `mwdialog_check.conflict.blacklist.txt` at the repo root (Dej's old hand-made list; no tool read it) is
+  removed. Nobody gets another person's always-loses picks; the list is the generated one in `generated\`.
+
 # mwdialog_check: no plugin is built into the always-loses list; its header names the file it is in (2026-11-26)
 
 - `OAAB_Saplings.esm` is no longer built in (`CONFLICT_BLACKLIST_BUILTIN` is removed). Nothing is pre-decided for

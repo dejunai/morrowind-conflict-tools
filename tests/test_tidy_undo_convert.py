@@ -43,6 +43,16 @@ for base, ds, fns in os.walk(d):
 for src in pk:
     name = re.sub(r"[^A-Za-z0-9_\-]", "", sorted(f for f in os.listdir(src) if f.endswith(".omwscripts"))[0][:-len(".omwscripts")]) or "OpenMWMod"
     is_root = os.path.realpath(src) == d
+    optout = json.loads(os.environ.get("STUB_OPTOUT", "{}"))                 # {name: the "reason" value to answer with}
+    if not dry:
+        optout.update(json.loads(os.environ.get("STUB_OPTOUT_REAL", "{}")))
+    if name in optout:                    # omw2mwse 8367f55, author-opt-out: nothing written (no manifest either), exit 0
+        r = optout[name]
+        mods.append({"name": name, "source": name, "status": "ok", "verdict": "blocked", "reason": r,
+                     "alerts": [{"level": "error", "code": "author-opt-out", "file": "scripts/x/main.lua", "line": 1,
+                                 "message": "the mod author opted out of mwsuite conversion"}],
+                     "files": {}, "plugins": [], "conflicts": [], "rewrites": [], "hardcodeLog": [], "changed": False})
+        continue
     files = {}
     plan = {}
     def put(rel, data):
@@ -970,3 +980,145 @@ def test_an_old_journal_entry_for_a_move_into_off_openmw_still_undoes(env):
     after, _ = snap(mod)
     assert "Old.omwscripts" in after and os.path.join("scripts", "Old", "g.lua") in after
     assert not any(k.startswith(os.path.join("Off", "OpenMW")) for k in after)
+
+
+# ---- author opt-out (omw2mwse 8367f55: "mwsuite conversion opt-out" in a Lua header) -----------------------------
+OPT_OUT = {"code": "author-opt-out", "file": "scripts/Foo/main.lua", "line": 1,
+           "message": "the mod author opted out of mwsuite conversion (scripts/Foo/main.lua:1); not converted"}
+
+
+def plan_then_apply(env, capsys):
+    """(output of the plan run, output of the --apply run): each run says its WARNING once."""
+    argv = ["vortex_tidy.py", "--staging", str(env.staging), "--no-lua", "--no-assets"]
+    env.mp.setattr(vt.sys, "argv", argv)
+    vt.NOTES.clear()
+    assert vt.main() == 0
+    plan = " ".join(capsys.readouterr().out.split())
+    env.mp.setattr(vt.sys, "argv", argv + ["--apply", "--yes"])
+    vt.NOTES.clear()
+    assert vt.main() == 0
+    return plan, " ".join(capsys.readouterr().out.split())
+
+
+SAYS = ("Foo: the original mod author has asked that this mod be excluded from mwsuite's conversion utility; "
+        "contact the original mod author for details; not converted, ")
+HIDDEN = ("scripts/Foo/main.lua", "scripts/x/main.lua", "main.lua:", "author-opt-out", "opt-out", "opted out")
+
+
+def check_nothing_points_at_the_request(env, *texts):
+    """No user-facing text (what was printed, the plan file, the journal, the audit copies) names the converter's
+    code, file, line or message for the author's request."""
+    files = [vt.PLAN, vt.JOURNAL]
+    for base, _d, fns in os.walk(str(env.tmp / "audit")):
+        files += [os.path.join(base, f) for f in fns]
+    texts = list(texts) + [open(f, encoding="utf-8", errors="replace").read() for f in files if os.path.isfile(f)]
+    for text in texts:
+        for bad in HIDDEN:
+            assert bad not in text, bad
+
+
+def check_opted_out(env, mod, before, out, at_apply=False):
+    check_whole_package_set_aside(mod, before)                                       # untouched, the whole package in Off
+    after, _ = snap(mod)
+    assert not any(k.startswith("MWSE") or k.endswith("omw2mwse-manifest.json") for k in after)    # nothing written
+    assert out.count(SAYS) == 1 and out.count("WARNING: " + SAYS.split(";")[0].split(":")[0]) == 1      # one line
+    assert "WARNING: " + SAYS in out or "WARNING: Foo-1-0: " + SAYS in out
+    assert "conversion undone" not in out
+    assert ("nothing was written" in out) == at_apply                                # only the apply-time warning says it
+    assert "converted Foo-1-0 with omw2mwse" not in out
+    check_nothing_points_at_the_request(env, out)
+
+
+def test_an_author_opt_out_known_at_plan_time_moves_the_package_untouched_with_one_warning(env, capsys):
+    mod = full_mod(env.staging)
+    before = snap(mod)
+    env.mp.setenv("STUB_OPTOUT", json.dumps({"Foo": OPT_OUT}))
+    plan, out = plan_then_apply(env, capsys)
+    assert plan.count("WARNING: Foo-1-0: " + SAYS + "its whole package goes to Off") == 1
+    check_nothing_points_at_the_request(env, plan)
+    check_opted_out(env, mod, before, out)
+    assert [c for c in env.calls() if "--dry-run" not in c] == []                    # the converter never really ran
+    assert [o for o in env.journal() if "omw_convert" in o] == []
+    assert vt.undo() == 0
+    assert snap(mod) == before
+
+
+def test_an_author_opt_out_only_at_apply_still_moves_the_package_and_is_not_called_converted(env, capsys):
+    mod = full_mod(env.staging)
+    other = root_mod(env.staging, "Ok")
+    before, okbefore = snap(mod), snap(other)
+    env.mp.setenv("STUB_OPTOUT_REAL", json.dumps({"Foo": OPT_OUT}))                  # the preview said ready
+    env.apply()
+    out = " ".join(capsys.readouterr().out.split())
+    check_opted_out(env, mod, before, out, at_apply=True)
+    assert (other / "Off" / "Ok" / "OpenMW" / "Ok.omwscripts").exists()              # another mod still converts
+    assert [o["name"] for o in env.journal() if "omw_convert" in o] == ["Ok"]
+    assert vt.undo() == 0
+    assert (snap(mod), snap(other)) == (before, okbefore)
+
+
+def test_the_next_run_leaves_an_opted_out_package_where_it_is(env, capsys):
+    mod = full_mod(env.staging)
+    env.mp.setenv("STUB_OPTOUT", json.dumps({"Foo": OPT_OUT}))
+    plan_then_apply(env, capsys)
+    after, _ = snap(mod)
+    env.mp.setattr(vt.sys, "argv", ["vortex_tidy.py", "--staging", str(env.staging), "--no-lua", "--no-assets"])
+    vt.NOTES.clear()
+    assert vt.main() == 0                                            # the plan has nothing left to do for it
+    out = capsys.readouterr().out
+    assert snap(mod)[0] == after
+    assert out.count("Foo: the original mod author") <= 1 and "omw2mwse says Foo" not in out        # the plan may repeat it
+    assert "convert with omw2mwse" not in out
+    check_nothing_points_at_the_request(env, out)
+
+
+@pytest.mark.parametrize("reason", [
+    {"code": "author-opt-out"},                                          # no file, no line
+    {"code": "author-opt-out", "file": "a.lua"},                         # no line
+    {"code": "author-opt-out", "file": None, "line": None, "message": None},
+    {"file": "a.lua", "line": 3},                                        # no code
+    {"code": 7, "file": ["x"], "line": {"n": 1}, "message": 5},          # wrong types
+    {}, "plain text reason", ["a", "list"], 12, None, "",
+])
+def test_a_reason_of_any_shape_never_crashes_tidy(env, capsys, reason):
+    mod = full_mod(env.staging)
+    before = snap(mod)
+    env.mp.setenv("STUB_OPTOUT", json.dumps({"Foo": reason}))
+    plan, out = plan_then_apply(env, capsys)
+    says = lambda s: s.count("omw2mwse says Foo") + s.count("Foo: the original mod author")
+    assert says(plan) == 1 and says(out) == 1 and "Traceback" not in out
+    if vt.is_opt_out({"reason": reason}):
+        check_nothing_points_at_the_request(env, plan, out)
+    check_whole_package_set_aside(mod, before)
+    assert vt.undo() == 0 and snap(mod) == before
+
+
+def test_reason_text_and_blocked_reason_are_total():
+    assert vt.reason_text({"code": "x-other", "file": "a.lua", "line": 2}) == "x-other at a.lua:2"
+    assert vt.reason_text({"code": "x-other", "file": "a.lua"}) == "x-other at a.lua"
+    assert vt.reason_text({"message": "just a message"}) == "just a message"
+    assert vt.reason_text("because") == "because" and vt.reason_text(None) == "" and vt.reason_text({}) == ""
+    assert vt.reason_text({"code": object(), "file": object(), "line": object()})              # odd values: still text
+    assert vt.reason_text("x" * 1000) == "x" * 300
+    assert vt.blocked_reason({"verdict": "blocked"}) == "no reason given"
+    assert vt.blocked_reason(None) == "no reason given" and vt.blocked_reason("junk") == "no reason given"
+    assert vt.blocked_reason({"alerts": [{"code": "blocker", "message": "m"}, "junk", None]}) == "1 blocker(s), first: m"
+    assert vt.blocked_reason({"reason": {"code": "x-other", "file": "a.lua", "line": 2},
+                              "alerts": [{"code": "blocker", "message": "m"}]}) == "x-other at a.lua:2; 1 blocker(s), first: m"
+    for e in (OPT_OUT, {"code": "author-opt-out"}):                               # the author's request: plain words only
+        entry = {"reason": e, "alerts": [{"code": "blocker", "message": "m"}, {"code": "author-opt-out",
+                 "file": "scripts/Foo/main.lua", "line": 1, "message": "x"}]}
+        assert vt.blocked_reason(entry) == vt.OPT_OUT_TEXT
+        assert vt.blocked_says("Foo", entry) == "Foo: " + vt.OPT_OUT_TEXT
+        assert vt.OPT_OUT_TEXT == ("the original mod author has asked that this mod be excluded from mwsuite's "
+                                   "conversion utility; contact the original mod author for details")
+    assert vt.blocked_says("Foo", {"reason": "x"}) == "omw2mwse says Foo cannot run (x)"
+    assert vt.blocked_reason({"alerts": "not a list"}) == "no reason given"
+    assert vt.is_opt_out({"reason": OPT_OUT}) and not vt.is_opt_out({"reason": "author-opt-out"}) and not vt.is_opt_out(None)
+
+
+def test_a_missing_manifest_is_fine_for_a_blocked_mod_and_for_the_plugin_list(tmp_path):
+    entry = {"name": "Foo", "verdict": "blocked", "reason": OPT_OUT, "plugins": [], "files": {}}
+    assert vt.converter_plugins(entry, str(tmp_path / "nope" / "omw2mwse-manifest.json")) == []
+    entry.pop("plugins")
+    assert vt.converter_plugins(entry, str(tmp_path / "nope" / "omw2mwse-manifest.json")) is None

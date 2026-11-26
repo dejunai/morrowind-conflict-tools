@@ -63,6 +63,11 @@ For each mod folder in Vortex's Morrowind staging folder (from Vortex's settings
     prints one NOTE per non-root plugin (where it went, the converter's reason). An older converter's boolean
     optional (true) counts as not-root; a manifest with no plugins key falls back to a scan for root plugins with
     no .omwaddon/.omwgame source. plugin-rename-clash alerts get a NOTE too.
+    A mod whose original author asked to be left out of conversion is not converted: omw2mwse writes nothing (not
+    even a manifest) and answers verdict blocked (exit 0). Tidy treats it like any blocked mod (the whole package to
+    Off\\<plugin name>\\OpenMW\\, untouched) with one WARNING line in plain words telling the user to contact the
+    original mod author; where the converter found the request is never shown or logged. A reason of any other shape
+    is shown as text and never stops tidy, and a missing manifest is fine.
   * A bugreports\\ folder tidy made during a run that is empty at the end of it (--apply, a dry run or --undo)
     is removed again; one that was already there, or has anything in it, stays.
   * Everything else (screenshots, FOMOD option folders, meta.ini, .bak files...) goes to
@@ -757,7 +762,7 @@ def _converter_problem(data, err):
             return f"{c.get('path')}: {c.get('reason')}"
         if m.get("message"):
             return str(m["message"])
-    for al in (data or {}).get("alerts") or []:
+    for al in entry_alerts(data):
         if al.get("level") == "error":
             return str(al.get("message"))
     return err or "no details"
@@ -778,8 +783,10 @@ def converter_summary(code, data, err):
         return False, f"omw2mwse error (exit {code}): {_converter_problem(data, err)}"
     bits = []
     for m in data.get("mods") or []:
-        blockers = sum(1 for al in m.get("alerts") or [] if al.get("code") == "blocker")
+        blockers = sum(1 for al in entry_alerts(m) if al.get("code") == "blocker")
         b = f"{m.get('name')} {m.get('status')}, verdict {m.get('verdict')}"
+        if m.get("verdict") == "blocked" and not is_opt_out(m) and reason_text(m.get("reason")):
+            b += f" ({reason_text(m.get('reason'))})"
         if blockers:
             b += f", {blockers} blocker(s)"
         if m.get("rewrites"):
@@ -795,11 +802,74 @@ def convert_lines(d, oms, mode):
             f"    {CONVERT_ACTION} ({mode}): OpenMW-only, no MWSE Lua ({', '.join(oms)})"]
 
 
+def entry_alerts(entry):
+    """The alerts of a converter result entry that are dicts (anything else in the list is ignored)."""
+    got = entry.get("alerts") if isinstance(entry, dict) else None
+    return [al for al in got if isinstance(al, dict)] if isinstance(got, list) else []
+
+
+def reason_text(reason):
+    """One short text for an entry's "reason": a dict {code, file, line, message} (author-opt-out, 8367f55) as
+    'code at file:line', a plain string as it is, anything else shortened; "" when there is nothing. Never raises
+    (any key may be missing or of any type)."""
+    try:
+        if isinstance(reason, dict):
+            code, file_, line = reason.get("code"), reason.get("file"), reason.get("line")
+            bits = []
+            if code not in (None, ""):
+                bits.append(str(code))
+            if file_ not in (None, ""):
+                bits.append("at " + str(file_) + (f":{line}" if line not in (None, "") else ""))
+            elif line not in (None, ""):
+                bits.append(f"at line {line}")
+            if not bits and reason.get("message") not in (None, ""):
+                bits.append(str(reason["message"]))
+            return " ".join(bits)[:300]
+        if reason is None or reason == "" or reason == [] or reason == {}:
+            return ""
+        return str(reason).strip()[:300]
+    except Exception:                                # a reason of a shape nobody expects must not stop tidy
+        return ""
+
+
+OPT_OUT_TEXT = ("the original mod author has asked that this mod be excluded from mwsuite's conversion utility; "
+                "contact the original mod author for details")
+
+
+def is_opt_out(entry):
+    """A converter entry whose mod author asked to be left out of conversion (reason.code "author-opt-out")."""
+    r = entry.get("reason") if isinstance(entry, dict) else None
+    return isinstance(r, dict) and r.get("code") == "author-opt-out"
+
+
 def blocked_reason(entry):
-    """For a converter result entry with verdict "blocked": 'N blocker(s), first: <message>'."""
-    bl = [al for al in entry.get("alerts") or [] if al.get("code") == "blocker"]
-    first = f", first: {bl[0].get('message')}" if bl else ""
-    return f"{len(bl)} blocker(s){first}"
+    """For a converter result entry with verdict "blocked": its "reason" (a dict is shown as 'code at file:line'),
+    and 'N blocker(s), first: <message>' when it has blocker alerts; 'no reason given' when it has neither. An
+    author's request to be left out of conversion is only ever shown in plain words (OPT_OUT_TEXT): never the
+    converter's code, file, line or message, so nobody is pointed at where to edit it."""
+    entry = entry if isinstance(entry, dict) else {}
+    if is_opt_out(entry):
+        return OPT_OUT_TEXT
+    parts = []
+    why = reason_text(entry.get("reason"))
+    if why:
+        parts.append(why)
+    bl = [al for al in entry_alerts(entry) if al.get("code") == "blocker"]
+    if bl:
+        parts.append(f"{len(bl)} blocker(s), first: {bl[0].get('message')}")
+    return "; ".join(parts) or "no reason given"
+
+
+def blocked_says(mname, entry):
+    """The start of the one WARNING line about a blocked mod."""
+    if is_opt_out(entry):
+        return f"{mname}: {OPT_OUT_TEXT}"
+    return f"omw2mwse says {mname} cannot run ({blocked_reason(entry)})"
+
+
+def blocked_then(entry):
+    """What joins the start of that line to 'not converted, ...'."""
+    return "; " if is_opt_out(entry) else ": "
 
 
 def preview_verdicts(data):
@@ -933,17 +1003,21 @@ def convert_apply(staging, mods, mode, head_extra=None):
         ok, line = converter_summary(code, data, err)
         name = os.path.basename(mod_dir)
         ops, blocked, notes = [], [], []
-        for mname, verdict, m in preview_verdicts(data):
-            if data.get("dryRun") or not (m.get("changed") or m.get("relocated")):
+        verdicts = preview_verdicts(data)
+        for mname, verdict, m in verdicts:
+            if data.get("dryRun"):
+                continue
+            wrote = bool(m.get("changed") or m.get("relocated"))
+            if verdict == "blocked":                  # also when nothing was written (an author opt-out writes nothing)
+                blocked.append((mname, conversion_op(mod_dir, m, mode) if wrote else None, blocked_says(mname, m), m))
+                continue
+            if not wrote:
                 continue
             op = conversion_op(mod_dir, m, mode)
-            if verdict == "blocked":
-                blocked.append((mname, op, blocked_reason(m)))
-                continue
             ops.append(op)
             if verdict == "partial":
                 notes.append(f"{mname} is only partly supported by omw2mwse (verdict partial): converted anyway")
-            for al in m.get("alerts") or []:
+            for al in entry_alerts(m):
                 if al.get("code") == "plugin-rename-clash":
                     notes.append(f"{mname}: {al.get('message')}; tidy leaves it there and never enables it")
             plugins = converter_plugins(m, os.path.join(mod_dir, *(op["tree"].split("/") + [MP.OMW_MANIFEST])))
@@ -957,7 +1031,9 @@ def convert_apply(staging, mods, mode, head_extra=None):
                                  f"enable one in Vortex only if you want that option")
         if ops:                                      # also from a result with a conflict in another mod
             journal_conversions(staging, ops, head_extra)
-        if ok:
+        if ok and verdicts and all(v == "blocked" for _n, v, _m in verdicts):
+            pass                                     # nothing was converted: the WARNING below says so
+        elif ok:
             print(f"  converted {name} with omw2mwse ({mode}): {line}")
         else:
             moves = unconverted_moves(mod_dir)
@@ -969,15 +1045,19 @@ def convert_apply(staging, mods, mode, head_extra=None):
                 left.append(mod_dir)
         for note in notes:
             print(f"  NOTE: {note}")
-        for mname, op, why in blocked:
-            if _undo_now(op, staging):
-                print(f"  WARNING: omw2mwse says {mname} cannot run ({why}): not converted, conversion undone, "
-                      f"its whole package goes to Off\\<plugin>\\OpenMW\\")
+        for mname, op, says, m in blocked:
+            if op is None or _undo_now(op, staging):          # no op: the converter wrote nothing, nothing to undo
+                print(f"  WARNING: {says}{blocked_then(m)}not converted, "
+                      + ("conversion undone, " if op is not None else "nothing was written, ")
+                      + "its whole package goes to Off\\<plugin>\\OpenMW\\")
+                for al in entry_alerts(m):
+                    if al.get("code") == "previous-output-present":
+                        print(f"  NOTE: {mname}: output of an earlier conversion is still there; tidy leaves it as it is")
                 moves = unconverted_moves(mod_dir)
                 if moves:
                     apply(moves, staging, None, head_extra)
             else:
-                print(f"  WARNING: omw2mwse says {mname} cannot run ({why}), and its output could not be undone")
+                print(f"  WARNING: {says}, and its output could not be undone")
                 left.append(mod_dir)
     return left
 
@@ -1111,10 +1191,10 @@ def run_plan(args):
         full = os.path.join(args.staging, d)
         if full in CONVERT:
             code, data, err = run_converter(full, CONVERTER["mode"], dry_run=True)   # a preview: nothing is written
-            blocked = [(n, blocked_reason(m)) for n, v, m in preview_verdicts(data) if v == "blocked"]
+            blocked = [(n, blocked_says(n, m), blocked_then(m)) for n, v, m in preview_verdicts(data) if v == "blocked"]
             if blocked:                              # omw2mwse would write an active loader that can't work
                 del CONVERT[full]
-                BLOCKED_PLAN.append(f"{d}: omw2mwse says {blocked[0][0]} cannot run ({blocked[0][1]}): not converted, "
+                BLOCKED_PLAN.append(f"{d}: {blocked[0][1]}{blocked[0][2]}not converted, "
                                     f"its whole package goes to Off\\<plugin>\\OpenMW\\")
                 res = unconverted_moves(full)
             else:
