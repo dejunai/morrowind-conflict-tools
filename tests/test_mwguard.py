@@ -25,7 +25,8 @@ end
 event = { register = realRegister, unregister = realUnregister, isRegistered = realIsRegistered }
 mwse = {
   loadConfig = function(_, d) local c = {} for k, v in pairs(d) do c[k] = v end c.enabled = ENABLED
-                               c.EnableLogTimestamps = STAMPS == true return c end,
+                               c.EnableLogTimestamps = STAMPS == true
+                               if MODE then c.logTimestampMode = MODE end return c end,
   log = function() end, mcm = {},
 }
 lfs = { mkdir = function() end, fileexists = function() return true end }
@@ -246,24 +247,23 @@ print("OK")
 
 
 def test_log_timestamps_wrap_print_and_mwse_log_once(tmp_path):
-    """EnableLogTimestamps (off by default): when on, mwguard wraps print and mwse.log once, as it loads first,
-    to put whole seconds since start ([000042], six digits) in front of each line."""
+    """EnableLogTimestamps (off by default): when on, default style is wall clock [HH:MM:SS]."""
     run(tmp_path, "STAMPS = true\nlocal printed = {}\nlocal realPrint = print\n"
         "print = function(s) printed[#printed + 1] = s end\n" + HARNESS + r'''
 assert(rawget(_G, "__mwsuite_log_timestamps") == true)
 print("plain", 2)
 mwse.log("[mod] %s %d", "x", 5)
 mwse.log("100% bad %d format")
-local function stamped(s) return s:match("^%[%d%d%d%d%d%d%] ") ~= nil end
+local function stamped(s) return s:match("^%[%d%d:%d%d:%d%d%] ") ~= nil end
 local seen = {}
-for _, l in ipairs(printed) do assert(stamped(l), "not stamped: " .. l) seen[l:sub(10)] = true end
+for _, l in ipairs(printed) do assert(stamped(l), "not stamped: " .. l) seen[l:sub(12)] = true end
 assert(seen["plain\t2"] and seen["[mod] x 5"] and seen["100% bad %d format"])
 -- a second load of the module does not stamp twice
 package.loaded["mwguard.main"] = nil
 require("mwguard.main")
 local n = #printed
 print("once")
-assert(printed[n + 1]:match("^%[%d%d%d%d%d%d%] once$"), printed[n + 1])
+assert(printed[n + 1]:match("^%[%d%d:%d%d:%d%d%] once$"), printed[n + 1])
 realPrint("OK")
 ''', enabled=False)
 
@@ -285,6 +285,7 @@ print("OK")
 def test_log_timestamps_are_six_digit_elapsed_seconds(tmp_path):
     """Whole seconds since start, zero-padded to six digits; the width grows only past 999999 s."""
     run(tmp_path, "STAMPS = true\n"
+        "MODE = [[elapsed]]\n"
         "local t0, now = 1000, 1000\n"
         "os.time = function() return now end\n"
         "local printed = {}\n"
@@ -296,5 +297,17 @@ assert(printed[#printed] == "[000042] later", printed[#printed])
 now = t0 + 1000000
 print("wide")
 assert(printed[#printed] == "[1000000] wide", printed[#printed])
+realPrint("OK")
+""", enabled=False)
+
+
+def test_log_timestamps_wall_clock_is_the_pre_e8ea653_format(tmp_path):
+    """Wall clock is [HH:MM:SS] with a trailing space, the same prefix mwguard used before e8ea653."""
+    run(tmp_path, "STAMPS = true\nMODE = [[wallclock]]\n"
+        "local printed = {}\n"
+        "local realPrint = print\n"
+        "print = function(s) printed[#printed + 1] = s end\n" + HARNESS + r"""
+print("hi")
+assert(printed[#printed]:match("^%[%d%d:%d%d:%d%d%] hi$"), printed[#printed])
 realPrint("OK")
 """, enabled=False)

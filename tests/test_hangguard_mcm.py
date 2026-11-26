@@ -126,7 +126,8 @@ assert(find("memLimit", hang.config), "memory warning level missing")
 assert(find("enabled", hang.config), "hangwatch enable missing")
 assert(find("audio", hang.config), "audio switch missing")
 assert(find("soundLines", hang.config), "sound lines slider missing")
-assert(find("EnableLogTimestamps"), "elapsed-seconds switch missing")
+assert(find("EnableLogTimestamps"), "enable timestamps switch missing")
+assert(find("logTimestampMode"), "timestamp style dropdown missing")
 assert(find("costMs") and find("reportSeconds") and find("sampleEvery") and find("logNoticeToMWSE"),
     "profiler sliders missing")
 local n = 0
@@ -140,12 +141,18 @@ for _, c in ipairs(components) do
     if c.kind == "createCategory" then cats[#cats + 1] = c.data.label end
 end
 assert(cats[1] == "Memory" and cats[2] == "Hang log", table.concat(cats, ", "))
-local elapsed
+local enable, style
 for _, c in ipairs(components) do
-    if c.data and c.data.label == "Elapsed seconds on MWSE.log lines" then elapsed = c end
+    if c.data and c.data.label == "Enable timestamps" then enable = c end
+    if c.data and c.data.label == "Timestamp style" then style = c end
 end
-assert(elapsed and elapsed.data.description:find("%[000042%]", 1) and elapsed.data.description:find("Off until"),
-    "elapsed-stamp description")
+assert(enable and enable.data.description:find("Off until", 1, true), "enable timestamps description")
+assert(style and style.kind == "createDropdown", "timestamp style is not a dropdown")
+local values = {}
+for _, opt in ipairs(style.data.options or {}) do values[#values + 1] = opt.value end
+assert(values[1] == "wallclock" and values[2] == "elapsed", table.concat(values, ", "))
+assert(style.data.description:find("%[17:42:33%]", 1) and style.data.description:find("%[000042%]", 1),
+    "timestamp style description")
 print("OK")
 """)
 

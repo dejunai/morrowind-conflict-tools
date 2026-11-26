@@ -18,12 +18,13 @@
        written to Data Files\MWSE\logs\mwguard.log.
     4. Non-Intrusive Logging:
        Other mods' logs and error tracebacks remain in MWSE.log.
-    5. Elapsed seconds on MWSE.log (EnableLogTimestamps, off by default):
+    5. Timestamps on MWSE.log (EnableLogTimestamps, off by default):
        MWSE 2.1 has no timestamp setting for MWSE.log, so when this is on, global print and mwse.log are
-       wrapped once, as mwguard loads (before other mods), to put whole seconds since start
-       ("[000042] ", six digits) in front of each line. The width stays fixed until 999999 s
-       (about 11.5 days), then the number grows. Nothing else about a line changes.
-       The Mod Config menu is "Guard & Hang Watch", shared with mwhangwatch.
+       wrapped once, as mwguard loads (before other mods). The style is logTimestampMode (default
+       "wallclock"): wall clock ("[17:42:33] ") or "elapsed" whole seconds since start ("[000042] ",
+       six digits; the width stays fixed until 999999 s, about 11.5 days, then the number grows).
+       Nothing else about a line changes. The Mod Config menu is "Guard & Hang Watch", shared with
+       mwhangwatch.
 ]]
 
 local CONFIG_NAME = "mwguard"
@@ -36,7 +37,8 @@ local defaults = {
     costMs = 0.75,               -- average ms per call to flag as a bottleneck
     logNoticeToMWSE = true,      -- output summary notices of costly handlers to MWSE.log
     showAddressSpace = true,     -- on-screen address-space percentage, profiling on or off
-    EnableLogTimestamps = false, -- prefix every MWSE.log line with [000042] (whole seconds since start)
+    EnableLogTimestamps = false, -- prefix every MWSE.log line (style: logTimestampMode)
+    logTimestampMode = "wallclock", -- "wallclock" ([17:42:33]) or "elapsed" ([000042] since start)
     exemptMods = {
         "mwguard", "mwcriminal", "mwcompanions", "mwhangwatch", "mwfloatfix", "mwstranded", "mwcollide",
         "mwperformers", "mwinfoloop", "mwsoundguard", "mwsoundfix", "mwsaveguard", "mwwarnsuppression",
@@ -52,17 +54,20 @@ local defaults = {
 
 local config = mwse.loadConfig(CONFIG_NAME, defaults)
 
--- clock times in MWSE.log: wrap print and mwse.log once, before other mods load (mwguard's load priority), so
+-- timestamps on MWSE.log: wrap print and mwse.log once, before other mods load (mwguard's load priority), so
 -- their lines (and the luafix log shim's, which forwards through the print it finds) carry the time too
 local function installLogTimestamps()
     if config.EnableLogTimestamps ~= true or rawget(_G, "__mwsuite_log_timestamps") then return end
     local origPrint = print
     if type(origPrint) ~= "function" then return end
     rawset(_G, "__mwsuite_log_timestamps", true)
-    local select, tostring, concat, format, time = select, tostring, table.concat, string.format, os.time
+    local select, tostring, concat, format, date, time = select, tostring, table.concat, string.format, os.date, os.time
     local logStart = time()
     local function stamp()
-        return format("[%06d] ", math.max(0, time() - logStart))
+        if config.logTimestampMode == "elapsed" then
+            return format("[%06d] ", math.max(0, time() - logStart))
+        end
+        return date("[%H:%M:%S] ")
     end
     print = function(...)
         local n = select("#", ...)
@@ -522,12 +527,24 @@ event.register(tes3.event.modConfigReady, function()
         variable = mwse.mcm.createTableVariable({ id = "logNoticeToMWSE", table = config }),
     })
     page2:createOnOffButton({
-        label = "Elapsed seconds on MWSE.log lines",
-        description = "Prefixes every MWSE.log line with the number of whole seconds since the game started, "
-            .. "zero-padded to six digits (for example [000042]). The width stays fixed until 999999 seconds "
-            .. "(about 11.5 days), then the number grows. Off until you turn it on. Restart the game after "
-            .. "changing this.",
+        label = "Enable timestamps",
+        description = "Prefixes every MWSE.log line with a timestamp. Off until you turn it on. Restart the game "
+            .. "after turning this on or off.\n\n"
+            .. "The style is set below: wall clock ([17:42:33]) or whole seconds since launch ([000042]).",
         variable = mwse.mcm.createTableVariable({ id = "EnableLogTimestamps", table = config }),
+    })
+    page2:createDropdown({
+        label = "Timestamp style",
+        description = "Wall clock writes the time of day, as [17:42:33]. Seconds since launch writes whole seconds "
+            .. "since the game started, zero-padded to six digits ([000042]); the width stays fixed until "
+            .. "999999 seconds (about 11.5 days), then the number grows.\n\n"
+            .. "If timestamps are already on, a change of style applies to the next log line. Turning timestamps "
+            .. "on or off still needs a restart.",
+        options = {
+            { label = "Wall clock", value = "wallclock" },
+            { label = "Seconds since launch", value = "elapsed" },
+        },
+        variable = mwse.mcm.createTableVariable({ id = "logTimestampMode", table = config }),
     })
     template:register()
 end)
