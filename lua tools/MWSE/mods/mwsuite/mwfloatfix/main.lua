@@ -550,7 +550,7 @@ local function undoLast()
     if not e then return nil end
     mwse.saveConfig(BLACKLIST_NAME, blacklist)
     rebuildKeys()
-    for _, cell in ipairs(tes3.getActiveCells()) do         -- bring it back if it's around
+    for _, cell in ipairs(tes3.player and tes3.getActiveCells() or {}) do   -- bring it back if it's around
         for ref in cell:iterateReferences() do
             if ref.disabled and ref.object and refKey(ref) == e.key then
                 ref:enable()
@@ -948,9 +948,14 @@ event.register(tes3.event.modConfigReady, function()
     refreshList()
     bpage:createButton({ buttonText = "Bring back the last one",
         description = "Shows the most recently hidden object again, in every game.", callback = function()
-        local e = undoLast()
+        local ok, e = pcall(undoLast)
+        if not ok then
+            mwse.log("[mwfloatfix] bringing back the last hidden object failed: %s", tostring(e))
+            tes3.messageBox("mwfloatfix: that didn't work. The reason is in MWSE.log.")
+            return
+        end
         tes3.messageBox(e and ("Back in every game: " .. e.id .. " (" .. e.cell .. ")") or "The list is empty.")
-        refreshList()
+        pcall(refreshList)
     end })
     template:register()
 end)

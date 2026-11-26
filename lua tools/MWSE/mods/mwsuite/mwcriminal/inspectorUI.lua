@@ -9,13 +9,91 @@ local GUI_ID_INPUT = tes3ui.registerID("mwcriminal:BlacklistInput")
 
 local manualInputText = ""
 
+-- A game is loaded once the player reference and its mobile exist. This is the same test MWSE's own MCM uses
+-- for in-game-only settings (not tes3.player). tes3.onMainMenu() is not used: it only reports the character
+-- generation state, not whether a save is loaded.
+local function gameLoaded()
+    return tes3.player ~= nil and tes3.mobilePlayer ~= nil
+end
+
+local enteredMenuMode = false   -- true only when these windows put the game into menu mode themselves
+local closeEventsRegistered = false
+local onMenuExit, onLoad, onEscape
+
+local function unregisterCloseEvents()
+    if not closeEventsRegistered then return end
+    closeEventsRegistered = false
+    event.unregister(tes3.event.menuExit, onMenuExit)
+    event.unregister(tes3.event.load, onLoad)
+    event.unregister(tes3.event.keyDown, onEscape, { filter = tes3.scanCode.escape })
+end
+
+local function registerCloseEvents()
+    if closeEventsRegistered then return end
+    closeEventsRegistered = true
+    event.register(tes3.event.menuExit, onMenuExit)
+    event.register(tes3.event.load, onLoad)
+    event.register(tes3.event.keyDown, onEscape, { filter = tes3.scanCode.escape })
+end
+
+local function destroyMenus()
+    for _, id in ipairs({ GUI_ID_MENU, GUI_ID_BLACKLIST_MENU }) do
+        local menu = tes3ui.findMenu(id)
+        if menu then pcall(function() menu:destroy() end) end
+    end
+end
+
+-- Closes both windows. Leaves menu mode only if these windows entered it, so closing a window opened from
+-- the Mod Config Menu leaves the Mod Config Menu open. Safe to call more than once.
 function inspectorUI.close()
-    local menu = tes3ui.findMenu(GUI_ID_MENU)
-    local blMenu = tes3ui.findMenu(GUI_ID_BLACKLIST_MENU)
-    if menu or blMenu then
-        tes3ui.leaveMenuMode()
-        if menu then menu:destroy() end
-        if blMenu then blMenu:destroy() end
+    destroyMenus()
+    unregisterCloseEvents()
+    if enteredMenuMode then
+        enteredMenuMode = false
+        if tes3ui.menuMode() then tes3ui.leaveMenuMode() end
+    end
+end
+
+-- The game left menu mode some other way (right-click, Esc, another mod): just remove the windows.
+onMenuExit = function()
+    enteredMenuMode = false
+    destroyMenus()
+    unregisterCloseEvents()
+end
+
+-- Loading a save while a window is open: close it first so nothing points at the old game.
+onLoad = function()
+    inspectorUI.close()
+end
+
+-- Esc closes the window when it is the one in front.
+onEscape = function()
+    local top = tes3ui.getMenuOnTop()
+    if top and (top.id == GUI_ID_MENU or top.id == GUI_ID_BLACKLIST_MENU) then
+        inspectorUI.close()
+    end
+end
+
+local function enterMenuModeOnce(id)
+    if not tes3ui.menuMode() then
+        tes3ui.enterMenuMode(id)
+        enteredMenuMode = true
+    end
+    registerCloseEvents()
+end
+
+-- Every way of opening a window comes through here: no game loaded means only a short message, and an error
+-- while building a window is logged to MWSE.log and leaves nothing half-open.
+local function safeOpen(where, build)
+    if not gameLoaded() then
+        tes3.messageBox("Load a game first: the detection inspector only works in a game.")
+        return
+    end
+    local ok, err = pcall(build)
+    if not ok then
+        mwse.log("[mwcriminal] %s failed: %s", where, tostring(err))
+        inspectorUI.close()
+        tes3.messageBox("mwcriminal: that window could not open. The reason is in MWSE.log.")
     end
 end
 
@@ -43,11 +121,13 @@ local function addHeader(parent, text)
     end)
 end
 
+local buildInspector, buildBlacklist
+
 function inspectorUI.refresh()
     local menu = tes3ui.findMenu(GUI_ID_MENU)
     if menu then
         menu:destroy()
-        inspectorUI.open()
+        safeOpen("refreshing the detection inspector", buildInspector)
     end
 end
 
@@ -55,13 +135,22 @@ function inspectorUI.refreshBlacklist()
     local blMenu = tes3ui.findMenu(GUI_ID_BLACKLIST_MENU)
     if blMenu then
         blMenu:destroy()
-        inspectorUI.openBlacklist()
+        safeOpen("refreshing the blacklist window", buildBlacklist)
     end
 end
 
---- Opens the main Stealth Detection Inspector.
---- Lists ONLY actors actively detecting the player (not blacklisted, not companions).
+--- Opens (or, if open, closes) the main Stealth Detection Inspector.
 function inspectorUI.open()
+    safeOpen("opening the detection inspector", buildInspector)
+end
+
+--- Opens (or, if open, closes) the separate Blacklist Management window.
+function inspectorUI.openBlacklist()
+    safeOpen("opening the blacklist window", buildBlacklist)
+end
+
+--- Lists ONLY actors actively detecting the player (not blacklisted, not companions).
+buildInspector = function()
     local blMenu = tes3ui.findMenu(GUI_ID_BLACKLIST_MENU)
     if blMenu then blMenu:destroy() end
 
@@ -302,13 +391,11 @@ function inspectorUI.open()
         inspectorUI.refresh()
     end)
 
-    if not tes3ui.menuMode() then
-        tes3ui.enterMenuMode(GUI_ID_MENU)
-    end
+    menu:updateLayout()
+    enterMenuModeOnce(GUI_ID_MENU)
 end
 
---- Opens the separate Blacklist Management UI.
-function inspectorUI.openBlacklist()
+buildBlacklist = function()
     local inspMenu = tes3ui.findMenu(GUI_ID_MENU)
     if inspMenu then inspMenu:destroy() end
 
@@ -534,9 +621,8 @@ function inspectorUI.openBlacklist()
         end)
     end
 
-    if not tes3ui.menuMode() then
-        tes3ui.enterMenuMode(GUI_ID_BLACKLIST_MENU)
-    end
+    menu:updateLayout()
+    enterMenuModeOnce(GUI_ID_BLACKLIST_MENU)
 end
 
 return inspectorUI

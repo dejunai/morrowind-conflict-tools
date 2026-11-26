@@ -170,10 +170,18 @@ event.register(tes3.event.modConfigReady, function()
         description = "Use after running mwdialog_check again, or to apply the switch above to the place you are in "
             .. "without leaving.",
         callback = function()
-            loadData()
-            if tes3.player then
+            local ok, err = pcall(function()
+                loadData()
+                if not (tes3.player and tes3.mobilePlayer) then
+                    tes3.messageBox("List re-read. It is applied once you load a game.")
+                    return
+                end
                 local h, s = settleActive()
                 tes3.messageBox("Doubled objects here: %d hidden, %d shown again.", h, s)
+            end)
+            if not ok then
+                mwse.log("[mwcollide] re-reading the list failed: %s", tostring(err))
+                tes3.messageBox("mwcollide: that didn't work. The reason is in MWSE.log.")
             end
         end,
     })

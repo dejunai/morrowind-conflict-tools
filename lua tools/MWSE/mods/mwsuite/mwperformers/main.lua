@@ -337,10 +337,17 @@ event.register(tes3.event.modConfigReady, function()
         description = "Picks a different performer, at random, for the building you're in (or applies the switch "
             .. "above here without leaving).",
         callback = function()
-            if tes3.player then
-                settleActive(true)
-                tes3.messageBox("Performers here: " .. (config.enabled and "one picked to perform." or "all perform."))
+            if not (tes3.player and tes3.mobilePlayer) then
+                tes3.messageBox("Load a game first: this picks a performer in the place you are in.")
+                return
             end
+            local ok, err = pcall(settleActive, true)
+            if not ok then
+                mwse.log("[mwperformers] picking again failed: %s", tostring(err))
+                tes3.messageBox("mwperformers: that didn't work. The reason is in MWSE.log.")
+                return
+            end
+            tes3.messageBox("Performers here: " .. (config.enabled and "one picked to perform." or "all perform."))
         end,
     })
     page:createOnOffButton({

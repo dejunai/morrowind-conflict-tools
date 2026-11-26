@@ -403,10 +403,18 @@ event.register(tes3.event.modConfigReady, function()
         description = "Re-reads the list and applies the current settings to the room you are in now (use after "
             .. "running mwdialog_check again).",
         callback = function()
-            loadData()
-            if tes3.player then
+            local ok, err = pcall(function()
+                loadData()
+                if not (tes3.player and tes3.mobilePlayer) then
+                    tes3.messageBox("List re-read. It is applied once you load a game.")
+                    return
+                end
                 local m, h, s = settleActive()
                 tes3.messageBox("Stranded objects here: %d brought in, %d hidden, %d shown again.", m, h, s)
+            end)
+            if not ok then
+                mwse.log("[mwstranded] re-reading the list failed: %s", tostring(err))
+                tes3.messageBox("mwstranded: that didn't work. The reason is in MWSE.log.")
             end
         end,
     })

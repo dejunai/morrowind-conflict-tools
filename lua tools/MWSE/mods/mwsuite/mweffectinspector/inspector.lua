@@ -44,15 +44,94 @@ local function logBoth(summaryLines, str)
     end
 end
 
-function inspector.closeWindow()
+-- A game is loaded once the player reference and its mobile exist. This is the same test MWSE's own MCM uses
+-- for in-game-only settings (not tes3.player). tes3.onMainMenu() is not used: it only reports the character
+-- generation state, not whether a save is loaded.
+local function gameLoaded()
+    return tes3.player ~= nil and tes3.mobilePlayer ~= nil
+end
+
+local NO_GAME = "Load a game first: the effect inspector only works in a game."
+
+local enteredMenuMode = false   -- true only when the window put the game into menu mode itself
+local closeEventsRegistered = false
+local onMenuExit, onLoad, onEscape
+
+local function unregisterCloseEvents()
+    if not closeEventsRegistered then return end
+    closeEventsRegistered = false
+    event.unregister(tes3.event.menuExit, onMenuExit)
+    event.unregister(tes3.event.load, onLoad)
+    event.unregister(tes3.event.keyDown, onEscape, { filter = tes3.scanCode.escape })
+end
+
+local function registerCloseEvents()
+    if closeEventsRegistered then return end
+    closeEventsRegistered = true
+    event.register(tes3.event.menuExit, onMenuExit)
+    event.register(tes3.event.load, onLoad)
+    event.register(tes3.event.keyDown, onEscape, { filter = tes3.scanCode.escape })
+end
+
+local function destroyWindow()
     local menu = tes3ui.findMenu(GUI_ID_WINDOW)
-    if menu then
-        menu:destroy()
-        tes3ui.leaveMenuMode()
+    if menu then pcall(function() menu:destroy() end) end
+end
+
+-- Closes the window. Leaves menu mode only if the window entered it, so closing a window opened from the
+-- Mod Config Menu or the console leaves those open. Safe to call more than once.
+function inspector.closeWindow()
+    destroyWindow()
+    unregisterCloseEvents()
+    if enteredMenuMode then
+        enteredMenuMode = false
+        if tes3ui.menuMode() then tes3ui.leaveMenuMode() end
     end
 end
 
+-- The game left menu mode some other way (right-click, Esc, another mod): just remove the window.
+onMenuExit = function()
+    enteredMenuMode = false
+    destroyWindow()
+    unregisterCloseEvents()
+end
+
+-- Loading a save while the window is open: close it first so nothing points at the old game.
+onLoad = function()
+    inspector.closeWindow()
+end
+
+-- Esc closes the window when it is the one in front.
+onEscape = function()
+    local top = tes3ui.getMenuOnTop()
+    if top and top.id == GUI_ID_WINDOW then
+        inspector.closeWindow()
+    end
+end
+
+-- Runs fn; an error is written to MWSE.log, the window is closed so nothing is left half-open, and false is
+-- returned.
+local function guarded(where, fn, ...)
+    local ok, err = pcall(fn, ...)
+    if not ok then
+        mwse.log("[mweffectinspector] %s failed: %s", where, tostring(err))
+        inspector.closeWindow()
+        tes3.messageBox("mweffectinspector: %s failed. The reason is in MWSE.log.", where)
+    end
+    return ok
+end
+
+local buildWindow
+
 function inspector.openWindow(targetRef)
+    if not gameLoaded() then
+        tes3.messageBox(NO_GAME)
+        return
+    end
+    guarded("opening the inspector", buildWindow, targetRef)
+end
+
+buildWindow = function(targetRef)
     local ref = targetRef or inspector.getTargetRef()
     if not ref then
         tes3.messageBox("mweffectinspector: No target reference found.")
@@ -323,10 +402,32 @@ function inspector.openWindow(targetRef)
     end)
 
     menu:updateLayout()
-    tes3ui.enterMenuMode(GUI_ID_WINDOW)
+    if not tes3ui.menuMode() then
+        tes3ui.enterMenuMode(GUI_ID_WINDOW)
+        enteredMenuMode = true
+    end
+    registerCloseEvents()
 end
 
+local inspectEffects, clearEffects
+
 function inspector.inspectEffects(targetRef)
+    if not gameLoaded() then
+        tes3.messageBox(NO_GAME)
+        return
+    end
+    guarded("inspecting effects", inspectEffects, targetRef)
+end
+
+function inspector.clearEffects(targetRef)
+    if not gameLoaded() then
+        tes3.messageBox(NO_GAME)
+        return
+    end
+    guarded("purging effects", clearEffects, targetRef)
+end
+
+inspectEffects = function(targetRef)
     local ref = targetRef or inspector.getTargetRef()
     if not ref then
         logConsole("[mweffectinspector] Error: No target reference found.")
@@ -351,7 +452,7 @@ function inspector.inspectEffects(targetRef)
     inspector.openWindow(ref)
 end
 
-function inspector.clearEffects(targetRef)
+clearEffects = function(targetRef)
     local ref = targetRef or inspector.getTargetRef()
     if not ref then
         logConsole("[mweffectinspector] Error: No target reference found.")
