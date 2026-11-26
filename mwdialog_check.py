@@ -102,7 +102,8 @@ from mwdialog_records import (  # noqa: E402,F401
     rewrite_cell_refs, SPEAKER_SUBS, split_cell, unresolved_refs,
     late_scales, misplaced_duplicates, drop_cell_refs, deleted_refs_cell)
 from mwdialog_state import (  # noqa: E402,F401
-    ADDED_MASTERS_RECORD, CELL_WINNER_PATCH, CELL_WINNERS_FILE, CONFLICT_ANSWERS_FILE, CONFLICT_BLACKLIST_DEFAULT, CONFLICT_BLACKLIST_FILE, conflict_blacklisted,
+    add_conflict_blacklist, ADDED_MASTERS_RECORD, CELL_WINNER_PATCH, CELL_WINNERS_FILE, CONFLICT_ANSWERS_FILE, CONFLICT_BLACKLIST_DEFAULT, CONFLICT_BLACKLIST_FILE, CONFLICT_BLACKLIST_HEADER, CONFLICT_BLACKLIST_MARK,
+    conflict_blacklisted, migrate_conflict_blacklist,
     CONFLICT_RULE_NOTE, CONFLICT_RULES_HEADER, DISABLED_RECORD, mark_merge_rebuild, MERGE_REBUILD_RECORD, MERGE_RECORD, merged_away,
     NORMAL_MAP_RE, note_promoted_rules, PROMOTED_END, PROMOTED_START, read_added_masters, read_cell_winners, read_conflict_answers,
     read_conflict_blacklist, read_disabled, read_generated_record, read_merge_rebuild, read_merge_record, read_redundant, record_bases,
@@ -5281,7 +5282,8 @@ def run_cell_conflicts(args, plugins, collect=False, incompatible_only=False, au
     skip = {x.lower() for x in OUR_PATCHES} | {CELL_WINNER_PATCH.lower()}
     if not incompatible_only and not getattr(args, "only_incompatible", False):
         skip.add(AUTO_MERGE_NAME.lower())
-    black = read_conflict_blacklist(os.path.dirname(os.path.abspath(args.data_dir)))
+    black = read_conflict_blacklist(os.path.dirname(os.path.abspath(args.data_dir)),
+                                    migrate=not getattr(args, "dry_run", False))
     left_out = [n for n, _p in plugins if conflict_blacklisted(n, black)]
     # still read: they load in game, so what they move or delete counts for mwfloatfix and mwcollide
     quiet = {n.lower() for n in left_out}
@@ -5958,6 +5960,7 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
                                 for k in cs)
 
     new_rules, turned_off = [], []
+    lost = []                                        # plugins that now always lose (not asked about again)
     active_names = {n.lower(): n for n, _p in plugins}
     active_merges = ({AUTO_MERGE_NAME.lower()} | {n.lower() for n in read_merge_record(game_dir)}) & active_names.keys()
     generated = [n for n, _p in plugins if is_our_patch(n)]
@@ -6053,6 +6056,8 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
     for i, ((a, b), c) in enumerate(ranked, 1):
         if a in {x.lower() for x, _w in turned_off} or b in {x.lower() for x, _w in turned_off}:
             continue
+        if a in {x.lower() for x in lost} or b in {x.lower() for x in lost}:
+            continue                                 # one of them now always loses: nothing left to decide
         A, B = name_of[a], name_of[b]
         kind = ("INCOMPATIBLE" if c.get("incompatible") else "DOUBLED" if c.get("doubled") else
                 "MAJOR" if (any(p[6] for p in c["place"]) or len(c["refs"]) >= 20) else "minor")
@@ -6163,6 +6168,11 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
                 if lua_affected:
                     say("      WARNING: MWSE Lua or metadata also names: " + ", ".join(lua_affected)
                           + "; review those mods separately")
+            if not c.get("incompatible"):
+                # the plugin never takes part in a cell conflict again (the generated conflict blacklist)
+                opts["7"] = ("lose", A, B, f"{A} always loses")
+                opts["8"] = ("lose", B, A, f"{B} always loses")
+                say(f"  [7] {A} always loses   [8] {B} always loses")
             return opts, off_plans, blockers
 
         def pick(opts, off_plans):
@@ -6260,6 +6270,18 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
                     forget_now(pair_key)
             continue
         what, x, y, label = opts[ans]
+        if what == "lose":
+            try:
+                if not args.dry_run:
+                    add_conflict_blacklist(game_dir, x, f"vs {y}")
+            except OSError as e:
+                print(f"ERROR: could not save {x} as always losing: {e}", file=sys.stderr)
+                continue
+            lost.append(x)
+            more = sum(1 for k, _c in ranked[i:] if x.lower() in k)
+            print(f"    -> {x} always loses" + (f" ({more} more conflict(s) of it dropped)" if more else "")
+                  + (" (dry run: not saved)" if args.dry_run else f" (saved in {CONFLICT_BLACKLIST_FILE})"))
+            continue
         if what == "off" and c.get("incompatible"):
             kept_winners.add(y.lower())
         answered[pair_key] = {"do": what, "plugin": x, "pair": [A, B], "when": time.strftime("%Y-%m-%d %H:%M")}
@@ -6304,7 +6326,7 @@ def _conflict_session(args, ranked, name_of, masters, total_new, plugins=(), lab
         winners.update(new_winners)
         write_cell_winners(game_dir, winners)
         print(f"\nRecorded {len(new_winners)} rebuilt interior choice(s) in {CELL_WINNERS_FILE}.")
-    if not new_rules and not turned_off and not new_winners:
+    if not new_rules and not turned_off and not new_winners and not lost:
         print("\nNo new rules and no plugins turned off." + (" (Earlier runs' conflict rules were removed; run --sort so the order follows your own rules.)" if remove_earlier else ""))
         if unresolved and not strict_saves:
             print("ERROR: incompatible plugins remain active; choose a side before building patches.")
@@ -8835,7 +8857,8 @@ def compute_order(plugins, rule_sets, current_order):
     # Hard rule: plugins in the conflict blacklist always lose: each loads as early as its masters allow
     # (an .esm among the .esm files, an .esp right after them / the ESM fixes patch)
     try:
-        black = read_conflict_blacklist(os.path.dirname(os.path.dirname(os.path.abspath(plugins[0][1]))), create=False)
+        black = read_conflict_blacklist(os.path.dirname(os.path.dirname(os.path.abspath(plugins[0][1]))), create=False,
+                                        migrate=False)
     except (IndexError, OSError):
         black = []
     if black:

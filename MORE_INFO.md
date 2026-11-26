@@ -598,7 +598,7 @@ When the tools are installed in `<game>\conflict-tools\`, the records, caches, j
 | `mwdialog_cleanup_journal.jsonl` | `--clean-up` | Backups moved to `<backups>\Off\cleanup\` (for `--clean-up-undo`) |
 | `mwdialog_redundant.txt` | `--redundant` | Plugins turned off as redundant, and keep-both choices |
 | `mwdialog_conflict_answers.json`, `mwdialog_new_conflicts.txt` | `--cell-conflicts` | Remembered answers; pairs the last `--use-answers` run had none for |
-| `mwdialog_check.conflict.blacklist.txt` | you (made with defaults) | Plugins that never take part in cell conflicts |
+| `mwdialog_check.conflict.blacklist.txt` | generated (the tool makes it, and adds a plugin when you choose "<plugin> always loses" in `--cell-conflicts`) | Plugins that always lose cell conflicts: left out of `--cell-conflicts`, loaded early by `--sort`. A hand-written one is converted once (entries kept, old file backed up) |
 | `mwdialog_auto-merge.blacklist.txt` | you | Plugins `--auto-merge` never merges |
 | `mwdialog_cell_winners.txt` | `--cell-conflicts` | Whose version of a rebuilt interior wins (built by `--fix` into `mwdialog_check Cell Fixes.esp`) |
 | `mwdialog_doubled_deleted.txt` | `--fix` | Doubled objects deleted in Cell Fixes |
