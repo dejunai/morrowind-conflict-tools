@@ -66,7 +66,9 @@ Rules (thresholds come from MWSE\\config\\mwguard.json when it exists - the same
      a field or function MWSE documents as returning a vector, tes3vectorN.new, or a local set from one  fix
 
 Never touched: MWSE's own code except exact KNOWN_BUGS fingerprints in named core and lib files, and
-your own mods (the names in OWN_MODS, plus any in exemptMods) unless --include-own.
+your own mods (the names in OWN_MODS, plus any in exemptMods) unless --include-own. Output of the OpenMW
+converter (omw2mwse: a loader with its marker or manifest, its hosted scripts, the omwcompat runtime) is never
+touched, --include-own or not: re-running the converter fixes it.
 
 Edits are made in place (the file is rewritten through the same handle, so Vortex's hard links between
 staging and Data Files keep sharing it). The file as it was is copied first to
@@ -3948,8 +3950,19 @@ def lua_files(root):
                 yield os.path.join(base, fn)
 
 
+def generated(path):
+    """Why a file is omw2mwse output, never patched here, --include-own or not (None: it is not). Recognised by
+    the converter's markers (mwdialog_paths.omw_generated): its manifest, the generated loader's header or its
+    use of omwcompat, and the omwcompat runtime in MWSE\\lib. The converter fixes these at the source."""
+    why = MP.omw_generated(path)
+    return f"{why}; the OpenMW converter fixes it at the source (re-run omw2mwse)" if why else None
+
+
 def excluded(path, include_own=False, cfg=None):
     """Why a file is never touched (None: it may be)."""
+    gen = generated(path)
+    if gen:
+        return gen
     parts = re.split(r"[\\/]+", os.path.abspath(path))
     for i, d in enumerate(parts[:-1]):
         lo = d.lower()
@@ -4066,8 +4079,9 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
     by_mod, kb_only = {}, set()                     # kb_only: MWSE core/lib files, which get Known Bugs repairs only
     for root in paths:
         for p in lua_files(root):
-            core = known_core_context(p)
-            why = excluded(p, include_own, cfg)
+            gen = generated(p)                        # converter output: not even Known Bugs repairs
+            core = None if gen else known_core_context(p)
+            why = gen or excluded(p, include_own, cfg)
             if why and not core:
                 rep.skipped.append((p, why))
                 continue

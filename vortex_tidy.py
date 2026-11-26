@@ -149,7 +149,7 @@ def is_grass_plugin(path):
                 grassy += 1
         p += 16 + size
     return bool(stats) and tags <= {b"STAT", b"ACTI", b"CELL"} and grassy >= max(1, stats * 0.6)
-KEEP_FILE_EXT = {".esp", ".esm", ".omwaddon", ".bsa"}
+KEEP_FILE_EXT = {".esp", ".esm", ".omwaddon", ".omwgame", ".bsa"}
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"}   # screenshots (not .dds/.tga: textures)
 DOC_EXT = {".txt", ".md", ".pdf", ".rtf", ".doc", ".docx", ".odt", ".html", ".htm", ".nfo"}
 DOC_DIR_NAMES = {"doc", "docs", "documentation", "readme", "readmes", "manual", "manuals", "info"}
@@ -333,7 +333,10 @@ def plan_mod(mod_dir):
     rename_addons = []
     if addons and not has_mw_plugin:
         scripts = openmw_scripts(mod_dir, entries)
-        if scripts:
+        converted = omw_converted(mod_dir)
+        if converted:                                # omw2mwse owns these copies: renaming them is its call
+            CONVERTED[mod_dir] = (addons, converted)
+        elif scripts:
             REVIEW[mod_dir] = (addons, scripts)
         else:
             rename_addons = addons
@@ -448,6 +451,7 @@ def plan_mod(mod_dir):
 
 
 REVIEW = {}            # mod folder -> (its .omwaddon files, the OpenMW scripts that make it OpenMW-only)
+CONVERTED = {}         # mod folder -> (its .omwaddon files, the omw2mwse-generated folders in it): left as they are
 
 def deleted_dir(staging):
     """Where deleted mods go: beside the staging folder in use, "<its name> - deleted by vortex_tidy"."""
@@ -455,8 +459,42 @@ def deleted_dir(staging):
     return os.path.join(os.path.dirname(staging), os.path.basename(staging) + " - deleted by vortex_tidy")
 
 
+def omw_converted(mod_dir):
+    """The mod folders under <mod>\\MWSE\\mods that the OpenMW converter (omw2mwse) generated, recognised by its
+    markers (mwdialog_paths.omw_generated_dir: its manifest, or a loader with its header or omwcompat use), as
+    paths relative to the mod; [] for a mod nothing converted."""
+    mods = os.path.join(mod_dir, existing(mod_dir, "MWSE"), "mods")
+    found = []
+    if not os.path.isdir(mods):
+        return found
+    for base, dirs, _fs in os.walk(mods):
+        keep = []
+        for d in sorted(dirs):
+            if MP.omw_generated_dir(os.path.join(base, d)):
+                found.append(os.path.relpath(os.path.join(base, d), mod_dir))
+            else:
+                keep.append(d)
+        dirs[:] = keep
+    return found
+
+
+def _openmw_package_scripts(p, label):
+    """*.omwscripts and a scripts folder directly in an OpenMW package folder p (label: its path in the mod)."""
+    out = []
+    try:
+        names = sorted(os.listdir(p))
+    except OSError:
+        return out
+    for x in names:
+        if x.lower().endswith(".omwscripts") or (x.lower() == "scripts" and os.path.isdir(os.path.join(p, x))):
+            out.append(os.path.join(label, x) + ("\\" if os.path.isdir(os.path.join(p, x)) else ""))
+    return out
+
+
 def openmw_scripts(mod_dir, entries):
-    """The OpenMW Lua scripts a mod has: *.omwscripts files and scripts folders, at its root or in OpenMW\\."""
+    """The OpenMW Lua scripts a mod has: *.omwscripts files and scripts folders, at its root, in OpenMW\\, or in
+    an original package set aside under Off\\ (Off\\<mod>\\OpenMW\\, where omw2mwse keeps it, or
+    Off\\OpenMW\\<mod>\\, where earlier tidy runs put it): no scripts at the root does not mean none."""
     found = []
     for e in entries:
         p = os.path.join(mod_dir, e)
@@ -468,6 +506,22 @@ def openmw_scripts(mod_dir, entries):
             for x in os.listdir(p):
                 if x.lower().endswith(".omwscripts") or (x.lower() == "scripts" and os.path.isdir(os.path.join(p, x))):
                     found.append(os.path.join(e, x) + ("\\" if os.path.isdir(os.path.join(p, x)) else ""))
+        elif os.path.isdir(p) and e.lower() == "off":
+            try:
+                subs = sorted(os.listdir(p))
+            except OSError:
+                subs = []
+            for x in subs:
+                px = os.path.join(p, x)
+                if not os.path.isdir(px):
+                    continue
+                if x.lower() == "openmw":                  # Off\OpenMW\<mod>\
+                    for y in sorted(os.listdir(px)):
+                        if os.path.isdir(os.path.join(px, y)):
+                            found += _openmw_package_scripts(os.path.join(px, y), os.path.join(e, x, y))
+                for y in sorted(os.listdir(px)):           # Off\<mod>\OpenMW\
+                    if y.lower() == "openmw" and os.path.isdir(os.path.join(px, y)) and x.lower() != "openmw":
+                        found += _openmw_package_scripts(os.path.join(px, y), os.path.join(e, x, y))
     return found
 
 
@@ -546,6 +600,7 @@ def run_plan(args):
     lines, all_moves, skipped, touched = [], [], [], 0
     ORPHAN_NORMALS.clear()
     NORMAL_PACKS.clear()
+    CONVERTED.clear()
     _TEX_INDEX.clear()
     pats = blacklist(create=bool(getattr(args, "apply", False))) + (args.skip or [])
     for d in mods:
@@ -572,6 +627,10 @@ def run_plan(args):
     if ORPHAN_NORMALS:
         NOTES.append(f"{len(ORPHAN_NORMALS)} normal map(s) with no diffuse texture anywhere left in place (no "
                      f"stand-in); mwdialog_check --full's unused-asset purge removes the unused ones")
+    for mod_dir, (addons, gen) in sorted(CONVERTED.items()):
+        NOTES.append(f"{os.path.basename(mod_dir)}: converted by omw2mwse ({', '.join(gen)}); its "
+                     f"{', '.join(addons)} (no .esp beside it) is the converter's copy and is left as it is - "
+                     f"Morrowind loads only .esp/.esm, so ask the converter if it should be one")
     for note in NOTES:
         head.append(f"  - NOTE: {note}")
     for d, rel in ORPHAN_NORMALS[:50]:

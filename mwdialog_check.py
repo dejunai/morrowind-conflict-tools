@@ -1503,6 +1503,8 @@ class World:
                         self.r.add("WARN", plugin, f"script {sname}", "",
                                    f"{m.group(1)}: {prob} (the game skips it when this line runs)")
 
+    # what a Lua mod's names are read from; .omw / .omwscripts: OpenMW Lua hosted by omw2mwse (main.lua.omw, ...)
+    LUA_NAME_EXT = (".lua", ".json", ".toml", ".omw", ".omwscripts")
     LUA_ASSET_RE = re.compile(r'["\']([^"\'\n]{3,200}\.(?:nif|dds|tga|bmp|kf))["\']', re.I)
     LUA_DIR_RE = re.compile(r'["\']([A-Za-z0-9_ #\-]{3,40})[\\/]+[^"\'\n]*["\']')
     SHARED_DIRS = {"a", "b", "c", "d", "e", "f", "i", "k", "l", "m", "n", "o", "r", "s", "w", "x", "bm", "xbase",
@@ -1519,7 +1521,7 @@ class World:
         exact, dirs = set(), set()
         for dp, _d, fns in os.walk(mwse):
             for fn in fns:
-                if not fn.lower().endswith((".lua", ".json", ".toml")):
+                if not fn.lower().endswith(self.LUA_NAME_EXT):
                     continue
                 try:
                     with open(os.path.join(dp, fn), encoding="utf-8", errors="replace") as f:

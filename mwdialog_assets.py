@@ -41,7 +41,8 @@ IMPLICIT_TEX = re.compile(r"^(menu_|tx_menu|cursor|levelup|scroll|tx_scroll|tx_s
                           r"tx_ash|tx_blight|tx_raindrop|ripple|caustic|fog|noise)", re.I)
 MAP_SUFFIX = re.compile(r"_(n|nm|nh|h|spec|s|gloss|g|ao|em|e|r|m|param|disp|d|emissive|glow)$", re.I)
 REF_TEXT_EXT = (".lua", ".json", ".ini", ".txt", ".fx", ".fxh", ".hlsl", ".toml", ".cfg", ".xml", ".html",
-                ".htm", ".css", ".mwscript")
+                ".htm", ".css", ".mwscript",
+                ".omw", ".omwscripts")      # OpenMW Lua hosted by omw2mwse: main.lua.omw, <Mod>.omwscripts
 
 
 NOT_EMPTY_TAGS = (b"NiKeyframeController", b"NiKeyframeData", b"NiTextKeyExtraData", b"NiPointLight",
