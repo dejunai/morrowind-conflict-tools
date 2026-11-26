@@ -470,7 +470,7 @@ A rule's `state` is `matches`, `partial`, `already-patched`, `no-match` or `skip
 
 Applied like the KB patches (exact text, whole or not at all, same header and checks), labelled `(Ref Safety)` in the report. They are on by default; to leave one out, list its id in `"skipKnown"` (in `mwguard.json`'s `"luafix"` section or `mwdialog_luafix.json`), for example `"skipKnown": ["KR2"]`.
 
-The frame-drain patches `KP1`-`KP4` (Attend Me's wheel and recruit rays, Keg Drip's mesh names, G7 Containers' `getReference`) were removed on 2026-11-26: they did less work but fixed no bug, so they are mwsuite intercept candidates (`docs/dev/LUAFIX_KP_HANDOFF.md`). A mod file already patched with one keeps it: luafix no longer knows the text, so it neither applies nor removes it, and `--undo` of the run that applied it (or reinstalling the mod) puts the original back.
+The frame-drain patches `KP1`-`KP4` (Attend Me's wheel and recruit rays, Keg Drip's mesh names, G7 Containers' `getReference`) were removed on 2026-11-26: they did less work but fixed no bug, so mwsuite's `mwpluginpatches` took over three of them as intercepts. A mod file already patched with one keeps it: luafix no longer knows the text, so it neither applies nor removes it, and `--undo` of the run that applied it (or reinstalling the mod) puts the original back.
 
 - **KR1 (`AURA/fader.lua`)**: the fade timer's callback used the reference it captured; it now stops when that reference's safe handle is no longer valid.
 - **KR2 (`AttendMeMWSE/actions.lua`)**: same for the follow tick (`forceFollow`) and `travelThen`'s timer.

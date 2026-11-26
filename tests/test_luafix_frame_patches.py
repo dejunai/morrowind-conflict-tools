@@ -1,6 +1,5 @@
 """luafix 2026-11-25: noise filters (MWSE\\backups / *-off folders, files nothing loads, G6 on "player", H2 for custom
-events fired only on loaded) and the targeted safe-handle (KR) patches. The frame-drain KP1-KP4 were removed on 2026-11-26 (not bugs:
-docs/dev/LUAFIX_KP_HANDOFF.md)."""
+events fired only on loaded) and the targeted safe-handle (KR) patches. The frame-drain KP1-KP4 were removed on 2026-11-26 (not bugs)."""
 import os
 
 import pytest

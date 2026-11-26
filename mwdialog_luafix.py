@@ -3629,7 +3629,7 @@ KNOWN_BUGS += [
 
 
 # ---- Timer safe handles (KR), asked for site by site (2026-11-25). skipKnown (mwguard.json "luafix") turns one off.
-# (KP1-KP4, the frame-drain patches, were removed on 2026-11-26: not bugs; see docs/dev/LUAFIX_KP_HANDOFF.md.)
+# (KP1-KP4, the frame-drain patches, were removed on 2026-11-26: not bugs; mwpluginpatches has intercepts for KP1, KP2 and KP4.)
 KR1 = ("the fade timers keep the sound's reference and call tes3.getSoundPlaying / tes3.removeSound on it for the "
        "whole fade; a reference deleted mid-fade now ends the fade as 'not playing' instead of being used")
 KNOWN_BUGS += [

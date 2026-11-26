@@ -1,6 +1,5 @@
 """mwpluginpatches: the intercepts that took over luafix KP1, KP2 and KP4 (Attend Me eye rays, Attend Me recruit
-label, MWSE Containers Extended linked-container lookup). KP3 (Keg Drip mesh paths) has no intercept: see
-docs/dev/LUAFIX_KP_HANDOFF.md.
+label, MWSE Containers Extended linked-container lookup). KP3 (Keg Drip mesh paths) has no intercept: it fixed no bug.
 
 The target mods are faked with small stand-ins written for the test; nothing of theirs is copied. Each fake can be
 written with the old luafix marker, and the intercept must then stand down.

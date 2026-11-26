@@ -1,9 +1,17 @@
+# docs/dev: LUAFIX_KP_HANDOFF.md and MWSUITE_RESUME.md removed (2026-11-26)
+
+- Removed `docs/dev/LUAFIX_KP_HANDOFF.md` (the KP1-KP4 handoff to mwsuite) and `docs/dev/MWSUITE_RESUME.md` (a pause
+  note). The `mwpluginpatches` intercepts and the KP removal are described in the entries below and in MORE_INFO.md.
+  References in `mwdialog_luafix.py`, `tests/test_kp_intercepts.py`, `tests/test_luafix_frame_patches.py` and
+  MORE_INFO.md now say what the file said in a few words; no test read either file. `docs/dev/` keeps
+  `LUA_MOD_BUGS.md` and `TODO.md`.
+
 # docs/dev: pre-implementation design notes removed (2026-11-26)
 
 - Removed `docs/dev/MWCRIMINAL_DESIGN.md`, `MWCOMPANIONS_DESIGN.md` and `MWCONSOLE_DESIGN.md`: notes written before the
   code, not for users. The credits stay on each mod's MCM Credits page. `test_mwsuite_credits.py` no longer reads them
   (`test_doc_credits_list_every_mcm_entry` removed; the MCM Credits and self-credit tests are unchanged).
-  `docs/dev/LUA_MOD_BUGS.md`, `LUAFIX_KP_HANDOFF.md` and `TODO.md` stay.
+  `docs/dev/LUA_MOD_BUGS.md` and `TODO.md` stay (the two other notes went on 2026-11-26, see the entry above).
 
 # luafix: general rules first, Known Bugs only where no rule matches; KP1-KP4 removed (2026-11-26)
 
@@ -23,8 +31,8 @@
 - Retired (a rule now makes the same repair, every part "same" in a read-only comparison over the installed mods):
   `KB5`, `KB51`, `KB28` (`Y1`); `KB21`, `KB22`, `KB24`, `KB27` (`I1`). They are regression fixtures:
   `tests/fixtures/luafix_retired_kb.py`, `tests/test_luafix_retired_kb.py`. 46 Known Bugs ids remain.
-- Removed: `KP1`-`KP4` (frame-drain patches of Attend Me, Keg Drip and G7 Containers): they fixed no bug. Handoff to
-  mwsuite as intercept candidates: `docs/dev/LUAFIX_KP_HANDOFF.md`. A file already patched keeps the patch (luafix no
+- Removed: `KP1`-`KP4` (frame-drain patches of Attend Me, Keg Drip and G7 Containers): they fixed no bug. The
+  `mwpluginpatches` intercepts took over KP1, KP2 and KP4. A file already patched keeps the patch (luafix no
   longer applies or removes it); `--undo` of that run or a reinstall restores the original. No mod loses a bug fix.
 - Policy: a new `KB`/`KR` entry must end its description with `(no rule can express this: <why>)`;
   `tests/test_luafix_kb_policy.py` enforces it for every id not in the 2026-11-26 table.
