@@ -3,8 +3,8 @@
 A comprehensive, automated maintenance and conflict resolution suite for **The Elder Scrolls III: Morrowind**. Built entirely in Python (standard library only), this toolset handles deep plugin conflict resolution, dirty record cleaning, cell and dialogue repair, load-order sorting, asset validation and optimization, and AST-level MWSE Lua hardening.
 
 The suite is engineered for massive, complex mod lists (hundreds of plugins, tens of thousands of assets) and provides two primary automated workflows:
-1. **`vortex_tidy.py`** — Staging-level mod directory sanitizer, file structure organizer, asset validator, and Lua patcher.
-2. **`mwdialog_check.py`** — Game-level plugin validator, dialogue fixer, cell conflict resolver, automated patch builder (AutoMerge, Multipatch, SoundFix), and mlox-compatible load-order sorter.
+1. **`vortex_tidy.py`** - Staging-level mod directory sanitizer, file structure organizer, asset validator, and Lua patcher.
+2. **`mwdialog_check.py`** - Game-level plugin validator, dialogue fixer, cell conflict resolver, automated patch builder (AutoMerge, Multipatch, SoundFix), and mlox-compatible load-order sorter.
 
 > [!IMPORTANT]
 > **Detailed Function Architecture & Empirical Fix Catalog**:
@@ -15,13 +15,15 @@ The suite is engineered for massive, complex mod lists (hundreds of plugins, ten
 ## Table of Contents
 
 - [Core Tools Overview](#core-tools-overview)
-  - [vortex_tidy.py — Mod Staging Sanitizer & Pipeline](#vortex_tidypy--mod-staging-sanitizer--pipeline)
-  - [mwdialog_check.py — Plugin Analysis & Conflict Engine](#mwdialog_checkpy--plugin-analysis--conflict-engine)
+  - [vortex_tidy.py - Mod Staging Sanitizer & Pipeline](#vortex_tidypy---mod-staging-sanitizer--pipeline)
+  - [mwdialog_check.py - Plugin Analysis & Conflict Engine](#mwdialog_checkpy---plugin-analysis--conflict-engine)
 - [Command-Line Switch Reference](#command-line-switch-reference)
   - [vortex_tidy Switches](#vortex_tidy-switches)
   - [mwdialog_check Switches](#mwdialog_check-switches)
   - [mwdialog_luafix Switches](#mwdialog_luafix-switches)
+  - [Exit Codes & Environment Variables](#exit-codes--environment-variables)
 - [The Plan-Then-Apply Workflow](#the-plan-then-apply-workflow)
+- [Load Order & Starting the Game](#load-order--starting-the-game)
 - [Key Architectural Features](#key-architectural-features)
   - [Dialogue & INFO Chain Healing](#dialogue--info-chain-healing)
   - [Cell Conflicts & Footing Rescue](#cell-conflicts--footing-rescue)
@@ -37,31 +39,35 @@ The suite is engineered for massive, complex mod lists (hundreds of plugins, ten
 
 ## Core Tools Overview
 
-### vortex_tidy.py — Mod Staging Sanitizer & Pipeline
+### vortex_tidy.py - Mod Staging Sanitizer & Pipeline
 
 `vortex_tidy.py` inspects and cleans each individual mod folder inside Vortex's Morrowind staging directory (read directly from Vortex's configuration state, or specified via `--staging`). It ensures that mods deployed to `Data Files` are properly structured, free of stray junk files, and statically verified:
 
 1. **Folder & Hierarchy Normalization**:
-   - Detects nested `Data Files` directories, misplaced asset folders, and root-level clutter.
+   - Leaves alone any mod that installs into the game folder instead of `Data Files` (an `.exe`, `.dll` or `.asi`, or a `Data Files` folder, at its root, like MGE XE), and every mod on the blacklist: `Morrowind Code Patch*`, `MCP beta*` and `NIFZER0EDIT*` are built in; add one folder-name pattern per line (wildcards allowed) to `vortex_tidy_blacklist.txt`.
+   - Keeps game folders (`Meshes`, `Textures`, `Icons`, `Sound`, `Music`, `BookArt`, `Splash`, `Fonts`, `Video`, `DistantLand`), support folders (`MWSE`, `MGE3`, `Shaders`, `Grass`, `MCPatch`), plugins (`.esp`, `.esm`, `.omwaddon`), `.bsa` archives, MWSE `*-metadata.toml` files and `<plugin>.bugreport.txt` where they are. `Extras\`, `Off\` and `bugreports\` are never moved or looked inside.
    - Moves documentation files (`.txt`, `.md`, `.pdf`, `.html`, `.htm`, `.doc`, `.docx`, `.odt`, `.rtf`, `.nfo`) at the mod root into `Docs\`, renamed `<mod name> - <file>` so one mod's `readme.txt` cannot overwrite another's when deployed. Documents already in `Docs\` that do not already name the mod get the same prefix.
    - Moves root image previews (`.jpg`, `.png`, `.gif`, `.bmp`, `.webp`) into `Screenshots\`, renamed the same way.
-   - Relocates misplaced textures (`.dds`, `.tga`), meshes (`.nif`), icons, book art, and audio files into their canonical `Textures`, `Meshes`, and other game folders at the mod root.
-   - Identifies MGE XE distant-land grass plugins and leaves them out of standard active plugin lists.
+   - A root folder holding a mod's readme (named after the mod or one of its plugins, or holding nothing but documents) becomes part of `Docs\`; anything in it that is not a document goes to `Extras\`. Everything else at the root that is not game data (FOMOD option folders, `meta.ini`, `.bak` files...) goes to `Extras\<mod name>\`, where `<mod name>` is the folder name without Vortex's Nexus id, version and download stamp.
+   - Moves MGE XE grass plugins (only statics, activators and cells, mostly grass) into `Grass\`, where MGE XE's distant land generator reads them; the game never loads them.
+   - Moves OpenMW-only content (`*.omwscripts` and the `scripts`, `l10n`, `animations` and `playlists` folders, plus an `OpenMW\` folder an earlier run made) to `Off\OpenMW\<mod name>\`. An `.omwaddon` with no `.esp`/`.esm` beside it is renamed `.esp` when the mod has no OpenMW scripts; with scripts, the plan flags it, and `--apply` stops at it, offers to open its folder, and offers to delete the mod (moved to `<staging> - deleted by vortex_tidy` beside the staging folder, so `--undo` can bring it back).
    - Moves OpenMW-only normal maps (`*_n` / `*_nm` / `*_normal` / `*_nrm`) whose diffuse texture exists to `Off\normal maps\<mod name>\`, so they are not deployed to vanilla Morrowind with MGE XE.
 2. **Asset Sanitization & Optimization**:
    - Inspects DDS textures for corrupt headers, missing mipmaps, unsupported formats, and uncompressed RGBA.
    - Automatically generates missing mipmaps using bundled `texconv`.
+   - Broken files it can't repair (empty, not the format their name says, truncated, a model the game crashes on, an MP3 with no audio) go to `<mod>\Off\broken\<plugin>\<path>` and a small valid dummy of the same type takes their place (made in code for textures, icons, sounds and NIF models; other types copied from a core game file), marked by `<original>.tidy-dummy` so later runs leave it alone. A crashing model another copy exists for is only moved out, so the good copy wins. `--undo` puts the original back.
    - Downsamples textures and splash screens exceeding 2048x2048 down to 2048 (preserving full size if `--no-reduce-textures` or `--no-reduce-splash` is passed). Splash screens are still made 24-bit RLE TGA.
 3. **MWSE Lua AST Static Analysis & In-Place Hardening**:
-   - Runs `mwdialog_luafix.py` against all Lua scripts across staged mods.
+   - Runs `mwdialog_luafix.py` against the MWSE Lua files of every staged mod, and against the MWSE core files a KnownBugs rule names (`Data Files\MWSE\core\...`, which MWSE's updater writes straight into Data Files: they are patched in place there, unless a staged mod ships MWSE itself).
    - Parses code into a full Abstract Syntax Tree (AST) using a pure-Python Lua 5.1/LuaJIT parser.
-   - Injects nil-guards, compresses absurd event priorities, adds a rate-limiting log shim for unthrottled `print` / `mwse.log` calls, and applies targeted patches for KnownBugs (KB1–KB17 and KB19; there is no KB18).
+   - Injects nil-guards, compresses absurd event priorities, adds a log shim that sends a spamming mod's lines past its allowance to its own `MWSE\logs\<mod>.log`, and applies targeted patches for KnownBugs (KB1-KB17 and KB19; there is no KB18).
 4. **Strict Safety**:
-   - Implements a strict two-stage **Plan-then-Apply** execution model (`plans\vortex_tidy_plan.txt`).
-   - Every file modification, move, or patch is cryptographically hashed and verified before execution.
-   - Complete reversibility via `--undo` using an atomic action journal.
+   - Implements a strict two-stage **Plan-then-Apply** execution model (`plans\vortex_tidy_plan.txt`): `--apply` works the plan out again and refuses, changing nothing, when its actions differ from the plan you reviewed.
+   - A Lua file whose content hash changed since it was checked is not patched, and a patched file is only written when LuaJIT (or luac) compiles it.
+   - Moves, Lua patches (MWSE core files too) and asset repairs are journaled (`generated\vortex_tidy_journal.jsonl`). Before a mod's files are repaired, every file the repairs can change (the file, same-named files beside it, the mod's plugins and bug reports) is copied to `backups\tidy\<run>\assets\<mod>\` and journaled with its SHA-256; a mod whose originals can't be kept is not repaired. `--undo` reverts the whole last `--apply`: each asset original goes back to its own path (written in place, so Vortex hard links and plugin dates survive) and the files the repairs made are deleted (repaired copies under new names, the mod's `Off\` copies, a new bug report); then the Lua patches, then the moves. It does not reverse a repair; it brings back the file as it was. Run it again to revert the `--apply` before that. A missing or altered original, or a file changed since the `--apply`, stops `--undo` before anything changes; `--force` overwrites changed files, but only with an original whose hash matches. The `vortex_tidy` sections `lua_apply` writes into bug reports are not undone.
+   - Purge in Vortex before `--apply`, and Deploy after `--apply` or `--undo`, so the game folder matches.
 
-### mwdialog_check.py — Plugin Analysis & Conflict Engine
+### mwdialog_check.py - Plugin Analysis & Conflict Engine
 
 `mwdialog_check.py` is the primary conflict resolution, cleaning, and patching powerhouse. Operating on the active load order and `Data Files`, it can run individual targeted repairs or an all-in-one automated pipeline (`--full`):
 
@@ -87,9 +93,9 @@ The suite is engineered for massive, complex mod lists (hundreds of plugins, ten
    - **SoundFix**: Recompiles problematic audio scripts using `MWRecompile` into `mwdialog_check - MWSoundFix.esp`, replacing broken `GetSoundPlaying` polling loops with state variables. `--fix` rebuilds this patch unless `--no-soundfix` is passed. `--soundfix` runs that step on its own.
 6. **Load-Order Sorter (`--sort`)**:
    - Built-in mlox-compatible topological sorter (implemented in `mwdialog_check.py`; `mwdialog_loadorder.py` parses rules and stores the order).
-   - Evaluates custom rules from `mwdialog_check.rules.txt` (`[Order]`, `[NearStart]`, `[NearEnd]`, `[Context]`), then mlox's `mlox_user.txt` and `mlox_base.txt`.
+   - Evaluates custom rules from `generated\mwdialog_check.rules.txt` (`[Order]`, `[NearStart]`, `[NearEnd]`, `[Exact]`; `--sort` keeps a `[Context]` section there itself), then mlox's `mlox\mlox_user.txt` and `mlox\mlox_base.txt` in the game folder. A rule that contradicts an earlier one is skipped.
    - Automatically adds patch-after-mod rules and dialogue cell-filter rules (`mwdialog_cellorder.py`) unless `--no-content-order` is passed.
-   - The intended order is written to `generated\mwdialog_load_order.txt` and plugin dates are set one day apart. `--play` writes that list back into `Morrowind.ini` (whose `[Game Files]` section can be truncated by Windows' 32,767-character limit).
+   - The intended order is written to `generated\mwdialog_load_order.txt` and plugin dates are set one day apart from 2000-01-01. Any run that changed that list writes it into `Morrowind.ini`'s `[Game Files]` when it ends normally, and `--play` writes it again before starting the game (Vortex's rewrite of that section can be cut at Windows' 32,767-character limit). See [Load Order & Starting the Game](#load-order--starting-the-game).
 7. **Asset Integrity Check (`--asset-check`)**:
    - Verifies all model, texture, and sound references in active plugins against loose files and loaded BSA archives (`mwdialog_bsa.py`).
    - Generates stand-in dummy assets for missing meshes or textures to prevent game crashes.
@@ -108,7 +114,8 @@ The suite is engineered for massive, complex mod lists (hundreds of plugins, ten
 | `--skip` | `<PATTERN ...>` | Skips specified mod staging folder names this run. To always skip one, add it to `vortex_tidy_blacklist.txt`. |
 | `--apply` | *(flag)* | Enacts the reviewed plan in `plans\vortex_tidy_plan.txt`. Refuses if the plan was modified or is out of date. |
 | `--yes` | *(flag)* | With `--apply`: don't ask first. |
-| `--undo` | *(flag)* | Reverses the last applied tidy actions using the execution journal. |
+| `--undo` | *(flag)* | Reverts the whole last `--apply` from the journal: original asset files back at their own paths (files the repairs made deleted), Lua patches, then moves. Again: the `--apply` before that. Stops, changing nothing, when an original is missing or altered or a file changed since. |
+| `--force` | *(flag)* | With `--undo`: overwrite files changed since the `--apply` (only with an original whose hash matches). |
 | `--no-assets` | *(flag)* | Skips the asset check of each mod's files. |
 | `--no-lua` | *(flag)* | Skips the Lua check (`mwdialog_luafix`). |
 | `--lua-only` | *(flag)* | Only the Lua check: no moves, no asset check. |
@@ -126,12 +133,12 @@ The suite is engineered for massive, complex mod lists (hundreds of plugins, ten
 | Switch | Argument | Description |
 | :--- | :--- | :--- |
 | *(default)* | `[DATA_DIR]` | Runs non-destructive validation on active plugins and outputs conflict reports. |
-| `--full` | *(flag)* | Starts from scratch. Aborts if a plugin's master is missing from Data Files. Then: unmerge; turn back on what earlier runs turned off (and drop their conflict rules and asset stand-ins); the redundant-plugin step; a cell-conflicts report (asking only hard incompatibilities); sort; set the old Multipatch aside; `--clean --fix --asset-check` (footing and SoundFix run as part of `--fix`); sort; stop and open `mwdialog_report.txt` if any ERROR remains; otherwise AutoMerge, sort, `--all`, sort again; stop again on ERROR; then offer interactive `--cell-conflicts`. `--yes`: no questions; `--add-all-esp`: add every plugin first; `--play`: start the game at the end. |
+| `--full` | *(flag)* | Starts from scratch. Aborts (exit 2) if a plugin's master is missing from Data Files. Replays the answers remembered in `mwdialog_conflict_answers.json` unless `--fresh-answers`. Then: undo the auto-merge (when there is one); turn back on what earlier runs turned off (and drop their conflict rules, rebuilt-interior choices and asset stand-ins); `--add-all-esp` if given; turn off redundant plugins (asking in a console; `--no-redundant` skips it); a cell-conflicts report (asking only hard incompatibilities); sort; set the old Multipatch aside; clean and fix with the asset check, no Multipatch yet (footing and SoundFix run as part of `--fix`); sort again; stop and open `mwdialog_report.txt` if any ERROR remains; otherwise AutoMerge, sort, `--all`, sort again; stop again on ERROR; then offer interactive `--cell-conflicts`. `--yes`: no questions; `--add-all-esp`: add every plugin first; `--play`: start the game at the end. With `--preserve-saves strict` there is no reset, unmerge or redundant step, and the steps it runs hold back what `strict` holds back (the auto-merge is kept as it is); `--preserve-saves` / `basic` is passed on to every step. Prints a per-step summary; exit 2 when a step fails or an ERROR stops it. |
 | `--all` | *(flag)* | `--clean`, then `--fix`, then `--multipatch`. |
-| `--fix` | *(flag)* | After the report, show a fix plan and apply it after you confirm. `.esp` files are fixed in place; masters (`.esm`) through `mwdialog_check - ESM fixes.esp`. Also rebuilds SoundFix unless `--no-soundfix`, refreshes the MWSE suite data, and runs footing / exterior float drops in `fix_cell_winners`. `.esm` files are never rewritten. |
+| `--fix` | *(flag)* | After the report, show a fix plan and apply it after you confirm. `.esp` files are fixed in place (backed up first); masters (`.esm`) through `mwdialog_check - ESM fixes.esp`. Also rebuilds Cell Fixes (`mwdialog_check Cell Fixes.esp`: doubled objects, footing moves, exterior float drops, pathgrids), SoundFix unless `--no-soundfix`, the MWSE suite data, and `MWSE\config\mwsoundguard_data.json`. `.esm` files are never rewritten. |
 | `--dry-run` | *(flag)* | With `--fix` (or other writing steps): show the plan but change nothing. |
 | `--yes` | *(flag)* | With `--fix`: apply without asking. |
-| `--play` | *(flag)* | Start `Morrowind.exe` directly, skipping the Morrowind Launcher (after any other steps given, e.g. `--sort --play`). Deploys `lua tools` to `Data Files` as part of launch. On its own, just starts the game. |
+| `--play` | *(flag)* | Start `Morrowind.exe` directly, skipping the Morrowind Launcher (after any other steps given, e.g. `--sort --play`; not after a failed step, and skipped with `--dry-run`). Refuses (exit 3) when a plugin's master is missing, off, or loads after it. Writes `generated\mwdialog_load_order.txt` into `Morrowind.ini`'s `[Game Files]`, brings `Data Files` up to date with `lua tools\`, and sets `SteamAppId` so Steam doesn't redirect to the Launcher. On its own, just does that and starts the game. |
 | `--play-anyway` | *(flag)* | With `--play`: start even if a plugin's master is missing or loads after it. |
 | `--exe` | `<NAME>` | With `--play`: the game executable (default `Morrowind.exe`). |
 | `--steam-appid` | `<ID>` | With `--play`: Steam app id (default 22320). |
@@ -141,20 +148,20 @@ The suite is engineered for massive, complex mod lists (hundreds of plugins, ten
 | :--- | :--- | :--- |
 | `--plugins` | `<PLUGINS ...>` | Explicit load order (file names in Data Files), instead of the active load order. |
 | `--only` | `<PLUGINS ...>` | Report (and fix) only issues coming from these plugins. Not an alias of `--plugins`. |
-| `--ini` | `<PATH>` | Path to `Morrowind.ini` (its `[Archives]`). The plugin list is `generated\mwdialog_load_order.txt`, made from this ini the first time, and written back into it whenever a run changes it, and by `--play`. |
-| `--openmw-cfg` | `<PATH>` | Reads `content=` and `data=` from `openmw.cfg`. |
-| `--vortex-dir`, `--staging` | `<PATH>` | Staging folder override for Vortex integration. |
+| `--ini` | `<PATH>` | Path to `Morrowind.ini` (default: the one in the game folder; its `[Archives]` are read). The plugin list is `generated\mwdialog_load_order.txt`, made from this ini the first time, and written back into it whenever a run changes it, and by `--play`. |
+| `--openmw-cfg` | `<PATH>` | Reads `content=` and `data=` from `openmw.cfg`. With it (or `--plugins`), `Morrowind.ini` is never written; with it, `--fix` also skips SoundFix, the MWSE suite data and the sound cache. |
+| `--vortex-dir`, `--staging` | `<PATH>` | Vortex's mod staging folder, searched for files that exist there but were never deployed (default: Vortex's own setting). |
 | `--no-vortex` | *(flag)* | Disables Vortex staging integration. |
 | `--vortex-downloads`, `--downloads` | `<PATH>` | Vortex download folder, to read a plugin's original header from its download archive when `--fix` has rewritten it (default: Vortex's own setting). |
 | `--no-archive-lookup` | *(flag)* | Don't open download archives for the master check. |
 | `--encoding` | `<NAME>` | Text encoding of plugin strings (default `cp1252`; `cp1251` Russian, `cp1250` Polish). |
 | `--csv` | `<PATH>` | Also write the report to a CSV file. |
-| `--no-interactive` | *(flag)* | Don't ask questions; use saved answers or report-only where a prompt would appear. |
+| `--no-interactive` | *(flag)* | With `--cell-conflicts` (and `--redundant`): only report, don't ask. Also the case when the output goes to a file. |
 
 #### Cleaning & ESM Repairs
 | Switch | Argument | Description |
 | :--- | :--- | :--- |
-| `--clean` | *(flag)* | Cleans dirty records, evil GMSTs, ITM junk cells, and misplaced exterior copies. `.esm` files are not rewritten. |
+| `--clean` | *(flag)* | Cleans `.esp` plugins like `tes3cmd clean`: duplicate object instances, redundant `AMBI`/`WHGT`, records duplicated from masters, Evil GMSTs, junk cells. `.esm` files are not rewritten. |
 | `--patch-esm` | *(flag)* | Same as `--fix` (kept for older batch notes). `--fix` already writes master fixes into `mwdialog_check - ESM fixes.esp`. |
 | `--no-placeholders` | *(flag)* | With `--fix`: don't add stand-in gold coins for objects that scripts name but no mod defines. |
 | `--restore-dates` | *(flag)* | Undo the last `--sort` (put the old dates back). |
@@ -173,15 +180,15 @@ The suite is engineered for massive, complex mod lists (hundreds of plugins, ten
 | :--- | :--- | :--- |
 | `--cell-conflicts` | *(flag)* | Analyzes exterior and interior cell conflicts, moved land, and prompts for conflict choices. Also writes the MWSE suite data (`mwfloatfix_data.json`, `mwcollide_data.json`, `mwstranded_data.json`). |
 | `--only-incompatible` | *(flag)* | Limits cell conflict analysis to hard incompatibilities (e.g. moved land). |
-| `--only-new` | *(flag)* | Only prompts for cell conflicts that have not been answered in `mwdialog_conflict_answers.json`. |
-| `--fresh-answers` | *(flag)* | Discards saved conflict answers and prompts interactively. |
-| `--use-answers` | *(flag)* | Uses existing saved conflict answers without prompting. |
-| `--conflict-min` | `<N>` | Minimum overlapping references required to flag a cell conflict. |
-| `--conflict-top` | `<N>` | Caps the number of displayed cell conflicts to top N. |
-| `--conflict-all` | *(flag)* | Reports all cell conflicts regardless of threshold. |
-| `--conflict-all-places` | *(flag)* | Evaluates conflicts across all worldspace locations. |
-| `--collide-radius` | `<FLOAT>` | Proximity radius in game units for detecting overlapping placed objects (default 32). |
-| `--no-doubled` | *(flag)* | Skips checking for doubled object placements. |
+| `--only-new` | *(flag)* | Replay every answer remembered in `mwdialog_conflict_answers.json` and ask only about the conflicts that have none yet. |
+| `--fresh-answers` | *(flag)* | With `--full`: don't replay the remembered answers (by default `--full` replays them and asks only about new conflicts). Incompatible plugins are still asked about. |
+| `--use-answers` | *(flag)* | With `--cell-conflicts`: take every remembered answer (a pair with none is asked in a console), then run what it needs (`--sort`, and `--fix --multipatch` if a plugin was turned off or a winner chosen). With `--full`: keep `mwdialog_cell_winners.txt` and replay the answers. |
+| `--conflict-min` | `<N>` | A plugin must add at least N new objects to a cell to count (default 5). |
+| `--conflict-top` | `<N>` | Print the N most serious pairs in the summary (default 40); the questions still go through every pair. |
+| `--conflict-all` | *(flag)* | Show every pair in the summary. |
+| `--conflict-all-places` | *(flag)* | Also list the pairs that only put a few objects near each other (left to `mwcollide`, not asked about). |
+| `--collide-radius` | `<UNITS>` | For `mwcollide`: hide anything of the earlier of two unrelated mods within this many units of something of the later one's (default 32; 0: only the same object or model, within 64). |
+| `--no-doubled` | *(flag)* | With `--fix`: don't look for (or turn off) plugins that place the same objects twice (recorded in `mwdialog_disabled.txt`). |
 
 #### Load Order & Sorter
 | Switch | Argument | Description |
@@ -189,19 +196,19 @@ The suite is engineered for massive, complex mod lists (hundreds of plugins, ten
 | `--sort` | *(flag)* | Sort the active plugins: masters before the plugins using them, then the rules in `mwdialog_check.rules.txt` and mlox's `mlox_user.txt` / `mlox_base.txt`. Dates are set one day apart. The intended order is `generated\mwdialog_load_order.txt`. |
 | `--no-mlox-rules` | *(flag)* | With `--sort`: use only `mwdialog_check.rules.txt`. |
 | `--update-rules` | *(flag)* | Removes the steps of mlox's `mlox_user.txt` and `mlox_base.txt` that `--sort` already skips because a master, your `mwdialog_check.rules.txt`, a context rule, or an earlier mlox rule says otherwise, or because they would put an `.esp` before an `.esm`. Only the contradicted step of an `[Order]` rule is commented out or split; the rest of the rule stays. Your own rules file is only reported, never edited. `--dry-run` shows the plan and the reason for each. Does not download anything. |
-| `--no-content-order` | *(flag)* | With `--sort`: don't add the automatic patch-after-mod rules or the dialogue cell-filter rules from `mwdialog_cellorder.py`. |
+| `--no-content-order` | *(flag)* | With `--sort`: don't add the automatic patch-after-mod rules or the dialogue cell-filter rules from `mwdialog_cellorder.py` (and so add no masters either). |
 | `--no-add-masters` | *(flag)* | With `--sort`: don't add a mod as a master to the patch that changes its records (keep only the `[Context]` order rule). |
-| `--add-all-esp` | *(flag)* | Activate every `.esm`/`.esp` in Data Files in `generated\mwdialog_load_order.txt` (masters first, then by date; MGE XE grass plugins left out; the old ini is backed up). Use `--dry-run` to preview. |
+| `--add-all-esp` | *(flag)* | Activate every `.esm`/`.esp` in Data Files in `generated\mwdialog_load_order.txt` (masters first, then by date). Left out: MGE XE grass plugins (`grass_plugins` in `mgeXE.toml`), plugins an auto-merge replaces, and plugins `--fix` or `--redundant` turned off. The old list is backed up. Use `--dry-run` to preview. |
 
 #### Merging & Patch Creation
 | Switch | Argument | Description |
 | :--- | :--- | :--- |
-| `--auto-merge` | *(flag)* | Generates `mwdialog_check AutoMerge.esp` (or `--merge-name`) from eligible plugins with no cell, land, or pathgrid edits, and deactivates them. Plugins listed in `mwdialog_auto-merge.blacklist.txt` are never merged. Use `--dry-run` first. |
-| `--merge` | `<OUT.esp> <INPUT ...>` | Merge the inputs into the named output plugin. The first argument is the output name. |
+| `--auto-merge` | *(flag)* | Generates `mwdialog_check AutoMerge.esp` (or `--merge-name`) from eligible plugins with no cell, land, or pathgrid edits, and deactivates them. Plugins listed in `mwdialog_auto-merge.blacklist.txt` are never merged. Use `--dry-run` first. Kept as it is with `--preserve-saves strict`. |
+| `--merge` | `<OUT.esp> <INPUT ...>` | Merge the inputs (files or folders) into the named output plugin, written beside the inputs' originals (their Vortex mod folder for deployed files) unless the name includes a path. Inputs whose masters aren't active, or whose dialogue names things no installed mod defines, are left out. Later inputs win. |
 | `--merge-name` | `<NAME.esp>` | With `--auto-merge`: the merged plugin's name. |
 | `--merge-plan` | *(flag)* | Recommend merges `--auto-merge` doesn't make (plugins with cells, land, or pathgrids). Read-only: writes `mwdialog_merge_plan.txt` and `.json`. |
 | `--plan-size` | `<N>` | With `--merge-plan`: at most N plugins per merge (small patches aren't capped; default 8). |
-| `--unmerge` | `[NAME.esp ...]` | Undo an `--auto-merge`: reactivate the plugins it replaced and remove the merged plugin (all recorded merges if no name is given). |
+| `--unmerge` | `[NAME.esp ...]` | Undo an `--auto-merge`: reactivate the plugins it replaced and remove the merged plugin (all recorded merges if no name is given). Refused (exit 2) with `--preserve-saves strict`. |
 | `--merge-all` | *(flag)* | With `--merge`: include every input anyway. |
 | `--merge-with` | `<PLUGINS ...>` | With `--merge`: plugins (not merged) that count as installed when checking the inputs. |
 | `--no-follow-up`, `--no-follow-fix` | *(flag)* | Don't run the usual follow-ups (`--fix --multipatch` after `--auto-merge` or a `--sort` that changed the order, and so on). |
@@ -211,43 +218,44 @@ The suite is engineered for massive, complex mod lists (hundreds of plugins, ten
 #### Sound Repair & SoundFix
 | Switch | Argument | Description |
 | :--- | :--- | :--- |
-| `--soundfix` | *(flag)* | Recompiles problematic audio scripts into `mwdialog_check - MWSoundFix.esp`. Already runs as part of `--fix` unless `--no-soundfix`. |
+| `--soundfix` | *(flag)* | Recompiles problematic audio scripts into `mwdialog_check - MWSoundFix.esp`. Only scripts whose source recompiles to their shipped bytecode are changed; `generated\mwdialog_soundfix_report.txt` lists the rest. Already runs as part of `--fix` unless `--no-soundfix`. With `--dry-run`: report only. Not built with `--preserve-saves` (exit 1 on its own; skipped inside `--fix`). |
 | `--soundfix-report` | *(flag)* | Reports scripts eligible for soundfix without compiling. |
-| `--soundfix-undo` | *(flag)* | Removes the SoundFix patch and its data file. |
-| `--soundfix-loop-mode` | `flag`/`restart` | Loop state tracking method (`flag` for MWSE, `restart` for vanilla engine). |
+| `--soundfix-undo` | *(flag)* | Takes the SoundFix patch out (backed up first), with its helper data. |
+| `--soundfix-loop-mode` | `flag`/`restart` | `flag` (default): a loop starts once, re-armed on a game load and by the `mwsoundfix` MWSE helper when its object comes back; `restart`: also restarted on every cell change (for an install without MWSE). |
 | `--no-soundfix` | *(flag)* | Skip audio script recompilation during `--fix`. |
 | `--repair-sounds` | *(flag)* | Re-saves sound files the active plugins play that the game can hang or crash on (24/32-bit or odd-codec WAVs, MP3s with damaged or huge tags), under the same names. Needs ffmpeg. Originals go to `<mod folder>\Off\<plugin>\<path>`. No plugin is changed. Missing files are not synthesized here; `--fix` / `--asset-check` create silent stand-ins for those. |
-| `--mwrecompile` | `<PATH>` | Path to `MWRecompile` for `--soundfix`. |
+| `--mwrecompile` | `<PATH>` | `MWRecompile.exe` for `--soundfix` (default: the `MWRECOMPILE` environment variable, then `tools\MWRecompile\`, then PATH). |
 
 #### Asset Management & Health
 | Switch | Argument | Description |
 | :--- | :--- | :--- |
-| `--asset-check` | *(flag)* | Validates models, textures, and sound files referenced across active plugins. |
+| `--asset-check` | *(flag)* | Also check the files records, scripts and `Morrowind.ini` name (models and their textures, icons, sounds, music, videos, fonts), searching Vortex mod folders and `.Orphaned` for missing ones; with `--fix`, put them back or use stand-ins (adds a few minutes). |
 | `--no-reduce-textures` | *(flag)* | Keeps textures > 2048 full size during asset repairs. |
 | `--no-reduce-splash` | *(flag)* | Keeps splash screens > 2048 full size during asset repairs. |
-| `--restore-textures` | *(flag)* | Restores original textures from backup copies. |
+| `--restore-textures` | *(flag)* | Puts back the full-size textures `--asset-check --fix` reduced to 2048 (listed in `mwdialog_reduced_textures.txt`). |
 | `--restore-unused` | *(flag)* | Puts back the unused textures/sounds `--asset-check --fix` moved to `Off\unused\`. |
-| `--remove-generated` | *(flag)* | Removes generated placeholder assets and stand-in files. |
-| `--longpaths-undo` | *(flag)* | Puts back every file `--fix` or `vortex_tidy` moved to a short path, and the paths in plugins and models. |
+| `--remove-generated` | *(flag)* | Deletes the stand-in files `--fix` put in Data Files (listed in `mwdialog_generated_files.txt`); a file whose size changed since (the real file is there now) is left alone. |
+| `--longpaths-undo` | *(flag)* | Puts back every file `--fix` or `vortex_tidy` moved to a short path, and the paths in plugins and models (moves a `vortex_tidy --undo` already put back are no longer listed). |
 
 #### Redundancy, Masters, & Safety
 | Switch | Argument | Description |
 | :--- | :--- | :--- |
-| `--redundant` | *(flag)* | Detects redundant plugins whose records are completely superseded by later mods. |
-| `--redundant-auto` | *(flag)* | Automatically deactivates identified redundant plugins. |
+| `--redundant` | *(flag)* | Finds plugins doing the same job as another (nothing of theirs would be missed, or two versions of one mod), describes how they overlap, and asks which to keep (report only outside a console or with `--no-interactive`; remembered in `mwdialog_redundant.txt`). Report only with `--preserve-saves strict`. |
+| `--redundant-auto` | *(flag)* | `--redundant`, turning off the high-confidence ones (an `.esp` that changes nothing in the game and that nothing needs) without asking; two versions of one mod are still only asked about. |
 | `--no-redundant` | *(flag)* | Skips redundancy analysis (including during `--full`). |
-| `--redundant-undo` | `[PLUGINS ...]` | Re-enables plugins previously disabled as redundant. |
-| `--reenable` | `[PLUGINS ...]` | Safely re-enables disabled plugins after verifying master availability. |
+| `--redundant-undo` | `[PLUGINS ...]` | Turns back on plugins `--redundant` turned off (all of them, and forgets the keep-both choices, with no name). |
+| `--reenable` | `[PLUGINS ...]` | Turns back on plugins `--fix` turned off as doubled (all of them with no name; see `mwdialog_disabled.txt`), after checking their masters are available. Refused (exit 2) with `--preserve-saves strict`. |
 | `--disable-mismatched` | *(flag)* | Deactivates compatibility patches built for a different master than the one installed. |
 | `--mismatch-threshold` | `<FLOAT>` | Confidence from which a master counts as a different mod (default 0.75). |
 | `--no-master-guard` | *(flag)* | Skip the master mismatch check. |
 | `--bug-reports` | *(flag)* | Write `<plugin>.bugreport.txt` for plugins with problems of their own (also done by `--fix` and `--asset-check`). |
 | `--no-bug-reports` | *(flag)* | Don't write `<plugin>.bugreport.txt` files. |
-| `--preserve-saves` | `[strict]` | Restricts patch generation and cleaning to prevent breaking in-progress saves. |
-| `--restore` | `<PLUGINS ...>` | Restores specified plugins from their newest backup. |
+| `--preserve-saves` | `[basic\|strict]` | Keep a game in progress working. The bare flag means `basic`; `--preserve-saves strict` or `--preserve-saves=strict` for more (put it after the Data Files folder, or use `=`, since the flag takes an optional value). `basic` skips `--soundfix` (it adds script variables), the topic renames, any rebuild or removal of Cell Fixes that would bring back an object it deletes, and setting aside an old Performers patch. `strict` does all that and also keeps the active plugins, the auto-merge and Cell Fixes exactly as they are (`--unmerge` / `--reenable` refused, `--auto-merge` kept, doubled/redundant/conflict turn-offs reported only), and skips the reference clean-ups and persistence flips. What it holds back is reported. Details: [MORE_INFO.md](MORE_INFO.md#15-keeping-a-game-in-progress---preserve-saves). |
+| `--restore` | `<PLUGINS ...>` | Puts each plugin's newest backup back (keeping the file date) and exits. |
 | `--restore-all` | *(flag)* | Reverts all plugins to their oldest original backups (what is replaced is backed up first). |
-| `--clean-up` | *(flag)* | Deletes the backups between each plugin's oldest original and its newest backup. |
-| `--trace` | `<RECORDS ...>` | Traces the history and overrides of specific record IDs across the load order. |
+| `--clean-up` | *(flag)* | Prunes plugin `.bak` backups (in Data Files and the backups folder): an installed or parked plugin keeps its oldest (the original) and newest; a plugin confirmed gone loses all of them; when it can't tell (a folder or record unreadable, Vortex staging unreadable, `--no-vortex`), that plugin's backups are moved to `<backups>\Off\cleanup\<path>` and journaled in `generated\mwdialog_cleanup_journal.jsonl`. `--dry-run` lists all three groups; asks first unless `--yes`. |
+| `--clean-up-undo` | *(flag)* | Puts back the backups the last `--clean-up` moved to `Off\cleanup\` (checked against their SHA-256; never over a different file). |
+| `--trace` | `<ID ...>` | Follows object IDs through the load order: who defines, places, deletes or scripts them. |
 | `--fix-log` | `<PATH>` | Where to append a record of fixes (default `mwdialog_fixes.log`). |
 
 ---
@@ -256,21 +264,38 @@ The suite is engineered for massive, complex mod lists (hundreds of plugins, ten
 
 | Switch | Argument | Description |
 | :--- | :--- | :--- |
-| *(default)* | `[PATHS ...]` | Analyzes the given Lua files or directories (default: `Data Files\MWSE\mods` of the Morrowind folder) and writes `plans\mwdialog_luafix_plan.txt`. |
+| *(default)* | `[PATHS ...]` | Analyzes the given Lua files or directories (default: `Data Files\MWSE\mods` of the Morrowind folder, plus the MWSE core files a KnownBugs rule names) and writes `plans\mwdialog_luafix_plan.txt` and `generated\mwdialog_luafix_known_bugs.txt`. |
 | `--apply` | *(flag)* | Enacts reviewed AST patches from `plans\mwdialog_luafix_plan.txt`. |
 | `--yes` | *(flag)* | With `--apply`: don't ask first. |
 | `--undo` | *(flag)* | Puts back the files the last `--apply` patched. |
 | `--force` | *(flag)* | With `--undo`: also put back files changed since they were patched. |
 | `--level` | `high`/`medium` | What gets patched: `high` (default) or also the medium-confidence findings. |
-| `--include-own` | *(flag)* | Also check your own mods (`mwguard`, `mwcollide`, and the rest of the suite). |
-| `--luajit` | `<PATH>` | Path to LuaJIT or luac to check syntax with. |
-| `--no-syntax-check` | *(flag)* | Patch even with no LuaJIT/luac (parser only). |
+| `--include-own` | *(flag)* | Also check the suite's own mods (`OWN_MODS`: `mwcollide`, `mwcompanions`, `mwcriminal`, `mwfloatfix`, `mwguard`, `mwpluginpatches`, `mwsaveguard`, `mwmanager`...) and any `exemptMods` in the settings, which are skipped by default. Only A1-A5 (nil guards) and F1 (log shim) are applied to them. |
+| `--luajit` | `<PATH>` | Path to LuaJIT or luac to check syntax with (default: `tools\luajit\luajit.exe`, then `luajit` / `luac5.1` / `luac` on PATH, then the `lupa` Python package if installed). |
+| `--no-syntax-check` | *(flag)* | Patch even with no LuaJIT/luac (parser only). Without it, `--apply` with no checker refuses (exit 2). |
 | `--log-shim-always` | *(flag)* | Add the log shim even where `mwguard` covers it. |
 | `--lua-log` | `flagged`/`all`/`off` | Which mods get the log shim: `flagged` (default), `all`, or `off`. |
 | `--no-cache` | *(flag)* | Read every file again. |
 | `--all` | *(flag)* | Also list what was left alone on purpose. |
 | `--json` | `<PATH>` | Also write the findings as JSON to this file. |
 | `--diff` | *(flag)* | Show each patch as a diff. |
+
+---
+
+### Exit Codes & Environment Variables
+
+| Tool | Code | Meaning |
+| :--- | :--- | :--- |
+| `mwdialog_check` | `0` | Done, no ERROR left. |
+| `mwdialog_check` | `1` | Done, ERRORs reported (also: another tool or MWManager holds the lock, or a step had nothing to do, e.g. `--reenable` with no match). |
+| `mwdialog_check` | `2` | Failed or refused: Vortex folders not found, a bad entry in your rules file, `--full` stopped, the sound cache not written, and so on. |
+| `mwdialog_check` | `3` | `--play` refused: a plugin's master is missing, off, or loads after it. |
+| `vortex_tidy`, `mwdialog_luafix` | `0` / `1` / `2` | Done / lock held, nothing to undo, an `--undo` that refused or left items in the journal, or some actions left unapplied / no plan, plan mismatch, Vortex folder not found, or (luafix) no syntax checker for `--apply`. |
+| `mwdialog_check.bat` | `9009` | Python 3 was not found. |
+
+Exit codes and files in detail: [MORE_INFO.md](MORE_INFO.md#14-files-exit-codes--environment).
+
+Environment variables: `MWRECOMPILE` (path to `MWRecompile.exe`), `APPDATA` (where Vortex's settings are read from), `MWDIALOG_PAUSE` (set by `mwdialog_check.bat` when started from Explorer: wait for Enter at the end), `MWMANAGER_DELEGATED_LOCKS` (set by MWManager for the tools it starts), and `MW_SRC` (tests only: the folder of scripts to test).
 
 ---
 
@@ -291,10 +316,21 @@ To guarantee safety and prevent unintended modifications across huge mod install
 ```
 
 1. **Plan Generation**: Running `python vortex_tidy.py` (or `python mwdialog_luafix.py`) scans the environment, computes required moves, DDS conversions, and AST patches, and writes an explicit plain-text plan to `plans/`.
-2. **User Review**: The plan clearly lists every file move, texture compression, and Lua patch (including cryptographic hashes of the original file and the intended patch).
-3. **Strict Application**: Running with `--apply` validates the plan. If any target file was touched or modified after the plan was generated, `--apply` **refuses to run** (exit code 2), safeguards the old plan as `.prev.txt`, and generates a fresh plan for review.
-4. **Post-Apply Blanking**: After a successful apply, the plan file is automatically blanked so actions cannot be accidentally applied twice.
-5. **Full Rollback**: Every applied change is recorded in an atomic journal, allowing complete restoration via `--undo`.
+2. **User Review**: The plan lists every file move, asset repair, and Lua patch (with the rule and line of each finding).
+3. **Strict Application**: `--apply` works the plan out again and compares it with the plan file, action by action. If they differ (a file changed, a mod was added, the plan was edited), `--apply` **refuses to run** (exit code 2), keeps the old plan as `<plan>.prev.txt`, and writes the fresh plan for review. No plan file, or a blank one, also refuses: run plan mode first. A Lua file whose content hash changed since the check is refused on its own.
+4. **Post-Apply Blanking**: After an apply, the plan file is blanked (a second `--apply` does nothing until plan mode runs again), or cut down to what was not applied. Copies of the plan as reviewed and as enacted go to `backups\tidy\<run>\` (`backups\luafix\<run>\` for luafix).
+5. **Rollback**: Every move, Lua patch and (tidy) asset repair is recorded in a journal (`generated\vortex_tidy_journal.jsonl`, `generated\mwdialog_luafix_journal.jsonl`), and `--undo` puts back the last `--apply`. Patched Lua originals are also copied to `backups\luafix\<run>\`; tidy's asset originals to `backups\tidy\<run>\assets\<mod>\`, with their SHA-256 in the journal. tidy `--undo` stops before changing anything when an original is missing or altered, or a file changed since (`--force` overwrites changed files when the original's hash matches). luafix `--undo` leaves a file changed since it was patched unless `--force`.
+
+---
+
+## Load Order & Starting the Game
+
+- **The load order is `generated\mwdialog_load_order.txt`**, one plugin per line. It is made from `Morrowind.ini`'s `[Game Files]` the first time; from then on it is the list the tools read, and an empty or damaged one is replaced by its backup. Plugin dates (set by `--sort`) decide the order the game loads them in.
+- **`Morrowind.ini` is written** when a run that changed the list (`--sort`, `--add-all-esp`, a merge, a plugin turned off...) ends normally, so MGE XE's distant land generator sees the same order, and again by `--play`. Plugins not in Data Files are left out. Not with `--dry-run`, `--plugins` or `--openmw-cfg`. The ini as it was before the tools first changed it is kept as `backups\legacy\Morrowind.ini.mwdialog-original.bak`, the latest previous one as `backups\Morrowind.ini.mwdialog-play.bak`, and every version as a dated copy in `backups\legacy\`.
+- **Automatic repairs before a run**: if `Morrowind.ini`'s list was cut at the 32,767-character section limit (and there is no `mwdialog_load_order.txt` yet), the run does `--add-all-esp --sort --yes` first. If an `[Exact]` group came apart (a plugin in it was saved since the last sort), it does `--sort --yes` first. `--dry-run` only reports these.
+- **Follow-ups**: `--sort` that changed the order, and `--auto-merge`, then run `--fix --multipatch`; `--unmerge` then runs `--add-all-esp --sort`. `--no-follow-up` skips them.
+- **Compatibility guard**: before `--fix`, `--multipatch`, `--auto-merge` or `--merge` write anything, the run checks for plugins that are incompatible with each other (moved land and the like; asked about in a console) and stops if that check fails.
+- **`--play`** (or double-click `Play Morrowind.bat`) checks every active plugin's masters (refusing with exit 3; `--play-anyway` starts regardless), writes the ini, deploys `lua tools\` into `Data Files` (missing files copied, older deployed files replaced with a backup in `backups\lua deploy\<date>\`, newer deployed files and your `MWSE\config\` settings left alone), then starts the game detached with `SteamAppId` set (`--steam-appid`, default 22320). Details: [MORE_INFO.md](MORE_INFO.md#starting-the-game---play).
 
 ---
 
@@ -325,26 +361,26 @@ A notorious Morrowind engine quirk causes `GetSoundPlaying` to return `0` for ce
 ### MWSE Lua AST Analysis & KnownBugs
 Unlike crude regex-based matchers, `mwdialog_luafix.py` uses a pure-Python lexical scanner and parser (`mwdialog_lua.py`) to build an AST for Lua 5.1/LuaJIT code:
 - **Nil Guards**: Automatically inserts defensive guards before unchecked property accesses (e.g. `e.reference.object`).
-- **Priority Compression**: Event handler priorities whose absolute value is 10,000 or more are compressed into 1000–1999, keeping their relative order (`compress_priority`).
-- **Log Shimming**: Rate-limits unthrottled `print` and `mwse.log` calls (not `tes3.log`) inside per-frame simulation events (`simulate`, `render`). The current shim is version 6.
-- **Targeted KnownBugs (KB1–KB17 and KB19)**: Hardens high-profile third-party mods against known engine crashes, memory leaks, sound-loop stacking, and unbounded UI element growth (such as MWSE Core's `ExclusionsPage` unbounded item pagination). There is no KB18: the WBSR save-block conflict is handled at runtime by `mwsaveguard.wbsr_bard`, not by a luafix patch of WBSR. See [MORE_INFO.md](MORE_INFO.md) for the catalog.
+- **Priority Compression**: Event handler priorities whose absolute value is 10,000 or more (`priorityLimit`) are made ordinary, keeping their relative order (`compress_priority`). By default (`priorityMode` `keepOrder`) they go to 9000-9999 (10000 -> 9000, 1e6 -> 9200, `math.huge` -> 9999; negative ones the same, negated), so they still run before every ordinary priority. `priorityMode` `clamp` uses 1000-1999 instead.
+- **Log Shimming** (rule `F1`): for a mod with log-spam signs (logging every frame, in loops, in frequent events, debug flags on), its `print` / `mwse.log` lines past its allowance go to `Data Files\MWSE\logs\<mod>.log` (rotated at 2 MB, at most 25 lines a second); errors and lifecycle lines still reach `MWSE.log`. `--lua-log all` gives every mod that logs the shim, `off` none. The current shim is version 6.
+- **Targeted KnownBugs (KB1-KB17 and KB19)**: Hardens high-profile third-party mods against known engine crashes, memory leaks, sound-loop stacking, and unbounded UI element growth (such as MWSE Core's `ExclusionsPage` unbounded item pagination). There is no KB18: the WBSR save-block conflict is handled at runtime by `mwsaveguard.wbsr_bard`, not by a luafix patch of WBSR. See [MORE_INFO.md](MORE_INFO.md) for the catalog.
 - **MWSE performance checks (report only)**: `G6` `tes3.getReference` in a frequent handler or a fast repeating timer; `G7` `tes3.rayTest` every frame or in a frequent handler with no `maxDistance`, no `root`, or `accurateSkinned`; `R1` a timer callback that uses a reference from its event with no safe handle or `:isValid()` check; `T1` `timer.start{ callback = "name" }` with no `timer.register("name", ...)` anywhere in the mod; `P1` `ref.data` written on a non-actor reference without `ref.modified = true`. `V1` (number before a vector in `*`, `+`, `-`) now flags only operands with vector evidence (MWSE's documented vector fields and functions, `tes3vector3.new`, a reference's `.position`, or a local set from one); `H2` no longer flags a timer started in `loaded` (MWSE clears every timer just before it); `D1` also flags costly work in an `infoFilter` handler that runs before it checks `e.passes`. `G6` ignores `getReference("player")`; `H2` treats a custom event fired only from `loaded` like `loaded`; `MWSE\backups\` and switched-off folders are skipped; files nothing loads are listed as unreferenced, their report-only findings set aside.
-- **Frame-drain and reference-safety patches (KP1–KP4, KR1–KR3)**: Attend Me's per-frame rays (one cast per frame for the wheel, recruit mode at 20 Hz), Keg Drip's mesh-name work, G7 Containers' `getReference` per tile update, and safe handles in AURA's fader and Attend Me's timers. On by default; `"skipKnown": ["KP2"]` leaves one out. See [MORE_INFO.md](MORE_INFO.md).
+- **Frame-drain and reference-safety patches (KP1-KP4, KR1-KR3)**: Attend Me's per-frame rays (one cast per frame for the wheel, recruit mode at 20 Hz), Keg Drip's mesh-name work, G7 Containers' `getReference` per tile update, and safe handles in AURA's fader and Attend Me's timers. On by default; `"skipKnown": ["KP2"]` leaves one out. See [MORE_INFO.md](MORE_INFO.md).
 
 ---
 
 ## MWSE Suite (CR-18)
 
-The first-party MWSE modules live in `lua tools\MWSE\mods\mwsuite\` and are deployed to `Data Files` by `--play` (and by MWManager). Recent suite logging and memory-safety work includes:
+The first-party MWSE modules live in `lua tools\MWSE\mods\mwsuite\` (with their `*-metadata.toml` files and `MWSE\config\mwguard.json`) and are deployed to `Data Files` by `--play` (and by MWManager). luafix leaves them (and any `exemptMods`) alone unless `--include-own` (then only A1-A5 and F1). See [MORE_INFO.md](MORE_INFO.md#13-mwse-suite-notes-cr-18) for the module list. Recent suite logging and memory-safety work includes:
 
-- **Log shim v6** (`mwdialog_luafix.py`): tighter lifecycle allowlist so lines like "Dialogue started with…" are not treated as init lines and forwarded to MWSE.log. The shim still intercepts `print` and `mwse.log`.
+- **Log shim v6** (`mwdialog_luafix.py`): tighter lifecycle allowlist so lines like "Dialogue started with..." are not treated as init lines and forwarded to MWSE.log. The shim still intercepts `print` and `mwse.log`.
 - **mwsaveguard**: if a requested save never reaches saveguard because another handler returned false, it logs that the save was swallowed and lists the registered save handlers. `wbsr_bard` (loaded from mwsaveguard) releases only WBSR's save block for bard / performer songs; real dialogue still blocks saving. The toggle is on by default when WBSR is installed and loaded, and off (and registers nothing) when it is not.
-- **mwhangwatch**: the 95%+ address-space warning is a non-modal toast, and it is opt-in (`memWarn` defaults to false). The hang watch itself (`enabled`) stays off until you turn it on.
+- **mwhangwatch**: the low-memory warning (address space at `memLimit`, 80% by default, 70-99 in the MCM) is a non-modal toast, and it is opt-in (`memWarn` defaults to false). The hang watch itself (`enabled`) stays off until you turn it on.
 - **mwfloatfix / `mwdialog_check --fix`**: `write_float_data` stamps `mwfloatfix_data.json` with size and an FNV-1a content hash of Cell Fixes, not the plugin's file time (those dates are rewritten for load order). `--fix` also runs an exterior z pass (`find_float_drops`) into Cell Fixes; interiors are still checked in-game.
 - **mwsoundguard**: when a repeating sound comes from an object whose id is just a number, the log also records the mesh, name, source mod, and Lua caller when there is one.
 - **mwguard**: `EnableLogTimestamps` (on by default) prefixes every MWSE.log line written through `print` / `mwse.log` with a clock time (`[HH:MM:SS]`).
 
-Other suite modules include `mwcollide`, `mwstranded`, `mwperformers`, `mwinfoloop`, `mwcriminal`, `mwcompanions`, and the rest of the folders under `mwsuite`.
+Other suite modules include `mwcollide`, `mwstranded`, `mwperformers`, `mwinfoloop`, `mwcriminal`, `mwcompanions`, `mwexitguard`, `mwpluginpatches`, and the rest of the folders under `mwsuite`.
 
 ---
 
@@ -355,38 +391,49 @@ Install the tools directly into a subfolder of your Morrowind directory, e.g.:
 <Morrowind>\conflict-tools\
 ```
 
-Run from this folder (or from the game root), the tools automatically locate `Morrowind.ini` and `Data Files`.
+Run from this folder (or from the game root), the tools automatically locate `Morrowind.ini` and `Data Files`: without a `Data Files` argument they use the first folder holding `Morrowind.ini` among the working folder, its parent, the parent of the scripts' folder, and the scripts' folder. Vortex's staging and download folders come from Vortex's own settings (its `state.v2` database or settings backups under `%APPDATA%\Vortex`), else from Vortex's marker file in the folder remembered in `generated\vortex_paths.json` or in Vortex's default location; `--staging` / `--downloads` override them.
+
+The `.bat` files are the usual way in: `mwdialog_check.bat` with no arguments scans and opens `generated\mwdialog_report.txt` in Notepad; with arguments it passes them through (its header lists common commands). `vortex_tidy.bat` passes its arguments to `vortex_tidy.py`. `Play Morrowind.bat` is the one-click way to play: it runs `mwdialog_check.bat --play` (master check, load order into `Morrowind.ini`, lua tools brought up to date, then `Morrowind.exe` without the Launcher) and keeps its window open only if that ends with an error code. It works from `conflict-tools\` or copied up into the Morrowind folder; add steps before `--play` in it (e.g. `--sort --yes --play`) to run them every time.
 
 ```text
 Morrowind\
- ├── Morrowind.exe
- ├── Morrowind.ini
- ├── Data Files\
- └── conflict-tools\             [Repository root]
-     ├── mwdialog_check.py        [Main plugin analysis & patcher]
-     ├── mwdialog_check.bat       [Windows batch runner]
-     ├── vortex_tidy.py           [Vortex staging organizer & sanitizer]
-     ├── vortex_tidy.bat          [Windows batch runner]
-     ├── mwdialog_luafix.py       [MWSE Lua AST hardening tool]
-     ├── README.md                [This documentation]
-     ├── MORE_INFO.md             [Architecture & function guide]
-     ├── plans\                   [Plan-then-apply files (.txt)]
-     ├── generated\               [Logs, conflict answers, caches, mwdialog_load_order.txt]
-     ├── backups\                 [Automatic backups (legacy\ for older)]
-     ├── tools\                   [Bundled utilities (see below)]
-     └── lua tools\               [MWSE suite modules deployed to Data Files]
+ +-- Morrowind.exe
+ +-- Morrowind.ini
+ +-- mgeXE.toml                 [MGE XE (G7): its grass_plugins list is read]
+ +-- mlox\                      [mlox_user.txt / mlox_base.txt, read by --sort]
+ +-- Data Files\
+ +-- conflict-tools\             [Repository root]
+     +-- mwdialog_check.py        [Main plugin analysis & patcher]
+     +-- mwdialog_check.bat       [Windows batch runner]
+     +-- Play Morrowind.bat       [One click: mwdialog_check --play]
+     +-- vortex_tidy.py           [Vortex staging organizer & sanitizer]
+     +-- vortex_tidy.bat          [Windows batch runner]
+     +-- mwdialog_luafix.py       [MWSE Lua AST hardening tool]
+     +-- README.md                [This documentation]
+     +-- MORE_INFO.md             [Architecture & function guide]
+     +-- plans\                   [Plan-then-apply files (.txt)]
+     +-- generated\               [Load order, rules, records, caches, journals, reports (see MORE_INFO)]
+     +-- backups\                 [Automatic backups (legacy\ for older; luafix\, tidy\, lua deploy\)]
+     +-- tools\                   [Bundled utilities (see below)]
+     +-- lua tools\               [MWSE suite modules deployed to Data Files]
+     +-- tests\                   [pytest suite]
+     +-- diag\                    [Developer one-off diagnostics; load mwdialog_check.py (not part of the tools)]
 ```
+
+When the tools are not installed inside the game folder, their records go straight into the game folder and backups into `<game>\mwdialog_backup\`.
 
 ---
 
 ## Requirements & Bundled Binaries
 
-- **Python 3.8+** (standard library only; no external pip dependencies required to run the tools). Developed and tested on Python 3.15. The luafix tests that use `lupa` need a side-by-side Python 3.14.
+- **Python 3.9 or newer** (standard library only; no pip packages are needed to run the tools). The tools are developed on Python 3.15, and nothing is meant to need more than 3.9.
+  - **Before shipping: test on Python 3.9.** Only 3.15 is tested today; 3.9 support comes from reading the code, not from running it.
+  - `lupa` is optional: luafix uses it as a last-resort syntax checker when no LuaJIT/luac is found. The luafix tests that use `lupa` need a side-by-side Python 3.14 (they are skipped when it isn't installed). Run the tests with `python -m pytest tests` (or `pytest tests`): always name the `tests` folder, because a plain `pytest` also collects old copies under `_backup\...\tests` and fails on duplicate test names.
 - **Windows OS** (Win32 process management, `MAX_PATH` handling, Vortex integration).
 - **Bundled Binaries** (under `tools\`; see [tools/README.md](tools/README.md) for licenses and exact layouts):
   - `tools\texconv.exe`: DirectX texture processing, DDS mipmap generation, compression (MIT).
-  - `tools\ffmpeg.exe` & `tools\ffprobe.exe`: Audio inspection, format conversion, silent stand-in synthesis (LGPL static build).
-  - `tools\7z\7z.exe`: Archive inspection for download master verification (LGPL / unRAR).
+  - `tools\ffmpeg.exe` & `tools\ffprobe.exe`: Audio inspection, format conversion, silent stand-in synthesis, and sound durations for `mwsoundguard_data.json` (LGPL static build).
+  - `tools\7z\7z.exe`: Archive inspection for download master verification (LGPL / unRAR). Optional: `--no-archive-lookup` skips it.
   - `tools\luajit\luajit.exe`: Bytecode syntax verification of patched Lua mods (MIT).
   - `tools\MWRecompile\MWRecompile.exe`: Recompiles rewritten sound scripts for `--soundfix`.
 
@@ -396,10 +443,12 @@ Morrowind\
 
 For the architecture of all 36 modules, the switches that trigger each subsystem, and empirical fix examples from the historical fix archives, please read:
 
-📖 **[MORE_INFO.md](MORE_INFO.md)**
+**[MORE_INFO.md](MORE_INFO.md)**
 
 ---
 
 ## License
+
+Created by dej (dejunai).
 
 This project is licensed under the **MIT License**. See [LICENSE](LICENSE) for details. Bundled tools in `tools/` maintain their respective open-source licenses (see [tools/README.md](tools/README.md)).
