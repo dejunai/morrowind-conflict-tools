@@ -1,3 +1,13 @@
+# vortex_tidy: the shipping converter mode is normal; a marked dev setting still forces hardcode (2026-11-26)
+
+- End users get `omw2mwse --convert-omwscripts=normal` unless they pass `--convert-omwscripts=hardcode` (or
+  `--no-convert-omwscripts`). The bare flag is `normal` too. `CONVERT_DEFAULT = "normal"`.
+- `CONVERT_DEV_HARDCODE = True` (one setting, marked `# --remove before shipping:`) forces hardcode when no mode was
+  chosen, so Dej keeps getting hardcode while developing. `ready_to_ship.py` matches that comment. Explicit
+  `--convert-omwscripts=normal` / `=hardcode` still wins. After the setting is removed (or set False), the default is
+  `normal`.
+- Tests: default with the setting on and off, bare flag, explicit flags, the marker text.
+
 # One Off layout for every tool: Off\<plugin>\<reason>\<path>, tidy migrates the older ones, MAX_PATH files are listed, never moved (2026-11-26)
 
 - Decided by dej (dejunai): everything the tools set aside in a staged mod goes to `Off\<plugin>\<reason>\<path relative to the

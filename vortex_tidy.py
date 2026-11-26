@@ -45,8 +45,8 @@ For each mod folder in Vortex's Morrowind staging folder (from Vortex's settings
     (refreshed, never duplicated; --undo puts back what was there).
   * An OpenMW-only mod (OpenMW scripts - an *.omwscripts file at its root, in OpenMW\\ or set aside under Off\\ -
     and no MWSE Lua of its own) is converted for MWSE instead: --apply runs the OpenMW converter, omw2mwse
-    --convert-omwscripts=<mode> <mod> --json (found on PATH or beside these tools; hardcode by default, with
-    --accept-hardcode-conversions; --convert-omwscripts=normal for the other mode, --no-convert-omwscripts for
+    --convert-omwscripts=<mode> <mod> --json (found on PATH or beside these tools; normal by default;
+    --convert-omwscripts=hardcode for the other mode, with --accept-hardcode-conversions; --no-convert-omwscripts for
     neither), which lays the mod out itself, so nothing else in it moves that run; the plan shows a dry-run
     preview. A conflict (exit 4) or other failure is one WARNING line, the run goes on, and the mod is treated as
     not convertible (below). A mod with real MWSE Lua (a .lua under MWSE\\ that omw2mwse didn't generate) is
@@ -627,7 +627,10 @@ CONVERTED = {}         # mod folder -> (its .omwaddon files, the omw2mwse-genera
 CONVERT = {}           # OpenMW-only mod folder -> its .omwscripts files: --apply hands it to omw2mwse
 PREVIEW = {}           # converted-to-be mod folder -> (ok, summary line) of omw2mwse's dry run
 BLOCKED_PLAN = []      # warning texts: mods omw2mwse's dry run judged blocked (they get the usual Off\\ move)
-CONVERT_MODES = ("hardcode", "normal")          # omw2mwse's own --convert-omwscripts modes
+CONVERT_MODES = ("normal", "hardcode")          # omw2mwse's own --convert-omwscripts modes
+CONVERT_DEFAULT = "normal"                      # what ships: end users get this unless they pass --convert-omwscripts=hardcode
+CONVERT_DEV_HARDCODE = True                     # --remove before shipping: developer-only, forces omw2mwse into hardcode mode
+_CONVERT_UNSET = object()                       # argparse: --convert-omwscripts was not given
 CONVERT_ACTION = "convert with omw2mwse"
 CONVERTER = {"mode": None, "cmd": None, "env": None, "why": "", "python": ""}   # set by main(): the mode, how to run it
 CONVERTER_MIN_PYTHON = (3, 11)    # omw2mwse 0.2.3 imports tomllib (3.11+) at the top of sidecar.py and build.py; on
@@ -795,6 +798,15 @@ def converter_python_problem(cmd, where="", requires=None):
     if have is None or have >= need:
         return ""
     return "omw2mwse needs Python %d.%d+, but it would run on Python %d.%d" % (need + have)
+
+
+def convert_mode(chosen=_CONVERT_UNSET):
+    """The omw2mwse mode tidy will run: `chosen` when it is one of CONVERT_MODES or None
+    (--no-convert-omwscripts); when nothing was chosen, CONVERT_DEFAULT, except CONVERT_DEV_HARDCODE
+    forces hardcode."""
+    if chosen is not _CONVERT_UNSET:
+        return chosen
+    return "hardcode" if CONVERT_DEV_HARDCODE else CONVERT_DEFAULT
 
 
 def setup_converter(mode):
@@ -3316,17 +3328,18 @@ def main():
     ap.add_argument("--no-coins", action="store_true",
                     help="a broken or missing model gets an empty, invisible model instead of the game's Dwemer "
                          "coin (the default, so the gap is easy to spot)")
-    ap.add_argument("--convert-omwscripts", nargs="?", const="hardcode", default="hardcode", choices=CONVERT_MODES,
-                    metavar="MODE",
+    ap.add_argument("--convert-omwscripts", nargs="?", const=CONVERT_DEFAULT, default=_CONVERT_UNSET,
+                    choices=CONVERT_MODES, metavar="MODE",
                     help="OpenMW-only mods (OpenMW scripts, no MWSE Lua) are converted for MWSE by omw2mwse, found "
-                         "on PATH or beside these tools, in this mode: hardcode (the default; hard-coded values "
-                         "become MCM settings) or normal. Mods with MWSE Lua are never converted: their OpenMW "
-                         "files go to Off\\<plugin>\\OpenMW\\. An OpenMW-only mod that is not converted gets its whole "
-                         "package moved to Off\\<plugin name>\\OpenMW\\")
+                         "on PATH or beside these tools, in this mode: normal (the default) or hardcode (hard-coded "
+                         "values become MCM settings; runs with --accept-hardcode-conversions). "
+                         "Pass --convert-omwscripts=hardcode to pick hardcode. Mods with MWSE Lua are never "
+                         "converted: their OpenMW files go to Off\\<plugin>\\OpenMW\\. An OpenMW-only mod that is "
+                         "not converted gets its whole package moved to Off\\<plugin name>\\OpenMW\\")
     ap.add_argument("--no-convert-omwscripts", dest="convert_omwscripts", action="store_const", const=None,
                     help="don't convert: OpenMW-only mods get their whole package moved to Off\\<plugin name>\\OpenMW\\")
     args = ap.parse_args()
-    setup_converter(args.convert_omwscripts)
+    setup_converter(convert_mode(args.convert_omwscripts))
     global NO_COINS
     NO_COINS = args.no_coins
     if args.no_reduce_textures or args.no_reduce_splash:

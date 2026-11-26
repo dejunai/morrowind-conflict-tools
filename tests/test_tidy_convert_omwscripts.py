@@ -1,5 +1,5 @@
 """vortex_tidy hands OpenMW-only mods (OpenMW scripts, no MWSE Lua) to the OpenMW converter (omw2mwse
---convert-omwscripts=<mode> <mod> --json, hardcode by default with --accept-hardcode-conversions); a mod with real
+--convert-omwscripts=<mode> <mod> --json, normal by default; hardcode with --accept-hardcode-conversions when asked); a mod with real
 MWSE Lua is MWSE-first and its OpenMW files go to Off\\OpenMW\\ as always; a converter that isn't there is one
 WARNING line and the usual move; a conflict (exit 4) is one WARNING line and the run goes on. The converter here is a
 stub script that answers like the real one. Temporary folders only; tidy never runs on live data. Python 3.9+."""
@@ -109,7 +109,7 @@ def tidy(tmp_path, monkeypatch):
                                  tmp=tmp_path)
 
 
-def test_openmw_only_mod_goes_to_the_converter_in_hardcode_mode_by_default(tidy, capsys):
+def test_openmw_only_mod_goes_to_the_converter_in_hardcode_mode_while_the_dev_setting_is_on(tidy, capsys):
     tidy.stub()
     mod = openmw_mod(tidy.staging, "Lights")
     assert tidy.run() == 0                                                     # plan: a dry run only
@@ -142,11 +142,11 @@ def test_normal_mode_is_selectable_and_passes_no_accept_flag(tidy):
     assert dry[0] == "--convert-omwscripts=normal" and "--accept-hardcode-conversions" not in dry
 
 
-def test_bare_flag_means_hardcode_and_other_modes_are_refused(tidy):
+def test_bare_flag_means_normal_and_other_modes_are_refused(tidy):
     tidy.stub()
     openmw_mod(tidy.staging, "Lights")
     assert tidy.run("--convert-omwscripts") == 0
-    assert "convert with omw2mwse (hardcode)" in tidy.plan()
+    assert "convert with omw2mwse (normal)" in tidy.plan()
     with pytest.raises(SystemExit):
         tidy.run("--convert-omwscripts=standard")
 
@@ -337,3 +337,51 @@ def test_the_converter_naming_its_own_python_minimum_in_json_is_honoured(tidy, m
     assert [c for c in tidy.calls() if "--dry-run" not in c] == []                 # nothing was really run
     assert tidy.run("--apply", "--yes") == 0
     assert sorted(os.listdir(tidy.staging / "Worse-1-0")) == ["Off"]
+
+
+# ------------------------------------------------------------------------------------------ convert mode (shipping default vs dev setting)
+def test_convert_mode_is_normal_unless_the_dev_setting_forces_hardcode(monkeypatch):
+    assert vt.CONVERT_DEFAULT == "normal" and vt.CONVERT_DEV_HARDCODE is True
+    assert vt.convert_mode() == "hardcode"                                    # nothing chosen, setting on
+    monkeypatch.setattr(vt, "CONVERT_DEV_HARDCODE", False)
+    assert vt.convert_mode() == "normal"                                      # what ships
+    assert vt.convert_mode("hardcode") == "hardcode" and vt.convert_mode("normal") == "normal"
+    assert vt.convert_mode(None) is None                                      # --no-convert-omwscripts
+
+
+def test_the_dev_hardcode_setting_carries_the_ready_to_ship_marker():
+    """MWManager's ready_to_ship.py matches "remove before shipping" in any case; this is that marker."""
+    marker = "remove before " + "shipping"
+    with open(vt.__file__, encoding="utf-8") as f:
+        hits = [ln.strip() for ln in f if "CONVERT_DEV_HARDCODE" in ln and marker in ln.casefold()]
+    assert hits and hits[0].startswith("CONVERT_DEV_HARDCODE = True") and marker in hits[0].casefold()
+
+
+def test_shipping_default_is_normal_when_the_dev_setting_is_off(tidy, monkeypatch):
+    tidy.stub()
+    monkeypatch.setattr(vt, "CONVERT_DEV_HARDCODE", False)
+    openmw_mod(tidy.staging, "Lights")
+    assert tidy.run() == 0
+    assert "convert with omw2mwse (normal)" in tidy.plan()
+    (dry,) = tidy.calls()
+    assert dry[0] == "--convert-omwscripts=normal" and "--accept-hardcode-conversions" not in dry
+
+
+def test_an_explicit_hardcode_flag_still_works_when_the_dev_setting_is_off(tidy, monkeypatch):
+    tidy.stub()
+    monkeypatch.setattr(vt, "CONVERT_DEV_HARDCODE", False)
+    openmw_mod(tidy.staging, "Lights")
+    assert tidy.run("--convert-omwscripts=hardcode") == 0
+    assert "convert with omw2mwse (hardcode)" in tidy.plan()
+    (dry,) = tidy.calls()
+    assert dry[0] == "--convert-omwscripts=hardcode" and "--accept-hardcode-conversions" in dry
+
+
+def test_an_explicit_normal_flag_wins_over_the_dev_setting(tidy):
+    tidy.stub()
+    openmw_mod(tidy.staging, "Lights")
+    assert vt.CONVERT_DEV_HARDCODE is True
+    assert tidy.run("--convert-omwscripts=normal") == 0
+    assert "convert with omw2mwse (normal)" in tidy.plan()
+    (dry,) = tidy.calls()
+    assert dry[0] == "--convert-omwscripts=normal" and "--accept-hardcode-conversions" not in dry
