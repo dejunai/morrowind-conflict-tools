@@ -261,9 +261,30 @@ def report(res, force=False, prefix="--play"):
     return lines
 
 
+def our_plugins(data_dir):
+    """Names of the plugins in data_dir whose TES3 header says these tools made them."""
+    out = []
+    try:
+        names = sorted(os.listdir(data_dir), key=str.lower)
+    except OSError:
+        return out
+    for n in names:
+        p = os.path.join(data_dir, n)
+        if n.lower().endswith((".esp", ".esm")) and os.path.isfile(p):
+            try:
+                with open(p, "rb") as f:
+                    head = f.read(16 + 8 + 300)
+            except OSError:
+                continue
+            if is_ours(head):
+                out.append(n)
+    return out
+
+
 def rebaseline(data_dir, dry=False):
-    """--rebaseline-hashes: record the current hash of every core file present and every recorded patch still in
-    Data Files (dropping the ones gone). Returns [lines]; writes nothing with dry."""
+    """--rebaseline-hashes: record the current hash of every core file present, every recorded patch still in
+    Data Files (dropping the ones gone), and every other plugin of ours found there (built before the record
+    existed). Returns [lines]; writes nothing with dry."""
     data_dir = os.path.abspath(data_dir)
     rp = record_path(data_dir)
     old, err = read_record(rp)
@@ -273,7 +294,9 @@ def rebaseline(data_dir, dry=False):
     lines = [f"--rebaseline-hashes{' (dry run: nothing is written)' if dry else ''}: {rp}"]
     if err:
         lines.append(f"  the old record was not usable ({err}); starting a new one")
-    for table, names in (("core", CORE), ("patches", sorted(old["patches"], key=str.lower))):
+    known = {n.lower() for n in old["patches"]}
+    patches = sorted(old["patches"], key=str.lower) + [n for n in our_plugins(data_dir) if n.lower() not in known]
+    for table, names in (("core", CORE), ("patches", patches)):
         for name in names:
             p = find(data_dir, name)
             _k, ent = _get(old[table], name)

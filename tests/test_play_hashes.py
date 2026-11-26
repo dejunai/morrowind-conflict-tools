@@ -150,3 +150,14 @@ def test_an_unreadable_record_fails_until_rebaselined(game):
     assert MH.failed(res) and res["error"]
     MH.rebaseline(str(data))
     assert not MH.failed(MH.verify(str(data)))
+
+
+def test_rebaseline_picks_up_a_patch_built_before_the_record_existed(game):
+    root, data = game
+    path = write_our_patch(data)
+    os.remove(root / MH.RECORD)                               # as if built by a version without the record
+    (data / "SomeMod.esp").write_bytes(open(path, "rb").read().replace(b"mwdialog_check", b"someone_else__"))
+    lines = MH.rebaseline(str(data))
+    assert any(line.startswith("  mwdialog_check Multipatch.esp: recorded") for line in lines)
+    rec, _err = MH.read_record(str(root / MH.RECORD))
+    assert list(rec["patches"]) == ["mwdialog_check Multipatch.esp"]
