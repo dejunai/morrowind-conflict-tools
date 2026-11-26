@@ -207,6 +207,7 @@ def test_luafix_only_reads_lua_so_hosted_main_lua_omw_is_never_a_candidate(tmp_p
 def plan(mod_dir):
     for d in (vt.NOTES, vt.ORPHAN_NORMALS, vt.NORMAL_PACKS, vt._TEX_INDEX, vt.REVIEW, vt.CONVERTED):
         d.clear()
+    vt.CONVERTER["mode"] = None                      # the converter hand-off has its own tests
     return vt.plan_mod(str(mod_dir))
 
 

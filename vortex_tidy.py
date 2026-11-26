@@ -34,6 +34,16 @@ For each mod folder in Vortex's Morrowind staging folder (from Vortex's settings
     XE's distant land generator reads them; the game itself never loads them.
   * OpenMW-only content goes to Off\\OpenMW\\<mod name>\\ (never deployed): *.omwscripts files and the scripts, l10n,
     animations and playlists folders; an OpenMW\\ folder an earlier run made at the root is moved there too.
+  * An OpenMW-only mod (OpenMW scripts - an *.omwscripts file at its root, in OpenMW\\ or set aside under Off\\ -
+    and no MWSE Lua of its own) is converted for MWSE instead: --apply runs the OpenMW converter, omw2mwse
+    --convert-omwscripts=<mode> <mod> --json (found on PATH or beside these tools; hardcode by default, with
+    --accept-hardcode-conversions; --convert-omwscripts=normal for the other mode, --no-convert-omwscripts for
+    neither), which lays the mod out itself, so nothing else in it moves that run; the plan shows a dry-run
+    preview. A conflict (exit 4) or other failure is one WARNING line, the run goes on and the mod stays in the
+    plan. A mod with real MWSE Lua (a .lua under MWSE\\ that omw2mwse didn't generate) is MWSE-first: its
+    OpenMW files go to Off\\OpenMW\\ as above and are never converted. Without the converter: one WARNING line
+    and the usual Off\\OpenMW\\ move. --undo doesn't reverse a conversion (omw2mwse keeps the original package,
+    byte for byte, in Off\\<Mod>\\OpenMW\\ and lists what it wrote in its manifest).
   * Everything else (screenshots, FOMOD option folders, meta.ini, .bak files...) goes to
     Extras\\<mod name>\\, where <mod name> is the folder name without Vortex's Nexus id, version and
     download stamp ("MUSE 2.02-46200-2-02-1593543300" -> "MUSE").
@@ -92,6 +102,7 @@ import os
 import re
 import shutil
 import struct
+import subprocess
 import sys
 import time
 
@@ -325,6 +336,13 @@ def plan_mod(mod_dir):
                                   if os.path.isfile(os.path.join(mod_dir, e))):
         return "installs into the game folder (exe/dll/Data Files at its root)"
     name = mod_name(os.path.basename(mod_dir))
+    if CONVERTER["mode"]:                            # OpenMW-only (no MWSE Lua): omw2mwse converts it
+        oms = openmw_only(mod_dir, entries)
+        if oms:
+            if CONVERTER["cmd"]:                     # it lays the mod out itself, so nothing else moves now
+                CONVERT[mod_dir] = oms
+                return []
+            CONVERTER["missed"] = CONVERTER.get("missed", 0) + 1     # not found: the usual Off\ move
     plugins = {os.path.splitext(e)[0].lower() for e in entries if os.path.splitext(e)[1].lower() in KEEP_FILE_EXT}
     # an OpenMW plugin (.omwaddon) and no Morrowind plugin: with no OpenMW scripts it is an ordinary plugin
     # in OpenMW's file name, so it becomes an .esp; with scripts, it needs OpenMW: you decide (REVIEW)
@@ -452,6 +470,12 @@ def plan_mod(mod_dir):
 
 REVIEW = {}            # mod folder -> (its .omwaddon files, the OpenMW scripts that make it OpenMW-only)
 CONVERTED = {}         # mod folder -> (its .omwaddon files, the omw2mwse-generated folders in it): left as they are
+CONVERT = {}           # OpenMW-only mod folder -> its .omwscripts files: --apply hands it to omw2mwse
+CONVERT_MODES = ("hardcode", "normal")          # omw2mwse's own --convert-omwscripts modes
+CONVERT_ACTION = "convert with omw2mwse"
+CONVERTER = {"mode": None, "cmd": None, "env": None, "why": ""}   # set by main(): the mode, how to run it
+CONVERTER_HOME = os.path.dirname(os.path.abspath(__file__))       # where sibling copies are looked for
+CONVERTER_TIMEOUT = 600
 
 def deleted_dir(staging):
     """Where deleted mods go: beside the staging folder in use, "<its name> - deleted by vortex_tidy"."""
@@ -489,6 +513,171 @@ def _openmw_package_scripts(p, label):
         if x.lower().endswith(".omwscripts") or (x.lower() == "scripts" and os.path.isdir(os.path.join(p, x))):
             out.append(os.path.join(label, x) + ("\\" if os.path.isdir(os.path.join(p, x)) else ""))
     return out
+
+
+def has_mwse_lua(mod_dir):
+    """True when the mod has real MWSE Lua: a .lua file anywhere under its MWSE folder that the OpenMW converter
+    did not generate (its mods and its omwcompat runtime, recognised by their markers, don't count). A mod with
+    it is MWSE-first: its OpenMW scripts go to Off\\ and are never converted."""
+    root = os.path.join(mod_dir, existing(mod_dir, "MWSE"))
+    if not os.path.isdir(root):
+        return False
+    for base, dirs, fns in os.walk(root):
+        dirs[:] = [d for d in dirs if not (MP.omw_generated_dir(os.path.join(base, d))
+                                           or MP.omw_runtime_path(os.path.join(base, d)))]
+        if any(fn.lower().endswith(".lua") and not MP.omw_runtime_path(os.path.join(base, fn)) for fn in fns):
+            return True
+    return False
+
+
+def openmw_only(mod_dir, entries):
+    """The .omwscripts files of a mod that is OpenMW-only and not converted yet ([] otherwise): it has OpenMW
+    scripts (an *.omwscripts file at its root, in OpenMW\\ or set aside under Off\\), no real MWSE Lua
+    (has_mwse_lua) and no omw2mwse output (omw_converted)."""
+    oms = [s for s in openmw_scripts(mod_dir, entries) if s.lower().endswith(".omwscripts")]
+    if not oms or omw_converted(mod_dir) or has_mwse_lua(mod_dir):
+        return []
+    return oms
+
+
+def _converter_cmd(path):
+    """The command line that runs the converter at path: an .exe/.cmd/.bat as it is, a Python script (the
+    bin\\omw2mwse launcher, omw2mwse.py) with this Python."""
+    ext = os.path.splitext(path)[1].lower()
+    if ext in (".exe", ".com", ".cmd", ".bat"):
+        return [path]
+    try:
+        with open(path, "rb") as f:
+            head = f.read(128)
+    except OSError:
+        head = b""
+    if ext == ".py" or (head.startswith(b"#!") and b"python" in head.split(b"\n", 1)[0]):
+        return [sys.executable, path]
+    return [path]
+
+
+def find_converter(home=None):
+    """(command, env, where) for omw2mwse, or (None, None, "") when it isn't there. Looked for on PATH, then as
+    a sibling tool beside these tools (in this folder, its tools\\ folder or the folder above), as an
+    omw2mwse(.exe/.cmd/.bat/.py) file, a converter checkout's bin\\omw2mwse, or the omw2mwse Python package
+    (run as python -m omw2mwse). No fixed paths."""
+    names = ("omw2mwse.exe", "omw2mwse.cmd", "omw2mwse.bat", "omw2mwse.py", "omw2mwse")
+    for d in os.environ.get("PATH", "").split(os.pathsep):   # by hand: .py and a bare launcher aren't in PATHEXT
+        for name in names:
+            p = os.path.join(d.strip('"'), name) if d else ""
+            if p and os.path.isfile(p):
+                return _converter_cmd(p), None, p
+    home = home or CONVERTER_HOME
+    for d in (home, os.path.join(home, "tools"), os.path.dirname(home)):
+        for rel in ("omw2mwse.exe", "omw2mwse.cmd", "omw2mwse.bat", "omw2mwse.py", "omw2mwse",
+                    os.path.join("omw2mwse", "bin", "omw2mwse"), os.path.join("openmw-mwse", "bin", "omw2mwse")):
+            p = os.path.join(d, rel)
+            if os.path.isfile(p):
+                return _converter_cmd(p), None, p
+        pkg = os.path.join(d, "omw2mwse")
+        if os.path.isfile(os.path.join(pkg, "__main__.py")) and os.path.isfile(os.path.join(pkg, "cli.py")):
+            env = dict(os.environ)
+            env["PYTHONPATH"] = d + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+            return [sys.executable, "-m", "omw2mwse"], env, pkg
+    return None, None, ""
+
+
+def setup_converter(mode):
+    """main(): mode None (--no-convert-omwscripts) or one of CONVERT_MODES; finds the converter."""
+    CONVERTER.update(mode=mode, cmd=None, env=None, why="")
+    if mode:
+        CONVERTER["cmd"], CONVERTER["env"], CONVERTER["why"] = find_converter()
+
+
+def run_converter(mod_dir, mode, dry_run=False):
+    """Run omw2mwse --convert-omwscripts=<mode> <mod_dir> --json (hardcode: --accept-hardcode-conversions, as
+    tidy runs it without a prompt; --apply already asked). (exit code, parsed JSON or None, error text)."""
+    argv = list(CONVERTER["cmd"]) + [f"--convert-omwscripts={mode}", mod_dir, "--json"]
+    if mode == "hardcode":
+        argv.append("--accept-hardcode-conversions")
+    if dry_run:
+        argv.append("--dry-run")
+    try:
+        r = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=CONVERTER["env"],
+                           timeout=CONVERTER_TIMEOUT)
+    except (OSError, subprocess.SubprocessError) as e:
+        return None, None, f"could not run omw2mwse ({e})"
+    out = r.stdout.decode("utf-8", "replace")
+    data = None
+    try:
+        data = json.loads(out)
+    except ValueError:
+        i = out.find("{")
+        if i >= 0:
+            try:
+                data = json.loads(out[i:])
+            except ValueError:
+                data = None
+    err = r.stderr.decode("utf-8", "replace").strip()
+    if not isinstance(data, dict):
+        data = None
+    return r.returncode, data, (err.splitlines()[-1] if err else "")
+
+
+def _converter_problem(data, err):
+    """The first error/conflict message in a converter result, for a one-line warning."""
+    for m in (data or {}).get("mods") or []:
+        for c in m.get("conflicts") or []:
+            return f"{c.get('path')}: {c.get('reason')}"
+        if m.get("message"):
+            return str(m["message"])
+    for al in (data or {}).get("alerts") or []:
+        if al.get("level") == "error":
+            return str(al.get("message"))
+    return err or "no details"
+
+
+def converter_summary(code, data, err):
+    """(ok, one line) for a converter result. Exit 0: what it did; 4: a conflict (nothing written for that mod);
+    3: hard-code conversion refused; 2/other: an error."""
+    if code is None:
+        return False, err
+    if data is None:
+        return False, f"omw2mwse exit {code}, no JSON result" + (f" ({err})" if err else "")
+    if code == 4:
+        return False, f"conflict, nothing written for it: {_converter_problem(data, err)}"
+    if code == 3:
+        return False, f"hard-code conversion refused, nothing written for it: {_converter_problem(data, err)}"
+    if code != 0:
+        return False, f"omw2mwse error (exit {code}): {_converter_problem(data, err)}"
+    bits = []
+    for m in data.get("mods") or []:
+        blockers = sum(1 for al in m.get("alerts") or [] if al.get("code") == "blocker")
+        b = f"{m.get('name')} {m.get('status')}, verdict {m.get('verdict')}"
+        if blockers:
+            b += f", {blockers} blocker(s)"
+        if m.get("rewrites"):
+            b += f", {len(m['rewrites'])} hard-coded value(s) as settings"
+        bits.append(b)
+    what = "; ".join(bits) or "nothing to convert"
+    return True, what + ("" if data.get("dryRun") else (" (changed)" if data.get("changed") else " (unchanged)"))
+
+
+def convert_lines(d, oms, mode):
+    """The plan lines of one OpenMW-only mod handed to the converter (an action --apply compares)."""
+    return [f"\n{d}   [{mod_name(d)}]",
+            f"    {CONVERT_ACTION} ({mode}): OpenMW-only, no MWSE Lua ({', '.join(oms)})"]
+
+
+def convert_apply(staging, mods, mode):
+    """--apply: run the converter on each OpenMW-only mod. A conflict (exit 4) or any other failure gets one
+    WARNING line and the run goes on. Returns the mod folders not converted."""
+    left = []
+    for mod_dir in mods:
+        code, data, err = run_converter(mod_dir, mode)
+        ok, line = converter_summary(code, data, err)
+        name = os.path.basename(mod_dir)
+        if ok:
+            print(f"  converted {name} with omw2mwse ({mode}): {line}")
+        else:
+            print(f"  WARNING: omw2mwse could not convert {name}: {line}; left as it is")
+            left.append(mod_dir)
+    return left
 
 
 def openmw_scripts(mod_dir, entries):
@@ -601,6 +790,8 @@ def run_plan(args):
     ORPHAN_NORMALS.clear()
     NORMAL_PACKS.clear()
     CONVERTED.clear()
+    CONVERT.clear()
+    CONVERTER["missed"] = 0
     _TEX_INDEX.clear()
     pats = blacklist(create=bool(getattr(args, "apply", False))) + (args.skip or [])
     for d in mods:
@@ -612,6 +803,10 @@ def run_plan(args):
         if isinstance(res, str):
             skipped.append((d, res))
             continue
+        if os.path.join(args.staging, d) in CONVERT:
+            touched += 1
+            lines += convert_lines(d, CONVERT[os.path.join(args.staging, d)], CONVERTER["mode"])
+            continue
         if not res:
             continue
         touched += 1
@@ -621,6 +816,13 @@ def run_plan(args):
             f"{sum(1 for m in all_moves if m[1])} move(s); {len(skipped)} left alone"]
     for d, why in skipped:
         head.append(f"  - left alone: {d} ({why})")
+    if CONVERTER.get("missed"):                      # one line: the converter isn't there
+        head.append(f"  - WARNING: omw2mwse (the OpenMW converter) was not found on PATH or beside these tools: "
+                    f"{CONVERTER['missed']} OpenMW-only mod(s) get the usual Off\\OpenMW\\ move instead")
+    for mod_dir in sorted(CONVERT):                  # a preview (dry run); "#"-free notes, not actions
+        ok, line = converter_summary(*run_converter(mod_dir, CONVERTER["mode"], dry_run=True))
+        head.append(f"  - {'omw2mwse preview' if ok else 'WARNING: omw2mwse preview'} for "
+                    f"{os.path.basename(mod_dir)} ({CONVERTER['mode']}): {line}")
     for d, n in sorted(NORMAL_PACKS.items()):
         NOTES.append(f"{d}: a normal-map add-on pack ({n} normal map(s) under a 'normal maps' path) - not "
                      f"applicable to classic Morrowind (only OpenMW uses normal maps); consider removing it in Vortex")
@@ -2328,7 +2530,16 @@ def main():
     ap.add_argument("--no-coins", action="store_true",
                     help="a broken or missing model gets an empty, invisible model instead of the game's Dwemer "
                          "coin (the default, so the gap is easy to spot)")
+    ap.add_argument("--convert-omwscripts", nargs="?", const="hardcode", default="hardcode", choices=CONVERT_MODES,
+                    metavar="MODE",
+                    help="OpenMW-only mods (OpenMW scripts, no MWSE Lua) are converted for MWSE by omw2mwse, found "
+                         "on PATH or beside these tools, in this mode: hardcode (the default; hard-coded values "
+                         "become MCM settings) or normal. Mods with MWSE Lua are never converted: their OpenMW "
+                         "files go to Off\\OpenMW\\. Without the converter: the usual Off\\OpenMW\\ move")
+    ap.add_argument("--no-convert-omwscripts", dest="convert_omwscripts", action="store_const", const=None,
+                    help="don't convert: OpenMW-only mods get the usual Off\\OpenMW\\ move")
     args = ap.parse_args()
+    setup_converter(args.convert_omwscripts)
     global NO_COINS
     NO_COINS = args.no_coins
     if args.no_reduce_textures or args.no_reduce_splash:
@@ -2398,7 +2609,7 @@ def plan_main(args):
     text, _parts, moves, lres, ares = fresh_plan(args)
     PF.write_atomic(PLAN, text)
     print(f"\nFull plan: {PLAN}")
-    if moves or REVIEW or (lres and lres["n_ok"]) or assets_pending(ares):
+    if moves or REVIEW or CONVERT or (lres and lres["n_ok"]) or assets_pending(ares):
         print("\nNothing changed. Purge in Vortex, review the plan, run again with --apply, then Deploy.")
     else:
         print("\nNothing to fix.")
@@ -2431,11 +2642,13 @@ def apply_main(args):
     sec = PF.sections(reviewed)
     keep = {k: v for k, v in sec.items() if k not in parts and PF.has_any_actions(v)}   # not enacted: stays
     st = {"moves": [], "progress": [], "lua": lres, "assets": ares, "keep": keep, "started": False,
-          "finished": False, "text": text}
+          "finished": False, "text": text, "convert": [], "convert_left": []}
     if not args.lua_only:
         moves, gone = review(args.staging, moves, assume_keep=args.yes)
-        if moves or gone:
-            what = f"{sum(1 for m in moves if m[1])} move(s)" + (f" and delete {len(gone)} mod(s)" if gone else "")
+        conv = sorted(CONVERT)
+        if moves or gone or conv:
+            what = f"{sum(1 for m in moves if m[1])} move(s)" + (f" and delete {len(gone)} mod(s)" if gone else "") \
+                + (f" and convert {len(conv)} OpenMW-only mod(s) with omw2mwse ({CONVERTER['mode']})" if conv else "")
             if not args.yes and input(f"\nApply {what}? Purge in Vortex first. [y/N] ").strip().lower() not in \
                     ("y", "yes"):
                 print("Nothing changed.")
@@ -2443,6 +2656,7 @@ def apply_main(args):
         else:
             print("Nothing to move.")
         st["moves"] = gone + moves
+        st["convert"] = st["convert_left"] = conv
     left = []
     try:
         st["started"] = True
@@ -2451,6 +2665,8 @@ def apply_main(args):
         lua_apply(args, lres)
         moved_mods = {os.path.relpath(st["moves"][i][0], args.staging).split(os.sep)[0] for i in st["progress"]}
         assets_apply(args, ares, moved_mods)
+        if st["convert"]:                            # last: it lays those mods out itself
+            st["convert_left"] = convert_apply(args.staging, st["convert"], CONVERTER["mode"])
         st["finished"] = True
     finally:
         left = _finish_plan(args, st, reviewed, audit)
@@ -2463,6 +2679,8 @@ def _left_lines(args, st):
     if "moves" in st["keep"]:
         out += [ln for ln in st["keep"]["moves"].splitlines() if not ln.startswith("#")]
     out += moves_as_lines([m for i, m in enumerate(st["moves"]) if i not in done], args.staging)
+    for mod_dir in st.get("convert_left") or []:     # not converted (failed, or the run stopped first)
+        out += convert_lines(os.path.basename(mod_dir), CONVERT.get(mod_dir, []), CONVERTER["mode"])
     lua = lua_pending(st["lua"]) or ([st["keep"][LUA_HEAD]] if LUA_HEAD in st["keep"] else [])
     if lua:
         out += ["", LUA_HEAD] + lua
