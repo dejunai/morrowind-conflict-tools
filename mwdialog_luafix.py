@@ -479,7 +479,6 @@ class LupaChecker:
 
 def find_checker(explicit=None, game_dir=HERE):
     """LuaJIT at <game>\\tools\\luajit\\ first, then luajit / luac on PATH, then lupa; None if there is none."""
-    import mwdialog_paths as MP
     for c in MP.luajit_candidates(game_dir, explicit):
         if c and os.path.isfile(c):
             return LuaJITChecker(c, "luac" if "luac" in os.path.basename(c).lower() else "luajit")
@@ -5017,7 +5016,6 @@ def main(argv=None):
         ap.error("--dry-run goes with --core-only (plan mode is already a dry run)")
     if args.core_only:
         return _core_only_main(args, ap)
-    import mwdialog_paths as MP
     if not MP.acquire_run_lock() or not MP.acquire_game_lock(HERE):
         print(MP.RUN_LOCKED_MESSAGE, file=sys.stderr)
         return 1

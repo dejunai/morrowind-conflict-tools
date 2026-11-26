@@ -32,6 +32,18 @@ def test_luafix_direct_run_refuses_a_held_game_lock(monkeypatch, capsys):
     assert MP.RUN_LOCKED_MESSAGE in capsys.readouterr().err
 
 
+def test_luafix_lock_check_uses_the_module_it_was_loaded_with(monkeypatch, capsys):
+    """MWManager's test run swaps module copies (sys.modules) between test folders. A function-local
+    `import mwdialog_paths` in luafix then got another copy than the one the lock is stubbed on, the stub never
+    applied, and a held game lock was not refused. The lock check must use luafix's own MP, whatever sys.modules
+    holds at call time."""
+    monkeypatch.setattr(MP, "acquire_game_lock", lambda _game: False)
+    monkeypatch.delitem(sys.modules, "mwdialog_paths")               # a re-import would build a fresh copy
+    assert L.MP is MP
+    assert L.main(["--undo"]) == 1
+    assert MP.RUN_LOCKED_MESSAGE in capsys.readouterr().err
+
+
 @pytest.fixture
 def df(tmp_path):
     d = tmp_path / "Morrowind" / "Data Files"

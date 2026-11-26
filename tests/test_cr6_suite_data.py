@@ -100,15 +100,36 @@ def test_aux_only_writes_the_suite_data_with_cell_fixes_as_the_last_word(tmp_pat
     assert (cfg / m.COLLIDE_DATA).exists() and (cfg / m.STRANDED_DATA).exists()
 
 
+def _main_steps():
+    """[(line, text)] of every call and assignment in mwdialog_check._main, read from the module's own file and
+    parsed - not inspect.getsource, which goes through linecache and the code object's line number and returns
+    other text when the file or the module set changed since the import (MWManager swaps module copies per test
+    folder, and a sync can rewrite the file)."""
+    import ast
+    with open(m.__file__, "rb") as f:
+        tree = ast.parse(f.read().decode("utf-8-sig"))
+    fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "_main")
+    steps = []
+    for node in ast.walk(fn):
+        if isinstance(node, (ast.Call, ast.Assign)):
+            steps.append((node.lineno, ast.unparse(node)))
+    return [text for _line, text in sorted(steps, key=lambda s: s[0])]
+
+
 def test_fix_refreshes_the_suite_data_from_the_load_order_file_last():
     """--fix ends with run_cell_conflicts(aux_only=True) on resolve()'s order (generated\\mwdialog_load_order.txt,
     the order --play gives the game), after the sound patch and the Multipatch."""
-    import inspect
-    src = inspect.getsource(m._main)
-    at = src.index("run_cell_conflicts(args, final_plugins, aux_only=True)")
-    assert src.index("run_multipatch(args, plugins, world)") < at
-    assert src.index("mwdialog_soundfix.run_soundfix(args, sf_plugins") < at
-    assert "final_plugins, _b, _d = resolve(args, Report())" in src
+    steps = _main_steps()
+
+    def first(text):
+        return next(i for i, t in enumerate(steps) if t.startswith(text))
+
+    at = first("run_cell_conflicts(args, final_plugins, aux_only=True)")
+    assert first("run_multipatch(args, plugins, world)") < at
+    assert first("mwdialog_soundfix.run_soundfix(args, sf_plugins") < at
+    assert any(i < at and t in ("final_plugins, _b, _d = resolve(args, Report())",
+                                "(final_plugins, _b, _d) = resolve(args, Report())")
+               for i, t in enumerate(steps))
 
 
 SCRIPT = r"""

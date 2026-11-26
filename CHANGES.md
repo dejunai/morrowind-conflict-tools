@@ -1,3 +1,19 @@
+# luafix's lock check uses its own module copy; two suite tests made deterministic (2026-11-26)
+
+- `mwdialog_luafix.main()` and `find_checker()` each re-imported `mwdialog_paths` inside the function. That resolves
+  through `sys.modules` at call time, so when something replaces the module set between import and call (MWManager's
+  combined run `pytest tests tools/steam-upstream/tests` swaps and recomposes copies per test folder) luafix got a
+  fresh copy of `mwdialog_paths` while the lock was stubbed on, or held by, the copy it was loaded with. The lock
+  check itself was already the first thing `main()` does (before `--undo`, before any write), but it asked the wrong
+  copy, so a held game lock was not refused and `--undo` printed "Nothing to undo (no journal)." Both local imports
+  are gone: luafix uses its module-level `MP`. New test `test_luafix_lock_check_uses_the_module_it_was_loaded_with`
+  removes `mwdialog_paths` from `sys.modules` and still expects the refusal.
+- `test_fix_refreshes_the_suite_data_from_the_load_order_file_last` read `inspect.getsource(m._main)` and searched the
+  text; that goes through `linecache` and the code object's line number, so it returned other text when the file or
+  the module set changed after the import (once in about six runs in MWManager). It now parses the module's own file
+  with `ast` and checks the order of the calls (multipatch and sound patch before the aux-only cell-conflicts run, on
+  `resolve()`'s order) - same assertions, no source-text search.
+
 # vortex_tidy sets an unconverted OpenMW-only mod aside as Off\<plugin name>\OpenMW (2026-11-26)
 
 - The whole-package move (blocked by omw2mwse, conversion failed, converter missing, `--no-convert-omwscripts`)
