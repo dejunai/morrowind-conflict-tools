@@ -109,8 +109,9 @@ A path over 259 characters (MAX_PATH 260 with the closing NUL) is never moved, a
 path would be: moving it would only make it worse. Such a file stays where it is, and
 `Off\<plugin>\max_path_too_long.txt` lists it: one path per line, relative to the mod's staged folder (backslashes),
 sorted without regard to case, no repeats, UTF-8. The list is the offenders of this run plus earlier lines whose
-file is still there and still too long, so it is refreshed, never duplicated: a run that finds nothing new
-rewrites nothing, and the file is removed when nothing is too long any more. A folder with such a file inside is
+file is still there and is still too long, either at that path or at its Off destination (a short source whose
+copy under `Off\<plugin>\...` would exceed MAX_PATH stays listed, so tidy and the converter agree and a refresh
+is idempotent). A run that finds nothing new rewrites nothing, and the file is removed when nothing is too long any more. A folder with such a file inside is
 moved piece by piece; the rest of it moves.
 
 ## 7. Journal and undo

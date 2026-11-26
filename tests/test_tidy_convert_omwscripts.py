@@ -385,3 +385,27 @@ def test_an_explicit_normal_flag_wins_over_the_dev_setting(tidy):
     assert "convert with omw2mwse (normal)" in tidy.plan()
     (dry,) = tidy.calls()
     assert dry[0] == "--convert-omwscripts=normal" and "--accept-hardcode-conversions" not in dry
+
+
+def test_requires_python_3_9_allows_3_9_and_3_10_the_undeclared_fallback_stays_3_11(monkeypatch):
+    monkeypatch.setattr(vt, "interpreter_version", lambda cmd: (3, 9))
+    assert vt.converter_python_problem(["python"], requires=">=3.9") == ""
+    monkeypatch.setattr(vt, "interpreter_version", lambda cmd: (3, 10))
+    assert vt.converter_python_problem(["python"], requires=">=3.9") == ""
+    monkeypatch.setattr(vt, "interpreter_version", lambda cmd: (3, 8))
+    assert vt.converter_python_problem(["python"], requires=">=3.9").startswith("omw2mwse needs Python 3.9+")
+    monkeypatch.setattr(vt, "interpreter_version", lambda cmd: (3, 10))
+    assert vt.converter_python_problem(["python"]) == "omw2mwse needs Python 3.11+, but it would run on Python 3.10"
+    monkeypatch.setattr(vt, "interpreter_version", lambda cmd: (3, 11))
+    assert vt.converter_python_problem(["python"]) == ""
+
+
+def test_a_converter_checkout_declaring_3_9_is_used_on_python_3_10(tidy, monkeypatch):
+    tidy.stub()
+    (tidy.home / "pyproject.toml").write_text('[project]\nrequires-python = ">=3.9"\n', encoding="utf-8")
+    monkeypatch.setattr(vt, "interpreter_version", lambda cmd: (3, 10))
+    openmw_mod(tidy.staging, "Lights")
+    assert tidy.run() == 0
+    assert "convert with omw2mwse" in tidy.plan() and "needs Python" not in tidy.plan()
+    (dry,) = tidy.calls()
+    assert dry[0].startswith("--convert-omwscripts=")

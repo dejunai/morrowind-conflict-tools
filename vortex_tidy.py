@@ -56,10 +56,10 @@ For each mod folder in Vortex's Morrowind staging folder (from Vortex's settings
     Off\\wildlife_attacks_npc\\OpenMW\\) - plugins, scripts, data folders, Docs\\, Screenshots\\ - so the staging root
     keeps only Off\\ (and Vortex's marker file) and that is all it deploys; an Off\\OpenMW\\<mod>\\ folder from an
     earlier tidy run is moved there too (and merged with what is there); --undo puts each file back. Without the converter: one WARNING line.
-    The converter needs Python 3.11+ (omw2mwse 0.2.3 imports tomllib; these tools stay 3.9+): tidy probes the Python that
-    would run it (find_converter's command; a requires-python in its pyproject.toml or a requiresPython in its --json
-    replaces the 3.11 default) and, when it is older, treats the converter as missing - one WARNING saying it needs
-    Python 3.11+, and the mod's whole package goes to Off\\<plugin>\\OpenMW\\ - instead of letting it die on an ImportError.
+    The converter declares the Python it needs (requires-python in its pyproject.toml, or requiresPython in its --json;
+    current omw2mwse is 3.9+). Tidy probes the Python that would run it and, when that is older than the declared minimum
+    (or, if nothing is declared, older than 3.11), treats the converter as missing - one WARNING, and the mod's whole
+    package goes to Off\\<plugin>\\OpenMW\\.
     --undo reverses a conversion: it journals what omw2mwse reported, deletes
     the files omw2mwse wrote (its manifest's list, each only if it still has the hash the manifest gives; an edited
     one stays, with one WARNING line) and puts the original package from Off\\<Mod>\\OpenMW\\ back at its
@@ -633,8 +633,8 @@ CONVERT_DEV_HARDCODE = True                     # --remove before shipping: deve
 _CONVERT_UNSET = object()                       # argparse: --convert-omwscripts was not given
 CONVERT_ACTION = "convert with omw2mwse"
 CONVERTER = {"mode": None, "cmd": None, "env": None, "why": "", "python": ""}   # set by main(): the mode, how to run it
-CONVERTER_MIN_PYTHON = (3, 11)    # omw2mwse 0.2.3 imports tomllib (3.11+) at the top of sidecar.py and build.py; on
-                                  # 3.9/3.10 it dies with an ImportError. These tools stay 3.9+; the converter needs this.
+CONVERTER_MIN_PYTHON = (3, 11)    # fallback when the converter declares no minimum (an older copy without pyproject or
+                                  # requiresPython). Current omw2mwse declares 3.9+; these tools stay 3.9+.
 CONVERTER_HOME = os.path.dirname(os.path.abspath(__file__))       # where sibling copies are looked for
 CONVERTER_TIMEOUT = 600
 
@@ -769,7 +769,7 @@ def interpreter_version(cmd):
 
 def declared_python(where):
     """The minimum Python the converter declares: requires-python in a pyproject.toml in or above the folder
-    `where` points into (up to three levels), else None (omw2mwse 0.2.3 has none)."""
+    `where` points into (up to three levels), else None. Current omw2mwse declares requires-python = ">=3.9"."""
     d = os.path.abspath(where) if where else ""
     d = d if os.path.isdir(d) else os.path.dirname(d)
     for _ in range(4):

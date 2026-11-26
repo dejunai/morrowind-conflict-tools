@@ -5,6 +5,7 @@ only; tidy never runs on live data. Python 3.9+."""
 import json
 import os
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -346,3 +347,56 @@ def test_the_shared_module_is_python_39_syntax():
     for name in ("mwdialog_offlayout.py", "vortex_tidy.py", "mwdialog_generated.py"):
         with open(os.path.join(here, name), encoding="utf-8") as f:
             ast.parse(f.read(), feature_version=(3, 9))
+
+
+def test_off_copy_maps_legacy_and_live_paths_into_the_layout(tmp_path):
+    mod = tmp_path / "Foo-1-0"
+    put(mod, "Foo.esp")
+    put(mod, "Meshes/x.nif")
+    put(mod, "Off/Damaged assets/Foo/Meshes/b.nif")
+    owner = "Foo"
+    live = OL.off_copy(str(mod), "Meshes\\x.nif", owner)
+    assert live.replace("/", os.sep).endswith(os.path.join("Off", "Foo", "OpenMW", "Meshes", "x.nif"))
+    legacy = OL.off_copy(str(mod), "Off\\Damaged assets\\Foo\\Meshes\\b.nif", owner)
+    assert legacy.replace("/", os.sep).endswith(os.path.join("Off", "Foo", "broken", "Meshes", "b.nif"))
+    already = OL.off_copy(str(mod), "Off\\Foo\\OpenMW\\scripts\\a.lua", owner)
+    assert already.replace("/", os.sep).endswith(os.path.join("Off", "Foo", "OpenMW", "scripts", "a.lua"))
+
+
+def test_a_short_source_whose_off_copy_would_be_too_long_stays_listed_on_refresh(env, monkeypatch):
+    """A file the converter listed (source short; Off\\<plugin>\\OpenMW\\<rel> would exceed MAX_PATH)
+    must stay listed when tidy refreshes and is not itself moving the file."""
+    rel = "Meshes/" + "b" * 20 + ".nif"
+    put(env.mod, rel, b"n")
+    _limit(monkeypatch, env.mod, len(rel.replace("/", "\\")) + 2)   # source fits; Off\\Foo\\OpenMW\\... does not
+    dest = OL.off_copy(str(env.mod), rel, "Foo")
+    assert not OL.too_long(str(env.mod / rel.replace("/", os.sep))) and OL.too_long(dest)
+    lst = env.mod / "Off" / "Foo" / LONG
+    lst.parent.mkdir(parents=True)
+    text = OL.list_text([rel])
+    lst.write_bytes(text.replace("\n", "\r\n").encode("utf-8"))
+    assert env() == 0
+    assert "0 to change" in open(vt.PLAN).read()                         # refresh is a no-op: same list
+    assert lst.read_text(encoding="utf-8").replace("\r\n", "\n") == text
+    assert (env.mod / rel.replace("/", os.sep)).exists()
+
+
+def test_list_update_keeps_a_short_source_whose_off_copy_is_too_long(tmp_path, monkeypatch):
+    mod = tmp_path / "Foo-1-0"
+    rel = "Meshes/" + "c" * 20 + ".nif"
+    put(mod, "Foo.esp")
+    put(mod, rel, b"n")
+    monkeypatch.setattr(OL, "MAX_PATH_CHARS", len(str(mod)) + len(rel.replace("/", "\\")) + 2)
+    owner = "Foo"
+    lst_path = OL.list_path(str(mod), owner)
+    lst = Path(lst_path)
+    lst.parent.mkdir(parents=True)
+    lst.write_bytes(OL.list_text([rel]).replace("\n", "\r\n").encode("utf-8"))
+    assert OL.list_update(str(mod), owner, []) is None                    # same text: no rewrite
+    gone = "Meshes/gone.nif"
+    lst.write_bytes(OL.list_text([rel, gone]).replace("\n", "\r\n").encode("utf-8"))
+    out = OL.list_update(str(mod), owner, [])
+    assert out and out[1] == OL.list_text([rel])                          # the missing one is dropped; the short+too-long Off copy stays
+    monkeypatch.setattr(OL, "MAX_PATH_CHARS", 259)
+    out = OL.list_update(str(mod), owner, [])
+    assert out == (str(lst), None)                                        # nothing is too long any more: the list goes

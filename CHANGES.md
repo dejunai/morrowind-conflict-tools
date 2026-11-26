@@ -1,3 +1,12 @@
+# Off list refresh keeps a short source whose Off copy is too long; the converter gate honours 3.9+ (2026-11-26)
+
+- `max_path_too_long.txt` refresh no longer drops a line just because the source path itself is short: a line stays
+  when the file is still there and either that path or its Off copy (`Off\\<plugin>\\...`, including the converter's
+  `Off\\<plugin>\\OpenMW\\<rel>`) would exceed MAX_PATH. Tidy and omw2mwse then agree, and a refresh is idempotent.
+- The converter (openmw-mwse a57155d) now declares Python 3.9+ (`requires-python` in pyproject.toml and
+  `requiresPython` in convert `--json`). Tidy already read both; tests confirm 3.9 and 3.10 are allowed when that is
+  declared, and the 3.11 fallback still applies when nothing is declared.
+
 # vortex_tidy: the shipping converter mode is normal; a marked dev setting still forces hardcode (2026-11-26)
 
 - End users get `omw2mwse --convert-omwscripts=normal` unless they pass `--convert-omwscripts=hardcode` (or

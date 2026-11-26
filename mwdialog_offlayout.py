@@ -350,13 +350,78 @@ def list_text(rels):
     return "".join(uniq[k] + "\n" for k in sorted(uniq))
 
 
+def off_copy(mod_dir, rel, owner):
+    r"""The absolute path of the Off copy of `rel` (relative to the mod) in the one layout: a path already under
+    Off\ is mapped the way the migration would move it; a path still in the mod is Off\<plugin>\OpenMW\<rel>
+    (where the converter puts a set-aside copy). Used to keep a max_path_too_long.txt line when the source is
+    short but the Off path would be too long."""
+    parts = os.path.normpath(rel.replace("/", os.sep)).split(os.sep)
+    if not parts or parts == ["."]:
+        return None
+    root = os.path.join(off_dir(mod_dir), owner)
+    if parts[0].lower() != "off":
+        return os.path.join(root, "OpenMW", *parts)
+
+    def loose_why(name):
+        ext = os.path.splitext(name)[1].lower()
+        if ext in PLUGIN_EXT or ext == ".bsa":
+            return "disabled plugins"
+        if ext == ".omwscripts":
+            return "OpenMW"
+        if ext in EXEC_EXT:
+            return "executables"
+        return None
+
+    rest = parts[1:]
+    if not rest:
+        return None
+    head, tail = rest[0], rest[1:]
+    hl = head.lower()
+    if not tail:
+        why = loose_why(head)
+        return os.path.join(root, why, head) if why else None
+    if hl in _CANON or hl in LEGACY:                 # Off\<reason>\<plugin>\<path>
+        return os.path.join(root, reason_for(head), *(tail[1:] if len(tail) > 1 else tail))
+    if hl == "openmw":                               # Off\OpenMW\<mod>\<path>
+        return os.path.join(root, "OpenMW", *(tail[1:] if len(tail) > 1 else tail))
+    if hl in GAME_TOPS:                              # Off\<path>
+        return os.path.join(root, REPAIRED, *rest)
+    nxt, more = tail[0], tail[1:]
+    nl = nxt.lower()
+    if not more:
+        why = loose_why(nxt)
+        if why:
+            return os.path.join(root, why, nxt)
+        if is_reason(nxt):
+            return os.path.join(root, reason_for(nxt))
+        return None
+    if nl in GAME_TOPS:                              # Off\<name>\<path>
+        return os.path.join(root, REPAIRED, nxt, *more)
+    if is_reason(nxt):                               # Off\<name>\<reason>\... (already canonical when name is owner)
+        return os.path.join(root, reason_for(nxt), *more)
+    return None
+
+
+def still_listed(mod_dir, rel, owner):
+    """True when a max_path_too_long.txt line should stay: the file is still there, and either its own path
+    or its Off copy (off_copy) is too long."""
+    src = os.path.join(mod_dir, rel.replace("/", os.sep))
+    if not _isfile(src):
+        return False
+    if too_long(src):
+        return True
+    dest = off_copy(mod_dir, rel, owner)
+    return dest is not None and too_long(dest)
+
+
 def list_update(mod_dir, owner, offenders):
     """(path, text) to write, (path, None) to remove, or None for no change: the list is the offenders found now
-    plus the earlier ones still there and still too long; written only when its text would differ."""
+    plus the earlier ones still there whose own path or Off copy is still too long; written only when its text
+    would differ."""
     path = list_path(mod_dir, owner)
     had = _isfile(path)
     old = read_list(path) if had else []
-    keep = [r for r in old if _isfile(os.path.join(mod_dir, r)) and too_long(os.path.join(mod_dir, r))]
+    keep = [r for r in old if still_listed(mod_dir, r, owner)]
     text = list_text(list(offenders) + keep)
     if not text:
         return (path, None) if had else None
