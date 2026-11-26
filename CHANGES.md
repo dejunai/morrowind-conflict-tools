@@ -1,3 +1,20 @@
+# luafix: generic tuning rules for throttles (2026-11-25)
+
+- `G2S`: a per-frame handler `G2` used to leave at medium (unseen calls or state writes) is gated at high when
+  its call closure scans the world every frame (`tes3.rayTest`, `:iterateReferences()`, `tes3.getReference` of
+  anything but the player, `tes3.findActorsInProximity`, `tes3.iterateObjects`) and nothing in it is
+  frame-critical. Same gate and interval as `G2`, its own id.
+- `G8`: a literal `tes3.messageBox` in a handler of an event that fires per hit or per NPC decision is shown at
+  most once per `messageInterval` (new key, 10 s). User-action events are left alone; in a per-frame handler it
+  is a report.
+- `U1`: a per-frame handler that sets the `.text` of a `createLabel` / `createBlock` element to a plain value
+  writes it only when it differs.
+- `skipRules` (new key): generic rule ids to report but never apply, like `skipKnown` for KB/KP/KR.
+- `M1` and `G2` both open a handler with an early return; at `--level medium` the second pass no longer sees the
+  gate as missing when the menu-mode return comes first (both are read from the handler's leading guards), so
+  such files are no longer rejected. `M1` skips a handler that already returns in menu mode.
+- `KP3` wording: Keg Drip refreshes once a second as shipped.
+
 # --play never deploys an older lua tools file over a newer one (2026-11-25)
 
 - A deployed Lua file is only replaced when that isn't a downgrade. Hash lineage decides: the deploy record

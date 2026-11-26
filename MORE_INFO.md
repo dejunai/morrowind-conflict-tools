@@ -363,9 +363,11 @@ Every finding has a rule id and a confidence: `high` findings are patched by `--
 | :--- | :--- | :--- |
 | `G1` | Absurd event priority (`\|p\| >= priorityLimit`) | fix: compressed, order kept |
 | `G2` | A per-frame handler (`simulate`, `simulated`, `enterFrame`) that only polls state | fix: runs every `minInterval` (0.35 s) |
+| `G2S` | A per-frame handler `G2` would leave at medium (it calls code luafix can't see, or writes game state) that scans the world every frame (`tes3.rayTest`, `:iterateReferences()`, `tes3.getReference` other than the player, `tes3.findActorsInProximity`, `tes3.iterateObjects`) and shows nothing frame-critical | fix: runs every `minInterval` (0.35 s) |
 | `G3` | A repeating timer faster than 0.35 s whose callback only polls | fix: 0.35 s |
 | `G4` | A one-shot handler (done flag) that never unregisters | fix: unregisters once the flag is set |
 | `G5` | Per-frame costs: uncached lookups, config/file I/O, allocations, message boxes every frame | report |
+| `G8` | The same literal `tes3.messageBox` in a handler of an event that fires per hit or per NPC decision (`damage`, `attack`, `spellTick`, `calcHitChance`, `determineAction`, `combatStarted`...); user-action events (`itemTileUpdated`, `uiObjectTooltip`, `activationTargetChanged`) are left alone | fix: shown at most once per `messageInterval` (10 s); in a per-frame handler: report |
 | `G6` | `tes3.getReference` in a frequent handler or a fast repeating timer | report |
 | `G7` | `tes3.rayTest` every frame or in a frequent handler with no `maxDistance`, no `root`, or `accurateSkinned` | report |
 | `A1` | `ref.data.x` used without a guard | fix: nil guard |
@@ -390,6 +392,7 @@ Every finding has a rule id and a confidence: `high` findings are patched by `--
 | `I3` | A config written inside a save handler | fix: written the frame after |
 | `L1` | A `while` loop that walks links (`x = x.next`) or counts down by a computed step | fix: capped at 10000 turns |
 | `M1` | An `enterFrame` handler (it also fires in menus) with no UI work | fix: returns in menu mode |
+| `U1` | A per-frame handler setting `.text` of an element it made with `:createLabel` / `:createBlock` to a plain value (a name, a field, a literal) every frame | fix: `if x.text ~= v then x.text = v end` |
 | `P1` | `ref.data` written on a non-actor reference with no `ref.modified = true` | report |
 | `R1` | A timer callback holding a reference from its event with no safe handle / `:isValid()` check | report |
 | `S1` | `tes3.getSoundPlaying{ reference = <not the player> }` used to decide a restart | report (`mwsoundguard` caps it) |
@@ -401,7 +404,7 @@ Never touched: MWSE's own code (except the exact KnownBugs fingerprints in named
 
 ### Settings
 
-luafix reads, in order (later wins): its built-in defaults, `Data Files\MWSE\config\mwguard.json` (only the keys it shares with `mwguard`), that file's `"luafix"` section, then `generated\mwdialog_luafix.json`. Keys: `priorityLimit` (10000), `priorityMode` (`keepOrder` / `clamp`), `priorityClampTo` (1000), `minInterval` (0.35), `exemptMods`, `log` (the shim: `scope`, `perSecond` 25, `maxMB` 2, `keepOld` 1, `flushSeconds` 2, `lifecycleMax` 5, `keepPatterns`, `exemptMods`...), `logSpamGuard`, `enabled`, `logShimWhenMwguard`, and `skipKnown` (KB/KP/KR ids to report but never apply). The plan header names the files it read.
+luafix reads, in order (later wins): its built-in defaults, `Data Files\MWSE\config\mwguard.json` (only the keys it shares with `mwguard`), that file's `"luafix"` section, then `generated\mwdialog_luafix.json`. Keys: `priorityLimit` (10000), `priorityMode` (`keepOrder` / `clamp`), `priorityClampTo` (1000), `minInterval` (0.35), `exemptMods`, `log` (the shim: `scope`, `perSecond` 25, `maxMB` 2, `keepOld` 1, `flushSeconds` 2, `lifecycleMax` 5, `keepPatterns`, `exemptMods`...), `logSpamGuard`, `enabled`, `logShimWhenMwguard`, `skipKnown` (KB/KP/KR ids to report but never apply), `skipRules` (generic rule ids such as `G2S`, `G8`, `U1` to report but never apply) and `messageInterval` (10, seconds between two of `G8`'s message boxes). The plan header names the files it read.
 
 The syntax checker is found in this order: `--luajit`, `tools\luajit\luajit.exe` (game folder, then the scripts' folder), `luajit` / `luac5.1` / `luac` on PATH, then the `lupa` Python package. With none, nothing is patched (`--apply` exits 2) unless `--no-syntax-check`. Each run also writes `generated\mwdialog_luafix_known_bugs.txt` (every KnownBugs fingerprint found: DETECTED / patched / NOT PATCHED); `--json` writes the findings as JSON, `--diff` prints each patch, `--all` also lists what was left alone on purpose.
 
@@ -439,7 +442,7 @@ Applied like the KB patches (exact text, whole or not at all, same header and ch
 
 - **KP1 (`AttendMeMWSE/actions.lua`)**: while the command wheel is open, `onSimulate` and `resolveMoveContext` cast the same crosshair ray in one frame. `rayWorld` keeps the hit's reference for the rest of that frame (the simulate handler is registered through `localpatch_frameRays`, which clears the memo after it returns or errors), so a second cast with the same `ignore` reuses it. Only the reference is kept: MWSE reuses the result object at the next `rayTest`. About 4 casts become 2 on frames where both run.
 - **KP2 (`AttendMeMWSE/recruit.lua`)**: in recruit mode `onSimulate` cast a ray and rebuilt the ring layout every frame; it now runs one frame in three (about 20 Hz at 60 fps).
-- **KP3 (`Keg Drip/main.lua`)**: `normalizeMesh` (three string calls) ran for every reference at each 3 s refresh; its result is now kept per mesh name.
+- **KP3 (`Keg Drip/main.lua`)**: `normalizeMesh` (three string calls) ran for every reference at each refresh (once a second as shipped); its result is now kept per mesh name.
 - **KP4 (`G7 Containers/main.lua`)**: `checkData` called `tes3.getReference` (a scan of every cell's references) for the linked container on every tile update, tooltip and equip; it now keeps a safe handle and looks again only when the handle is invalid or the reference is deleted.
 - **KR1 (`AURA/fader.lua`)**: the fade timer's callback used the reference it captured; it now stops when that reference's safe handle is no longer valid.
 - **KR2 (`AttendMeMWSE/actions.lua`)**: same for the follow tick (`forceFollow`) and `travelThen`'s timer.

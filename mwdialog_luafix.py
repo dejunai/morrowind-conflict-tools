@@ -10,6 +10,13 @@ changes (encoding, line endings and every line number stay the same: helpers go 
 Rules (thresholds come from MWSE\\config\\mwguard.json when it exists - the same file mwguard reads at runtime):
   G1 absurd event priority (|p| >= priorityLimit, 10000) -> compressed to 1000..1999 (order kept)    fix
   G2 a per-frame handler (simulate/simulated/enterFrame) that only polls state -> runs every 0.35 s  fix
+  G2S a per-frame handler G2 would leave at medium (unseen calls, state writes) that scans the world
+     every frame (tes3.rayTest, iterateReferences, tes3.getReference...) and shows nothing
+     frame-critical -> runs every 0.35 s (its own id: skipRules turns it off)                         fix
+  G8 the same literal tes3.messageBox in a combat-event handler (damage, attack, spellTick...) ->
+     shown at most once per messageInterval (10 s); in a per-frame handler                           report
+  U1 a per-frame handler writing a createLabel/createBlock element's .text with the same kind of
+     value every frame -> written only when it differs                                                fix
   G3 a repeating timer faster than 0.35 s whose callback only polls -> 0.35 s                          fix
   G4 a one-shot handler (done flag) that never unregisters -> unregisters once the flag is set         fix
   G5 per-frame costs: uncached lookups, config/file I/O, allocations, message boxes every frame      report
@@ -193,6 +200,7 @@ DEFAULTS = {
     "priorityMode": "keepOrder",     # keepOrder: absurd priorities go to just under the limit (9000..9999), so
                                      # they still sort ahead of every ordinary priority; clamp: clampTo..2*clampTo
     "minInterval": 0.35,             # the guide: at least 0.35 s between repeating calls
+    "messageInterval": 10,           # G8: one literal message box in a combat-event handler at most this often
     "exemptMods": [],
     "log": {                         # the log shim (F1): mwguard.json "luafix": { "log": { ... } } overrides
         "scope": "all",              # every third-party mod that logs gets its own log
@@ -219,6 +227,7 @@ DEFAULTS = {
     "enabled": True,
     "logShimWhenMwguard": False,     # also patch log spam when mwguard's runtime guard covers the mod
     "skipKnown": [],                 # targeted patches (KB / KP / KR rule names) to report but never apply
+    "skipRules": [],                 # generic rules (G2S, G8, U1...) to report but never apply
 }
 
 PER_FRAME = {"simulate", "simulated", "enterFrame"}
@@ -264,6 +273,15 @@ FRAME_HINTS = ("delta", "camera", "velocity", "orientation", "rotation", "animat
                "ismousebutton", "applymovement", "forcejump", "playanimation", "setplayercontrolstate",
                "updatelayout", "lookat", "facing")
 FRAME_HINT_OK = {"menumode", "ismenumode"}            # reading the menu state is a poll
+# G2S: a world scan that costs real time each call (G6/G7 vocabulary)
+HEAVY_SCANS = {"tes3.rayTest", "tes3.getReference", "tes3.findActorsInProximity", "tes3.iterateObjects"}
+HEAVY_SCAN_METHODS = {"iterateReferences", "iterateObjects"}
+# G8: events fired per hit or per NPC decision, not by a player's own click (itemTileUpdated, uiObjectTooltip,
+# activationTargetChanged: there a message is the answer to one action, so it is never throttled)
+MESSAGE_EVENTS = {"damage", "damaged", "damageHandToHand", "damagedHandToHand", "attack", "attackHit", "attackStart",
+                  "spellTick", "calcHitChance", "determineAction", "determinedAction", "combatStarted"}
+# U1: elements whose .text a per-frame handler may rewrite with the value it already has
+TEXT_ELEMENT_CREATORS = {"createLabel", "createBlock"}
 SELF_TIMED = {"os.clock", "os.time", "tes3.getSimulationTimestamp", "mwse.simulateTimers.clock",
               "mwse.realTimers.clock", "tes3.getRealTimestamp"}
 QUERIES = {
@@ -330,7 +348,7 @@ REF_FIELDS = {"reference", "target", "mobile", "attacker", "attackerReference", 
               "targetReference", "targetMobile", "actor", "current", "previous"}
 NON_ACTOR_TYPES = {"activator", "alchemy", "ammunition", "apparatus", "armor", "book", "clothing", "container",
                    "door", "ingredient", "light", "lockpick", "miscItem", "probe", "repairItem", "static", "weapon"}
-RULES_REV = 3                  # bump when a rule changes, so cached findings are worked out again
+RULES_REV = 4                  # bump when a rule changes, so cached findings are worked out again
 # console-only commands; replacement suggestions follow the guide's table where it has one
 CONSOLE_ONLY = {"togglepov": "tes3.togglePOV() (or tes3.force1stPerson() / tes3.force3rdPerson())",
                 "tcl": "console only (no script command)", "tai": "console only (no script command)",
@@ -765,6 +783,8 @@ class FileAnalysis:
         return self._lines.bisect_left(self._nl, n.s) + 1
 
     def add(self, rule, node, what, fix="", conf="report", edits=(), needs=()):
+        if edits and rule in ((self.cfg or {}).get("skipRules") or ()):
+            what, conf, edits, needs = what + " (skipRules: not applied)", "report", (), ()
         f = Finding(rule=rule, line=self.line(node) if node is not None else 1, what=what, fix=fix, conf=conf,
                     edits=list(edits), needs=set(needs))
         self.findings.append(f)
@@ -877,8 +897,40 @@ class FileAnalysis:
             return "medium", "calls code it can't see (" + ", ".join(sorted(set(unknown))[:4]) + ")"
         return "high", "only checks state and reacts to a change"
 
+    def leading_guards(self, f):
+        """The conditions of the 'if <cond> then return end' statements a function starts with (where M1's
+        menu-mode return and G2's gate go, in either order)."""
+        out = []
+        for st in f.body.stats:
+            if not (st.kind == "If" and len(st.clauses) == 1 and st.orelse is None):
+                break
+            body = st.clauses[0][1].stats
+            if not (len(body) == 1 and body[0].kind == "Return" and not body[0].exprs):
+                break
+            out.append(self.text(st.clauses[0][0]))
+        return out
+
     def gated(self, f):
-        return bool(f.body.stats) and "localpatch_gate(" in self.text(f.body.stats[0])
+        return any("localpatch_gate(" in c for c in self.leading_guards(f))
+
+    def menu_guarded(self, f):
+        return any(re.search(r"\btes3(ui)?\.menuMode\(\)", c) for c in self.leading_guards(f))
+
+    def heavy_scans(self, f):
+        """World scans in f and the same-file functions it calls: (names) sorted."""
+        out = set()
+        for g in self.closure(f):
+            for n in L.walk(g.body):
+                if n.kind == "Call":
+                    d = L.dotted(n.func) or ""
+                    if d in HEAVY_SCANS:
+                        if d == "tes3.getReference" and n.args and n.args[0].kind == "String" and \
+                                (L.string_value(n.args[0].raw) or "").lower() in PLAYER_IDS:
+                            continue                          # answered without a scan
+                        out.add(d)
+                elif n.kind == "Method" and n.name in HEAVY_SCAN_METHODS:
+                    out.add(":" + n.name)
+        return sorted(out)
 
     # --- rules
     def run(self):
@@ -887,9 +939,105 @@ class FileAnalysis:
                   self.r_reload_timers, self.r_globals, self.r_toplevel, self.r_loops, self.r_logger_level,
                   self.r_log_triggers, self.r_loggers, self.r_save_safe, self.r_while_caps, self.r_menu_exit,
                   self.r_vector_order, self.r_known, self.r_sound_query, self.r_frequent_lookups,
-                  self.r_timer_refs, self.r_ref_data_modified):
+                  self.r_timer_refs, self.r_ref_data_modified, self.r_message_repeat, self.r_text_rewrite):
             r()
         return self.findings
+
+    def r_message_repeat(self):
+        """G8: tes3.messageBox("<literal>") in a handler of an event that fires per hit or per NPC decision
+        (MESSAGE_EVENTS) shows the same text again for every hit -> at most once per messageInterval. In a
+        per-frame handler it is only reported (it is often behind a key or state check the rule can't see)."""
+        iv = self.cfg.get("messageInterval", DEFAULTS["messageInterval"])
+        try:
+            iv = max(float(iv), 0.5)
+        except (TypeError, ValueError):
+            iv = float(DEFAULTS["messageInterval"])
+        ivs = f"{iv:g}"
+        seen = set()
+        for c, ev, fn, _h, _o in self.registrations:
+            if fn is None or not (ev in MESSAGE_EVENTS or ev in PER_FRAME):
+                continue
+            for g in self.closure(fn):
+                for n in L.walk(g.body):
+                    if n.kind != "CallStat" or n.call.kind != "Call" or id(n) in seen:
+                        continue
+                    call = n.call
+                    if L.dotted(call.func) != "tes3.messageBox" or not call.args or call.args[0].kind != "String" \
+                            or any(a.kind not in ("String", "Number") for a in call.args[1:]):
+                        continue
+                    seen.add(id(n))
+                    blk = n.parent
+                    guard = blk.parent if blk is not None else None
+                    if guard is not None and guard.kind == "If" and \
+                            any("localpatch_gate(" in self.text(cl[0]) for cl in guard.clauses):
+                        continue                          # already throttled
+                    msg = self.text(call.args[0])[:50]
+                    if ev in PER_FRAME:
+                        self.add("G8", n, f"{ev} handler shows tes3.messageBox({msg}) - every frame it is reached",
+                                 "show it once per state change", "report")
+                        continue
+                    k = self._gate_next
+                    self._gate_next += 1
+                    self.add("G8", n, f"{ev} handler shows the same tes3.messageBox({msg}) for every hit",
+                             f"at most once per {ivs} s", "high",
+                             self._wrap(n, f"not localpatch_gate({k}, {ivs})", "stmt"), {"gate"})
+
+    def text_elements(self):
+        """Names / fields assigned an element from :createLabel / :createBlock anywhere in the file."""
+        out = set()
+        for n in self.nodes:
+            if n.kind == "Assign":
+                pairs = [(L.dotted(t), n.exprs[i] if i < len(n.exprs) else None) for i, t in enumerate(n.targets)]
+            elif n.kind == "Local":
+                pairs = [(nm, n.exprs[i] if i < len(n.exprs) else None) for i, nm in enumerate(n.names)]
+            else:
+                continue
+            for d, v in pairs:
+                if d and v is not None and v.kind == "Method" and v.name in TEXT_ELEMENT_CREATORS:
+                    out.add(d if isinstance(d, str) else getattr(d, "id", str(d)))
+        return out
+
+    def r_text_rewrite(self):
+        """U1: a per-frame handler setting a label's .text to a plain value (a name, a field, a literal) each
+        frame -> only when it differs. Setting .text goes to the engine's setText every time; the guard reads
+        the same property back, so the element ends up the same."""
+        elems = None
+        seen = set()
+        for c, ev, fn, _h, _o in self.registrations:
+            if ev not in PER_FRAME or fn is None:
+                continue
+            for g in self.closure(fn):
+                for n in L.walk(g.body):
+                    if n.kind != "Assign" or id(n) in seen or len(n.targets) != 1 or len(n.exprs) != 1:
+                        continue
+                    t, v = n.targets[0], n.exprs[0]
+                    if t.kind != "Index" or t.field != "text" or not self.plain_value(v):
+                        continue
+                    seen.add(id(n))
+                    if elems is None:
+                        elems = self.text_elements()
+                    obj = L.dotted(t.obj)
+                    if not obj or obj not in elems:
+                        continue
+                    tgt, val = self.text(t), self.text(v)
+                    blk = n.parent
+                    guard = blk.parent if blk is not None else None
+                    if guard is not None and guard.kind == "If" and len(blk.stats) == 1 and \
+                            any(re.sub(r"\s+", "", self.text(cl[0])) == re.sub(r"\s+", "", f"{tgt}~={val}")
+                                for cl in guard.clauses):
+                        continue                          # already only written on a change
+                    self.add("U1", n, f"{ev} handler sets {tgt} every frame", f"only when it differs: "
+                             f"if {tgt} ~= {val} then ... end", "high", self._wrap(n, f"{tgt} ~= {val}", "stmt"))
+
+    @staticmethod
+    def plain_value(v):
+        """A value reading it twice can't change: a literal, a name, or a field chain of names."""
+        if v.kind in ("String", "Number", "Name"):
+            return True
+        if v.kind == "Index":
+            return v.key.kind == "String" and FileAnalysis.plain_value(v.obj) if hasattr(v, "key") and \
+                v.key is not None else False
+        return False
 
     def r_known(self):
         """KB<n>: documented bugs that cannot be repaired from a separate Lua mod."""
@@ -994,6 +1142,8 @@ class FileAnalysis:
             if ev != "enterFrame" or fn is None or id(fn) in seen:
                 continue
             seen.add(id(fn))
+            if self.menu_guarded(fn):             # already returns in menu mode (by hand or an earlier run)
+                continue
             body = "".join(self.text(g.body) for g in self.closure(fn))
             if ui.search(body):
                 continue
@@ -1142,6 +1292,13 @@ class FileAnalysis:
             more = self.events_of_function(fn) - {ev}
             if more:
                 cls, why = "medium", why + "; also handles " + ", ".join(sorted(more))
+            scans = self.heavy_scans(fn) if cls == "medium" and not other and not more and \
+                why.startswith(("calls code it can't see", "writes game state")) else []
+            if scans:                           # G2S: the world scan is the cost; its reactions can wait 0.35 s
+                self.add("G2S", c, f"{ev} handler {name} scans the world every frame ({', '.join(scans[:3])}); "
+                         + why, f"run it at most every {self.cfg['minInterval']} s", "high",
+                         [self._gate_edit(fn)], {"gate"})
+                continue
             self.add("G2", c, f"{ev} handler {name} every frame: {why}",
                      f"run it at most every {self.cfg['minInterval']} s", cls, [self._gate_edit(fn)], {"gate"})
 
@@ -3220,7 +3377,8 @@ KNOWN_BUGS += [
      "    local hit = rayTarget()\n", KP2),
 ]
 
-KP3 = ("refreshCell runs every checkInterval (3 s) over every reference of every active cell and normalises each "
+KP3 = ("refreshCell runs at every refresh (once a second as shipped) over every reference of every active cell and "
+       "normalises each "
        "one's mesh path with lower() and two gsub()s; the same path always gives the same answer, so it is worked "
        "out once per path")
 KNOWN_BUGS += [
