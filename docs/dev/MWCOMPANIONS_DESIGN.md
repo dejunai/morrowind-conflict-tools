@@ -129,14 +129,12 @@ teleport) that is still on.
 
 ## 6. Credits
 
-mwcompanions is by dejunai. It borrows ideas from, and works with, the mods below. The same list is on the Credits page of its MCM.
+mwcompanions is by dejunai. It borrows ideas from the mods below. The same list is on the Credits page of its MCM.
 
 | Idea | Source mod | Author | Link |
 |---|---|---|---|
 | Follower rules, warping and moving with you through doors, levitation and water walking, follower traits, no friendly fire, collapse instead of death, companions joining fights, quiet followers after a cell change, no activating a follower while sneaking | Smart Companions | abot | <https://www.nexusmods.com/morrowind/mods/49848> |
 | Warping followers who fall behind or are left in another cell; the ignore list of actors that are never followers (imported once) | Easy Escort | NullCascade | <https://www.nexusmods.com/morrowind/mods/45712> |
-| Arc placement behind the player, the crash-safe `companion` read, recognizing its recruits | Attend Me Expanded MWSE | drekar51 (MWSE port of Attend Me by urm) | <https://www.nexusmods.com/morrowind/mods/60810> |
-| The follower HUD and teleport idea ported by the MWSE version | Attend Me (OpenMW) | urm (uramer) | <https://www.nexusmods.com/morrowind/mods/51232> |
-| Guards on a temporary follow are not followers (interop) | More Attentive Guards | Celediel | <https://www.nexusmods.com/morrowind/mods/48622> |
+| Spreading warped followers in an arc behind you, and reading the companion variable safely so it cannot crash the game | Attend Me Expanded MWSE | drekar51 (MWSE port of Attend Me by urm) | <https://www.nexusmods.com/morrowind/mods/60810> |
 
 The escort self-defense and escort protection options are our own additions (not taken from these mods).

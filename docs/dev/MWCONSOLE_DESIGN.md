@@ -4,7 +4,7 @@ mwconsole is by dejunai (part of the mwsuite). It gives the console commands, Ta
 
 ## Credits
 
-It borrows ideas from, and works with, the mods below. No code from them is used. The same list is on the Credits page of its MCM.
+It borrows ideas from the mods below. No code from the third-party mods is used. The same list is on the Credits page of its MCM.
 
 | Idea | Source mod | Author | Link |
 |---|---|---|---|
@@ -12,4 +12,4 @@ It borrows ideas from, and works with, the mods below. No code from them is used
 | Context-aware suggestions and Tab completion | Blue - Smart Console | Safebox | <https://www.nexusmods.com/morrowind/mods/53427> |
 | Quick keys for ResetActors, ToggleCollision and ToggleMenus | Easy Console Commands | TribalLu | <https://www.nexusmods.com/morrowind/mods/54855> |
 | Details of the selected object shown beside the console | Selection Details | NullCascade | <https://www.nexusmods.com/morrowind/mods/51095> |
-| The Lua console the completion, mode keys and panel attach to | UI Expansion | NullCascade and Hrnchamd | <https://www.nexusmods.com/morrowind/mods/46071> |
+| The effect inspector (showeffects, cleareffects and the in-game window), now part of mwconsole | mweffectinspector | dej (dejunai) | |

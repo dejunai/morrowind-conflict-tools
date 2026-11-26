@@ -109,14 +109,23 @@ assert(#opened == 1 and opened[1] == tes3.player, "opens the details window on t
 ''')
 
 
-def test_nothing_mentions_mweffectinspector():
+def test_settings_do_not_treat_mweffectinspector_as_installed():
+    """The Credits page may name the retired mweffectinspector; settings and actions must not."""
     run_lua(r'''
+local skip = { createPage = true, createCategory = true, createInfo = true, createHyperlink = true }
+local named
 for _, c in ipairs(components) do
-    for _, key in ipairs({ "label", "description", "text", "buttonText" }) do
-        local v = c.data[key]
-        assert(type(v) ~= "string" or not v:lower():find("mweffectinspector", 1, true), c.kind .. " " .. tostring(v))
+    if c.kind == "createCategory" and type(c.data.label) == "string" and c.data.label:find("mweffectinspector", 1, true) then
+        named = true
+    end
+    if not skip[c.kind] then
+        for _, key in ipairs({ "label", "description", "text", "buttonText" }) do
+            local v = c.data[key]
+            assert(type(v) ~= "string" or not v:lower():find("mweffectinspector", 1, true), c.kind .. " " .. tostring(v))
+        end
     end
 end
+assert(named, "Credits should name mweffectinspector")
 ''')
 
 
