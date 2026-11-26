@@ -1,6 +1,6 @@
 # Morrowind Conflict Tools: Comprehensive Architecture & Function Reference (MORE_INFO.md)
 
-This document provides a low-level architectural analysis of the **Morrowind Conflict Tools** suite. It covers all 36 Python modules, describes how the major subsystems operate, lists the command-line switches that trigger them, and documents concrete empirical fix examples drawn from the historical fix archive (`fixes.archive.txt`), the active fix log (`mwdialog_fixes.log`), and third-party MWSE Lua repair records (`LUA_MOD_BUGS.md`). Function names in the tables are the real entry points in the current code. Helper functions and internal scanners are omitted. The tools are by dej (dejunai).
+This document provides a low-level architectural analysis of the **Morrowind Conflict Tools** suite. It covers all 36 Python modules, describes how the major subsystems operate, lists the command-line switches that trigger them, and documents concrete empirical fix examples drawn from the historical fix archive (`fixes.archive.txt`), the active fix log (`mwdialog_fixes.log`), and third-party MWSE Lua repair records (`docs/dev/LUA_MOD_BUGS.md` in the repository). Function names in the tables are the real entry points in the current code. Helper functions and internal scanners are omitted. The tools are by dej (dejunai).
 
 ---
 

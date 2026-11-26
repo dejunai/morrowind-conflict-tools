@@ -653,5 +653,5 @@ KB18 (the WBSR save-block conflict stays in `mwsaveguard.wbsr_bard`).
 * **Logic (`KB49`)**: Animated Dialogue's pose blender blends the root bones and flips the actor 180 degrees
   against the engine's facing when dialogue ends.
 
-The catalog in MORE_INFO.md lists each rule and the exact relative `Data Files\MWSE` paths. First-party
+The catalog in docs/MORE_INFO.md lists each rule and the exact relative `Data Files\MWSE` paths. First-party
 mwsuite files are never patched: their names live in `lua tools\MWSE\mods\mwsuite\ownmods.json`.

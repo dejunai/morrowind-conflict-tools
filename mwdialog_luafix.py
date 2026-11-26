@@ -2,7 +2,7 @@
 """mwdialog_luafix.py - find and patch bad habits in MWSE Lua mods that pass a syntax check.
 
 Each .lua file under an MWSE\\mods folder is parsed (mwdialog_lua.py: a real Lua tokenizer and parser, not
-regexes) and checked against the rules of "# Morrowind MWSE Lua Debugging & Repair Guide.MD" plus a few the
+regexes) and checked against the rules of the MWSE Lua guide (docs/LUA-DEBUGGING.md) plus a few the
 guide implies. Every finding has a confidence: "high" ones are patched by --apply, "medium" ones only with
 --level medium, the rest are only reported. A patch is a few token-span edits; nothing else in the file
 changes (encoding, line endings and every line number stay the same: helpers go at the start of line 1).

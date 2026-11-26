@@ -7,7 +7,7 @@
 #   exclude <glob>                  never ship these (an exclude always wins over an include)
 # Globs: '*' stays inside one folder, '**' crosses folders ("lua tools/**" is everything below "lua tools").
 # deploy.py also refuses on its own, whatever this file says: tests, .git and CI files, deploy.py and its
-# deploy.ini/manifest, sync.py, audits, backups and personal notes (see NEVER in deploy.py).
+# deploy.ini/manifest, sync.py, audits, backups, docs/dev and personal notes (see NEVER in deploy.py).
 
 # The tools: the Python modules and launchers at the project root
 include *.py
@@ -20,7 +20,7 @@ exclude lua tools/**/MWSE/core/**       # MWSE's own core files are never ours t
 
 include tools/**
 
-# Docs: the target keeps them in docs\
+# Docs: the target keeps them in docs\ (README.md stays at the project root for GitHub)
 include docs/**
+exclude docs/dev/**                     # design notes, TODO and the Lua repair log: development only
 include README.md => docs/README.md
-include MORE_INFO.md => docs/MORE_INFO.md

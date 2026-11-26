@@ -15,7 +15,7 @@ DEPLOY = os.path.join(SRC, "deploy.py")
 pytestmark = pytest.mark.skipif(not os.path.isfile(DEPLOY) or shutil.which("git") is None,
                                 reason="deploy.py is not vendored here (MWManager), or git is missing")
 DEV = ("tests/", "diag/", ".git", ".github/", "deploy.py", "deploy.ini", "deploy_manifest.txt", "sync.py",
-       "agents.md", "_backup/", "backups/")
+       "agents.md", "_backup/", "backups/", "docs/dev/")
 
 
 def load():
@@ -47,8 +47,8 @@ def proj(tmp_path):
     shutil.copyfile(DEPLOY, str(p / "deploy.py"))
     shutil.copyfile(os.path.join(SRC, "deploy_manifest.txt"), str(p / "deploy_manifest.txt"))
     for rel, data in {"vortex_tidy.py": "print(1)\n", "mwdialog_x.py": "x = 1\n", "tidy.bat": "@echo off\n",
-                      "Play Morrowind.bat": "@echo off\n", "README.md": "# readme\n", "MORE_INFO.md": "more\n",
-                      "CHANGES.md": "c\n", "LUA_EDIT_AUDIT.md": "audit\n", "AGENTS.md": "a\n", "sync.py": "s\n",
+                      "Play Morrowind.bat": "@echo off\n", "README.md": "# readme\n", "docs/MORE_INFO.md": "more\n",
+                      "docs/CHANGES.md": "c\n", "docs/dev/TODO.md": "todo\n", "LUA_EDIT_AUDIT.md": "audit\n", "AGENTS.md": "a\n", "sync.py": "s\n",
                       "docs/OFF-LAYOUT.md": "off\n", "tests/test_a.py": "def test(): pass\n",
                       "tests/fixtures/f.lua": "--\n", "diag/d.py": "d\n", ".gitignore": "deploy.ini\n",
                       ".github/workflows/ci.yml": "on: push\n",
@@ -86,14 +86,15 @@ def test_the_real_manifest_ships_no_test_or_dev_file():
     assert bad == [], bad
     assert not any("/mwse/core/" in d.lower() for _r, d in files)
     dests = {d for _r, d in files}
-    assert {"vortex_tidy.py", "mwdialog_check.py", "docs/README.md", "docs/MORE_INFO.md"} <= dests
+    assert {"vortex_tidy.py", "mwdialog_check.py", "docs/README.md", "docs/MORE_INFO.md", "docs/CHANGES.md"} <= dests
+    assert not any(d.lower().startswith("docs/dev/") for d in dests)       # dev notes stay in the repository
 
 
 def test_rules_in_the_manifest_cannot_ship_a_never_file(tmp_path):
     dep = load()
     rules = [("include", "**", None)]
     tracked = ["tests/test_x.py", "a/tests/b.py", ".gitignore", ".github/x.yml", "deploy.py", "sync.py",
-               "CODEX_AUDIT-1.MD", "_backup/n.txt", "backups/b.zip", "mwdialog_x.py"]
+               "CODEX_AUDIT-1.MD", "_backup/n.txt", "backups/b.zip", "docs/dev/TODO.md", "mwdialog_x.py"]
     assert [d for _r, d in dep.ship_list(tracked, rules)] == ["mwdialog_x.py"]
 
 
@@ -103,7 +104,7 @@ def test_a_deploy_ships_the_manifest_set_and_nothing_dev(proj, capsys):
     assert run(dep, p, str(target), "--backups", str(backups)) == 0
     got = tree(target)
     assert set(got) == {"vortex_tidy.py", "mwdialog_x.py", "tidy.bat", "docs/README.md", "docs/MORE_INFO.md",
-                        "docs/OFF-LAYOUT.md", "lua tools/MWSE/mods/mwsuite/mwguard/main.lua",
+                        "docs/CHANGES.md", "docs/OFF-LAYOUT.md", "lua tools/MWSE/mods/mwsuite/mwguard/main.lua",
                         "lua tools/mwsuite-metadata.toml", "tools/luajit/luajit.exe"}
     assert not [r for r in got if is_dev(r)]                              # the deployed tree has no test/dev file
     assert got["docs/README.md"] == b"# readme\n"

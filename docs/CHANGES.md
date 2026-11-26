@@ -1,3 +1,16 @@
+# Release tidy: docs in docs\, dev notes in docs\dev\, no generated files in the checkout (2026-11-26)
+
+- Docs moved with their history: `MORE_INFO.md` and this file to `docs/`; the Lua guide
+  (`# Morrowind MWSE Lua Debugging & Repair Guide.MD`) renamed to `docs/LUA-DEBUGGING.md`; the design notes, TODO,
+  mwsuite resume notes and the third-party Lua repair log to `docs/dev/` (never shipped: `deploy_manifest.txt`
+  excludes it and deploy.py refuses it). `README.md`, `LICENSE` and `AGENTS.md` stay at the root. Links updated.
+- Out of the repository (kept in a dated backups folder with a MANIFEST.txt and RESTORE.ps1): `LUA_EDIT_AUDIT.md`,
+  `MWDIALOG_REFACTOR.md`, `MWDIALOG_REFACTOR2.md`, `RESUME.md`, `WIKI_PLUGIN_MANAGEMENT_SUITE.md`, and the
+  per-install records, caches and lock the tools had written into the checkout (all already in `.gitignore`).
+- deploy.py ships `docs/**` minus `docs/dev/**`, so `docs/CHANGES.md` and `docs/LUA-DEBUGGING.md` now ship too.
+  The stand-in models ("dummy assets") are still never in the repository: each is copied out of the player's
+  Morrowind.bsa when first needed (`mwdialog_media.dummy_path`), placeholder icons and sounds are made at run time.
+
 # Audit 2026-11-26: recoverable conversions, apply bound to the converter preview, partial API shown; deploy.py (2026-11-26)
 
 - Recovery intent: before omw2mwse writes anything, `--apply` records `vortex_tidy_journal_intent.json` beside the
