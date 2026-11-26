@@ -40,7 +40,8 @@ Active Plugin Status:
   • Party Alchemy: %s
   • Keg Drip: %s
   • Essential Indicators: %s
-  • Magican't: %s]],
+  • Magican't: %s
+  • Ahead of the Classes: %s]],
     config.isMcaActive() and "Active" or "Not Active",
     config.isEbonheartUnderworksActive() and "Active" or "Not Active",
     config.isPAndSActive() and "Active" or "Not Active",
@@ -56,7 +57,8 @@ Active Plugin Status:
     config.isPartyAlchemyInstalled() and "Active" or "Not Active",
     config.isKegDripInstalled() and "Active" or "Not Active",
     config.isEssentialIndicatorsInstalled() and "Active" or "Not Active",
-    config.isMagicantInstalled() and "Active" or "Not Active"),
+    config.isMagicantInstalled() and "Active" or "Not Active",
+    config.isAheadOfTheClassesInstalled() and "Active" or "Not Active"),
 })
 
 -- SECTION 1: FRIENDS & FRENS (JIUB COMPANION DELAY)
@@ -439,6 +441,19 @@ magicantCategory:createYesNoButton({
         .. "the magic menu the bar updates when the menu closes. Its files are not edited. Off unless Magican't is "
         .. "installed. Needs a restart.",
     variable = mwse.mcm.createTableVariable({ id = "magicantMenuGuardEnabled", table = config }),
+})
+
+local aotcCategory = page:createCategory(string.format("Ahead of the Classes: Starting Gear%s",
+    getStatusText(config.isAheadOfTheClassesInstalled())))
+
+aotcCategory:createYesNoButton({
+    label = "Equip One Item Per Slot",
+    description = "When a new game leaves character creation, Ahead of the Classes adds your class gear and then tries to "
+        .. "equip every armor, weapon and clothing item it finds, over and over as the inventory changes, so items for the "
+        .. "same slot swap in and out. With this on, each slot gets at most one item: a slot that is already filled is left "
+        .. "alone. Adding the gear is unchanged, you can equip anything yourself afterwards, and its files are not edited. "
+        .. "Off unless Ahead of the Classes is installed. Needs a restart.",
+    variable = mwse.mcm.createTableVariable({ id = "aotcEquipOnceEnabled", table = config }),
 })
 
 local voicesCategory = page:createCategory(string.format("Voices of Vvardenfell: Console%s",

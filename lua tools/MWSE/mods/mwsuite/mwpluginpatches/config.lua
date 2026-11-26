@@ -105,7 +105,7 @@ function config.isMwcaConsumerActive()
     )) or false
 end
 
--- Intercepts for tweaks that used to be hand edits (patches/: wtsMetadataLog, partyAlchemyModuleBox, kegDripCadence, essentialAttackerFilter, magicantMenuGuard). These run when
+-- Intercepts for tweaks that used to be hand edits (patches/: wtsMetadataLog, partyAlchemyModuleBox, kegDripCadence, essentialAttackerFilter, magicantMenuGuard, aheadOfTheClassesEquip). These run when
 -- mwpluginpatches loads, before the load order is readable, so they look for the mod's own Lua file.
 function config.isWatchTheSkiesInstalled()
     return (lfs and lfs.fileexists and lfs.fileexists("Data Files/MWSE/mods/tew/Watch the Skies/util.lua")) or false
@@ -125,6 +125,10 @@ end
 
 function config.isMagicantInstalled()
     return (lfs and lfs.fileexists and lfs.fileexists("Data Files/MWSE/mods/tew/Magican't/main.lua")) or false
+end
+
+function config.isAheadOfTheClassesInstalled()
+    return (lfs and lfs.fileexists and lfs.fileexists("Data Files/MWSE/mods/Danae/Classes/main.lua")) or false
 end
 
 local function getDynamicDefaults()
@@ -236,6 +240,9 @@ local function getDynamicDefaults()
         kegDripIntervalSeconds = 3,
         essentialAttackerFilterEnabled = config.isEssentialIndicatorsInstalled(),
         magicantMenuGuardEnabled = config.isMagicantInstalled(),
+
+        -- Ahead of the Classes: its post-chargen equip pass fills each slot with at most one item
+        aotcEquipOnceEnabled = config.isAheadOfTheClassesInstalled(),
     }
 end
 

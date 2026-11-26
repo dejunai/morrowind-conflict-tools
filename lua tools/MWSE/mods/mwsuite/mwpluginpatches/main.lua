@@ -21,6 +21,7 @@ local partyAlchemyModuleBox = require("mwpluginpatches.patches.partyAlchemyModul
 local kegDripCadence = require("mwpluginpatches.patches.kegDripCadence")
 local essentialAttackerFilter = require("mwpluginpatches.patches.essentialAttackerFilter")
 local magicantMenuGuard = require("mwpluginpatches.patches.magicantMenuGuard")
+local aheadOfTheClassesEquip = require("mwpluginpatches.patches.aheadOfTheClassesEquip")
 
 -- OAAB and Garden of Dreams call include("MWCA.interop") at file scope when their
 -- main.lua is loaded. That is after this file (load-priority 4500) and before
@@ -110,6 +111,10 @@ local function onInitialized()
     end
     if config.personalEffectsEnabled and config.isPersonalEffectsActive() then
         personalEffects.init()
+    end
+    if config.aotcEquipOnceEnabled and config.isAheadOfTheClassesInstalled() then
+        local ok, err = pcall(aheadOfTheClassesEquip.init)
+        if not ok then mwse.log("[mwpluginpatches] Ahead of the Classes intercept failed to start: %s", tostring(err)) end
     end
 
     mwse.log("[mwpluginpatches] Unified plugin compatibility patches initialized.")
