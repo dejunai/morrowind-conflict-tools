@@ -9,7 +9,8 @@
   (https://github.com/dejunai/openmw-mwse) as experimental, in early development and private for now, and keep it
   apart from tidy's own `.omwaddon` / `Off\OpenMW\` handling.
 - `--cell-conflicts`: the `[7]` / `[8]` "<plugin> always loses" choices, the tool-managed
-  `mwdialog_check.conflict.blacklist.txt` (remove a plugin by hand), and `mwdialog_incompatible_losers.txt` (holds
+  `mwdialog_check.conflict.blacklist.txt` (made by the first pick, with `OAAB_Saplings.esm` built in; reading never
+  makes it; remove a plugin by hand), and `mwdialog_incompatible_losers.txt` (holds
   while the winner is active, lapses when it is gone).
 - `--play`: the lua tools deploy is described by SHA-256 lineage (`generated\mwdialog_lua_manifest.json`, up to 16
   earlier hashes per file), with file times only for content no record knows. It said older / newer by time before.

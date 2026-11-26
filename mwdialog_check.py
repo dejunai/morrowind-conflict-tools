@@ -102,7 +102,7 @@ from mwdialog_records import (  # noqa: E402,F401
     rewrite_cell_refs, SPEAKER_SUBS, split_cell, unresolved_refs,
     late_scales, misplaced_duplicates, drop_cell_refs, deleted_refs_cell)
 from mwdialog_state import (  # noqa: E402,F401
-    add_conflict_blacklist, add_incompatible_loser, ADDED_MASTERS_RECORD, CELL_WINNER_PATCH, CELL_WINNERS_FILE, CONFLICT_ANSWERS_FILE, CONFLICT_BLACKLIST_DEFAULT, CONFLICT_BLACKLIST_FILE, CONFLICT_BLACKLIST_HEADER, CONFLICT_BLACKLIST_MARK,
+    add_conflict_blacklist, add_incompatible_loser, ADDED_MASTERS_RECORD, CELL_WINNER_PATCH, CELL_WINNERS_FILE, CONFLICT_ANSWERS_FILE, CONFLICT_BLACKLIST_BUILTIN, CONFLICT_BLACKLIST_FILE, CONFLICT_BLACKLIST_HEADER, CONFLICT_BLACKLIST_MARK,
     conflict_blacklisted, INCOMPATIBLE_LOSERS_FILE, migrate_conflict_blacklist, read_incompatible_losers,
     CONFLICT_RULE_NOTE, CONFLICT_RULES_HEADER, DISABLED_RECORD, mark_merge_rebuild, MERGE_REBUILD_RECORD, MERGE_RECORD, merged_away,
     NORMAL_MAP_RE, note_promoted_rules, PROMOTED_END, PROMOTED_START, read_added_masters, read_cell_winners, read_conflict_answers,
@@ -5282,8 +5282,7 @@ def run_cell_conflicts(args, plugins, collect=False, incompatible_only=False, au
     skip = {x.lower() for x in OUR_PATCHES} | {CELL_WINNER_PATCH.lower()}
     if not incompatible_only and not getattr(args, "only_incompatible", False):
         skip.add(AUTO_MERGE_NAME.lower())
-    black = read_conflict_blacklist(os.path.dirname(os.path.abspath(args.data_dir)),
-                                    migrate=not getattr(args, "dry_run", False))
+    black = read_conflict_blacklist(os.path.dirname(os.path.abspath(args.data_dir)))
     left_out = [n for n, _p in plugins if conflict_blacklisted(n, black)]
     # still read: they load in game, so what they move or delete counts for mwfloatfix and mwcollide
     quiet = {n.lower() for n in left_out}
@@ -8880,8 +8879,7 @@ def compute_order(plugins, rule_sets, current_order):
     # Hard rule: plugins in the conflict blacklist always lose: each loads as early as its masters allow
     # (an .esm among the .esm files, an .esp right after them / the ESM fixes patch)
     try:
-        black = read_conflict_blacklist(os.path.dirname(os.path.dirname(os.path.abspath(plugins[0][1]))), create=False,
-                                        migrate=False)
+        black = read_conflict_blacklist(os.path.dirname(os.path.dirname(os.path.abspath(plugins[0][1]))))
     except (IndexError, OSError):
         black = []
     if black:

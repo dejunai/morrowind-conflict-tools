@@ -203,7 +203,7 @@ CONFLICT_BLACKLIST_HEADER = """; mwdialog_check.conflict.blacklist.txt - GENERAT
 ; it must load after the mods it patches.
 """
 
-CONFLICT_BLACKLIST_DEFAULT = CONFLICT_BLACKLIST_HEADER + "OAAB_Saplings.esm\n"
+CONFLICT_BLACKLIST_BUILTIN = ("OAAB_Saplings.esm",)   # always lose, listed or not; written into the file when it is first made
 
 
 def _conflict_blacklist_write(path, text):
@@ -234,38 +234,36 @@ def migrate_conflict_blacklist(path):
     return True
 
 
-def read_conflict_blacklist(game_dir, create=True, migrate=True):
-    """Lowercase patterns from mwdialog_check.conflict.blacklist.txt (made with the defaults the first time; a
-    hand-written one is converted to the generated form once, backed up first)."""
+def read_conflict_blacklist(game_dir):
+    """Lowercase patterns of the plugins that always lose: the built-in ones, then the lines of
+    mwdialog_check.conflict.blacklist.txt. Only reads: a missing file is not made (the first "always loses"
+    choice makes it), and a hand-written one is left as it is."""
     path = MP.state_path(game_dir, CONFLICT_BLACKLIST_FILE)
-    if not os.path.exists(path):
-        if not create:
-            return []
-        try:
-            _conflict_blacklist_write(path, CONFLICT_BLACKLIST_DEFAULT)
-        except OSError:
-            return []
-    elif migrate:
-        try:
-            migrate_conflict_blacklist(path)
-        except OSError:
-            pass                                    # still readable as it is
-    out = []
-    for line in open(path, encoding="cp1252", errors="replace"):
-        line = line.split(";", 1)[0].strip()
-        if line:
-            out.append(line.lower())
+    out = [n.lower() for n in CONFLICT_BLACKLIST_BUILTIN]
+    try:
+        with open(path, encoding="cp1252", errors="replace") as f:
+            for line in f:
+                line = line.split(";", 1)[0].strip()
+                if line and line.lower() not in out:
+                    out.append(line.lower())
+    except OSError:
+        pass
     return out
 
 
 def add_conflict_blacklist(game_dir, name, note=""):
-    """Make plugin `name` always lose its cell conflicts: one line appended to the generated file (made, or
-    converted from a hand-written one, first). False when it is already covered by an entry. An OSError is raised
-    when the file can't be written."""
+    """Make plugin `name` always lose its cell conflicts: one line appended to the generated file. The file is
+    made here, the first time (the header, the built-in entries, then this one); a hand-written one is converted
+    to the generated form first, backed up. False when an entry (or a built-in one) already covers the plugin and
+    nothing is written. An OSError is raised when the file can't be written."""
     path = MP.state_path(game_dir, CONFLICT_BLACKLIST_FILE)
     if conflict_blacklisted(name, read_conflict_blacklist(game_dir)):
         return False
-    text = _conflict_blacklist_text(path)
+    if os.path.exists(path):
+        migrate_conflict_blacklist(path)
+        text = _conflict_blacklist_text(path)
+    else:
+        text = CONFLICT_BLACKLIST_HEADER + "".join(f"{n}  ; built in\n" for n in CONFLICT_BLACKLIST_BUILTIN)
     entry = name.replace("[", "[[]")                # a name is matched as a pattern: [ is not a wildcard here
     stamp = time.strftime("%Y-%m-%d %H:%M")
     why = f"; always loses: chosen in --cell-conflicts {stamp}" + (f" ({note})" if note else "")
