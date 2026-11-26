@@ -1,3 +1,10 @@
+# docs/dev: pre-implementation design notes removed (2026-11-26)
+
+- Removed `docs/dev/MWCRIMINAL_DESIGN.md`, `MWCOMPANIONS_DESIGN.md` and `MWCONSOLE_DESIGN.md`: notes written before the
+  code, not for users. The credits stay on each mod's MCM Credits page. `test_mwsuite_credits.py` no longer reads them
+  (`test_doc_credits_list_every_mcm_entry` removed; the MCM Credits and self-credit tests are unchanged).
+  `docs/dev/LUA_MOD_BUGS.md`, `LUAFIX_KP_HANDOFF.md` and `TODO.md` stay.
+
 # luafix: general rules first, Known Bugs only where no rule matches; KP1-KP4 removed (2026-11-26)
 
 - Rule order: the general rules run before the Known Bugs table. A Known Bugs part whose text a high-confidence rule

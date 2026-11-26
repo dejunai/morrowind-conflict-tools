@@ -1,6 +1,6 @@
 """mwcriminal, mwconsole and mwcompanions credit the mods they borrow ideas from: a Credits page in each MCM
-(source mod, author and a link when the original has a public page) and a Credits section in the mod's design
-doc. Self-credits (suite mods by dejunai) may have no link. Compatibility and interop alone are not credited."""
+(source mod, author and a link when the original has a public page). Self-credits (suite mods by dejunai)
+may have no link. Compatibility and interop alone are not credited."""
 import re
 from pathlib import Path
 
@@ -8,12 +8,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 MODS = ROOT / "lua tools" / "MWSE" / "mods" / "mwsuite"
-DOCS = ROOT / "docs" / "dev"
-CASES = [
-    ("mwcriminal", "MWCRIMINAL_DESIGN.md"),
-    ("mwcompanions", "MWCOMPANIONS_DESIGN.md"),
-    ("mwconsole", "MWCONSOLE_DESIGN.md"),
-]
+CASES = ["mwcriminal", "mwcompanions", "mwconsole"]
 URL = re.compile(r'url = "(https://www\.nexusmods\.com/morrowind/mods/\d+)"')
 ENTRY = re.compile(
     r'\{ mod = "([^"]+)", author = "([^"]+)",\s*idea = "([^"]+)"(?:,\s*url = "([^"]+)")? \}'
@@ -40,8 +35,8 @@ def read(path):
     return path.read_text(encoding="utf-8")
 
 
-@pytest.mark.parametrize("mod,doc", CASES)
-def test_mcm_has_a_credits_page(mod, doc):
+@pytest.mark.parametrize("mod", CASES)
+def test_mcm_has_a_credits_page(mod):
     mcm = read(MODS / mod / "mcm.lua")
     assert 'createPage({ label = "Credits" })' in mcm
     entries = ENTRY.findall(mcm)
@@ -64,20 +59,6 @@ def test_mcm_has_a_credits_page(mod, doc):
     if linked:
         assert "createHyperlink" in mcm
     assert "by dejunai" in mcm
-
-
-@pytest.mark.parametrize("mod,doc", CASES)
-def test_doc_credits_list_every_mcm_entry(mod, doc):
-    mcm = read(MODS / mod / "mcm.lua")
-    text = read(DOCS / doc)
-    assert "## " in text and "Credits" in text
-    credits = text[text.index("Credits"):]
-    for gone in REMOVED:
-        assert gone not in credits, (mod, gone)
-    for name, author, _idea, url in ENTRY.findall(mcm):
-        if url:
-            assert url in credits, (mod, url)
-        assert name in credits and author.split(" (")[0] in credits, (mod, name)
 
 
 def test_self_credits_dej_confirmed():
