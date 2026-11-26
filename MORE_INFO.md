@@ -372,6 +372,34 @@ luafix reads, in order (later wins): its built-in defaults, `Data Files\MWSE\con
 
 The syntax checker is found in this order: `--luajit`, `tools\luajit\luajit.exe` (game folder, then the scripts' folder), `luajit` / `luac5.1` / `luac` on PATH, then the `lupa` Python package. With none, nothing is patched (`--apply` exits 2) unless `--no-syntax-check`. Each run also writes `generated\mwdialog_luafix_known_bugs.txt` (every KnownBugs fingerprint found: DETECTED / patched / NOT PATCHED); `--json` writes the findings as JSON, `--diff` prints each patch, `--all` also lists what was left alone on purpose.
 
+### Core-only entry point (`--core-only`)
+
+For a caller that only wants MWSE's own core files repaired (MWManager runs it after `MWSE-Update.exe`, and before `--play`), `apply_core_known_bugs(data_dir, dry_run=False, *, game_dir=None, cfg=None, checker=<auto>, no_syntax_check=False, journal=None, backup_root=None)` returns a list of `CoreResult`, one per core file a KnownBugs rule names (`known_core_files()`: KB3/KB4 on `core\mcm\components\pages\exclusionspage.lua` today). It reads and patches nothing else and writes no plan file. `core_data_dir(path)` finds `Data Files` from the Morrowind folder or from `Data Files` itself. Importing the module has no side effects, and every path is an argument.
+
+A write goes through `apply_report`, so it is the same as `--apply`: the original is copied to `backups\luafix\<run>\` first, the journal line carries the before/after SHA-1, a file that changed since it was checked is refused, the patched text must pass the syntax checker (no checker: refused, unless `--no-syntax-check`), and `--undo` puts the run back. The journal's run line also carries `"core_only": true` and `"entry"` (the run's folder name), which is the `journal_entry` of each written file.
+
+| `status` | Meaning |
+| :--- | :--- |
+| `applied` | Patched (with `dry_run`: would be; `written` says which). |
+| `already-patched` | Our header (`--[[localpatch N: KB3 KB4]]`) is at the top and no fingerprint is left. |
+| `no-match` | No fingerprint and no header: MWSE fixed or changed the file. |
+| `partial` | A rule that applies whole or not at all (KB4) matches only some of its parts. Nothing is written, not even the rules that do match. `parts_matched` / `parts_total` count the parts of every rule on the file. |
+| `refused` | Nothing written; `reason` says why (file not found, no syntax checker, the checker rejects the patch, the file changed after it was checked, an I/O error). |
+
+`--core-only [FOLDER] [--dry-run] [--json FILE|-] [--luajit EXE] [--no-syntax-check]` prints a summary and exits `0` (every file applied, already patched or no match), `1` (lock held), `2` (any file refused; wins over partial), `3` (partial, none refused) or `4` (no such folder); a bad option combination exits `2` like any argparse error. `--json -` prints only the JSON on stdout (the summary goes to stderr):
+
+```json
+{"tool": "mwdialog_luafix", "mode": "core-only", "version": 5, "dry_run": false, "data_dir": "<Data Files>", "journal": "<journal path>", "exit_code": 0,
+ "counts": {"applied": 1, "already-patched": 0, "no-match": 0, "partial": 0, "refused": 0},
+ "files": [{"path": "<Data Files>\\MWSE\\core\\mcm\\components\\pages\\exclusionspage.lua", "rel": "core/mcm/components/pages/exclusionspage.lua",
+   "kb_ids": ["KB3", "KB4"], "status": "applied", "parts_matched": 4, "parts_total": 4, "reason": "patched KB3, KB4",
+   "journal_entry": "20261125-190000", "dry_run": false, "written": true, "backup": "<backup folder>\\...\\exclusionspage.lua",
+   "sha1_before": "e059dc3c...", "sha1_after": "eda5739b...",
+   "kbs": [{"kb": "KB3", "state": "matches", "parts_matched": 1, "parts_total": 1}, {"kb": "KB4", "state": "matches", "parts_matched": 3, "parts_total": 3}]}]}
+```
+
+A rule's `state` is `matches`, `partial`, `already-patched`, `no-match` or `skipped` (listed in `skipKnown`). A write takes the same two locks as `--apply`; a dry run takes none.
+
 ### Targeted frame-drain (KP) and reference-safety (KR) patches
 
 Applied like the KB patches (exact text, whole or not at all, same header and checks), labelled `(Known Perf)` and `(Ref Safety)` in the report. They are on by default; to leave one out, list its id in `"skipKnown"` (in `mwguard.json`'s `"luafix"` section or `mwdialog_luafix.json`), for example `"skipKnown": ["KP2"]`: it is then reported as not applied.
@@ -391,6 +419,7 @@ Applied like the KB patches (exact text, whole or not at all, same header and ch
 | :--- | :--- | :--- | :--- | :--- |
 | `check_paths` | *(default)* | `mwdialog_luafix.py` | Scans Lua scripts, parses ASTs, checks rules and KnownBugs, and feeds the plan written as `plans\mwdialog_luafix_plan.txt`. | Generated a Lua plan flagging nil guards and KnownBug patches |
 | `apply_report` | `--apply` | `mwdialog_luafix.py` | Enacts planned Lua patches; refuses a file whose content hash changed since it was checked; the original goes to `backups\luafix\<run>\` and every write is journaled (`generated\mwdialog_luafix_journal.jsonl`, with before/after hashes). | Patched `MWSE\core\mcm\components\pages\exclusionspage.lua` with KB4 |
+| `apply_core_known_bugs` | `--core-only` | `mwdialog_luafix.py` | Checks and patches only the MWSE core files a KnownBugs rule names (KB3/KB4), with no plan file, through the same backup, journal, hash check and `--undo` as `apply_report`; returns one `CoreResult` (status `applied` / `already-patched` / `no-match` / `partial` / `refused`) per file. `--dry-run` writes nothing. | MWManager re-applied KB3/KB4 after `MWSE-Update.exe` |
 | `undo` | `--undo` | `mwdialog_luafix.py` | Restores the files the last `--apply` patched, from the journal (the plan file plays no part). A file changed since it was patched is left unless `--force`. | Reverted an experimental Lua patch |
 | `tokenize` | *(internal)* | `mwdialog_lua.py` | Lexical scanner producing Lua 5.1/LuaJIT tokens, comments, and literals. | Tokenized a large UI Expansion module |
 | `parse` | *(internal)* | `mwdialog_lua.py` | Recursive-descent parser generating the Abstract Syntax Tree. | Constructed the AST for a patched script |
@@ -576,6 +605,7 @@ In the game: `Data Files\MWSE\config\` gets the suite's data files (section 13);
 | `mwdialog_check` | 3 | `--play` refused because of masters |
 | `vortex_tidy` | 0 / 1 / 2 | Done / busy lock, nothing to undo, `--undo` refused (an original missing or altered, a file changed since) or items left in the journal, or actions left unapplied / no plan, plan mismatch, staging folder not found |
 | `mwdialog_luafix` | 0 / 1 / 2 | Done / busy lock or nothing to undo / no plan, plan mismatch, or no syntax checker for `--apply` |
+| `mwdialog_luafix --core-only` | 0 / 1 / 2 / 3 / 4 | Done (applied, already patched or no match) / busy lock / a file refused / partial match, nothing written / no such Morrowind folder |
 | `mwdialog_check.bat` | 9009 | Python 3 was not found |
 
 Inside `--full`, a step that ends with anything but 0 or 1 stops the run; `--play` after other steps starts the game only when they ended with 0 or 1.

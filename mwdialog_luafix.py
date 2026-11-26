@@ -79,6 +79,7 @@ cut down to the patches not written; a copy of it is kept in that run's <backups
 vortex_tidy.py runs the same check on every staging mod (its plan shows it, --apply patches, --undo reverts;
 --no-lua skips it, --lua-only does nothing else).
 """
+import dataclasses
 import hashlib
 import json
 import math
@@ -89,6 +90,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from typing import Optional
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mwdialog_lua as L                                   # noqa: E402
@@ -4403,6 +4405,274 @@ def write_known_bug_report(rep, done=None, refused=None, path=None):
     return path
 
 
+# ---------------------------------------------------------------------------------------------- core-only
+# A small entry point for callers that only want MWSE's own core files repaired (MWManager, after MWSE-Update.exe):
+# the files a KNOWN_BUGS rule names under core/ (KB3 and KB4 on exclusionspage.lua today), nothing else.
+CORE_STATUSES = ("applied", "already-patched", "no-match", "partial", "refused")
+CORE_EXIT_OK, CORE_EXIT_LOCKED, CORE_EXIT_REFUSED, CORE_EXIT_PARTIAL, CORE_EXIT_USAGE = 0, 1, 2, 3, 4
+_AUTO = object()
+
+
+@dataclasses.dataclass
+class CoreResult:
+    """What core-only found for one core file. status is one of CORE_STATUSES:
+    applied (patched; with dry_run, would be), already-patched (our header present, no fingerprint left),
+    no-match (no fingerprint, no header: upstream fixed it or changed it), partial (a rule whose parts must all match
+    matches only some: nothing written), refused (the reason says why; nothing written)."""
+    path: str
+    rel: str
+    kb_ids: list
+    status: str
+    parts_matched: int = 0
+    parts_total: int = 0
+    reason: str = ""
+    journal_entry: Optional[str] = None
+    dry_run: bool = False
+    written: bool = False
+    backup: Optional[str] = None
+    sha1_before: Optional[str] = None
+    sha1_after: Optional[str] = None
+    kbs: list = dataclasses.field(default_factory=list)
+
+    def to_dict(self):
+        return dataclasses.asdict(self)
+
+
+def _kb_order(rule):
+    return (int(re.sub(r"\D", "", rule) or 0), rule)
+
+
+def core_rels():
+    """The core/ paths (lower case, as in KNOWN_BUGS) a Known Bugs rule names."""
+    return sorted({rel for _rule, _plugin, rel, _old, _new, _what in KNOWN_BUGS if rel.startswith("core/")})
+
+
+def _child_ci(folder, name):
+    try:
+        return next((os.path.join(folder, n) for n in os.listdir(folder) if n.lower() == name.lower()), None)
+    except OSError:
+        return None
+
+
+def core_data_dir(path):
+    """(game folder, Data Files folder) for a path that is either the Morrowind folder or its Data Files folder.
+    ValueError when it is neither."""
+    path = os.path.abspath(path)
+    if os.path.basename(path).lower() == "data files" and os.path.isdir(path):
+        return os.path.dirname(path), path
+    sub = _child_ci(path, "Data Files")
+    if sub and os.path.isdir(sub):
+        return path, sub
+    if os.path.isdir(path) and _child_ci(path, "MWSE"):
+        return os.path.dirname(path), path
+    raise ValueError(f"{path}: not a Morrowind folder or a Data Files folder")
+
+
+def _core_parts(src, rel, skip=()):
+    """{rule: (parts that match, parts)} for each KNOWN_BUGS rule on rel, counted as FileAnalysis.r_known does."""
+    crlf = "\r\n" in src
+    out = {}
+    for rule, _plugin, path, old, _new, _what in KNOWN_BUGS:
+        if path != rel or rule in skip:
+            continue
+        if crlf:
+            old = old.replace("\n", "\r\n")
+        m, n = out.get(rule, (0, 0))
+        out[rule] = (m + (1 if old in src else 0), n + 1)
+    return out
+
+
+def _banner_rules(src):
+    """The rule names in this tool's header at the top of the file (empty: no header)."""
+    m = MARK_RE.match(src, insert_point(src))
+    return set(m.group(2).split()) if m else set()
+
+
+def apply_core_known_bugs(data_dir, dry_run=False, *, game_dir=None, cfg=None, checker=_AUTO, no_syntax_check=False,
+                          journal=None, backup_root=None):
+    """Check, and unless dry_run patch in place, only the MWSE core files a Known Bugs rule names, under
+    data_dir (the Data Files folder; core_data_dir() finds it from the game folder). No other file is read for
+    patching and nothing is planned: a file is written the way --apply writes it (backed up first, journaled,
+    refused when it changed after it was checked, only when the syntax checker accepts the patched text), so
+    --undo puts the run back. Without a checker (no LuaJIT/luac/lupa and no_syntax_check) a patch is refused.
+    Returns a list of CoreResult, one per core file a rule names (a missing file is a refused one)."""
+    data_dir = os.path.abspath(data_dir)
+    game_dir = game_dir or HERE
+    journal = journal or JOURNAL
+    backup_root = backup_root or BACKUP_ROOT
+    cfg = cfg if cfg is not None else load_config(game_dir, data_dir)
+    if checker is _AUTO:
+        checker = None if no_syntax_check else find_checker(None, game_dir)
+    elif no_syntax_check:
+        checker = None
+    skip = set(cfg.get("skipKnown") or ())
+    mwse = _child_ci(data_dir, "MWSE") or os.path.join(data_dir, "MWSE")
+    found = {}
+    for p in known_core_files(mwse):
+        ctx = known_core_context(p)
+        if ctx:
+            found[ctx[1]] = p
+    results = []
+
+    def kb_ids_of(rel):
+        return sorted({r for r, _pl, path, _o, _n, _w in KNOWN_BUGS if path == rel}, key=_kb_order)
+
+    for rel in core_rels():
+        if rel not in found:
+            results.append(CoreResult(path=os.path.join(mwse, *rel.split("/")), rel=rel, kb_ids=kb_ids_of(rel),
+                                      status="refused", dry_run=dry_run,
+                                      reason="the core file was not found (is MWSE installed here?)"))
+    rep = check_paths([found[r] for r in sorted(found)], cfg, False, checker, "high", None, use_cache=False,
+                      game_dir=game_dir) if found else Report()
+    pending, by_path = [], {}
+    for rel in sorted(found):
+        p = found[rel]
+        ent = rep.files.get(p) or {"error": "not checked", "patch": None}
+        res = CoreResult(path=p, rel=rel, kb_ids=kb_ids_of(rel), status="refused", dry_run=dry_run,
+                         sha1_before=ent.get("sha"))
+        by_path[p] = res
+        results.append(res)
+        try:
+            with open(p, "rb") as f:
+                src = unbrand(f.read().decode("latin-1"))
+        except OSError as e:
+            res.reason = str(e)
+            continue
+        parts = _core_parts(src, rel, skip)
+        banner = _banner_rules(src)
+        res.parts_matched = sum(m for m, _n in parts.values())
+        res.parts_total = sum(n for _m, n in parts.values())
+        partial = []
+        for rule in res.kb_ids:
+            m, n = parts.get(rule, (0, 0))
+            if rule in skip:
+                state = "skipped"
+            elif rule in KNOWN_BUGS_WHOLE and 0 < m < n:
+                state = "partial"
+                partial.append(f"{rule}: only {m} of its {n} parts match")
+            elif m:
+                state = "matches"
+            else:
+                state = "already-patched" if rule in banner else "no-match"
+            res.kbs.append({"kb": rule, "state": state, "parts_matched": m, "parts_total": n})
+        patch = ent.get("patch")
+        if ent.get("error"):
+            res.reason = ent["error"]
+        elif partial:
+            res.status = "partial"
+            res.reason = ("; ".join(partial) + ": this file is neither the version the fix was written for nor "
+                          "the fixed one, so nothing was written")
+            ent["patch"] = None                    # no part of a file that does not match whole is written
+        elif patch and not patch["ok"]:
+            res.reason = patch["why"] or "the patch was rejected"
+            ent["patch"] = None
+        elif patch:
+            res.sha1_after = sha(patch["text"].encode("latin-1"))
+            if checker is None and not no_syntax_check:
+                res.reason = ("no LuaJIT/luac found (" + MP.describe_luajit_search(game_dir) + "); not patching "
+                              "without a syntax check (--luajit, or --no-syntax-check)")
+                res.sha1_after = None
+                ent["patch"] = None
+            else:
+                res.status = "applied"
+                res.reason = ("would patch " if dry_run else "patched ") + ", ".join(patch["rules"])
+                pending.append(p)
+        elif res.parts_matched:
+            res.reason = "a fingerprint matches but no patch was built"
+        elif any(r in banner for r in res.kb_ids):
+            res.status = "already-patched"
+            res.reason = "this tool's header is there and no fingerprint is left"
+        else:
+            res.status = "no-match"
+            res.reason = "no fingerprint matches and there is no header: MWSE fixed or changed this file"
+    if pending and not dry_run:
+        bdir = run_backup_dir(backup_root)
+        entry = os.path.basename(bdir)
+        done = []
+        _w, refused = apply_report(rep, journal=journal, backup_root=backup_root, bdir=bdir, done=done,
+                                   head_extra={"core_only": True, "entry": entry}, log=lambda s: None)
+        why = dict(refused)
+        backups = {}
+        try:
+            runs = _read_runs(journal)
+            if runs and runs[-1]["head"].get("entry") == entry:
+                backups = {op["luafix"]: op["backup"] for op in runs[-1]["ops"]}
+        except OSError:
+            pass
+        for p in pending:
+            res = by_path[p]
+            if p in done:
+                res.written, res.journal_entry, res.backup = True, entry, backups.get(p)
+            else:
+                res.status, res.sha1_after = "refused", None
+                res.reason = why.get(p) or "not written"
+    return sorted(results, key=lambda r: r.rel)
+
+
+def core_exit_code(results):
+    """CORE_EXIT_REFUSED when any file was refused, else CORE_EXIT_PARTIAL when any was partial, else 0."""
+    states = {r.status for r in results}
+    return CORE_EXIT_REFUSED if "refused" in states else CORE_EXIT_PARTIAL if "partial" in states else CORE_EXIT_OK
+
+
+def core_result_json(results, data_dir, dry_run, journal=None):
+    counts = {s: sum(1 for r in results if r.status == s) for s in CORE_STATUSES}
+    return {"tool": "mwdialog_luafix", "mode": "core-only", "version": VERSION, "dry_run": bool(dry_run),
+            "data_dir": os.path.abspath(data_dir), "journal": journal or JOURNAL, "exit_code": core_exit_code(results),
+            "counts": counts, "files": [r.to_dict() for r in results]}
+
+
+def core_result_lines(results, dry_run):
+    out = [f"mwdialog_luafix --core-only{' --dry-run' if dry_run else ''}: {len(results)} MWSE core file(s)"]
+    for r in results:
+        out.append(f"  {r.status.upper()}: {r.rel} ({' '.join(r.kb_ids)}; parts {r.parts_matched}/{r.parts_total})")
+        out.append(f"      {r.reason}")
+        if r.written:
+            out.append(f"      journal entry {r.journal_entry}; backup {r.backup}")
+    out.append("Nothing changed (dry run)." if dry_run else "--undo puts back what was written.")
+    return out
+
+
+def _raw_stdout():
+    s = sys.stdout
+    while hasattr(s, "_inner"):                    # MT.install()'s wrapper would wrap JSON lines
+        s.flush()
+        s = s._inner
+    return s
+
+
+def _core_only_main(args, ap):
+    for flag in ("apply", "yes", "undo", "diff", "include_own"):
+        if getattr(args, flag):
+            ap.error(f"--core-only does not combine with --{flag.replace('_', '-')} (it applies by itself; "
+                     "--dry-run only checks; --undo puts back the last run)")
+    if len(args.paths) > 1:
+        ap.error("--core-only takes one folder: the Morrowind folder or its Data Files folder")
+    to_stdout = args.json == "-"
+    log = sys.stderr if to_stdout else sys.stdout
+    try:
+        game_dir, data_dir = core_data_dir(args.paths[0] if args.paths else os.path.join(HERE, "Data Files"))
+    except ValueError as e:
+        print(f"{e}", file=sys.stderr)
+        return CORE_EXIT_USAGE
+    if not args.dry_run and (not MP.acquire_run_lock() or not MP.acquire_game_lock(game_dir)):
+        print(MP.RUN_LOCKED_MESSAGE, file=sys.stderr)
+        return CORE_EXIT_LOCKED
+    checker = None if args.no_syntax_check else find_checker(args.luajit, game_dir)
+    results = apply_core_known_bugs(data_dir, args.dry_run, game_dir=game_dir, checker=checker,
+                                    no_syntax_check=args.no_syntax_check)
+    for line in core_result_lines(results, args.dry_run):
+        print(line, file=log)
+    doc = core_result_json(results, data_dir, args.dry_run)
+    if to_stdout:
+        out = _raw_stdout()
+        out.write(json.dumps(doc, indent=1) + "\n")
+        out.flush()
+    elif args.json:
+        with open(args.json, "w", encoding="utf-8") as f:
+            json.dump(doc, f, indent=1)
+    return doc["exit_code"]
+
 # ---------------------------------------------------------------------------------------------- CLI
 def main(argv=None):
     MT.install()
@@ -4423,9 +4693,21 @@ def main(argv=None):
                          "that logs), off")
     ap.add_argument("--no-cache", action="store_true", help="read every file again")
     ap.add_argument("--all", action="store_true", help="also list what was left alone on purpose")
-    ap.add_argument("--json", help="also write the findings as JSON to this file")
+    ap.add_argument("--json", help="also write the findings as JSON to this file (with --core-only: the result; - "
+                                   "prints it to stdout and the summary goes to stderr)")
     ap.add_argument("--diff", action="store_true", help="show each patch as a diff")
+    ap.add_argument("--core-only", action="store_true",
+                    help="check and patch only the MWSE core files a Known Bugs rule names (KB3, KB4: Data Files\\"
+                         "MWSE\\core\\...\\ExclusionsPage.lua), at once, with no plan: one folder (the Morrowind "
+                         "folder or its Data Files folder; default: Data Files of the Morrowind folder). Exit 0: "
+                         "applied / already patched / nothing matches; 1: another tool holds the lock; 2: a file "
+                         "was refused; 3: partial match, nothing written; 4: no such folder")
+    ap.add_argument("--dry-run", action="store_true", help="with --core-only: only check, write nothing")
     args = ap.parse_args(argv)
+    if args.dry_run and not args.core_only:
+        ap.error("--dry-run goes with --core-only (plan mode is already a dry run)")
+    if args.core_only:
+        return _core_only_main(args, ap)
     import mwdialog_paths as MP
     if not MP.acquire_run_lock() or not MP.acquire_game_lock(HERE):
         print(MP.RUN_LOCKED_MESSAGE, file=sys.stderr)

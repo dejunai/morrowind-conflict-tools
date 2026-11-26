@@ -277,8 +277,10 @@ The suite is engineered for massive, complex mod lists (hundreds of plugins, ten
 | `--lua-log` | `flagged`/`all`/`off` | Which mods get the log shim: `flagged` (default), `all`, or `off`. |
 | `--no-cache` | *(flag)* | Read every file again. |
 | `--all` | *(flag)* | Also list what was left alone on purpose. |
-| `--json` | `<PATH>` | Also write the findings as JSON to this file. |
+| `--json` | `<PATH>` | Also write the findings as JSON to this file. With `--core-only`, the result as JSON; `-` prints it to stdout (and the summary goes to stderr). |
 | `--diff` | *(flag)* | Show each patch as a diff. |
+| `--core-only` | `[FOLDER]` | Checks and patches only the MWSE core files a KnownBugs rule names (KB3/KB4 on `core\mcm\components\pages\exclusionspage.lua` today), straight away and with no plan file, for a caller such as MWManager after `MWSE-Update.exe`. `FOLDER` is the Morrowind folder or its `Data Files` folder (default: `Data Files` of the Morrowind folder). Nothing else is scanned. Each file gets one status: `applied`, `already-patched` (our header is there, no fingerprint left), `no-match` (upstream fixed or changed it), `partial` (a rule whose parts must all match matches only some: nothing written) or `refused` (a reason is given: file missing, no syntax checker, patch rejected, changed since it was checked). Writes use the same backup, journal, hash check and `--undo` as `--apply`. Exit codes: `0` done (applied, already patched or no match), `1` another tool or MWManager holds the lock, `2` a file was refused, `3` partial (and none refused), `4` no such Morrowind folder. |
+| `--dry-run` | *(flag)* | With `--core-only`: only check; write nothing, take no lock. |
 
 ---
 
