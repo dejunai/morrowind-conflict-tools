@@ -1437,6 +1437,47 @@ def read_vortex_settings(game_id=GAME_ID, refresh=False):
     return {k: list(v) if isinstance(v, list) else v for k, v in info.items()}
 
 
+def _json_text(raw):
+    """A LevelDB value holding a JSON string, as a clean one-line str; None when it is not one or is empty."""
+    try:
+        v = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError, AttributeError):
+        return None
+    if not isinstance(v, str):
+        return None
+    v = " ".join("".join(c for c in v if c.isprintable()).split())
+    return v or None
+
+
+def vortex_mod_info(mod_folder, game_id=GAME_ID):
+    """{"title": ..., "author": ...} Vortex's state holds for the mod installed in staging folder `mod_folder`
+    (read-only; keys persistent###mods###<game>###<mod id>###attributes###modName / author; the mod id is the
+    folder name), or {} when Vortex's state can't be read or knows nothing. The title is the mod's page name
+    (modName), else its file name's logical name, else the name the user gave it."""
+    prefix = f"persistent###mods###{game_id}###{mod_folder}###".encode("utf-8")
+    for folder in vortex_search_dirs():
+        if os.path.basename(folder).lower() not in ("state.v2", "state") or not os.path.isdir(folder):
+            continue
+        try:
+            live = read_leveldb_prefix(folder, prefix)
+        except Exception:  # noqa: BLE001 - a reader bug is "no info"
+            continue
+        if not live:
+            continue
+
+        def attr(name):
+            return _json_text(live.get(prefix + b"attributes###" + name.encode("ascii"), b""))
+        info = {}
+        title = attr("modName") or attr("logicalFileName") or attr("customFileName")
+        author = attr("author")
+        if title:
+            info["title"] = title
+        if author:
+            info["author"] = author
+        return info
+    return {}
+
+
 def clear_vortex_settings_cache():
     """Forget what read_vortex_settings read (a long-running caller, after Vortex's settings changed)."""
     _SETTINGS_MEMO.clear()

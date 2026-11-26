@@ -28,6 +28,8 @@ GAME = {"meshes", "textures", "icons", "sound", "sounds", "music", "fonts", "spl
 sha = lambda b: hashlib.sha256(b).hexdigest()
 RUNTIME = {"MWSE/lib/omwcompat.lua": b"return require('omwcompat.runtime')\n",
            "MWSE/lib/omwcompat/runtime.lua": b"return {}\n"}
+with open(os.environ["STUB_LOG"], "a", encoding="utf-8") as f:
+    f.write(json.dumps(args) + "\n")
 dry = "--dry-run" in args
 mods = []
 pk = []
@@ -46,6 +48,7 @@ for src in pk:
     def put(rel, data):
         plan[rel] = data
     originals = []
+    alerts = []
     for base, ds, fns in os.walk(src):
         if is_root:
             ds[:] = [x for x in ds if x.lower() not in ("mwse", "off")]
@@ -54,6 +57,7 @@ for src in pk:
             originals.append((os.path.relpath(p, src).replace(os.sep, "/"), p))
     off = "Off/%s/OpenMW" % name
     tree = "MWSE/mods/mwsuite/openmw/%s" % name
+    present = {rel.lower() for rel, _ in originals}
     for rel, p in originals:
         data = open(p, "rb").read()
         put(off + "/" + rel, data)
@@ -61,7 +65,14 @@ for src in pk:
         if top in GAME:
             put(rel, data)
         if rel.lower().endswith(".omwaddon"):
-            put(rel[:-len(".omwaddon")] + ".esp", data)
+            new = rel[:-len(".omwaddon")] + ".esp"
+            if new.lower() in present:
+                alerts.append({"level": "warning", "code": "plugin-rename-clash",
+                               "message": "%s not renamed: the package also ships %s; %s is kept only under Off/" % (rel, new, rel)})
+            else:
+                put(new, data)
+        if "/" not in rel and rel.lower().endswith((".esp", ".esm")):
+            put(rel, data)
         if rel.lower().endswith((".omwscripts", ".lua", ".yaml")):
             put(tree + "/omw/" + rel, data)
     put(tree + "/main.lua", os.environ.get("STUB_HEADER", "").replace("{n}", name).encode() if False else
@@ -71,9 +82,14 @@ for src in pk:
     put(name + "-metadata.toml", ("[tools.mwse]\nname = \"" + name + "\"\n").encode())
     for rel, data in RUNTIME.items():
         put(rel, data)
+    verdict = json.loads(os.environ.get("STUB_VERDICT", "{}")).get(name, "ready")
+    if not dry:
+        verdict = json.loads(os.environ.get("STUB_VERDICT_REAL", "{}")).get(name, verdict)
+    if verdict == "blocked":
+        alerts.append({"level": "error", "code": "blocker", "message": "requires unsupported module openmw.ui"})
     if dry:
-        mods.append({"name": name, "source": off, "off": off, "status": "ok", "verdict": "ready", "rewrites": [],
-                     "conflicts": [], "files": {}, "alerts": [], "changed": True})
+        mods.append({"name": name, "source": off, "off": off, "status": "ok", "verdict": verdict, "rewrites": [],
+                     "conflicts": [], "files": {}, "alerts": alerts, "changed": True})
         continue
     for rel, data in plan.items():
         dst = os.path.join(d, *rel.split("/"))
@@ -86,7 +102,7 @@ for src in pk:
     open(mp, "w").write(json.dumps(man, indent=1, sort_keys=True) + "\n")
     moved = []
     for rel, p in originals:
-        if is_root and rel.split("/")[0].lower() in GAME:
+        if is_root and (rel.split("/")[0].lower() in GAME or ("/" not in rel and rel.lower().endswith((".esp", ".esm")))):
             continue
         if os.path.realpath(p) != os.path.realpath(os.path.join(d, *(off + "/" + rel).split("/"))):
             os.remove(p)
@@ -98,8 +114,8 @@ for src in pk:
     while not is_root and os.path.realpath(parent) != d and not os.listdir(parent):
         os.rmdir(parent)
         parent = os.path.dirname(parent)
-    entry = {"name": name, "source": off, "off": off, "status": "ok", "verdict": "ready", "rewrites": [],
-             "conflicts": [], "files": {}, "alerts": [], "changed": True}
+    entry = {"name": name, "source": off, "off": off, "status": "ok", "verdict": verdict, "rewrites": [],
+             "conflicts": [], "files": {}, "alerts": alerts, "changed": True}
     if moved:
         entry["relocatedFrom"] = src if is_root else os.path.relpath(src, d).replace(os.sep, "/")
         entry["relocated"] = moved
@@ -161,6 +177,8 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(vt, "CONVERTER", dict(vt.CONVERTER))
     monkeypatch.setattr(vt, "HERE", str(game))
     monkeypatch.setattr(vt, "CORE_MISSING", {})
+    monkeypatch.setattr(vt, "vortex_info", lambda d: {})                   # never reads the real Vortex state
+    monkeypatch.setenv("STUB_LOG", str(tmp_path / "calls.jsonl"))
     monkeypatch.setattr(vt, "JOURNAL", str(tmp_path / "journal.jsonl"))
     monkeypatch.setattr(vt, "PLAN", str(tmp_path / "vortex_tidy_plan.txt"))
     monkeypatch.setattr(vt, "AUDIT_ROOT", str(tmp_path / "audit"))
@@ -170,16 +188,22 @@ def env(tmp_path, monkeypatch):
 
     def apply(*only):
         extra = ["--only", *only] if only else []
+        vt.NOTES.clear()                                                   # one process per run in real life
         monkeypatch.setattr(vt.sys, "argv", ["vortex_tidy.py", "--staging", str(staging), "--no-lua", "--no-assets",
                                              *extra])
         assert vt.main() == 0
         monkeypatch.setattr(vt.sys, "argv", ["vortex_tidy.py", "--staging", str(staging), "--no-lua", "--no-assets",
                                              "--apply", "--yes", *extra])
+        vt.NOTES.clear()
         assert vt.main() == 0
 
     def journal():
         return [json.loads(x) for x in open(vt.JOURNAL, encoding="utf-8") if x.strip()]
-    return types.SimpleNamespace(staging=staging, game=game, apply=apply, journal=journal, tmp=tmp_path)
+    def calls():
+        log = tmp_path / "calls.jsonl"
+        return [json.loads(x) for x in log.read_text().splitlines()] if log.exists() else []
+    return types.SimpleNamespace(staging=staging, game=game, apply=apply, journal=journal, tmp=tmp_path,
+                                 calls=calls, mp=monkeypatch)
 
 
 def test_root_package_is_converted_then_undone_exactly(env, capsys):
@@ -380,3 +404,317 @@ def test_one_undo_reverses_the_moves_and_the_conversion_of_the_same_apply(env):
     assert len(ids) == 1                                                   # one id: one --undo undoes them all
     assert vt.undo() == 0
     assert (snap(foo), snap(plain)) == before
+
+
+# ---------------------------------------------------------------------------------------------- verdicts
+def apply_and_capture(env, capsys, *only):
+    env.apply(*only)
+    return capsys.readouterr()
+
+
+def test_a_blocked_mod_is_planned_as_the_usual_off_move_with_one_warning(env, capsys):
+    mod = root_mod(env.staging, "Foo")
+    before = snap(mod)
+    env.mp.setenv("STUB_VERDICT", json.dumps({"Foo": "blocked"}))
+    env.apply()
+    out = capsys.readouterr().out
+    assert out.count("omw2mwse says Foo cannot run (1 blocker(s), first: requires unsupported module openmw.ui)") >= 1
+    plan_text = open(vt.PLAN, encoding="utf-8").read() if os.path.exists(vt.PLAN) else out
+    assert "convert with omw2mwse" not in out
+    after, _ = snap(mod)
+    assert not any(k.startswith("MWSE") for k in after) and "Foo.esp" not in after      # nothing active shipped
+    assert os.path.join("Off", "OpenMW", "Foo-1-0", "Foo.omwscripts") in after            # the usual Off move
+    assert os.path.join("Off", "OpenMW", "Foo-1-0", "scripts", "Foo", "g.lua") in after
+    assert [c for c in env.calls() if "--dry-run" not in c] == []                        # never really run
+    assert vt.undo() == 0
+    assert snap(mod) == before
+
+
+def test_blocked_only_at_apply_is_undone_at_once_and_moved_to_off(env, capsys):
+    mod = root_mod(env.staging, "Foo")
+    other = root_mod(env.staging, "Ok")
+    before = (snap(mod), snap(other))
+    env.mp.setenv("STUB_VERDICT_REAL", json.dumps({"Foo": "blocked"}))             # the preview said ready
+    env.apply()
+    out = capsys.readouterr().out
+    assert out.count("WARNING: omw2mwse says Foo cannot run") == 1
+    assert "conversion undone" in " ".join(out.split())
+    after, _ = snap(mod)
+    assert not any(k.startswith("MWSE") for k in after) and "Foo.esp" not in after
+    assert os.path.join("Off", "OpenMW", "Foo-1-0", "Foo.omwscripts") in after
+    assert not any(k.startswith(os.path.join("Off", "Foo")) for k in after)            # the converter's Off copy is gone
+    assert (other / "Off" / "Ok" / "OpenMW" / "Ok.omwscripts").exists()                 # another mod converted
+    ops = env.journal()
+    assert [o["name"] for o in ops if "omw_convert" in o] == ["Ok"]                    # the blocked one is not recorded
+    assert vt.undo() == 0
+    assert (snap(mod), snap(other)) == before                                          # moves and conversion both undone
+
+
+def test_partial_is_converted_with_one_note(env, capsys):
+    mod = root_mod(env.staging, "Foo")
+    env.mp.setenv("STUB_VERDICT", json.dumps({"Foo": "partial"}))
+    env.apply()
+    out = " ".join(capsys.readouterr().out.split())
+    assert out.count("NOTE: Foo is only partly supported by omw2mwse (verdict partial): converted anyway") == 1
+    assert out.count("verdict partial for Foo: it will be converted") >= 1            # in the plan
+    assert (mod / "MWSE" / "mods" / "mwsuite" / "openmw" / "Foo" / "main.lua").exists()
+    assert [o["name"] for o in env.journal() if "omw_convert" in o] == ["Foo"]
+
+
+def test_title_and_author_come_from_vortex_when_it_has_them(env):
+    root_mod(env.staging, "Foo")
+    env.mp.setattr(vt, "vortex_info", lambda d: {"title": "Leave The Lights Off", "author": "Some Author"})
+    env.apply()
+    real = [c for c in env.calls() if "--dry-run" not in c]
+    assert real and real[0][real[0].index("--title") + 1] == "Leave The Lights Off"
+    assert real[0][real[0].index("--author") + 1] == "Some Author"
+
+
+def test_no_title_or_author_flags_without_vortex_info(env):
+    root_mod(env.staging, "Foo")
+    env.apply()
+    assert all("--title" not in c and "--author" not in c for c in env.calls())
+
+
+def test_vortex_mod_info_reads_the_state_keys_and_prefers_the_page_name(tmp_path, monkeypatch):
+    seen = []
+
+    def fake(folder, prefix):
+        seen.append(prefix)
+        pre = b"persistent###mods###morrowind###Foo-1-0###"
+        data = {pre + b"attributes###modName": b'"Leave The Lights Off"',
+                pre + b"attributes###logicalFileName": b'"LTLO main"',
+                pre + b"attributes###author": b'"  Some   Author "',
+                pre + b"installationPath": b'"Foo-1-0"'}
+        return {k: v for k, v in data.items() if k.startswith(prefix)}
+    sd = tmp_path / "state.v2"
+    sd.mkdir()
+    P = __import__("mwdialog_paths")
+    monkeypatch.setattr(P, "vortex_search_dirs", lambda: [str(tmp_path / "nothing"), str(sd)])
+    monkeypatch.setattr(P, "read_leveldb_prefix", fake)
+    assert P.vortex_mod_info("Foo-1-0") == {"title": "Leave The Lights Off", "author": "Some Author"}
+    assert seen[0] == b"persistent###mods###morrowind###Foo-1-0###"
+    assert P.vortex_mod_info("Other-2-0") == {}
+
+
+def test_the_converters_rename_clash_flag_is_honoured_and_shipped_plugins_are_not_touched(env, capsys):
+    mod = root_mod(env.staging, "Foo")
+    (mod / "Foo.esp").write_bytes(b"TES3 shipped")                       # the package ships X.esp beside X.omwaddon
+    put(mod / "wildlife_getfight.esp", b"TES3 optional")                 # an optional plugin for old OpenMW
+    before = snap(mod)
+    env.apply()
+    out = " ".join(capsys.readouterr().out.split())
+    assert out.count("Foo.omwaddon not renamed: the package also ships Foo.esp") == 1
+    assert "never enables it" in out
+    assert "wildlife_getfight.esp" in out and "tidy does not rename or enable them" in out   # by manifest, not by name
+    assert (mod / "wildlife_getfight.esp").read_bytes() == b"TES3 optional" and (mod / "Foo.esp").read_bytes() == b"TES3 shipped"
+    assert not [p for p in mod.iterdir() if p.suffix == ".esp" and p.name not in ("Foo.esp", "wildlife_getfight.esp")]
+    assert vt.undo() == 0
+    assert snap(mod) == before
+
+
+def test_tidy_never_renames_the_omwaddon_of_a_converted_mod_and_says_why(env):
+    mod = root_mod(env.staging, "Foo")
+    put(mod / "MWSE" / "mods" / "mwsuite" / "openmw" / "Foo" / "main.lua",
+        "-- Foo: MWSE loader generated by omw2mwse 0.2.0.\n")
+    moves = vt.plan_mod(str(mod))
+    assert not any(d and d.endswith(".esp") for _s, d, _w in moves)
+    assert str(mod) in vt.CONVERTED
+
+
+# ---------------------------------------------------------------------------------------------- bugreports
+def make_run(env, name="Foo"):
+    mod = root_mod(env.staging, name)
+    return mod
+
+
+def test_an_empty_bugreports_folder_tidy_made_goes_at_the_end_of_every_run(env, capsys):
+    a, b = root_mod(env.staging, "Aaa"), root_mod(env.staging, "Bbb")
+    real_assets = vt.assets_check
+
+    def make_empty(args):
+        (a / "bugreports").mkdir(exist_ok=True)                         # made by the run, never filled
+        (b / "BugReports").mkdir(exist_ok=True)
+        put(b / "BugReports" / "Bbb.bugreport.txt", "kept\n")          # this one has a report
+        return real_assets(args)
+    env.mp.setattr(vt, "assets_check", make_empty)
+    env.mp.setattr(vt.sys, "argv", ["vortex_tidy.py", "--staging", str(env.staging), "--no-lua"])
+    assert vt.main() == 0                                               # a dry (plan-only) run
+    assert not (a / "bugreports").exists()
+    assert (b / "BugReports" / "Bbb.bugreport.txt").exists()            # not empty: stays
+
+
+def test_bugreports_goes_after_apply_and_after_undo_too_but_a_folder_that_was_empty_before_stays(env):
+    a, b = root_mod(env.staging, "Aaa"), root_mod(env.staging, "Bbb")
+    (b / "bugreports").mkdir()                                          # not made by this run
+    real_assets = vt.assets_check
+
+    def make_empty(args):
+        (a / "bugreports").mkdir(exist_ok=True)
+        return real_assets(args)
+    env.mp.setattr(vt, "assets_check", make_empty)
+    base = ["vortex_tidy.py", "--staging", str(env.staging), "--no-lua"]
+    env.mp.setattr(vt.sys, "argv", base)
+    assert vt.main() == 0
+    env.mp.setattr(vt.sys, "argv", base + ["--apply", "--yes"])
+    assert vt.main() == 0
+    assert not (a / "bugreports").exists() and (b / "bugreports").is_dir()
+    real_undo = vt.undo
+
+    def undo_makes_one(force=False):
+        (a / "bugreports").mkdir(exist_ok=True)
+        return real_undo(force)
+    env.mp.setattr(vt, "undo", undo_makes_one)
+    env.mp.setattr(vt.sys, "argv", ["vortex_tidy.py", "--undo"])
+    assert vt.main() == 0
+    assert not (a / "bugreports").exists()
+
+
+def test_a_report_tidy_clears_leaves_no_empty_folder(env):
+    a = root_mod(env.staging, "Aaa")
+    ah = __import__("mwdialog_assets")
+    report = a / "bugreports" / "Aaa.bugreport.txt"
+    ah.update_bug_report(str(report), "vortex_tidy (files)", ["h"], ["a finding"])
+    assert report.exists()
+    real_assets = vt.assets_check
+
+    def clear(args):
+        ah.update_bug_report(str(report), "vortex_tidy (files)", [], [])  # the last section goes, the file with it
+        return real_assets(args)
+    env.mp.setattr(vt, "assets_check", clear)
+    env.mp.setattr(vt.sys, "argv", ["vortex_tidy.py", "--staging", str(env.staging), "--no-lua"])
+    assert vt.main() == 0
+    assert not (a / "bugreports").exists()
+
+
+# ------------------------------------------------------------------ an OpenMW-only mod that is not converted
+FULL_PACKAGE = ["Foo.omwscripts", "Foo.omwaddon", "Foo.esp", "scripts/Foo/g.lua", "l10n/Foo/en.yaml",
+                "meshes/x/Foo.nif", "textures/tx_foo.dds", "textures/tx_foo_n.dds", "sound/fx/foo.wav",
+                "icons/foo.dds", "fonts/foo.fnt", "Docs/manual.txt", "Screenshots/shot.png", "readme.txt",
+                "Foo-metadata.toml", "bugreports/Foo-1-0.bugreport.txt", "weird/stuff.bin"]
+
+
+def full_mod(staging, name="Foo"):
+    """An OpenMW-only mod with everything a package can hold at the mod root, plus Vortex's marker file."""
+    mod = staging / f"{name}-1-0"
+    for rel in FULL_PACKAGE:
+        rel = rel.replace("Foo", name)
+        put(mod / rel, f"{rel}\n" if rel.endswith((".omwscripts", ".lua", ".yaml", ".txt", ".toml")) else rel.encode())
+    put(mod / "__folder_managed_by_vortex", "")
+    return mod
+
+
+def check_whole_package_set_aside(mod, before):
+    after, _ = snap(mod)
+    top = {k.split(os.sep)[0] for k in after}
+    assert top == {"Off", "__folder_managed_by_vortex"}, top          # all that is left in the mod root
+    pk = os.path.join("Off", "OpenMW", vt.mod_name(mod.name))
+    for rel in FULL_PACKAGE:
+        assert os.path.join(pk, *rel.split("/")) in after, rel         # every file, same relative path
+    assert not any(k.lower().startswith(("mwse", "docs", "extras")) for k in after)
+    assert len(after) == len(FULL_PACKAGE) + 1
+
+
+def test_blocked_mod_moves_its_whole_package_to_off_and_undo_restores_every_file(env, capsys):
+    mod = full_mod(env.staging)
+    other = root_mod(env.staging, "Ok")
+    before, okbefore = snap(mod), snap(other)
+    env.mp.setenv("STUB_VERDICT", json.dumps({"Foo": "blocked"}))                    # the plan already knows
+    env.apply()
+    out = " ".join(capsys.readouterr().out.split())
+    assert "omw2mwse says Foo cannot run" in out and "its whole package goes to Off\\OpenMW\\" in out
+    check_whole_package_set_aside(mod, before)
+    assert (other / "Off" / "Ok" / "OpenMW" / "Ok.omwscripts").exists()              # a ready one converted
+    assert vt.undo() == 0
+    assert (snap(mod), snap(other)) == (before, okbefore)                              # every file back, folders too
+    assert vt.undo() == 1 and snap(mod) == before                                      # nothing more to undo
+
+
+def test_blocked_at_apply_only_moves_the_whole_package_and_undo_restores_it(env, capsys):
+    mod = full_mod(env.staging)
+    before = snap(mod)
+    env.mp.setenv("STUB_VERDICT_REAL", json.dumps({"Foo": "blocked"}))               # the preview said ready
+    env.apply()
+    check_whole_package_set_aside(mod, before)                                       # generated output is gone
+    assert [o for o in env.journal() if "omw_convert" in o] == []
+    assert vt.undo() == 0
+    assert snap(mod) == before
+
+
+def test_missing_converter_moves_the_whole_package_and_undo_restores_it(env, capsys):
+    env.mp.setattr(vt, "CONVERTER_HOME", str(env.tmp / "nowhere"))
+    mod = full_mod(env.staging)
+    before = snap(mod)
+    env.apply()
+    assert env.calls() == []
+    check_whole_package_set_aside(mod, before)
+    assert vt.undo() == 0
+    assert snap(mod) == before
+
+
+def test_no_convert_flag_moves_the_whole_package_too(env):
+    mod = full_mod(env.staging)
+    before = snap(mod)
+    base = ["vortex_tidy.py", "--staging", str(env.staging), "--no-lua", "--no-assets", "--no-convert-omwscripts"]
+    env.mp.setattr(vt.sys, "argv", base)
+    assert vt.main() == 0
+    env.mp.setattr(vt.sys, "argv", base + ["--apply", "--yes"])
+    assert vt.main() == 0
+    check_whole_package_set_aside(mod, before)
+    assert env.calls() == []
+    assert vt.undo() == 0
+    assert snap(mod) == before
+
+
+def test_whole_package_move_is_planned_in_the_plan_and_is_idempotent(env, capsys):
+    mod = full_mod(env.staging)
+    env.mp.setenv("STUB_VERDICT", json.dumps({"Foo": "blocked"}))
+    env.mp.setattr(vt.sys, "argv", ["vortex_tidy.py", "--staging", str(env.staging), "--no-lua", "--no-assets"])
+    assert vt.main() == 0
+    out = " ".join(capsys.readouterr().out.split())
+    assert "WARNING: Foo-1-0: omw2mwse says Foo cannot run" in out
+    assert "textures -> " + os.path.join("Off", "OpenMW", vt.mod_name("Foo-1-0"), "textures") in out
+    assert os.path.exists(mod / "textures")                                          # a dry run touches nothing
+    env.apply()
+    first = snap(mod)
+    capsys.readouterr()
+    env.mp.setattr(vt.sys, "argv", ["vortex_tidy.py", "--staging", str(env.staging), "--no-lua", "--no-assets"])
+    assert vt.main() == 0                                                             # a second run finds it done
+    assert "0 to change" in capsys.readouterr().out and snap(mod) == first
+
+
+def test_an_openmw_folder_an_earlier_run_made_is_unpacked_not_nested(env):
+    mod = env.staging / "Foo-1-0"
+    put(mod / "OpenMW" / "Foo.omwscripts", "GLOBAL: scripts/Foo/g.lua\n")
+    put(mod / "OpenMW" / "scripts" / "Foo" / "g.lua", "return 1\n")
+    put(mod / "meshes" / "Foo.nif", b"nif")
+    before = snap(mod)
+    env.mp.setattr(vt, "CONVERTER_HOME", str(env.tmp / "nowhere"))
+    env.apply()
+    after, _ = snap(mod)
+    pk = os.path.join("Off", "OpenMW", vt.mod_name("Foo-1-0"))
+    assert sorted(after) == sorted([os.path.join(pk, "Foo.omwscripts"), os.path.join(pk, "scripts", "Foo", "g.lua"),
+                                    os.path.join(pk, "meshes", "Foo.nif")])
+    assert vt.undo() == 0
+    assert snap(mod) == before
+
+
+def test_a_mod_with_real_mwse_lua_is_unchanged_only_its_openmw_files_go_to_off(env):
+    mod = env.staging / "Hyb-1-0"
+    put(mod / "MWSE" / "mods" / "hyb" / "main.lua", "-- real mwse lua\n")
+    put(mod / "Hyb.omwscripts", "GLOBAL: scripts/Hyb/g.lua\n")
+    put(mod / "scripts" / "Hyb" / "g.lua", "return 1\n")
+    put(mod / "meshes" / "Hyb.nif", b"nif")
+    put(mod / "textures" / "tx_hyb.dds", b"dds")
+    put(mod / "Hyb.esp", b"TES3")
+    before = snap(mod)
+    env.apply()
+    after, _ = snap(mod)
+    assert env.calls() == []                                                          # never converted
+    for rel in ("MWSE/mods/hyb/main.lua", "meshes/Hyb.nif", "textures/tx_hyb.dds", "Hyb.esp"):
+        assert os.path.join(*rel.split("/")) in after, rel                            # stay put
+    pk = os.path.join("Off", "OpenMW", vt.mod_name("Hyb-1-0"))
+    assert os.path.join(pk, "Hyb.omwscripts") in after and os.path.join(pk, "scripts", "Hyb", "g.lua") in after
+    assert not any(k.startswith(pk) and ("meshes" in k or "textures" in k or k.endswith(".esp")) for k in after)
+    assert vt.undo() == 0
+    assert snap(mod) == before

@@ -232,8 +232,9 @@ def test_tidy_finds_scripts_set_aside_under_off(tmp_path, monkeypatch):
         put(mod / f"{MOD}.omwaddon", b"TES3")
         put(mod.joinpath(*off) / f"{MOD}.omwscripts", "GLOBAL: scripts/x.lua\n")
         moves = plan(mod)
-        assert str(mod) in vt.REVIEW, off                           # OpenMW-only: not renamed .esp
-        assert not any(d and d.endswith(".esp") for _s, d, _w in moves)
+        assert str(mod) not in vt.REVIEW, off                       # OpenMW-only, not converted: all of it to Off
+        assert not any(d and d.endswith(".esp") for _s, d, _w in moves)      # and never renamed .esp
+        assert [os.path.basename(s) for s, d, _w in moves if d] == [f"{MOD}.omwaddon"], off
     bare = tmp_path / "staging" / "Bare-1-0"
     put(bare / "Bare.omwaddon", b"TES3")
     assert any(d and d.endswith("Bare.esp") for _s, d, _w in plan(bare))   # no scripts anywhere: renamed

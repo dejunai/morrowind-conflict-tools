@@ -1,3 +1,34 @@
+# omw2mwse verdicts, Vortex title and author, optional plugins, empty bugreports (2026-11-25)
+
+Follows f31470a (already pushed, so a second commit).
+
+- An OpenMW-only mod that is not converted now has its ENTIRE package moved to `Off\OpenMW\<mod>\` (same relative
+  paths): plugins, scripts, `textures\`, `meshes\`, `sound\`, `icons\`, `fonts\`, tidy's own `Docs\` and
+  `Screenshots\`, everything. The staging root keeps only `Off\` (and Vortex's `__folder_managed_by_vortex`), so a mod
+  that stays enabled in Vortex deploys nothing but `Off\`. This covers: omw2mwse not found, a conversion that fails
+  (conflict, refusal, error), a conversion omw2mwse judges `blocked`, and `--no-convert-omwscripts`. An `OpenMW\`
+  folder an earlier run made is unpacked there, not nested; omw2mwse's generated output is never moved (it is
+  removed). `--undo` puts every file back to its original place from the journal. Hybrids (real MWSE Lua) are
+  unchanged: MWSE-first, only their OpenMW-specific files go to `Off\OpenMW\<mod>\`.
+- The converter's verdict (`mods[].verdict` in its `--json`) is honoured. `blocked`: it exits 0 and still writes an
+  active loader, so tidy does not ship it. The plan lists it up front; at `--apply` the converter output is undone
+  straight away from its manifest (nothing is journaled), the whole package is set aside as above, and there is one
+  WARNING line (verdict, blocker count, first message). `partial` is converted, with one NOTE.
+- `--title` and `--author` are passed to omw2mwse from Vortex's mod info (`modName`, else the logical or custom
+  file name; `author`) when Vortex has them (`mwdialog_paths.vortex_mod_info`); no flags otherwise.
+- omw2mwse renames `.omwaddon` to `.esp` and `.omwgame` to `.esm` itself and keeps the originals under `Off\`;
+  tidy never renames a converted mod's plugins. A plugin the converter flags (`plugin-rename-clash`) or that the
+  manifest shows at the mod root with no `Off\...` source is reported in a NOTE and never enabled. This goes by
+  the converter's own report and manifest, never by name. The converter has no explicit "optional plugin" flag
+  yet: one is needed for plugins such as `wildlife_getfight.esp`.
+- `--undo` takes the omw2mwse conversions of a run out first (they were the last thing `--apply` did), then the
+  asset repairs, the Lua patches and the moves. Before, a bug report the asset pass had written in a converted
+  mod could come back from `Off\` after its repair was undone.
+- A `bugreports\` folder is removed at the end of a run (`--apply`, dry run, `--undo`) when it is empty and was
+  not there when the run began, so tidy only removes one it made. A folder that was already there stays, empty or
+  not. (The converter also sweeps a tidy bug report in a mod root into `Off\<Mod>\OpenMW\bugreports\`, which
+  leaves the folder empty.)
+
 # vortex_tidy --undo reverses an omw2mwse conversion (2026-11-25)
 
 - `--apply` journals each conversion with the converter's own report: where the original package was

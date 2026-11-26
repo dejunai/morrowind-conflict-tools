@@ -81,6 +81,7 @@ def tidy(tmp_path, monkeypatch):
     monkeypatch.setenv("STUB_HEADER", HEADER)
     monkeypatch.setattr(vt, "CONVERTER_HOME", str(home))
     monkeypatch.setattr(vt, "CONVERTER", dict(vt.CONVERTER))                # main() sets it; never leaks
+    monkeypatch.setattr(vt, "vortex_info", lambda d: {})                      # never read the real Vortex state
     monkeypatch.setattr(vt, "HERE", str(game))
     monkeypatch.setattr(vt, "CORE_MISSING", {})
     monkeypatch.setattr(vt, "JOURNAL", str(tmp_path / "journal.jsonl"))
@@ -176,14 +177,14 @@ def test_mwse_lua_is_detected_by_content_not_by_name(tidy):
     assert not vt.has_mwse_lua(str(named))
 
 
-def test_missing_converter_is_one_warning_and_the_usual_off_move(tidy, capsys):
+def test_missing_converter_is_one_warning_and_the_whole_package_goes_to_off(tidy, capsys):
     openmw_mod(tidy.staging, "Lights")
     openmw_mod(tidy.staging, "Dark")
     assert tidy.run() == 0
     out = capsys.readouterr().out
     assert out.count("WARNING: omw2mwse (the OpenMW converter) was not found") == 1
     plan = tidy.plan()
-    assert "2 OpenMW-only mod(s) get the usual" in plan and "convert with omw2mwse" not in plan
+    assert "2 OpenMW-only mod(s) get their whole package moved to Off" in " ".join(plan.split()) and "convert with omw2mwse" not in plan
     off = os.path.join("Off", "OpenMW", vt.mod_name("Lights-1-0"))
     assert "Lights.omwscripts  ->  " + os.path.join(off, "Lights.omwscripts") in plan
 
@@ -196,23 +197,24 @@ def test_no_convert_flag_keeps_the_old_behaviour_without_a_warning(tidy, capsys)
     assert os.path.join("Off", "OpenMW") in tidy.plan() and "convert with omw2mwse" not in tidy.plan()
 
 
-def test_conflict_at_apply_warns_once_converts_the_rest_and_keeps_it_in_the_plan(tidy, capsys, monkeypatch):
+def test_conflict_at_apply_warns_once_converts_the_rest_and_moves_the_whole_package_of_the_one_that_failed(tidy, capsys, monkeypatch):
     tidy.stub()
     bad = openmw_mod(tidy.staging, "Bad")
     good = openmw_mod(tidy.staging, "Good")
     monkeypatch.setenv("STUB_FAIL", json.dumps({"Bad": 4}))
     assert tidy.run() == 0
     assert "WARNING: omw2mwse preview for Bad-1-0 (hardcode): conflict, nothing written for it" in tidy.plan()
-    assert tidy.run("--apply", "--yes") == 1                                  # something left
+    assert tidy.run("--apply", "--yes") == 0                                  # nothing left over
     out = capsys.readouterr().out
     assert out.count("WARNING: omw2mwse could not convert") == 1               # one (wrapped) line
     assert ("WARNING: omw2mwse could not convert Bad-1-0: conflict, nothing written for it: "
-            "MWSE/mods/mwsuite/openmw/x/main.lua: not written by omw2mwse; left as it is") in " ".join(out.split())
+            "MWSE/mods/mwsuite/openmw/x/main.lua: not written by omw2mwse; not converted, its whole package "
+            "goes to Off\\OpenMW\\") in " ".join(out.split())
     assert (good / "MWSE" / "mods" / "mwsuite" / "openmw" / "Good" / "main.lua").exists()
-    assert (bad / "Bad.omwscripts").exists() and not (bad / "MWSE").exists()
-    left = tidy.plan()
-    assert "convert with omw2mwse (hardcode): OpenMW-only, no MWSE Lua (Bad.omwscripts)" in left
-    assert "Good.omwscripts" not in left
+    assert not (bad / "MWSE").exists() and not (bad / "Bad.omwscripts").exists()
+    assert sorted(os.listdir(bad)) == ["Off"]
+    assert (bad / "Off" / "OpenMW" / vt.mod_name("Bad-1-0") / "Bad.omwscripts").exists()
+    assert "Bad.omwscripts" not in tidy.plan()
 
 
 @pytest.mark.parametrize("code,expect", [(2, "omw2mwse error (exit 2)"), (3, "hard-code conversion refused")])
@@ -221,9 +223,12 @@ def test_errors_and_refusals_are_one_warning_line(tidy, capsys, monkeypatch, cod
     openmw_mod(tidy.staging, "Bad")
     monkeypatch.setenv("STUB_FAIL", json.dumps({"Bad": code}))
     assert tidy.run() == 0
-    assert tidy.run("--apply", "--yes") == 1
+    assert tidy.run("--apply", "--yes") == 0
     out = capsys.readouterr().out
     assert out.count("could not convert Bad-1-0") == 1 and expect in " ".join(out.split())
+    assert sorted(os.listdir(tidy.staging / "Bad-1-0")) == ["Off"]            # the whole package is set aside
+    assert vt.undo() == 0                                                     # and --undo brings every file back
+    assert sorted(os.listdir(tidy.staging / "Bad-1-0")) == ["Bad.omwaddon", "Bad.omwscripts", "readme.txt", "scripts"]
 
 
 def test_output_that_is_not_json_is_a_warning(tidy, capsys):

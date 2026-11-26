@@ -39,14 +39,26 @@ For each mod folder in Vortex's Morrowind staging folder (from Vortex's settings
     --convert-omwscripts=<mode> <mod> --json (found on PATH or beside these tools; hardcode by default, with
     --accept-hardcode-conversions; --convert-omwscripts=normal for the other mode, --no-convert-omwscripts for
     neither), which lays the mod out itself, so nothing else in it moves that run; the plan shows a dry-run
-    preview. A conflict (exit 4) or other failure is one WARNING line, the run goes on and the mod stays in the
-    plan. A mod with real MWSE Lua (a .lua under MWSE\\ that omw2mwse didn't generate) is MWSE-first: its
-    OpenMW files go to Off\\OpenMW\\ as above and are never converted. Without the converter: one WARNING line
-    and the usual Off\\OpenMW\\ move. --undo reverses a conversion: it journals what omw2mwse reported, deletes
+    preview. A conflict (exit 4) or other failure is one WARNING line, the run goes on, and the mod is treated as
+    not convertible (below). A mod with real MWSE Lua (a .lua under MWSE\\ that omw2mwse didn't generate) is
+    MWSE-first: its OpenMW files go to Off\\OpenMW\\ as above and are never converted. An OpenMW-only mod that
+    is not converted (no converter, a failed or blocked conversion, --no-convert-omwscripts) has its ENTIRE
+    package moved to Off\\OpenMW\\<mod name>\\ - plugins, scripts, data folders, Docs\\, Screenshots\\ - so the
+    staging root keeps only Off\\ (and Vortex's marker file) and that is all it deploys; --undo puts each file
+    back. Without the converter: one WARNING line.
+    --undo reverses a conversion: it journals what omw2mwse reported, deletes
     the files omw2mwse wrote (its manifest's list, each only if it still has the hash the manifest gives; an edited
     one stays, with one WARNING line) and puts the original package from Off\\<Mod>\\OpenMW\\ back at its
     original paths. The shared MWSE\\lib\\omwcompat runtime goes only when no converted mod is left in staging or
-    Data Files.
+    Data Files. The converter gets --title and --author from Vortex's mod info when it has them. omw2mwse's
+    verdict is read from its JSON: blocked (it cannot run, but the converter still writes an active loader and
+    exits 0) is not shipped - the output is undone at once, the mod is treated as not convertible, its whole
+    package goes to Off\\OpenMW\\ as above, one WARNING line, and the plan says so up front; partial counts as
+    converted, with one NOTE. Plugins are never renamed or enabled by tidy: omw2mwse renames .omwaddon/.omwgame
+    to .esp/.esm itself (originals stay under Off\\); an optional plugin it flags (plugin-rename-clash) or a
+    plugin shipped at the mod root is only reported in a NOTE, not enabled.
+  * A bugreports\\ folder tidy made during a run that is empty at the end of it (--apply, a dry run or --undo)
+    is removed again; one that was already there, or has anything in it, stays.
   * Everything else (screenshots, FOMOD option folders, meta.ini, .bak files...) goes to
     Extras\\<mod name>\\, where <mod name> is the folder name without Vortex's Nexus id, version and
     download stamp ("MUSE 2.02-46200-2-02-1593543300" -> "MUSE").
@@ -331,6 +343,36 @@ def has_diffuse_sibling(path):
                for x in names)
 
 
+def whole_package_moves(mod_dir, entries, name):
+    """The moves of an OpenMW-only mod that is not converted (omw2mwse missing, failed, judged it blocked, or
+    --no-convert-omwscripts): its ENTIRE package goes to Off\\OpenMW\\<mod name>\\ - plugins, scripts, data
+    folders, tidy's own Docs\\ and Screenshots\\ - so the staging root keeps only Off\\ (and Vortex's own
+    marker file) and that is all the mod deploys. Left where they are: Off\\ itself, Vortex's marker file and
+    omw2mwse-generated output (it is removed, not shipped). An OpenMW\\ folder an earlier run made is
+    unpacked there (not nested). --undo puts every file back from the journal."""
+    off = os.path.join(mod_dir, existing(mod_dir, "Off"))
+    openmw = os.path.join(off, existing(off, "OpenMW") if os.path.isdir(off) else "OpenMW", name)
+    why = "OpenMW-only mod that is not converted: whole package -> Off\\OpenMW\\"
+    moves, taken = [], set()
+
+    def move(src, rel):
+        moves.append((src, free_path(os.path.join(openmw, rel), taken), why))
+
+    for e in sorted(entries):
+        el, src = e.lower(), os.path.join(mod_dir, e)
+        if el == "off" or el in VORTEX_FILES:
+            continue
+        if os.path.isdir(src) and el == "openmw":
+            for x in sorted(os.listdir(src)):
+                move(os.path.join(src, x), x)
+            moves.append((src, None, "remove the emptied folder"))
+            continue
+        if os.path.isdir(src) and el == "mwse" and any(MP.omw_generated(p) for p in files_under(src)):
+            continue                                     # omw2mwse's own output: removed by its undo, never moved
+        move(src, e)
+    return moves
+
+
 def plan_mod(mod_dir):
     """[(source, destination, reason)] for one mod, or a str saying why it's left alone."""
     entries = os.listdir(mod_dir)
@@ -339,13 +381,14 @@ def plan_mod(mod_dir):
                                   if os.path.isfile(os.path.join(mod_dir, e))):
         return "installs into the game folder (exe/dll/Data Files at its root)"
     name = mod_name(os.path.basename(mod_dir))
-    if CONVERTER["mode"]:                            # OpenMW-only (no MWSE Lua): omw2mwse converts it
-        oms = openmw_only(mod_dir, entries)
-        if oms:
-            if CONVERTER["cmd"]:                     # it lays the mod out itself, so nothing else moves now
-                CONVERT[mod_dir] = oms
-                return []
-            CONVERTER["missed"] = CONVERTER.get("missed", 0) + 1     # not found: the usual Off\ move
+    oms = openmw_only(mod_dir, entries)              # OpenMW-only (no MWSE Lua): omw2mwse converts it
+    if oms:
+        if CONVERTER["mode"] and CONVERTER["cmd"]:   # it lays the mod out itself, so nothing else moves now
+            CONVERT[mod_dir] = oms
+            return []
+        if CONVERTER["mode"]:
+            CONVERTER["missed"] = CONVERTER.get("missed", 0) + 1     # not found
+        return whole_package_moves(mod_dir, entries, name)           # not converted: all of it goes to Off\
     plugins = {os.path.splitext(e)[0].lower() for e in entries if os.path.splitext(e)[1].lower() in KEEP_FILE_EXT}
     # an OpenMW plugin (.omwaddon) and no Morrowind plugin: with no OpenMW scripts it is an ordinary plugin
     # in OpenMW's file name, so it becomes an .esp; with scripts, it needs OpenMW: you decide (REVIEW)
@@ -474,6 +517,8 @@ def plan_mod(mod_dir):
 REVIEW = {}            # mod folder -> (its .omwaddon files, the OpenMW scripts that make it OpenMW-only)
 CONVERTED = {}         # mod folder -> (its .omwaddon files, the omw2mwse-generated folders in it): left as they are
 CONVERT = {}           # OpenMW-only mod folder -> its .omwscripts files: --apply hands it to omw2mwse
+PREVIEW = {}           # converted-to-be mod folder -> (ok, summary line) of omw2mwse's dry run
+BLOCKED_PLAN = []      # warning texts: mods omw2mwse's dry run judged blocked (they get the usual Off\\ move)
 CONVERT_MODES = ("hardcode", "normal")          # omw2mwse's own --convert-omwscripts modes
 CONVERT_ACTION = "convert with omw2mwse"
 CONVERTER = {"mode": None, "cmd": None, "env": None, "why": ""}   # set by main(): the mode, how to run it
@@ -592,12 +637,32 @@ def setup_converter(mode):
         CONVERTER["cmd"], CONVERTER["env"], CONVERTER["why"] = find_converter()
 
 
+_VORTEX_INFO = {}       # mod folder name -> what Vortex knows (read once per run)
+
+
+def vortex_info(mod_dir):
+    """{"title", "author"} Vortex knows for a staging mod folder (read-only; {} when it can't be read or knows
+    nothing): omw2mwse credits them in the MCM page, notices and metadata."""
+    key = os.path.basename(mod_dir)
+    if key not in _VORTEX_INFO:
+        try:
+            _VORTEX_INFO[key] = MP.vortex_mod_info(key) or {}
+        except Exception:                             # noqa: BLE001 - no info is not an error
+            _VORTEX_INFO[key] = {}
+    return _VORTEX_INFO[key]
+
+
 def run_converter(mod_dir, mode, dry_run=False):
     """Run omw2mwse --convert-omwscripts=<mode> <mod_dir> --json (hardcode: --accept-hardcode-conversions, as
-    tidy runs it without a prompt; --apply already asked). (exit code, parsed JSON or None, error text)."""
+    tidy runs it without a prompt; --apply already asked), with --title/--author when Vortex has them.
+    (exit code, parsed JSON or None, error text)."""
     argv = list(CONVERTER["cmd"]) + [f"--convert-omwscripts={mode}", mod_dir, "--json"]
     if mode == "hardcode":
         argv.append("--accept-hardcode-conversions")
+    info = vortex_info(mod_dir)
+    for opt in ("title", "author"):
+        if info.get(opt):
+            argv += ["--" + opt, info[opt]]
     if dry_run:
         argv.append("--dry-run")
     try:
@@ -667,6 +732,47 @@ def convert_lines(d, oms, mode):
             f"    {CONVERT_ACTION} ({mode}): OpenMW-only, no MWSE Lua ({', '.join(oms)})"]
 
 
+def blocked_reason(entry):
+    """For a converter result entry with verdict "blocked": 'N blocker(s), first: <message>'."""
+    bl = [al for al in entry.get("alerts") or [] if al.get("code") == "blocker"]
+    first = f", first: {bl[0].get('message')}" if bl else ""
+    return f"{len(bl)} blocker(s){first}"
+
+
+def preview_verdicts(data):
+    """[(mod name, verdict, entry)] of a converter result's ok mods."""
+    return [(m.get("name"), m.get("verdict"), m) for m in (data or {}).get("mods") or []
+            if m.get("status") == "ok"]
+
+
+def unconverted_moves(mod_dir):
+    """The usual plan_mod moves of a mod, as if it were not going to be converted (blocked by omw2mwse: its
+    OpenMW files go to Off\\OpenMW\\ as for any OpenMW-only mod)."""
+    saved = CONVERTER["mode"]
+    CONVERTER["mode"] = None
+    try:
+        res = plan_mod(mod_dir)
+    finally:
+        CONVERTER["mode"] = saved
+    return res if isinstance(res, list) else []
+
+
+def shipped_plugins(files):
+    """Root plugins (.esp/.esm) in a converter manifest's file list that the converter did not make from an
+    .omwaddon/.omwgame (no such file under its Off package): the package shipped them itself."""
+    keys = {k.replace("\\", "/") for k in files or {}}
+    low = {k.lower() for k in keys}
+    out = []
+    for k in sorted(keys):
+        stem, ext = os.path.splitext(k)
+        if "/" in k or ext.lower() not in (".esp", ".esm"):
+            continue
+        src = ".omwaddon" if ext.lower() == ".esp" else ".omwgame"
+        if not any(x.endswith("/" + stem.lower() + src) and x.startswith("off/") for x in low):
+            out.append(k)
+    return out
+
+
 def _rel_in(mod_dir, p):
     """p (a path the converter printed: relative to the mod, or absolute) as a '/'-separated path relative to
     mod_dir; '' for the mod folder itself."""
@@ -707,24 +813,68 @@ def journal_conversions(staging, ops, head_extra):
         os.fsync(j.fileno())
 
 
+def _undo_now(op, staging):
+    """Undo a conversion at once (omw2mwse's verdict was blocked). True when it is undone."""
+    cstate = {"mods": 0, "removed": 0, "restored": 0, "defer": [], "names": set(), "staging": staging}
+    ok = undo_conversion(op, staging, cstate)
+    finish_conversions(cstate)
+    return ok
+
+
 def convert_apply(staging, mods, mode, head_extra=None):
     """--apply: run the converter on each OpenMW-only mod and journal what it changed (for --undo). A conflict
-    (exit 4) or any other failure gets one WARNING line and the run goes on. Returns the mod folders not
-    converted."""
+    (exit 4) or any other failure gets one WARNING line and the run goes on. A mod omw2mwse judges blocked
+    (verdict "blocked": it exits 0 and still writes an active loader) is not shipped: its output is undone at
+    once and its OpenMW files take the usual Off\\OpenMW\\ move, with one WARNING line; "partial" is converted,
+    with one NOTE. Returns the mod folders not converted."""
     left = []
     for mod_dir in mods:
         code, data, err = run_converter(mod_dir, mode)
         ok, line = converter_summary(code, data, err)
         name = os.path.basename(mod_dir)
-        ops = [conversion_op(mod_dir, m, mode) for m in (data or {}).get("mods") or []
-               if m.get("status") == "ok" and (m.get("changed") or m.get("relocated")) and not data.get("dryRun")]
+        ops, blocked, notes = [], [], []
+        for mname, verdict, m in preview_verdicts(data):
+            if data.get("dryRun") or not (m.get("changed") or m.get("relocated")):
+                continue
+            op = conversion_op(mod_dir, m, mode)
+            if verdict == "blocked":
+                blocked.append((mname, op, blocked_reason(m)))
+                continue
+            ops.append(op)
+            if verdict == "partial":
+                notes.append(f"{mname} is only partly supported by omw2mwse (verdict partial): converted anyway")
+            for al in m.get("alerts") or []:
+                if al.get("code") == "plugin-rename-clash":
+                    notes.append(f"{mname}: {al.get('message')}; tidy leaves it there and never enables it")
+            ship = shipped_plugins(op["files"])
+            if ship:
+                notes.append(f"{mname} also has plugin(s) at its root that omw2mwse did not make from an "
+                             f".omwaddon/.omwgame ({', '.join(ship)}): tidy does not rename or enable them; "
+                             f"enable one in Vortex only if you want that option")
         if ops:                                      # also from a result with a conflict in another mod
             journal_conversions(staging, ops, head_extra)
         if ok:
             print(f"  converted {name} with omw2mwse ({mode}): {line}")
         else:
-            print(f"  WARNING: omw2mwse could not convert {name}: {line}; left as it is")
-            left.append(mod_dir)
+            moves = unconverted_moves(mod_dir)
+            print(f"  WARNING: omw2mwse could not convert {name}: {line}; not converted, "
+                  + ("its whole package goes to Off\\OpenMW\\" if moves else "left as it is"))
+            if moves:
+                apply(moves, staging, None, head_extra)
+            else:
+                left.append(mod_dir)
+        for note in notes:
+            print(f"  NOTE: {note}")
+        for mname, op, why in blocked:
+            if _undo_now(op, staging):
+                print(f"  WARNING: omw2mwse says {mname} cannot run ({why}): not converted, conversion undone, "
+                      f"its whole package goes to Off\\OpenMW\\")
+                moves = unconverted_moves(mod_dir)
+                if moves:
+                    apply(moves, staging, None, head_extra)
+            else:
+                print(f"  WARNING: omw2mwse says {mname} cannot run ({why}), and its output could not be undone")
+                left.append(mod_dir)
     return left
 
 
@@ -839,6 +989,9 @@ def run_plan(args):
     NORMAL_PACKS.clear()
     CONVERTED.clear()
     CONVERT.clear()
+    _VORTEX_INFO.clear()
+    PREVIEW.clear()
+    del BLOCKED_PLAN[:]
     CONVERTER["missed"] = 0
     _TEX_INDEX.clear()
     pats = blacklist(create=bool(getattr(args, "apply", False))) + (args.skip or [])
@@ -851,10 +1004,24 @@ def run_plan(args):
         if isinstance(res, str):
             skipped.append((d, res))
             continue
-        if os.path.join(args.staging, d) in CONVERT:
-            touched += 1
-            lines += convert_lines(d, CONVERT[os.path.join(args.staging, d)], CONVERTER["mode"])
-            continue
+        full = os.path.join(args.staging, d)
+        if full in CONVERT:
+            code, data, err = run_converter(full, CONVERTER["mode"], dry_run=True)   # a preview: nothing is written
+            blocked = [(n, blocked_reason(m)) for n, v, m in preview_verdicts(data) if v == "blocked"]
+            if blocked:                              # omw2mwse would write an active loader that can't work
+                del CONVERT[full]
+                BLOCKED_PLAN.append(f"{d}: omw2mwse says {blocked[0][0]} cannot run ({blocked[0][1]}): not converted, "
+                                    f"its whole package goes to Off\\OpenMW\\")
+                res = unconverted_moves(full)
+            else:
+                PREVIEW[full] = converter_summary(code, data, err)
+                for n, v, _m in preview_verdicts(data):
+                    if v == "partial":
+                        NOTES.append(f"{d}: omw2mwse verdict partial for {n}: it will be converted, only partly "
+                                     f"supported")
+                touched += 1
+                lines += convert_lines(d, CONVERT[full], CONVERTER["mode"])
+                continue
         if not res:
             continue
         touched += 1
@@ -866,11 +1033,14 @@ def run_plan(args):
         head.append(f"  - left alone: {d} ({why})")
     if CONVERTER.get("missed"):                      # one line: the converter isn't there
         head.append(f"  - WARNING: omw2mwse (the OpenMW converter) was not found on PATH or beside these tools: "
-                    f"{CONVERTER['missed']} OpenMW-only mod(s) get the usual Off\\OpenMW\\ move instead")
-    for mod_dir in sorted(CONVERT):                  # a preview (dry run); "#"-free notes, not actions
-        ok, line = converter_summary(*run_converter(mod_dir, CONVERTER["mode"], dry_run=True))
+                    f"{CONVERTER['missed']} OpenMW-only mod(s) get their whole package moved to Off\\OpenMW\\ instead")
+    for text in BLOCKED_PLAN:
+        head.append(f"  - WARNING: {text}")
+    for mod_dir in sorted(CONVERT):                  # the preview (dry run); notes, not actions
+        ok, line = PREVIEW[mod_dir]
         head.append(f"  - {'omw2mwse preview' if ok else 'WARNING: omw2mwse preview'} for "
-                    f"{os.path.basename(mod_dir)} ({CONVERTER['mode']}): {line}")
+                    f"{os.path.basename(mod_dir)} ({CONVERTER['mode']}): {line}"
+                    + ("" if ok else "; if --apply cannot convert it either, its whole package goes to Off\\OpenMW\\"))
     for d, n in sorted(NORMAL_PACKS.items()):
         NOTES.append(f"{d}: a normal-map add-on pack ({n} normal map(s) under a 'normal maps' path) - not "
                      f"applicable to classic Morrowind (only OpenMW uses normal maps); consider removing it in Vortex")
@@ -879,8 +1049,9 @@ def run_plan(args):
                      f"stand-in); mwdialog_check --full's unused-asset purge removes the unused ones")
     for mod_dir, (addons, gen) in sorted(CONVERTED.items()):
         NOTES.append(f"{os.path.basename(mod_dir)}: converted by omw2mwse ({', '.join(gen)}); its "
-                     f"{', '.join(addons)} (no .esp beside it) is the converter's copy and is left as it is - "
-                     f"Morrowind loads only .esp/.esm, so ask the converter if it should be one")
+                     f"{', '.join(addons)} (no .esp beside it) stays as it is - current omw2mwse installs the .esp "
+                     f"itself and keeps the original under Off\\, so this is an older conversion's copy: re-run omw2mwse "
+                     f"(--convert-omwscripts) rather than renaming it here")
     for note in NOTES:
         head.append(f"  - NOTE: {note}")
     for d, rel in ORPHAN_NORMALS[:50]:
@@ -1027,10 +1198,15 @@ def undo(force=False):
               "its mod's Off\\ folder), or --undo --force to overwrite files changed since.", file=sys.stderr)
         return 1
     back = 0
+    cstate = {"mods": 0, "removed": 0, "restored": 0, "defer": [], "names": set(), "staging": None}
+    conv_failed = set()                               # omw2mwse conversions came last in the --apply: first out
+    for r in reversed(group):
+        for op in reversed(r["ops"]):
+            if "omw_convert" in op and not undo_conversion(op, r["head"].get("staging"), cstate):
+                conv_failed.add(id(op))
     restored, removed, afailed = _asset_undo(aplan, aops, force) if aops else (0, 0, [])
     keep_assets = bool(afailed)                       # every asset op stays for another try (putting back is idempotent)
     out_runs = []
-    cstate = {"mods": 0, "removed": 0, "restored": 0, "defer": [], "names": set(), "staging": None}
     for r in reversed(group):
         left = []                                     # ops not undone: kept in the journal for another try
         for op in reversed(r["ops"]):
@@ -1047,10 +1223,9 @@ def undo(force=False):
                     print("  " + msg, file=sys.stderr)
                     left.append(op)
                 continue
-            if "omw_convert" in op:                   # an omw2mwse conversion: generated files out, originals back
-                if undo_conversion(op, r["head"].get("staging"), cstate):
-                    continue
-                left.append(op)
+            if "omw_convert" in op:                   # undone above; one that could not be stays for another try
+                if id(op) in conv_failed:
+                    left.append(op)
                 continue
             try:
                 if "rmdir" in op:
@@ -2792,8 +2967,12 @@ def main():
             and (not os.path.isdir(os.path.join(HERE, "Data Files")) or MP.acquire_game_lock(HERE))):
         print(MP.RUN_LOCKED_MESSAGE, file=sys.stderr)
         return 1
-    if args.undo:
-        return undo(args.force)                       # works from the journal; the plan file plays no part
+    if args.undo:                                     # works from the journal; the plan file plays no part
+        before = {st: bugreport_folders(st) for st in (_journal_stagings() if os.path.exists(JOURNAL) else [])}
+        try:
+            return undo(args.force)
+        finally:
+            remove_empty_bugreports(before)
     try:
         args.staging = MP.resolve_staging(cli=args.staging, required=True)
     except MP.VortexPathError as e:
@@ -2802,11 +2981,13 @@ def main():
     src = "--staging" if any(a == "--staging" or a.startswith("--staging=") for a in sys.argv[1:]) else "Vortex settings"
     print(f"Vortex staging: {args.staging}  (from {src})")
     CORE_MISSING.clear()
+    before = {args.staging: bugreport_folders(args.staging)}
     try:
         if not args.apply:
             return plan_main(args)
         return apply_main(args)
     finally:
+        remove_empty_bugreports(before)
         print_core_warning()                          # once per run, last, whatever happened
 
 
@@ -2941,6 +3122,59 @@ def _finish_plan(args, st, reviewed, audit):
     PF.finish(PLAN, "vortex_tidy.py" + (" --lua-only" if args.lua_only else ""), left, audit, reviewed,
               st["text"], note)
     return left
+
+
+# ---------------------------------------------------------------- empty bugreports\ folders
+# A mod's bugreports\ folder is made when a bug report is written, and update_bug_report deletes a report left
+# with no sections but not its folder. Whatever makes one, tidy never leaves one behind: at the end of every run
+# (plan, --apply, --undo) a mod's bugreports\ folder that is empty and that tidy made (absent when the run
+# began) or emptied (it held files then) is removed. One that was already empty is not ours and stays.
+
+def bugreport_folders(staging):
+    """{path of a mod's bugreports folder: True when it holds anything} for every mod folder in staging."""
+    out = {}
+    try:
+        mods = os.listdir(staging)
+    except OSError:
+        return out
+    for d in mods:
+        md = os.path.join(staging, d)
+        try:
+            names = os.listdir(md) if os.path.isdir(md) else ()
+        except OSError:
+            continue
+        for e in names:
+            p = os.path.join(md, e)
+            if e.lower() == "bugreports" and os.path.isdir(p):
+                try:
+                    out[p] = bool(os.listdir(p))
+                except OSError:
+                    pass
+    return out
+
+
+def remove_empty_bugreports(before):
+    """before: {staging: bugreport_folders(staging) at the start of the run}. Removes what the rule above says."""
+    for staging, was in before.items():
+        for p, has in bugreport_folders(staging).items():
+            if not has and was.get(p) is not False:
+                try:
+                    os.rmdir(p)
+                except OSError:
+                    pass
+
+
+def _journal_stagings():
+    """The staging folders named by the journal's runs (what an --undo can touch)."""
+    out = []
+    try:
+        for r in _read_journal_runs():
+            st = r["head"].get("staging")
+            if st and os.path.isdir(st) and st not in out:
+                out.append(st)
+    except OSError:
+        pass
+    return out
 
 
 def _main_with_notice():
