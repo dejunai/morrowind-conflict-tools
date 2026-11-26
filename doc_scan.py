@@ -4,7 +4,8 @@ exist in the code, and every switch the code defines should be documented.
 It only verifies. It never edits a doc or a source file.
 
 What it reads
-  The tools: every *.py beside this script (the CLIs). tests/, diag/ and this file are left out.
+  The tools: every *.py beside this script (the CLIs). tests/, diag/, this file and the private, untracked
+gather_steam_lua.py are left out.
   The docs: README.md, docs/MORE_INFO.md, and the other docs/*.md except docs/CHANGES.md
   (a history of names that were removed on purpose) and docs/dev/.
 
@@ -82,7 +83,8 @@ def rel(root, path):
 
 def py_files(root):
     """CLI modules beside the script (or DIR). This checker is not one of the tools it checks."""
-    skip = {"doc_scan.py"}
+    # gather_steam_lua.py: a private, untracked helper (.gitignore) that is not documented on purpose
+    skip = {"doc_scan.py", "gather_steam_lua.py"}
     for name in sorted(os.listdir(root)):
         if name.endswith(".py") and name not in skip and not name.startswith("."):
             yield os.path.join(root, name), name

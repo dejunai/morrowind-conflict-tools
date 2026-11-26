@@ -1,3 +1,14 @@
+# sync.py is a repository tool, one way: repository -> MWManager (2026-11-26)
+
+- `sync.py` moved from the Steam install into the repository (dev only: `deploy_manifest.txt` excludes it, `deploy.py`
+  never ships it) and is documented under "Developer Tools (repository only)". It is tested now (`tests/test_sync.py`).
+- Removed completely: the Steam -> repository step (it copied the install's files over the repository's), the
+  `--clone-only` switch, the check of the deployed suite against `lua tools\`, and every other read or write of the
+  Morrowind install. `deploy.py` is the only tool that writes to Steam. The source is the repository's working tree
+  (uncommitted tracked files are warned about); the one destination is MWManager, given on the command line and saved
+  in `sync.ini` (untracked); a folder inside a Morrowind install is refused. MWManager's files are read only to compare
+  versions (no-downgrade: skip, one WARNING line, go on) and to retire mods that left the repository (backed up first).
+
 # GUI stress test fixes: long-path repairs, cached log-shim plans, play-hash record, doc_scan test (2026-11-26)
 
 - vortex_tidy: a file both too long once deployed and broken (MWManager's test mod "Zz Deep Path") had its repair

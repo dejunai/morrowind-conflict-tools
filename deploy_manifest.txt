@@ -12,6 +12,7 @@
 # The tools: the Python modules and launchers at the project root
 include *.py
 exclude doc_scan.py                     # dev: verifies documented switches against the code
+exclude sync.py                         # dev: repository -> MWManager; never writes to an install
 include *.bat
 exclude Play Morrowind.bat              # the game-folder launcher: it lives beside Morrowind.exe, not in conflict-tools
 

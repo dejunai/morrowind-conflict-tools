@@ -37,6 +37,7 @@ The suite is engineered for massive, complex mod lists (hundreds of plugins, ten
 - [Developer Tools (repository only)](#developer-tools-repository-only)
   - [deploy.py](#deploypy)
   - [doc_scan.py](#doc_scanpy)
+  - [sync.py](#syncpy)
 - [License](#license)
 
 ---
@@ -471,7 +472,7 @@ When the tools are not installed inside the game folder, their records go straig
 
 ## Developer Tools (repository only)
 
-These two scripts are for working on the tools. They are in the repository and are never deployed into an install.
+These scripts are for working on the tools. They are in the repository and are never deployed into an install.
 
 ### deploy.py
 
@@ -501,6 +502,23 @@ python doc_scan.py -h | --help
 ```
 
 It reads `README.md` and `docs\*.md` (not `docs\CHANGES.md`, which keeps removed names on purpose, and not `docs\dev\`), and the switches the tools define (argparse calls and hand-written parsers). It prints one line per documented switch the code doesn't have (file, line, and the tool it was checked against) and one per switch the code has that no doc mentions, then a summary. A switch hidden with `help=argparse.SUPPRESS` (retired or internal) is not listed as undocumented. Switches of other programs (`omw2mwse`, `luajit`, `git`...) written after that program's name are left out. `DIR` checks another copy of the project. Exit codes: `0` clean, `1` something to fix, `2` an unknown switch.
+
+### sync.py
+
+Carries the tools from the repository into MWManager, one way: repository to MWManager. It never opens, reads or writes the Morrowind install (`deploy.py` is the only tool that writes there), never changes this repository and takes nothing back from MWManager.
+
+```text
+python sync.py [MWMANAGER] [--dry-run]
+python sync.py -h | --help
+```
+
+| Switch | Argument | Description |
+| :--- | :--- | :--- |
+| `MWMANAGER` | `<PATH>` | The MWManager folder to sync into. Saved in `sync.ini` beside `sync.py` (machine-specific, never committed); with none given the saved one is used. Refused when it is, or is inside, a Morrowind install. |
+| `--dry-run` | *(flag)* | Report everything a real run would do (copies, retirements, manifest and `UPSTREAM.json` changes) and write nothing at all (not even `sync.ini`). Run this first. |
+| `-h`, `--help` | *(flag)* | Print the full help and exit. |
+
+The source is the repository's working tree (the files git tracks, as they are on disk); tracked files with uncommitted changes are listed in a warning, and `UPSTREAM.json` names `HEAD`, so commit and run it again. The destination is MWManager's `tools\steam-upstream\` (the entries in `COPY_MANIFEST.json`, plus the repository's tests and the suite Lua, which always go along), its root copies of the upstream modules, `reference\mwse-lua-guards\` and `reference\mwmanager-menu\`; the sizes and hashes in both manifests follow the copied bytes. A mod gone from the repository is removed from MWManager after a backup to `<MWManager's parent>\_deploy_backups\mwmanager-retired-<stamp>\` (`SHA256SUMS.txt`, a relative `ROLLBACK.ps1`). No-downgrade: a `lua tools\` file is never put over a newer one in MWManager; it is skipped with one warning line and the rest goes on (other files are simply overwritten). MWManager's files are read only to compare versions. Before a real run, back up what it will change; it commits and pushes nothing. Exit codes: `0` done, `1` refused, `2` an unknown switch.
 
 ---
 
