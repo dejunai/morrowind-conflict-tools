@@ -1,3 +1,22 @@
+# vortex_tidy --undo reverses an omw2mwse conversion (2026-11-25)
+
+- `--apply` journals each conversion with the converter's own report: where the original package was
+  (`relocatedFrom`, or `source` when it was not moved), where omw2mwse keeps it (`Off\<Mod>\OpenMW\`), the folder
+  and manifest it wrote and the manifest's file list with hashes. The record shares the `--apply` id, so one
+  `--undo` undoes the moves, the Lua patches, the asset repairs and the conversions of that run.
+- `--undo` puts the original package back from `Off\<Mod>\OpenMW\` at its original paths (a file already there
+  with the same content just lets the Off copy go; a different one is kept, with one WARNING line), then deletes
+  what omw2mwse wrote, from its manifest (the manifest on disk, else the journaled copy, else whatever carries its
+  markers plus `MWSE\config\omwcompat_<Mod>.json`). A generated file whose hash is no longer the manifest's was
+  edited: it stays, with one WARNING line, and so does the manifest. Never deleted: a path of the original
+  package, anything under the Off package, anything a manifest path points outside the mod folder at, or a
+  file the manifest does not list (your own MWSE mods, the game's config). Emptied folders go.
+- The shared `MWSE\lib\omwcompat` runtime goes, in every mod it was deferred in, only once no converted mod is
+  left in any mod folder of staging or in Data Files (a deployed copy of a mod just undone does not count).
+- A second `--undo` finds nothing to do. Checked end to end against the real omw2mwse (a package at the mod root, one
+  set aside under `Off\OpenMW\<Mod>\`, both modes, two mods sharing the runtime): the mod folders come back
+  byte for byte, folder for folder.
+
 # OpenMW converter output is recognised by its markers; tidy converts OpenMW-only mods (2026-11-25)
 
 - `mwdialog_paths.omw_generated` / `omw_generated_dir`: a folder is omw2mwse output when it holds
@@ -22,7 +41,7 @@
   (exit 4), refusal (3) or error is one WARNING line, the run goes on and the mod stays in the plan. The
   converter is found on PATH or beside these tools (this folder, its `tools\` or the folder above: an
   `omw2mwse(.exe/.cmd/.bat/.py)`, a checkout's `bin\omw2mwse`, or the `omw2mwse` package); not found: one
-  WARNING line and the usual `Off\OpenMW\` move. `--undo` does not reverse a conversion.
+  WARNING line and the usual `Off\OpenMW\` move.
 - Hybrid mods (real MWSE Lua: a `.lua` under `MWSE\` that omw2mwse did not generate) are never converted:
   their OpenMW files go to `Off\OpenMW\<mod>\` as before.
 

@@ -42,8 +42,11 @@ For each mod folder in Vortex's Morrowind staging folder (from Vortex's settings
     preview. A conflict (exit 4) or other failure is one WARNING line, the run goes on and the mod stays in the
     plan. A mod with real MWSE Lua (a .lua under MWSE\\ that omw2mwse didn't generate) is MWSE-first: its
     OpenMW files go to Off\\OpenMW\\ as above and are never converted. Without the converter: one WARNING line
-    and the usual Off\\OpenMW\\ move. --undo doesn't reverse a conversion (omw2mwse keeps the original package,
-    byte for byte, in Off\\<Mod>\\OpenMW\\ and lists what it wrote in its manifest).
+    and the usual Off\\OpenMW\\ move. --undo reverses a conversion: it journals what omw2mwse reported, deletes
+    the files omw2mwse wrote (its manifest's list, each only if it still has the hash the manifest gives; an edited
+    one stays, with one WARNING line) and puts the original package from Off\\<Mod>\\OpenMW\\ back at its
+    original paths. The shared MWSE\\lib\\omwcompat runtime goes only when no converted mod is left in staging or
+    Data Files.
   * Everything else (screenshots, FOMOD option folders, meta.ini, .bak files...) goes to
     Extras\\<mod name>\\, where <mod name> is the folder name without Vortex's Nexus id, version and
     download stamp ("MUSE 2.02-46200-2-02-1593543300" -> "MUSE").
@@ -664,14 +667,59 @@ def convert_lines(d, oms, mode):
             f"    {CONVERT_ACTION} ({mode}): OpenMW-only, no MWSE Lua ({', '.join(oms)})"]
 
 
-def convert_apply(staging, mods, mode):
-    """--apply: run the converter on each OpenMW-only mod. A conflict (exit 4) or any other failure gets one
-    WARNING line and the run goes on. Returns the mod folders not converted."""
+def _rel_in(mod_dir, p):
+    """p (a path the converter printed: relative to the mod, or absolute) as a '/'-separated path relative to
+    mod_dir; '' for the mod folder itself."""
+    if not p:
+        return ""
+    if os.path.isabs(p):
+        p = os.path.relpath(os.path.realpath(p), os.path.realpath(mod_dir))
+    p = p.replace("\\", "/").strip("/")
+    return "" if p == "." else p
+
+
+def conversion_op(mod_dir, entry, mode):
+    """The undo record of one converted mod in a converter result (an entry of its JSON "mods"): where its
+    original package was (relocatedFrom, or source when it was not moved), where omw2mwse keeps it now (off),
+    the folder and manifest it wrote, and the files the manifest lists, with their hashes."""
+    name = entry.get("name")
+    off = _rel_in(mod_dir, entry.get("off") or entry.get("source"))
+    frm = _rel_in(mod_dir, entry.get("relocatedFrom") if entry.get("relocatedFrom") is not None
+                  else entry.get("source"))
+    tree = "MWSE/mods/mwsuite/openmw/" + str(name)
+    for g in omw_converted(mod_dir):
+        if os.path.basename(g) == name:
+            tree = g.replace("\\", "/")
+    files = _manifest_files(os.path.join(mod_dir, *(tree.split("/") + [MP.OMW_MANIFEST])))
+    return {"omw_convert": mod_dir, "name": name, "mode": mode, "from": frm, "off": off, "tree": tree,
+            "relocated": sorted(entry.get("relocated") or []), "files": files or {}}
+
+
+def journal_conversions(staging, ops, head_extra):
+    """Append the undo records of a conversion to the journal, on disk before anything else happens."""
+    head = {"run": time.strftime("%Y-%m-%d %H:%M:%S"), "staging": staging}
+    head.update(head_extra or {})
+    with open(JOURNAL, "a", encoding="utf-8") as j:
+        j.write(json.dumps(head) + "\n")
+        for op in ops:
+            j.write(json.dumps(op) + "\n")
+        j.flush()
+        os.fsync(j.fileno())
+
+
+def convert_apply(staging, mods, mode, head_extra=None):
+    """--apply: run the converter on each OpenMW-only mod and journal what it changed (for --undo). A conflict
+    (exit 4) or any other failure gets one WARNING line and the run goes on. Returns the mod folders not
+    converted."""
     left = []
     for mod_dir in mods:
         code, data, err = run_converter(mod_dir, mode)
         ok, line = converter_summary(code, data, err)
         name = os.path.basename(mod_dir)
+        ops = [conversion_op(mod_dir, m, mode) for m in (data or {}).get("mods") or []
+               if m.get("status") == "ok" and (m.get("changed") or m.get("relocated")) and not data.get("dryRun")]
+        if ops:                                      # also from a result with a conflict in another mod
+            journal_conversions(staging, ops, head_extra)
         if ok:
             print(f"  converted {name} with omw2mwse ({mode}): {line}")
         else:
@@ -982,6 +1030,7 @@ def undo(force=False):
     restored, removed, afailed = _asset_undo(aplan, aops, force) if aops else (0, 0, [])
     keep_assets = bool(afailed)                       # every asset op stays for another try (putting back is idempotent)
     out_runs = []
+    cstate = {"mods": 0, "removed": 0, "restored": 0, "defer": [], "names": set(), "staging": None}
     for r in reversed(group):
         left = []                                     # ops not undone: kept in the journal for another try
         for op in reversed(r["ops"]):
@@ -997,6 +1046,11 @@ def undo(force=False):
                 else:
                     print("  " + msg, file=sys.stderr)
                     left.append(op)
+                continue
+            if "omw_convert" in op:                   # an omw2mwse conversion: generated files out, originals back
+                if undo_conversion(op, r["head"].get("staging"), cstate):
+                    continue
+                left.append(op)
                 continue
             try:
                 if "rmdir" in op:
@@ -1030,6 +1084,7 @@ def undo(force=False):
                 pass
         if left:
             out_runs.insert(0, {"head": r["head"], "ops": list(reversed(left))})
+    finish_conversions(cstate)                        # the shared runtime, once every mod of the run is undone
     runs.extend(out_runs)
     tmp = JOURNAL + ".tmp"
     with open(tmp, "w", encoding="utf-8") as j:
@@ -1038,7 +1093,12 @@ def undo(force=False):
             for op in r["ops"]:
                 j.write(json.dumps(op) + "\n")
     os.replace(tmp, JOURNAL)
-    print(f"Put back {back} item(s) moved or patched by the run of {group[-1]['head']['run']}. Deploy in Vortex again.")
+    if back or not cstate["mods"]:
+        print(f"Put back {back} item(s) moved or patched by the run of {group[-1]['head']['run']}. "
+              f"Deploy in Vortex again.")
+    if cstate["mods"]:
+        print(f"omw2mwse conversions undone: {cstate['mods']} mod(s), {cstate['removed']} generated file(s) removed, "
+              f"{cstate['restored']} original(s) put back. Deploy in Vortex again.")
     if aops:
         print(f"Asset repairs: {restored} original(s) put back at their own path, {removed} file(s) the repairs made "
               f"removed.")
@@ -1048,6 +1108,187 @@ def undo(force=False):
               f"({JOURNAL}), so --undo can try them again.")
         return 1
     return 0
+
+
+# ---------------------------------------------------------------- omw2mwse conversions, for --undo
+# --apply journals each conversion as it is made ("omw_convert": where the original package was, where omw2mwse
+# keeps it, the manifest's file list with hashes). --undo then (1) puts the original package back from
+# Off\<Mod>\OpenMW\ at its original paths (a file already there with the same content just lets the Off copy go;
+# a different one is kept, with a WARNING), (2) deletes what omw2mwse wrote, taken from its manifest
+# (omw2mwse-manifest.json, else the copy journaled at convert time, else whatever carries its markers plus the
+# mod's MWSE\config\omwcompat_<Mod>.json): a file whose hash is no longer the manifest's was edited, so it stays,
+# with one WARNING line; never a path of the original package, never anything under the Off package; the manifest
+# goes last and only if nothing stayed, (3) removes the emptied folders and (4) the shared MWSE\lib\omwcompat
+# runtime once no converted mod is left in staging or Data Files. Running it again finds nothing to do.
+
+def _manifest_files(path):
+    """{relative path: sha256} from an omw2mwse-manifest.json, or None when it is missing or unreadable."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            files = json.load(f).get("files")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return files if isinstance(files, dict) else None
+
+
+def _inside(base, rel):
+    """base + the '/'-separated rel, or None when rel is empty, absolute or climbs out of base."""
+    parts = [x for x in re.split(r"[\\/]+", rel or "") if x]
+    if not parts or os.path.isabs(rel) or any(x == ".." or ":" in x for x in parts):
+        return None
+    return os.path.join(base, *parts)
+
+
+def _prune_empty(path, top):
+    """Remove path (a folder) and its parents while they are empty, never top or anything above it."""
+    top = _nk(top)
+    d = path
+    try:
+        while d and _nk(d).startswith(top + os.sep) and os.path.isdir(d) and not os.listdir(d):
+            os.rmdir(d)
+            d = os.path.dirname(d)
+    except OSError:
+        pass
+
+
+def _warn(msg):
+    print("  WARNING: " + msg, file=sys.stderr)
+
+
+def _off_files(off_abs):
+    out = []
+    for base, _ds, fns in os.walk(off_abs):
+        for fn in sorted(fns):
+            p = os.path.join(base, fn)
+            out.append((os.path.relpath(p, off_abs), p))
+    return sorted(out)
+
+
+def undo_conversion(op, staging, cstate):
+    """Undo one journaled conversion (see above). True when done (also when files stayed with a WARNING);
+    False when it could not be done at all (it stays in the journal for another try)."""
+    mod_dir = op["omw_convert"]
+    name = op.get("name") or os.path.basename(mod_dir)
+    if not os.path.isdir(mod_dir):
+        print(f"  not undone (the mod folder is gone): {mod_dir}", file=sys.stderr)
+        return False
+    cstate["staging"] = cstate["staging"] or staging
+    cstate["names"].add(name)
+    touched = []                                      # folders to tidy up afterwards
+    kept = False
+    try:
+        off_abs = _inside(mod_dir, op.get("off"))
+        frm = op.get("from") or ""
+        frm_abs = _inside(mod_dir, frm) if frm else mod_dir
+        moved_off = bool(off_abs and frm_abs and _nk(off_abs) != _nk(frm_abs))
+        originals = set()
+        if moved_off and os.path.isdir(off_abs):      # (1) the original package, back at its own paths
+            for rel, src in _off_files(off_abs):
+                dst = _inside(frm_abs, rel.replace(os.sep, "/"))
+                if dst is None:
+                    continue
+                originals.add(_nk(dst))
+                if not os.path.exists(dst):
+                    os.makedirs(os.path.dirname(dst), exist_ok=True)
+                    os.rename(src, dst)
+                    cstate["restored"] += 1
+                    touched.append(os.path.dirname(src))
+                elif _sha256(dst) == _sha256(src):
+                    os.remove(src)                    # a copy of what is already in place
+                    touched.append(os.path.dirname(src))
+                else:
+                    _warn(f"kept {src}: {dst} is there already and differs")
+                    kept = True
+        files = _manifest_files(os.path.join(mod_dir, *(op["tree"].split("/") + [MP.OMW_MANIFEST]))) \
+            or op.get("files") or None
+        gen = []                                      # (path, expected hash or None)
+        if files:                                     # (2) what omw2mwse wrote, by its own record
+            for rel, h in sorted(files.items()):
+                p = _inside(mod_dir, rel)
+                if p is None or _nk(p) in originals or (off_abs and (_nk(p) + os.sep).startswith(_nk(off_abs) + os.sep)):
+                    continue
+                gen.append((p, h))
+        else:                                         # no record left: what carries omw2mwse's markers
+            tree = _inside(mod_dir, op["tree"])
+            if tree and MP.omw_generated_dir(tree):
+                for base, _ds, fns in os.walk(tree):
+                    gen += [(os.path.join(base, fn), None) for fn in fns]
+            cfg = os.path.join(mod_dir, "MWSE", "config", f"omwcompat_{name}.json")
+            if os.path.isfile(cfg):
+                gen.append((cfg, None))
+            lib = os.path.join(mod_dir, "MWSE", "lib")
+            for base, _ds, fns in (os.walk(lib) if os.path.isdir(lib) else ()):
+                gen += [(os.path.join(base, fn), None) for fn in fns
+                        if MP.omw_runtime_path(os.path.join(base, fn))]
+        for p, h in gen:
+            if not os.path.isfile(p) or _nk(p) in originals:
+                continue
+            if h and _sha256(p) != h:
+                _warn(f"kept {p}: it changed since omw2mwse wrote it")
+                kept = True
+            elif MP.omw_runtime_path(p):
+                cstate["defer"].append((p, h, mod_dir))
+            else:
+                os.remove(p)
+                cstate["removed"] += 1
+                touched.append(os.path.dirname(p))
+        man = os.path.join(mod_dir, *(op["tree"].split("/") + [MP.OMW_MANIFEST]))
+        if not kept and os.path.isfile(man):
+            os.remove(man)
+            touched.append(os.path.dirname(man))
+    except OSError as e:
+        print(f"  could not undo the conversion of {name}: {e}", file=sys.stderr)
+        return False
+    for d in set(touched):                            # (3) emptied folders, inside the mod only
+        _prune_empty(d, mod_dir)
+    cstate["mods"] += 1
+    return True
+
+
+def converted_elsewhere(staging, names, data_files):
+    """True when a converted mod (its MWSE\\mods folder holds omw2mwse output) is left in any mod folder of
+    staging, or in Data Files, other than a deployed copy of one of `names` (the mods just undone)."""
+    def scan(mods_dir, skip_names):
+        for base, dirs, _fs in os.walk(mods_dir):
+            keep = []
+            for d in dirs:
+                if MP.omw_generated_dir(os.path.join(base, d)):
+                    if d not in skip_names:
+                        return True
+                else:
+                    keep.append(d)
+            dirs[:] = keep
+        return False
+    if staging and os.path.isdir(staging):
+        for m in sorted(os.listdir(staging)):
+            md = os.path.join(staging, m)
+            if os.path.isdir(md) and m.lower() != "off":
+                mods = os.path.join(md, existing(md, "MWSE"), "mods")
+                if os.path.isdir(mods) and scan(mods, ()):
+                    return True
+    dm = os.path.join(data_files, "MWSE", "mods")
+    return os.path.isdir(dm) and scan(dm, names)
+
+
+def finish_conversions(cstate):
+    """--undo, after every conversion of the run: the shared runtime (MWSE\\lib\\omwcompat*) goes from the mods
+    it was deferred in, unless a converted mod is left in staging or Data Files."""
+    if not cstate["defer"]:
+        return
+    if converted_elsewhere(cstate["staging"], cstate["names"], os.path.join(HERE, "Data Files")):
+        return
+    for p, h, mod_dir in cstate["defer"]:
+        try:
+            if not os.path.isfile(p):
+                continue
+            if h and _sha256(p) != h:
+                _warn(f"kept {p}: it changed since omw2mwse wrote it")
+                continue
+            os.remove(p)
+            cstate["removed"] += 1
+            _prune_empty(os.path.dirname(p), mod_dir)
+        except OSError as e:
+            print(f"  could not remove {p}: {e}", file=sys.stderr)
 
 
 # ---------------------------------------------------------------- asset repairs: the originals, for --undo
@@ -2512,8 +2753,9 @@ def main():
     ap.add_argument("--apply", action="store_true", help="make the changes (without it, only the plan is shown)")
     ap.add_argument("--yes", action="store_true", help="with --apply: don't ask first")
     ap.add_argument("--undo", action="store_true",
-                    help="put back everything the last --apply changed: the moves, the Lua patches, and the "
-                         "original of every file an asset repair changed, at its own path")
+                    help="put back everything the last --apply changed: the moves, the Lua patches, the "
+                         "original of every file an asset repair changed, at its own path, and an omw2mwse "
+                         "conversion (its generated files removed, the original package put back)")
     ap.add_argument("--force", action="store_true",
                     help="with --undo: put originals back even over files changed since the --apply")
     ap.add_argument("--no-assets", action="store_true", help="skip the asset check of each mod's files")
@@ -2666,7 +2908,8 @@ def apply_main(args):
         moved_mods = {os.path.relpath(st["moves"][i][0], args.staging).split(os.sep)[0] for i in st["progress"]}
         assets_apply(args, ares, moved_mods)
         if st["convert"]:                            # last: it lays those mods out itself
-            st["convert_left"] = convert_apply(args.staging, st["convert"], CONVERTER["mode"])
+            st["convert_left"] = convert_apply(args.staging, st["convert"], CONVERTER["mode"],
+                                              args._journal_extra)
         st["finished"] = True
     finally:
         left = _finish_plan(args, st, reviewed, audit)
