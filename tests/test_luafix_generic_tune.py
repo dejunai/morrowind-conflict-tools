@@ -200,7 +200,3 @@ def test_gated_and_menu_guarded_see_either_order():
         fn = a.registrations[0][2]
         assert a.gated(fn) and a.menu_guarded(fn)
         assert not found(a, "M1") and not [g for g in found(a, "G2") if g["edits"]]
-
-
-def test_KP3_wording_matches_the_shipped_keg_drip():
-    assert "checkInterval" not in lf.KP3 and "once a second as shipped" in lf.KP3

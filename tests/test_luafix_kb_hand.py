@@ -1,4 +1,5 @@
-"""KB51: MUSE 2.02 DebugLog calls that LuaJIT rejects, and the KB20+ hand-repair table."""
+"""MUSE 2.02 DebugLog calls that LuaJIT rejects (KB51, repaired by Y1 since 2026-11-26), and the KB20+ hand-repair
+table."""
 import os
 import subprocess
 import tempfile
@@ -55,8 +56,8 @@ def muse_src(old):
             "end\n")
 
 
-# region.lua has three split calls (different tab depths); KB51 is a whole rule, so all three
-# must be present before any is applied. The other three files have one call each.
+# region.lua has three split calls (different tab depths). KB51 was retired on 2026-11-26: Y1 repairs any call whose
+# '(' is on a later line, whatever the depth, and keeps every line number.
 REGION_ALL = (
     muse_src("MUSE.DebugLog\n\t\t\t\t\t\t(")
     + "\nlocal function b()\n    "
@@ -72,26 +73,26 @@ REGION_ALL = (
     ("music/region.lua", REGION_ALL),
 ])
 @pytest.mark.parametrize("eol", ["\n", "\r\n"])
-def test_KB51_joins_the_debuglog_call(rel, source, eol):
+def test_Y1_joins_the_debuglog_call(rel, source, eol):
     source = source.replace("\n", eol)
-    findings = [f for f in lf.FileAnalysis(source, "music", rel, CFG).run() if f["rule"] == "KB51"]
+    findings = [f for f in lf.FileAnalysis(source, "music", rel, CFG).run() if f["rule"] == "Y1"]
     assert findings and all(f["conf"] == "high" for f in findings)
     repaired, applied = lf.build_patch(source, findings, "music", CFG, "high", False)
-    assert set(applied) == {"KB51"}
+    assert set(applied) == {"Y1"}
     assert "MUSE.DebugLog(" in repaired
-    # the split form is gone
-    assert "MUSE.DebugLog" + eol not in repaired
-    assert not [f for f in lf.FileAnalysis(repaired, "music", rel, CFG).run() if f["rule"] == "KB51"]
+    # the split form is gone, and no line moved
+    assert "MUSE.DebugLog" + eol not in repaired and repaired.count(eol) == source.count(eol)
+    assert not [f for f in lf.FileAnalysis(repaired, "music", rel, CFG).run() if f["rule"] == "Y1"]
     if os.path.isfile(LUAJIT):
         ok, msg = compile_ok(source)
         assert not ok, msg
         ok, msg = compile_ok(repaired)
         assert ok, msg
-    # a different path is left alone
-    assert not [f for f in lf.FileAnalysis(source, "music", "music/other.lua", CFG).run() if f["rule"] == "KB51"]
+    # a general rule: any path
+    assert [f for f in lf.FileAnalysis(source, "music", "music/other.lua", CFG).run() if f["rule"] == "Y1"]
 
 
-def test_KB51_on_all_four_files_through_check_paths(tmp_path):
+def test_Y1_on_all_four_MUSE_files_through_check_paths(tmp_path):
     roots = tmp_path / "Data Files" / "MWSE" / "mods" / "music"
     roots.mkdir(parents=True)
     files = {
@@ -117,7 +118,7 @@ def test_KB51_on_all_four_files_through_check_paths(tmp_path):
                          data_dir=str(tmp_path / "Data Files"))
     for name in files:
         ent = next(e for p, e in rep.files.items() if p.lower().endswith(name))
-        assert ent["patch"] and ent["patch"]["ok"] and ent["patch"]["rules"] == ["KB51"], (name, ent.get("patch"))
+        assert ent["patch"] and ent["patch"]["ok"] and ent["patch"]["rules"] == ["Y1"], (name, ent.get("patch"))
         if os.path.isfile(LUAJIT):
             ok, msg = compile_ok(ent["patch"]["text"])
             assert ok, (name, msg)
@@ -143,7 +144,8 @@ def test_hand_repair_rules_are_keyed_idempotent_and_not_own_mods():
     assert len(list(KBH.RULES)) == len(KBH.RULES)
 
 
-def test_KB28_repairs_the_creatures_and_critters_syntax_error(tmp_path):
+def test_Y1_repairs_the_creatures_and_critters_syntax_error(tmp_path):
+    """Was KB28 (retired 2026-11-26): literals on separate lines with no ',' never compile; Y1 adds it."""
     src = (
         "local t = {\n"
         "  {\n"
@@ -172,7 +174,8 @@ def test_KB28_repairs_the_creatures_and_critters_syntax_error(tmp_path):
                          data_dir=str(tmp_path / "Data Files"))
     ent = next(iter(rep.files.values()))
     assert ent["error"] is None
-    assert ent["patch"] and ent["patch"]["ok"] and "KB28" in ent["patch"]["rules"]
+    assert ent["patch"] and ent["patch"]["ok"] and "Y1" in ent["patch"]["rules"]
+    assert ent["patch"]["text"].count("\n") == src.count("\n")
     assert '"aa_cr_ing_Twilight_feather",' in ent["patch"]["text"]
     if os.path.isfile(LUAJIT):
         ok, msg = compile_ok(ent["patch"]["text"])
@@ -182,4 +185,4 @@ def test_KB28_repairs_the_creatures_and_critters_syntax_error(tmp_path):
     rep2 = lf.check_paths([str(path.parent.parent.parent)], CFG, checker=checker, use_cache=False,
                           data_dir=str(tmp_path / "Data Files"))
     ent2 = next(iter(rep2.files.values()))
-    assert ent2["patch"] is None or "KB28" not in (ent2["patch"]["rules"] or [])
+    assert ent2["patch"] is None or "Y1" not in (ent2["patch"]["rules"] or [])

@@ -1,3 +1,29 @@
+# luafix: general rules first, Known Bugs only where no rule matches; KP1-KP4 removed (2026-11-26)
+
+- Rule order: the general rules run before the Known Bugs table. A Known Bugs part whose text a high-confidence rule
+  edit also changes is dropped (the rule fixes it); a whole-or-nothing entry keeps its text and the overlapping rule
+  edit is reported (`not applied: Known Bugs KBn repairs this text`). `RULES_REV` 5, so cached plans are re-read.
+- New rules: `Y1` (syntax LuaJIT always rejects: a call's `(` on a later line than the function, moved up with the
+  line break kept; two literals on separate lines in a table with no `,`; this repair runs only on a file LuaJIT
+  rejects and is kept only if the file then compiles), `F3` (a value that can only be true/false concatenated into
+  log text: `tostring()`).
+- Extended: `I1` looks in `icons\` and in the loaded BSAs (`Morrowind.bsa`, `Morrowind.ini` `[Archives]`), fixes
+  `x.dds.dds`, and at medium points a path at its only file one folder off. `A3` covers `tes3.getCurrentWeather`
+  (high) and `tes3.getPlayerCell` / `tes3.getPlayerRef` (medium). `R1` is a fix (a safe handle when the timer starts;
+  the callback returns once the reference is gone). At medium: `H2` cancels a kept timer handle before restarting,
+  `H4` reads a top-level `local X = tes3.worldController.y` in `main.lua` again where it is used, `A1` covers a name
+  that is a reference by its fields (writes guarded with `supportsLuaData`).
+- Retired (a rule now makes the same repair, every part "same" in a read-only comparison over the installed mods):
+  `KB5`, `KB51`, `KB28` (`Y1`); `KB21`, `KB22`, `KB24`, `KB27` (`I1`). They are regression fixtures:
+  `tests/fixtures/luafix_retired_kb.py`, `tests/test_luafix_retired_kb.py`. 46 Known Bugs ids remain.
+- Removed: `KP1`-`KP4` (frame-drain patches of Attend Me, Keg Drip and G7 Containers): they fixed no bug. Handoff to
+  mwsuite as intercept candidates: `docs/dev/LUAFIX_KP_HANDOFF.md`. A file already patched keeps the patch (luafix no
+  longer applies or removes it); `--undo` of that run or a reinstall restores the original. No mod loses a bug fix.
+- Policy: a new `KB`/`KR` entry must end its description with `(no rule can express this: <why>)`;
+  `tests/test_luafix_kb_policy.py` enforces it for every id not in the 2026-11-26 table.
+- `diag/luafix_kb_compare.py` (dev, read-only): compares each Known Bugs part with what the rules alone make of the
+  released text and lists the new rules' findings outside Known Bugs files. Tests: `tests/test_luafix_general_rules.py`.
+
 # F1 report: shimmed, high only where a patch is planned; the cache knows the shim version (2026-11-26)
 
 - Seen in tidy's Lua check: "F1: 138 high" with no repair planned. Cause (read only, Dej's real staging and the real

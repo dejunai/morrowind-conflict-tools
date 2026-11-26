@@ -648,7 +648,7 @@ def test_known_bugs_patch_exact_third_party_and_core_fingerprints(tmp_path):
     assert any("DETECTED: (Known Bugs) KB3: MWSE Core:" in line for line in bug_lines)
 
 
-def test_KB5_repairs_muse_mcm_calls_even_when_original_does_not_compile(tmp_path):
+def test_Y1_repairs_muse_mcm_calls_even_when_original_does_not_compile(tmp_path):
     source = '''local category = {}
 category:createInfo
 {
@@ -678,12 +678,12 @@ category:createOnOffButton
     rep = lf.check_paths([str(tmp_path)], CFG, checker=MUSEChecker(), use_cache=False,
                          data_dir=str(tmp_path / "Data Files"))
     entry = next(iter(rep.files.values()))
-    assert [f["rule"] for f in entry["findings"] if f["rule"] == "KB5"] == ["KB5", "KB5"]
-    assert entry["patch"]["ok"] and entry["patch"]["rules"] == ["KB5"]
+    # KB5 was retired on 2026-11-26: Y1 (any call whose '(' is on a later line) repairs it, line numbers kept
+    assert [f["rule"] for f in entry["findings"] if f["rule"] == "Y1"] == ["Y1", "Y1"]
+    assert entry["patch"]["ok"] and entry["patch"]["rules"] == ["Y1"]
     assert "category:createOnOffButton\n    (" not in entry["patch"]["text"]
     assert entry["patch"]["text"].count("category:createOnOffButton(") == 2
-    bug_lines = lf.known_bug_report_lines(rep)
-    assert any("DETECTED: (Known Bugs) KB5: MUSE 2.02:" in line for line in bug_lines)
+    assert entry["patch"]["text"].count("\n") == source.count("\n")
 
 
 def test_KB6_repairs_enchanted_weapon_condition_only_at_matching_path():
@@ -2184,7 +2184,13 @@ def test_R1_timer_holding_an_event_reference():
            "local function onDmg(e)\n  timer.start{ duration = 1, callback = function() e.reference.mobile:kill() end }\n"
            "end\nevent.register('damaged', onDmg)\n")
     r1 = [f for f in analyse(bad).findings if f["rule"] == "R1"]
-    assert sorted(f["line"] for f in r1) == [4, 9] and all(not f["edits"] for f in r1)
+    assert sorted(f["line"] for f in r1) == [4, 9] and all(f["edits"] and f["conf"] == "high" for f in r1)
+    fixed, applied = lf.build_patch(bad, r1, "testmod", CFG, "high", False)     # R1 is a fix since 2026-11-26
+    assert applied == ["R1"] and fixed.count("\n") == bad.count("\n")
+    assert "local localpatch_h1 = ref and tes3.makeSafeObjectHandle(ref) timer.start" in fixed
+    assert "callback = function() if localpatch_h1 and not localpatch_h1:valid() then return end" in fixed
+    assert "local localpatch_h2 = e.reference and tes3.makeSafeObjectHandle(e.reference) timer.start" in fixed
+    assert "R1" not in [f["rule"] for f in analyse(fixed).findings if f["edits"]]
     good = ("local function onAct(e)\n  local h = tes3.makeSafeObjectHandle(e.target)\n"
             "  timer.start{ duration = 5, callback = function()\n    if h:valid() then h:getObject():disable() end\n"
             "  end }\nend\nevent.register('activate', onAct)\n"

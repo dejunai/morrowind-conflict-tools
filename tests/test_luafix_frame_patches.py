@@ -1,5 +1,6 @@
 """luafix 2026-11-25: noise filters (MWSE\\backups / *-off folders, files nothing loads, G6 on "player", H2 for custom
-events fired only on loaded) and the targeted frame-drain (KP) and safe-handle (KR) patches."""
+events fired only on loaded) and the targeted safe-handle (KR) patches. The frame-drain KP1-KP4 were removed on 2026-11-26 (not bugs:
+docs/dev/LUAFIX_KP_HANDOFF.md)."""
 import os
 
 import pytest
@@ -173,19 +174,25 @@ def test_without_data_files_nothing_is_called_unreferenced(tmp_path):
 
 
 def test_skipKnown_reports_a_targeted_patch_without_applying_it():
-    cfg = dict(CFG, skipKnown=["KP3"])
-    src = KEGDRIP
-    fs = [f for f in analyse(src, "kegdrip/main.lua", cfg).findings if f["rule"] == "KP3"]
+    cfg = dict(CFG, skipKnown=["KR3"])
+    src = RECRUIT_DISMISS
+    fs = [f for f in analyse(src, "attendmemwse/recruit.lua", cfg).findings if f["rule"] == "KR3"]
     assert len(fs) == 1 and fs[0]["conf"] == "report" and not fs[0]["edits"] and "skipKnown" in fs[0]["what"]
 
 
 def test_known_labels():
-    assert lf.known_label("KB19") == "(Known Bugs)" and lf.known_label("KP1") == "(Known Perf)"
+    assert lf.known_label("KB19") == "(Known Bugs)" and lf.known_label("KP1") is None
     assert lf.known_label("KR2") == "(Ref Safety)" and lf.known_label("G6") is None
 
 
-# ------------------------------------------------------------------------------------------------ KP / KR patches
-NEW_RULES = {"KP1", "KP2", "KP3", "KP4", "KR1", "KR2", "KR3"}
+# ------------------------------------------------------------------------------------------------ KR patches
+NEW_RULES = {"KR1", "KR2", "KR3"}
+
+
+def test_the_frame_drain_patches_are_gone():
+    """KP1-KP4 did less work, they fixed no bug: luafix no longer carries them (mwsuite intercept candidates)."""
+    assert not [e for e in lf.KNOWN_BUGS if e[0].startswith("KP")]
+    assert not {r for r in lf.KNOWN_BUGS_WHOLE if r.startswith("KP")}
 
 
 def test_targeted_patches_apply_once_and_are_whole_where_parts_depend():
@@ -194,20 +201,20 @@ def test_targeted_patches_apply_once_and_are_whole_where_parts_depend():
     for _rule, _owner, rel, old, new, _what in entries:
         assert old not in new and rel == rel.lower()
         assert "local fix" in new or "localpatch_" in new
-    assert {"KP1", "KR1", "KR2"} <= lf.KNOWN_BUGS_WHOLE
+    assert {"KR1", "KR2"} <= lf.KNOWN_BUGS_WHOLE
     own = {r.split("/")[0] for _r, _o, r, *_x in entries}
     assert not own & set(lf.OWN_MODS)                      # never the user's own mwsuite Lua
 
 
-def kp_patch(source, rel, rule, parts, eol):
+def kp_patch(source, rel, rule, parts, eol, cfg=CFG):
     """The rule's findings on source (with eol): patched, parses, idempotent, line 1 keeps its text."""
     source = source.replace("\n", eol)
-    findings = [f for f in analyse(source, rel).findings if f["rule"] == rule]
+    findings = [f for f in analyse(source, rel, cfg).findings if f["rule"] == rule]
     assert len(findings) == parts and all(f["conf"] == "high" for f in findings), findings
     repaired, applied = lf.build_patch(source, findings, "testmod", CFG, "high", False)
     assert rule in applied and repaired.count("\n") == repaired.count(eol)
     assert source.split(eol, 1)[0] in repaired.split(eol, 1)[0]
-    assert not [f for f in analyse(repaired, rel).findings if f["rule"] == rule]
+    assert not [f for f in analyse(repaired, rel, cfg).findings if f["rule"] == rule]
     assert lf.verify_patch(source, repaired, applied, None, "testmod", rel, CFG, "high")["ok"]
     return repaired
 
@@ -218,198 +225,6 @@ def lua():
 
 def entry(rule, i=0):
     return [e for e in lf.KNOWN_BUGS if e[0] == rule][i]
-
-
-ATTEND_ACTIONS = """local currentTarget = COMPANION
-local labels = {}
-
-""" + entry("KP1")[3] + """
-
-local function resolveLootContext(companionRef)
-    local hit = rayWorld(companionRef)
-    if not hit or not hit.reference then return nil, "Loot", nil end
-    return "loot", "Loot", hit.reference
-end
-
-local function resolveMoveContext(companionRef)
-    if not companionRef then return "move", "Move" end
-""" + entry("KP1", 1)[3] + """
-        return "wait", "Wait"
-    end
-    return "move", "Move"
-end
-
-local function resolveActionContext(companionRef)
-    local hit = rayWorld(companionRef)
-    if hit and hit.reference and hit.reference.locked then return "lock", "Pick Lock", hit.reference end
-    return "wander", "Wander", nil
-end
-
-local function onSimulate()
-    local _, a = resolveMoveContext(currentTarget)
-    local _, b = resolveLootContext(currentTarget)
-    local _, c = resolveActionContext(currentTarget)
-    local _, _, t = resolveActionContext(currentTarget)
-    labels[#labels + 1] = a .. "/" .. tostring(b) .. "/" .. c .. "/" .. tostring(t and t.name)
-    if FAIL then error("boom") end
-end
-
-local function init()
-""" + entry("KP1", 2)[3] + """end
-init()
-return { rayWorld = rayWorld, labels = labels, move = resolveMoveContext }
-"""
-
-ATTEND_STUBS = """
-COMPANION = { name = "Ajira" }
-CHEST = { name = "chest", locked = true }
-RAYS = 0
-RESULT = {}                                    -- MWSE reuses one result object for every rayTest
-HANDLER = nil
-event = { register = function(_e, fn) HANDLER = fn end }
-tes3 = { event = { simulate = "simulate" }, player = { name = "player" },
-         getPlayerEyePosition = function() return 0 end, getPlayerEyeVector = function() return 1 end }
-tes3.rayTest = function(p)
-    RAYS = RAYS + 1
-    local skipCompanion = false
-    for _, r in ipairs(p.ignore) do if r == COMPANION then skipCompanion = true end end
-    RESULT.reference = skipCompanion and CHEST or COMPANION
-    return RESULT
-end
-"""
-
-
-@need_lua
-@pytest.mark.parametrize("eol", ["\n", "\r\n"])
-def test_KP1_attend_me_shares_the_frames_eye_rays_and_keeps_every_label(eol):
-    repaired = kp_patch(ATTEND_ACTIONS, "attendmemwse/actions.lua", "KP1", 3, eol)
-    out = {}
-    for name, text in (("orig", ATTEND_ACTIONS), ("patched", repaired)):
-        rt = lua()
-        rt.execute(ATTEND_STUBS)
-        rt.globals().SRC = text.replace("\r", "")
-        m = rt.eval("assert(loadstring(SRC))()")
-        rt.execute("HANDLER() HANDLER()")
-        rays_two_frames = rt.eval("RAYS")
-        rt.globals().M = m
-        assert rt.eval("M.rayWorld(COMPANION) == RESULT and M.rayWorld(COMPANION).reference == CHEST")
-        assert rt.eval("select(2, M.move(COMPANION))") == "Wait"
-        rt.execute("FAIL = true")
-        ok = rt.eval("pcall(HANDLER)")
-        assert ok[0] is False and "boom" in ok[1]
-        rt.execute("FAIL = false RAYS = 0")
-        assert rt.eval("M.rayWorld(COMPANION) == RESULT and RAYS == 1")     # an error never leaves the memo on
-        out[name] = (list(m.labels.values()), rays_two_frames)
-    assert out["orig"][0] == out["patched"][0] == ["Wait/Loot/Pick Lock/chest"] * 3
-    assert out["orig"][1] == 8 and out["patched"][1] == 4                    # 4 rays a frame -> 2
-
-
-RECRUIT = """local active = true
-local rays, labels = 0, 0
-local function rayTarget() rays = rays + 1 return { reference = NPC } end
-local function showLabel() labels = labels + 1 end
-
-""" + entry("KP2")[3] + """    if hit and hit.reference then showLabel() end
-end
-
-local function onClick()
-    local hit = rayTarget()
-    return hit.reference
-end
-return { sim = onSimulate, click = onClick, counts = function() return rays, labels end }
-"""
-
-
-@need_lua
-@pytest.mark.parametrize("eol", ["\n", "\r\n"])
-def test_KP2_recruit_label_ray_every_third_frame_click_unchanged(eol):
-    repaired = kp_patch(RECRUIT, "attendmemwse/recruit.lua", "KP2", 1, eol)
-    got = {}
-    for name, text in (("orig", RECRUIT), ("patched", repaired)):
-        rt = lua()
-        rt.execute('NPC = { name = "Fargoth" } MENU = false tes3 = { menuMode = function() return MENU end }')
-        rt.globals().SRC = text.replace("\r", "")
-        rt.globals().M = rt.eval("assert(loadstring(SRC))()")
-        rt.execute("for i = 1, 6 do M.sim() end MENU = true M.sim() M.sim() MENU = false")
-        rays, labels = rt.eval("M.counts()")
-        assert rt.eval("M.click() == NPC")
-        got[name] = (rays, labels)
-    assert got["orig"] == (6, 6) and got["patched"] == (2, 2)                # frames 1 and 4; none in menu mode
-
-
-KEGDRIP = """local kegs = {}
-""" + entry("KP3")[3] + """
-return normalizeMesh
-"""
-
-
-@need_lua
-@pytest.mark.parametrize("eol", ["\n", "\r\n"])
-def test_KP3_keg_drip_normalises_each_mesh_once_with_the_same_answer(eol):
-    repaired = kp_patch(KEGDRIP, "kegdrip/main.lua", "KP3", 1, eol)
-    inputs = ["Meshes/F/Furn_Com_Kegstand.NIF", "f\\furn_de_kegstand.nif", "MESHES\\x/y.nif", "meshes/meshes/a.nif",
-              "hr\\f\\hr_furn_kegstand_01.nif"]
-    res = {}
-    for name, text in (("orig", KEGDRIP), ("patched", repaired)):
-        rt = lua()
-        rt.execute("GSUBS = 0 local g = string.gsub string.gsub = function(...) GSUBS = GSUBS + 1 return g(...) end")
-        rt.globals().SRC = text.replace("\r", "")
-        rt.globals().F = rt.eval("assert(loadstring(SRC))()")
-        vals = [rt.eval("F(...)", x) for x in inputs * 3]
-        assert rt.eval("F(nil) == nil and F(false) == false")
-        assert rt.eval("select('#', F('a/b.nif'))") == 1
-        res[name] = (vals, rt.eval("GSUBS"))
-    assert res["orig"][0] == res["patched"][0] and res["orig"][0][0] == "f\\furn_com_kegstand.nif"
-    assert res["orig"][1] == 2 * (3 * len(inputs) + 1) and res["patched"][1] == 2 * (len(inputs) + 1)
-
-
-G7 = """local mod = {}
----@param itemData tes3itemData|nil
-""" + entry("KP4")[3] + """
-return checkData
-"""
-
-G7_STUBS = """
-LOOKUPS = 0
-REFS = {}
-tes3 = {}
-tes3.getReference = function(id) LOOKUPS = LOOKUPS + 1 if id == nil then return "PLAYER" end return REFS[id] end
-tes3.makeSafeObjectHandle = function(ref)
-    return { valid = function() return not ref.gone end, getObject = function() return ref end }
-end
-function item(id) return { data = { g7containers = { linkedRef = id, baseObject = "g7_bag" } } } end
-"""
-
-
-@need_lua
-@pytest.mark.parametrize("eol", ["\n", "\r\n"])
-def test_KP4_g7_containers_finds_the_linked_container_once(eol):
-    repaired = kp_patch(G7, "spammer/g7 containers/main.lua", "KP4", 1, eol)
-    steps = """
-local out = {}
-local function rec(r, b) out[#out + 1] = tostring(r and r.name) .. ":" .. tostring(b) end
-local A, B, C = { name = "A" }, { name = "B" }, { name = "C" }
-REFS.box = A
-for i = 1, 3 do rec(F(item("box"))) end
-A.gone = true REFS.box = B           -- handle invalid: looked up again
-rec(F(item("box")))
-B.deleted = true REFS.box = C        -- deleted: looked up again
-rec(F(item("box"))) rec(F(item("box")))
-REFS.box = nil C.gone = true         -- gone for good: nil like getReference
-rec(F(item("box")))
-rec(F(nil)) rec(F({ data = {} }))
-out[#out + 1] = tostring(F(item(nil)))
-return table.concat(out, ",")
-"""
-    got = {}
-    for name, text in (("orig", G7), ("patched", repaired)):
-        rt = lua()
-        rt.execute(G7_STUBS)
-        rt.globals().SRC = text.replace("\r", "")
-        rt.globals().F = rt.eval("assert(loadstring(SRC))()")
-        got[name] = (rt.execute(steps), rt.eval("LOOKUPS"))
-    assert got["orig"][0] == got["patched"][0] == "A:g7_bag,A:g7_bag,A:g7_bag,B:g7_bag,C:g7_bag,C:g7_bag,nil:g7_bag,nil:nil,nil:nil,PLAYER"
-    assert got["orig"][1] == 8 and got["patched"][1] == 5
 
 
 FADER = """local this = {}
@@ -542,7 +357,11 @@ return { dismiss = dismissCompanion, home = function() return HOME end }
 @need_lua
 @pytest.mark.parametrize("eol", ["\n", "\r\n"])
 def test_KR3_attend_me_dismiss_checks_a_safe_handle_first(eol):
-    repaired = kp_patch(RECRUIT_DISMISS, "attendmemwse/recruit.lua", "KR3", 1, eol)
+    # R1 (a general rule) repairs this shape too and runs first: KR3 applies where R1 does not (the real file)
+    r1 = [f for f in analyse(RECRUIT_DISMISS.replace("\n", eol), "attendmemwse/recruit.lua").findings
+          if f["rule"] in ("R1", "KR3")]
+    assert [f["rule"] for f in r1 if f["edits"]] == ["R1"]
+    repaired = kp_patch(RECRUIT_DISMISS, "attendmemwse/recruit.lua", "KR3", 1, eol, dict(CFG, skipRules=["R1"]))
     got = {}
     for name, text in (("orig", RECRUIT_DISMISS), ("patched", repaired)):
         rt = lua()

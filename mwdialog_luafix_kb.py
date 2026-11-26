@@ -5,18 +5,13 @@ applies whole or not at all (every part of it in a file matches, or nothing in t
 and once applied its text is gone, so a second run finds nothing. Paths are under MWSE\\mods, or
 lib/... under MWSE for libraries. Data only: mwdialog_luafix adds these to KNOWN_BUGS."""
 
-KB_WHOLE = {"KB20", "KB21", "KB22", "KB23", "KB24", "KB25", "KB26", "KB27", "KB28", "KB29", "KB30", "KB31", "KB32", "KB33", "KB34", "KB35", "KB36", "KB37", "KB38", "KB39", "KB40", "KB41", "KB42", "KB43", "KB44", "KB45", "KB46", "KB47", "KB48", "KB49", "KB50"}
+KB_WHOLE = {"KB20", "KB23", "KB25", "KB26", "KB29", "KB30", "KB31", "KB32", "KB33", "KB34", "KB35", "KB36", "KB37", "KB38", "KB39", "KB40", "KB41", "KB42", "KB43", "KB44", "KB45", "KB46", "KB47", "KB48", "KB49", "KB50"}
 
 WHAT = {
     "KB20": ('the default effect icons and particle textures name .tga files that are not shipped (the textures are .dds); the names are corrected to .dds'),
-    "KB21": ('the Self Repair and Thorns effects name the particle texture vfx_alt_glow.tga, which ships as .dds'),
-    "KB22": ('the flawed daedroth summon names the particle texture vfx_conj_flare02.tga, which ships as .dds'),
     "KB23": ("the achievements compare tes3.getGlobal() with a number, and getGlobal returns nil when the ABtv_Ach_* globals are not loaded ('attempt to compare nil with number'); missing globals fall back to player data"),
-    "KB24": ('the summon effect names the particle texture vfx_conj_flare02.tga, which ships as .dds'),
     "KB25": ('four quest icons name \\Icons\\SSQN\\BA_Vamp.dds; the shipped icon is BA_Vampire.dds'),
     "KB26": ('icons.MT_S names \\Icons\\SSQN\\MT\\MT24MT_S.dds; the icon ships as \\Icons\\SSQN\\MT24MT_S.dds'),
-    "KB27": ('the chapel icon names temple.dds.dds (doubled extension); the file is temple.dds'),
-    "KB28": ('the _plume ids list is missing three commas, so the file does not compile and the mod never loads'),
     "KB29": ("swapping a reference copies item data and cell state without nil checks and raises when the target object, the new reference or the cell is missing; the copies are guarded and the swap is pcall'd"),
     "KB30": ('musicSelectTrack reads tes3.player.cell before a game is loaded (main menu music)'),
     "KB31": ('export/import checks, restocking and the barter/dialogue handlers index the player cell, region, service actor and reference data without nil checks'),
@@ -148,15 +143,6 @@ PARTS = [
     ("KB20", 'Magicka Expanded', 'operatorjack/magickaexpanded-lorefriendlypack/effects/banishdaedraeffect.lua',
      "    particleTexture = \"vfx_myst_flare01.tga\",\n",
      "    particleTexture = \"vfx_myst_flare01.dds\",\n"),
-    ("KB21", 'DRIP', 'mer/drip/customeffects/effects/selfrepair.lua',
-     "        particleTexture = \"vfx_alt_glow.tga\",\n",
-     "        particleTexture = \"vfx_alt_glow.dds\",\n"),
-    ("KB21", 'DRIP', 'mer/drip/customeffects/effects/thorns.lua',
-     "\t\tparticleTexture = \"vfx_alt_glow.tga\",\n",
-     "\t\tparticleTexture = \"vfx_alt_glow.dds\",\n"),
-    ("KB22", 'OAAB Grazelands', 'oaab/grazelands/effects/flawedsummondaedrotheffect.lua',
-     "        particleTexture = \"vfx_conj_flare02.tga\",\n",
-     "        particleTexture = \"vfx_conj_flare02.dds\",\n"),
     ("KB23", 'OAAB Grazelands', 'oaab/grazelands/achievements.lua',
      "-- Track the MWSE summon even when the achievement framework is absent.\n"
      "local function observeVerminoth()\n",
@@ -197,9 +183,6 @@ PARTS = [
     ("KB23", 'OAAB Grazelands', 'oaab/grazelands/achievements.lua',
      "            achievement.condition = function() return tes3.getGlobal(variable) >= threshold end\n",
      "            achievement.condition = function() return getGlobal(variable) >= threshold end\n"),
-    ("KB24", 'The Garden of Dreams', 'x32/summons/interop.lua',
-     "    particleTexture = \"vfx_conj_flare02.tga\",\n",
-     "    particleTexture = \"vfx_conj_flare02.dds\",\n"),
     ("KB25", 'SSQN Patches', 'cz/ssqnpatches/main.lua',
      "\t\tssqn.registerQIcon(\"vaba06_mastrius\",\"\\\\Icons\\\\SSQN\\\\BA_Vamp.dds\")\n",
      "\t\tssqn.registerQIcon(\"vaba06_mastrius\",\"\\\\Icons\\\\SSQN\\\\BA_Vampire.dds\")\n"),
@@ -214,19 +197,6 @@ PARTS = [
     ("KB26", 'SSQN LE', 'ssqn/iconlist.lua',
      "icons.MT_S = \"\\\\Icons\\\\SSQN\\\\MT\\\\MT24MT_S.dds\"\n",
      "icons.MT_S = \"\\\\Icons\\\\SSQN\\\\MT24MT_S.dds\"\n"),
-    ("KB27", 'Map Icons', 'spammer/map icons/skyicons.lua',
-     "    [\" chapel\"] = \"Textures\\\\Spammer\\\\SkyIcons\\\\temple.dds.dds\",\n",
-     "    [\" chapel\"] = \"Textures\\\\Spammer\\\\SkyIcons\\\\temple.dds\",\n"),
-    ("KB27", 'Map Icons', 'spammer/map icons/vanillaicons.lua',
-     "    [\" chapel\"] = \"Textures\\\\Spammer\\\\MapIcons\\\\temple.dds.dds\",\n",
-     "    [\" chapel\"] = \"Textures\\\\Spammer\\\\MapIcons\\\\temple.dds\",\n"),
-    ("KB28", 'Creatures and Critters', 'danae/cc/main.lua',
-     "      \"aa_cr_ing_Twilight_feather\"\n"
-     "      \"aa_RacerPlumes2\"\n"
-     "      \"aa_RacerPlumes3\"\n",
-     "      \"aa_cr_ing_Twilight_feather\",\n"
-     "      \"aa_RacerPlumes2\",\n"
-     "      \"aa_RacerPlumes3\",\n"),
     ("KB29", 'Dynamic Object Replacer', 'lib/dor/gpobjectreplacer.lua',
      "local function cloneReferenceData(newRef, oldRef)\n"
      "    -- Copy over basic item data.\n",

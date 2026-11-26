@@ -21,8 +21,11 @@ Rules (thresholds come from MWSE\\config\\mwguard.json when it exists - the same
   G4 a one-shot handler (done flag) that never unregisters -> unregisters once the flag is set         fix
   G5 per-frame costs: uncached lookups, config/file I/O, allocations, message boxes every frame      report
   A1 ref.data.x used without a guard -> (ref.data and ref.data.x) / if ref.data then ... end           fix
+     (a name REF_NAME doesn't know, read with reference-only fields such as .baseObject or .mobile in the
+     same function: medium; a write there is guarded with if x.supportsLuaData then ... end)
   A2 a keybind's .keyCode (.mouseButton ...) read with no check -> (key and key.keyCode)               fix
-  A3 a tes3 lookup that can return nil (getObject, getReference, getPlayerTarget, findMenu...) used
+  A3 a tes3 lookup that can return nil (getObject, getReference, getPlayerTarget, findMenu, getCurrentWeather;
+     getPlayerCell and getPlayerRef, nil only before a game is loaded, at medium...) used
      without a check -> guarded                                                                        fix
   A4 an event field that can be nil (damage e.attacker, attack e.targetMobile, cellChanged
      e.previousCell, uiObjectTooltip e.reference...) used without a check -> guarded                  fix
@@ -38,25 +41,40 @@ Rules (thresholds come from MWSE\\config\\mwguard.json when it exists - the same
   F1 log spam (logging every frame, in loops, in frequent events, debug flags on) -> the mod's lines
      past its allowance go to Data Files\\MWSE\\logs\\<mod>.log; errors still reach MWSE.log            fix
   F2 a logger created at DEBUG/TRACE level -> INFO                                                     fix
+  F3 a value that can only be true/false (a comparison, not, a table slot the file only sets to true/false)
+     concatenated into log text ('attempt to concatenate a boolean value') -> tostring(value)         fix
   H1 event.register inside a load/cellChanged/... handler: a named handler -> isRegistered guard     fix
      (MWSE refuses the duplicate but prints a warning and a traceback every time); an anonymous one
      stacks a new copy each time                                                                      report
   H2 a repeating timer started in a handler that runs again (cellChanged...), never cancelled        report
+     (its handle kept in an upvalue, a global or a field: the old timer is cancelled first, medium)    fix
      (not loaded/load: MWSE cancels every timer, real ones too, just before loaded)
   G6 tes3.getReference (scans every cell) in a frequent handler or a fast repeating timer             report
   G7 tes3.rayTest every frame / in a frequent handler with no maxDistance, no root, or accurateSkinned report
   P1 ref.data written on a non-actor reference with no ref.modified = true (lost on reload)           report
-  R1 a timer callback holding a reference from its event with no safe handle / :isValid() check     report
+  R1 a timer callback holding a reference from its event with no safe handle / :isValid() check -> a
+     safe handle taken when it starts; the callback returns once that reference is gone              fix
   T1 timer.start{ callback = "name" } with no timer.register("name", ...) anywhere in the mod         report
   H3 global variables a mod creates by accident (no local)                                            report
   H4 game data used at file load, before the initialized event                                        report
+     (local X = tes3.worldController.x / tes3.player.x / tes3.mobilePlayer.x at the top of main.lua,
+     never assigned again: nil-safe at load and read again where used, (X or <chain>), medium)        fix
   H5 require cycles inside a mod                                                                      report
-  I1 a .tga/.bmp it names is gone and a real .dds of that name is there -> names the .dds          fix
+  I1 a .tga/.bmp it names is gone and a real .dds of that name is there (loose under Data Files or the
+     mod, in textures\\ or icons\\, or in a loaded BSA) -> names the .dds; x.dds.dds whose x.dds is there
+     -> one extension; a path whose file is in exactly one place one folder off (medium) -> that path  fix
   I2 a repeating real-time timer that redraws UI keeps running through a save -> skips while saving fix
   I3 a config written inside a save handler (during the save) -> written the frame after it        fix
   H6 tes3.messageBox inside a loop                                                                    report
   H7 X.f() through local X = require(...) of the same mod, whose table never gets f                  report
+  Y1 syntax LuaJIT always rejects, so the file never loads: a call's '(' on a later line than the function
+     ('ambiguous syntax') -> the '(' moves up, the line break stays after it; two literals on separate
+     lines in a table with no ',' -> the ','. May repair a file that doesn't compile (kept only if it
+     then compiles)                                                                                    fix
   KB<n> a documented bug that requires editing its owning mod/core file -> its exact replacement     fix
+     The rules run first: a Known Bugs part applies only where no rule matched (a whole-or-nothing part
+     keeps its text and the overlapping rule edit gives way). A new KB entry must say in its description
+     why no rule can express it: "(no rule can express this: <why>)" (tests/test_luafix_kb_policy.py).
   L1 a while loop that walks links (x = x.next) or counts down by a computed step -> capped at 10000   fix
   M1 an enterFrame handler (it also fires in menus) with no UI work -> returns in menu mode            fix
   S1 tes3.getSoundPlaying{ reference = <not the player> }: on a non-actor the engine can say "not
@@ -238,7 +256,12 @@ PLAYER_IDS = {"player", "playersavegame"}
 KEY_FIELDS = {"keyCode", "mouseButton", "mouseWheel", "isShiftDown", "isAltDown", "isControlDown", "isSuperDown"}
 NIL_LOOKUPS = {"tes3.getObject", "tes3.getReference", "tes3.getPlayerTarget", "tes3.getEquippedItem", "tes3.getCell",
                "tes3.getFaction", "tes3.getSound", "tes3.getScript", "tes3.findDialogue",
-               "tes3.getRegion", "tes3.findClass", "tes3ui.findMenu"}
+               "tes3.getRegion", "tes3.findClass", "tes3ui.findMenu",
+               # nil right after a new game is started from inside a running one (KB10-KB12)
+               "tes3.getCurrentWeather",
+               # nil only before a game is loaded (main menu): guarded at medium (most callers run in a game)
+               "tes3.getPlayerCell", "tes3.getPlayerRef"}
+NIL_LOOKUPS_MEDIUM = {"tes3.getPlayerCell", "tes3.getPlayerRef"}
 _DMG = {"attacker", "attackerReference", "projectile", "magicSourceInstance", "magicEffectInstance"}
 _ATK = {"targetMobile", "targetReference"}
 _CAST = {"target"}
@@ -256,6 +279,15 @@ NULLABLE_EVENT_FIELDS = {
     "spellCast": _CAST, "spellCasted": _CAST, "spellCastedFailure": _CAST, "magicCasted": _CAST,
     "leveledItemPicked": {"pick", "spawner"}, "leveledCreaturePicked": {"pick", "spawner"}}
 NIL_TMP = "localpatch_v"
+# rules that may repair a file LuaJIT rejects (with the exact Known Bugs repairs): Y1 fixes only syntax that never compiles
+SYNTAX_RULES = frozenset({"Y1"})
+# F3: calls whose arguments are log text (a concatenation error there kills the handler for a log line)
+LOG_FUNC_NAMES = frozenset({"log", "debuglog", "debug_log", "dlog", "logmessage", "logdebug", "logger"})
+LOG_METHODS = frozenset({"trace", "debug", "info", "warn", "error"})
+# A1 at medium: a name REF_NAME doesn't recognise is a reference when the same function also reads one of these on it
+REF_ONLY_FIELDS = frozenset({"baseObject", "mobile", "sceneNode", "supportsLuaData", "tempData", "modified"})
+# H4 fix: top-level captures of these are nil when the file loads and are read again where they are used
+LOAD_NIL_ROOTS = ("tes3.worldController", "tes3.player", "tes3.mobilePlayer")
 FRAME_EXEMPT_EVENTS = {"cameraControl", "calcMoveSpeed", "mouseAxis", "preventRest"}
 ONCE_EVENTS = {"initialized", "modConfigReady", "initialize"}
 FREQUENT_EVENTS = PER_FRAME | FRAME_EXEMPT_EVENTS | {
@@ -350,7 +382,7 @@ REF_FIELDS = {"reference", "target", "mobile", "attacker", "attackerReference", 
               "targetReference", "targetMobile", "actor", "current", "previous"}
 NON_ACTOR_TYPES = {"activator", "alchemy", "ammunition", "apparatus", "armor", "book", "clothing", "container",
                    "door", "ingredient", "light", "lockpick", "miscItem", "probe", "repairItem", "static", "weapon"}
-RULES_REV = 4                  # bump when a rule changes, so cached findings are worked out again
+RULES_REV = 5                  # bump when a rule changes, so cached findings are worked out again
 # console-only commands; replacement suggestions follow the guide's table where it has one
 CONSOLE_ONLY = {"togglepov": "tes3.togglePOV() (or tes3.force1stPerson() / tes3.force3rdPerson())",
                 "tcl": "console only (no script command)", "tai": "console only (no script command)",
@@ -766,6 +798,7 @@ class FileAnalysis:
         self.registrations = []          # (call, event, handler Function or None, handler arg, options)
         self.handler_events = {}         # id(Function) -> events it is registered for
         self._gate_next = 1 + max([int(x) for x in re.findall(r"localpatch_gate\((\d+)", src)] or [0])
+        self._handle_next = 1 + max([int(x) for x in re.findall(r"\blocalpatch_h(\d+)\b", src)] or [0])
         for c in self.calls:
             if L.dotted(c.func) == "event.register" and len(c.args) >= 2:
                 ev = event_name(c.args[0])
@@ -941,9 +974,12 @@ class FileAnalysis:
                   self.r_keycode, self.r_lookups, self.r_event_fields, self.r_object_fields, self.r_destroy, self.r_console, self.r_info_filter, self.r_reregister,
                   self.r_reload_timers, self.r_globals, self.r_toplevel, self.r_loops, self.r_logger_level,
                   self.r_log_triggers, self.r_loggers, self.r_save_safe, self.r_while_caps, self.r_menu_exit,
-                  self.r_vector_order, self.r_known, self.r_sound_query, self.r_frequent_lookups,
-                  self.r_timer_refs, self.r_ref_data_modified, self.r_message_repeat, self.r_text_rewrite):
+                  self.r_vector_order, self.r_sound_query, self.r_frequent_lookups,
+                  self.r_timer_refs, self.r_ref_data_modified, self.r_message_repeat, self.r_text_rewrite,
+                  self.r_split_calls, self.r_log_concat):
             r()
+        self.r_known()                    # last: a Known Bugs part applies only where no rule matched
+        self.findings[:] = rules_before_kb(self.findings)
         return self.findings
 
     def r_message_repeat(self):
@@ -1041,6 +1077,89 @@ class FileAnalysis:
             return v.key.kind == "String" and FileAnalysis.plain_value(v.obj) if hasattr(v, "key") and \
                 v.key is not None else False
         return False
+
+    def r_split_calls(self):
+        """Y1: f\n(args) - a call's '(' on a later line than the function. Lua 5.1 and LuaJIT reject it ('ambiguous
+        syntax (function call x new statement)'), so the whole file never loads. The '(' moves up to the function and
+        the line break stays after it (every line number stays the same)."""
+        for n in self.nodes:
+            if n.kind not in ("Call", "Method") or n.argkind != "paren":
+                continue
+            if n.kind == "Call":
+                end = n.func.e
+            else:
+                i = self.src.find(":", n.obj.e)
+                j = self.src.find(n.name, i + 1) if i >= 0 else -1
+                if j < 0:
+                    continue
+                end = j + len(n.name)
+            k = end
+            while k < len(self.src) and self.src[k] in " \t\r\n\f\v":
+                k += 1
+            if k >= len(self.src) or self.src[k] != "(" or "\n" not in self.src[end:k]:
+                continue
+            gap = self.src[end:k]
+            self.add("Y1", n, f"{self.src[n.s:end][-40:]} and its '(' are on different lines: LuaJIT rejects the file "
+                     f"(ambiguous syntax), so it never loads", "the '(' moves up to the call; the line break stays",
+                     "high", [(end, k + 1, "(" + gap)])
+
+    def _log_call(self, n):
+        if n.kind == "Method":
+            return n.name in LOG_METHODS and "log" in (L.dotted(n.obj) or "").lower()
+        if n.kind != "Call":
+            return False
+        d = L.dotted(n.func) or ""
+        if d in LOGS:
+            return getattr(n.func if n.func.kind == "Name" else n.func.obj, "binding", None) is None
+        return d.split(".")[-1].lower() in LOG_FUNC_NAMES
+
+    def _bool_slots(self):
+        """Table slots this file only ever stores true/false in: {key} (key: the slot's text for x.f, or the
+        table's text + '[]' for x[k])."""
+        got, other = set(), set()
+        for n in self.nodes:
+            if n.kind != "Assign":
+                continue
+            for i, t in enumerate(n.targets):
+                if t.kind != "Index":
+                    continue
+                v = n.exprs[i] if i < len(n.exprs) else None
+                key = (" ".join(self.text(t.obj).split()) + "[]") if t.field is None else " ".join(self.text(t).split())
+                (got if v is not None and v.kind in ("True", "False") else other).add(key)
+        return got - other
+
+    def r_log_concat(self):
+        """F3: a value that can only be true/false concatenated into log text ('attempt to concatenate a boolean
+        value': the handler stops at its log line). It is wrapped in tostring(), nothing else changes."""
+        calls = [n for n in self.nodes if self._log_call(n)]
+        if not calls:
+            return
+        slots = None
+        done = set()
+        for c in calls:
+            for a in c.args:
+                for m in L.walk_no_funcs(a):
+                    if m.kind != "Binop" or m.op != "..":
+                        continue
+                    for x in (m.left, m.right):
+                        if id(x) in done:
+                            continue
+                        v = x
+                        while v.kind == "Paren":
+                            v = v.expr
+                        boolean = v.kind in ("True", "False") or v.kind == "Unop" and v.op == "not" or \
+                            v.kind == "Binop" and v.op in ("==", "~=", "<", ">", "<=", ">=")
+                        if not boolean and x.kind == "Index":
+                            if slots is None:
+                                slots = self._bool_slots()
+                            key = (" ".join(self.text(x.obj).split()) + "[]") if x.field is None else \
+                                " ".join(self.text(x).split())
+                            boolean = key in slots
+                        if boolean:
+                            done.add(id(x))
+                            self.add("F3", x, f"{self.text(x)[:50]} is true/false and is concatenated into log text "
+                                     f"('attempt to concatenate a boolean value')", "tostring()", "high",
+                                     [(x.s, x.s, "tostring("), (x.e, x.e, ")")])
 
     def r_known(self):
         """KB<n>: documented bugs that cannot be repaired from a separate Lua mod."""
@@ -1500,8 +1619,12 @@ class FileAnalysis:
             if bt is None or bt in ("tes3.player", "tes3.player1stPerson", "tes3.mobilePlayer.reference"):
                 continue
             last = bt.split(".")[-1]
+            conf = "high"
             if not REF_NAME.search(last):
-                continue                                   # self.data, config.data...: not a reference
+                f0 = L.enclosing_function(n)
+                if f0 is None or not self._ref_evidence(f0, bt):
+                    continue                               # self.data, config.data...: not a reference
+                conf = "medium"                            # a reference by its fields, not by its name
             if base.kind == "Name" and getattr(base, "binding", None) is not None:
                 v = base.binding.value
                 if v is not None and L.dotted(v) in ("tes3.player", "tes3.mobilePlayer.reference"):
@@ -1512,16 +1635,25 @@ class FileAnalysis:
             if not self._rvalue_slot(n):
                 lv = sorted((x for x in chain if x.e >= dnode.e and x is not n), key=lambda x: x.e)
                 g = " and ".join(self.src[n.s:x.e] for x in lv)
-                if n.parent is not None and n.parent.kind == "Assign" and any(t is n for t in n.parent.targets) \
-                        or n.parent is not None and n.parent.kind in ("Index", "Method", "Call", "Table", "Binop",
-                                                                       "Return", "Local", "Assign", "Unop", "Paren"):
+                write = n.parent is not None and n.parent.kind == "Assign" and any(t is n for t in n.parent.targets)
+                if conf == "medium" and write:
+                    g = f"{bt}.supportsLuaData"            # the write is skipped on a reference that can't hold it
+                if write or n.parent is not None and n.parent.kind in ("Index", "Method", "Call", "Table", "Binop",
+                                                                        "Return", "Local", "Assign", "Unop", "Paren"):
                     self._nil_fix("A1", n, g, f"{self.text(n)[:60]} used without checking {bt}.data (nil on "
-                                  f"references that can't hold Lua data)")
+                                  f"references that can't hold Lua data)", conf)
                 continue
             levels = sorted((x for x in chain if x.e >= dnode.e), key=lambda x: x.e)
             rep = "(" + " and ".join(self.src[n.s:x.e] for x in levels) + ")"
             self.add("A1", n, f"{self.text(n)[:60]} read without checking {bt}.data (nil on references that "
-                     f"can't hold Lua data)", rep, "high", [(n.s, n.e, rep)])
+                     f"can't hold Lua data)", rep, conf, [(n.s, n.e, rep)])
+
+    def _ref_evidence(self, f, bt):
+        """Does function f read a field only references have (REF_ONLY_FIELDS) on bt?"""
+        for m in L.walk(f.body):
+            if m.kind == "Index" and m.field in REF_ONLY_FIELDS and L.dotted(m.obj) == bt:
+                return True
+        return False
 
     def _rvalue_slot(self, n):
         p = n.parent
@@ -1711,32 +1843,32 @@ class FileAnalysis:
             return None, "in an and/or expression outside a condition"
         return None, f"inside a {st.kind.lower()} statement that can't be wrapped without changing scope or flow"
 
-    def _nil_fix(self, rule, n, g, what):
+    def _nil_fix(self, rule, n, g, what, conf="high"):
         edits, how = self.nil_plan(n, g)
         if edits is None:
             return self.add(rule, n, what, f"check {g} first - left as a report: {how}", "report")
         seen = self.__dict__.setdefault("_nil_seen", set())
         sig = tuple((s, e, t) for s, e, t, _o in edits)
         if sig in seen:                                      # same guard as another read in this place
-            return self.add(rule, n, what, f"{how} on {g} (with the read above)", "high")
+            return self.add(rule, n, what, f"{how} on {g} (with the read above)", conf)
         seen.add(sig)
         tgt = (edits[0][0], edits[1][0])
         body = " ".join(self.src[tgt[0]:tgt[1]].split())
         prev = edits[0][2] + (body if len(body) <= 90 else body[:80] + " ... ") + edits[1][2]
-        return self.add(rule, n, what, f"{how}: {prev}", "high", edits)
+        return self.add(rule, n, what, f"{how}: {prev}", conf, edits)
 
     def _uses_of(self, n):
         """n.x / n:m() reads of n (a nil-able value): the Index/Method nodes that would fail."""
         p = n.parent
         return p if p is not None and p.kind in ("Index", "Method") and p.obj is n else None
 
-    def _guard_binding_uses(self, rule, b, g, what_of):
+    def _guard_binding_uses(self, rule, b, g, what_of, conf="high"):
         if b.assigns or any(self._check_pos(r) for r in b.reads):
             return
         for r in b.reads:
             u = self._uses_of(r)
             if u is not None and u.s >= (self.nodes[0].s if self.nodes else 0):
-                self._nil_fix(rule, u, g, what_of(u))
+                self._nil_fix(rule, u, g, what_of(u), conf)
 
     def r_lookups(self):
         decl_b = {}
@@ -1752,7 +1884,7 @@ class FileAnalysis:
                 if b is not None:
                     self._guard_binding_uses("A3", b, st.names[0], lambda u, d=d, nm=st.names[0]: (
                         f"{self.text(u)[:50]} - {nm} comes from {d}, which returns nil when nothing is found, and is "
-                        f"never checked"))
+                        f"never checked"), "medium" if d in NIL_LOOKUPS_MEDIUM else "high")
         for c in self.calls:
             d = L.dotted(c.func)
             if d not in NIL_LOOKUPS or self._uses_of(c) is None:
@@ -1769,7 +1901,7 @@ class FileAnalysis:
                 L_ = st.e - st.s
                 edits = [(c.s, c.e, pre, (1, -L_)), (st.e, st.e, " end end", (0, L_))]
                 self.add("A3", c, what, f"held in a local and checked: do local {NIL_TMP} = {d}(...) if {NIL_TMP} "
-                         f"then ... end end", "high", edits)
+                         f"then ... end end", "medium" if d in NIL_LOOKUPS_MEDIUM else "high", edits)
             else:
                 self.add("A3", c, what, "keep the result in a local and check it - left as a report: the lookup "
                          "is indexed inside a bigger expression", "report")
@@ -2018,10 +2150,35 @@ class FileAnalysis:
                 continue
             if set(evs) <= {"loaded", "load"}:
                 continue                     # MWSE cancels every timer (real ones too) just before loaded
-            f = self.add("H2", c, f"repeating {typ} started in the {'/'.join(evs)} handler and never cancelled: "
-                         f"one more runs each time it fires", "keep the handle; cancel the old timer before starting "
-                         "one", "report-high")
+            what = f"repeating {typ} started in the {'/'.join(evs)} handler and never cancelled: one more runs " \
+                   f"each time it fires"
+            st = stmt_of(c)
+            held = self._kept_handle(c, _outer)
+            if held and st is not None and st.parent is not None and st.parent.kind == "Block" and \
+                    side_effect_free(st.targets[0]):
+                f = self.add("H2", c, what, f"the old timer is cancelled first: if {held} then {held}:cancel() end",
+                             "medium", [(st.s, st.s, f"if {held} then {held}:cancel() end ")])
+            else:
+                f = self.add("H2", c, what, "keep the handle; cancel the old timer before starting one",
+                             "report-high")
             f["events"] = list(evs)          # dropped later when each is a custom event fired only on loaded
+
+    def _kept_handle(self, c, outer):
+        """The name or field c (a timer.start call) is stored in, when it outlives the handler outer (an upvalue,
+        a global or a table field): x = timer.start{...}. None otherwise."""
+        p = c.parent
+        if p is None or p.kind != "Assign" or len(p.targets) != 1 or len(p.exprs) != 1 or p.exprs[0] is not c:
+            return None
+        t = p.targets[0]
+        d = L.dotted(t)
+        if not d:
+            return None
+        if t.kind == "Name":
+            b = getattr(t, "binding", None)
+            if b is not None and outer is not None and b.func is not None and \
+                    outer.s <= b.func.s and b.func.e <= outer.e:
+                return None                  # a local of the handler: gone when it returns
+        return d
 
     def _fast_timers(self):
         """[(timer.start call, callback Function)] for timers repeating faster than once a second."""
@@ -2107,18 +2264,29 @@ class FileAnalysis:
                         continue                             # a global, or a local of the callback itself
                     src = self._ref_source(b.value) if b.kind == "local" and not b.assigns else None
                     if src:
-                        hit = (n, f"{n.id} (= {src})")
+                        hit = (n, f"{n.id} (= {src})", n.id if b.decl is not None and b.decl.e <= c.s else None)
                         break
                 elif n.kind == "Index" and n.field in REF_FIELDS and n.obj.kind == "Name":
                     b = getattr(n.obj, "binding", None)
                     if b is not None and b.kind == "param" and b.func is not fn and not (
                             fn.s <= b.func.s and b.func.e <= fn.e):
-                        hit = (n, L.dotted(n))
+                        hit = (n, L.dotted(n), L.dotted(n))
                         break
             if hit:
-                self.add("R1", hit[0], f"timer callback uses {hit[1]} from when the timer started, with no safe "
-                         f"handle or :isValid() check (the reference can be gone when it fires)",
-                         "tes3.makeSafeObjectHandle(ref) when starting it; :valid() / :getObject() in the callback")
+                what = f"timer callback uses {hit[1]} from when the timer started, with no safe handle or " \
+                       f":isValid() check (the reference can be gone when it fires)"
+                held = hit[2]
+                st = stmt_of(c)
+                if held and st is not None and st.parent is not None and st.parent.kind == "Block":
+                    h = f"localpatch_h{self._handle_next}"
+                    self._handle_next += 1
+                    self.add("R1", hit[0], what, f"a safe handle taken when it starts; the callback returns once "
+                             f"the reference is gone: local {h} = {held} and tes3.makeSafeObjectHandle({held})",
+                             "high", [(st.s, st.s, f"local {h} = {held} and tes3.makeSafeObjectHandle({held}) "),
+                                      (fn.params_end, fn.params_end, f" if {h} and not {h}:valid() then return end")])
+                else:
+                    self.add("R1", hit[0], what, "tes3.makeSafeObjectHandle(ref) when starting it; :valid() / "
+                             ":getObject() in the callback")
 
     def timer_names(self):
         """([(name, line)] started by name, {names registered}) for T1."""
@@ -2190,11 +2358,57 @@ class FileAnalysis:
                     L.enclosing_function(n) is None:
                 if n.kind == "Index" and n.parent is not None and n.parent.kind == "Call" and n.parent.func is n:
                     continue
+                if self._nil_safe_chain(n):
+                    continue
                 hits.append((n, d))
-        if hits:
-            n, d = hits[0]
-            self.add("H4", n, f"{d} used when the file loads ({len(hits)} place(s)), before the game data exists",
+        fixed = set()
+        for n, d in hits:
+            f = self._read_when_used(n)
+            if f is not None:
+                fixed.add(id(n))
+        rest = [(n, d) for n, d in hits if id(n) not in fixed]
+        if rest:
+            n, d = rest[0]
+            self.add("H4", n, f"{d} used when the file loads ({len(rest)} place(s)), before the game data exists",
                      "move it into an initialized (or loaded) handler")
+
+    def _nil_safe_chain(self, n):
+        """n is part of 'a.b and a.b.c ...' (the value H4's fix leaves): each step is checked before it is read."""
+        top = n
+        while top.parent is not None and top.parent.kind == "Index" and top.parent.obj is top:
+            top = top.parent
+        p, q = top.parent, None
+        while p is not None and p.kind == "Binop" and p.op == "and":
+            q, p = p, p.parent
+        if q is None:
+            return False
+        parts = [x for x in re.split(r"\s+and\s+", self.text(q))]
+        return len(parts) > 1 and all(re.fullmatch(r"[A-Za-z_][\w.]*", x) for x in parts) and \
+            all(parts[i + 1].startswith(parts[i] + ".") for i in range(len(parts) - 1))
+
+    def _read_when_used(self, n):
+        """H4 fix: local X = tes3.worldController.weatherController (or a field chain of tes3.player /
+        tes3.mobilePlayer) at the top of the file, never assigned again: the value is nil-safe when the file loads
+        and each read is (X or <the chain>), so it is read again when it is used. None when the shape differs."""
+        top = n
+        while top.parent is not None and top.parent.kind == "Index" and top.parent.obj is top:
+            top = top.parent
+        st = top.parent
+        if top.kind != "Index" or st is None or st.kind != "Local" or len(st.names) != 1 or len(st.exprs) != 1 or \
+                st.exprs[0] is not top or st.parent is None or st.parent.kind != "Block":
+            return None
+        chain = L.dotted(top)
+        if not chain or not any(chain == r or chain.startswith(r + ".") for r in LOAD_NIL_ROOTS):
+            return None
+        b = next((m.binding for m in self.nodes if m.kind == "Name" and getattr(m, "binding", None) is not None
+                  and m.binding.decl is st), None)
+        if b is None or b.assigns or not b.reads:
+            return None
+        parts = chain.split(".")
+        safe = " and ".join(".".join(parts[:i]) for i in range(2, len(parts) + 1))
+        edits = [(top.s, top.e, safe)] + [(r.s, r.e, f"({r.id} or ({safe}))") for r in b.reads]
+        return self.add("H4", n, f"{st.names[0]} = {chain} is taken when the file loads, before the game data "
+                        f"exists (nil then)", f"read when used: ({st.names[0]} or ({safe}))", "medium", edits)
 
     def r_loops(self):
         for c in self.calls:
@@ -2431,7 +2645,8 @@ SAVE_HELPER = ('local localpatch_save do localpatch_save = package.loaded["local
                'event.register("loaded", function() localpatch_save.saving = false end) '
                'event.register("menuExit", function() localpatch_save.saving = false end) end end ')
 
-IMAGE_LIT_RE = re.compile(r'(["\'])([^"\'\r\n]{1,260}?)\.(tga|bmp)\1', re.I)
+IMAGE_LIT_RE = re.compile(r'(["\'])([^"\'\r\n]{1,260}?)\.(tga|bmp|dds)\1', re.I)
+IMAGE_DIRS = ("", "textures", "icons")            # where a path in a string is looked up (MWSE: icons, textures)
 
 
 def _is_dds(path):
@@ -2442,26 +2657,167 @@ def _is_dds(path):
         return False
 
 
-def image_findings(src, roots):
-    """I1: a string naming a .tga/.bmp that is in none of `roots` (Data Files, the mod's own package) while a
-    file of that name with a real DDS header is: Lua loads images by exact name, with no fallback to .dds."""
+_BSA_NAMES = {}
+
+
+def bsa_names(data_dir):
+    """{lowercase backslash path} of every file in the BSAs the game loads (Morrowind.bsa and Morrowind.ini's
+    [Archives], read from the folder above Data Files); empty when there is none. Read once per run."""
+    if not data_dir:
+        return frozenset()
+    key = os.path.normcase(os.path.abspath(data_dir))
+    if key in _BSA_NAMES:
+        return _BSA_NAMES[key]
+    names = ["Morrowind.bsa"]
+    ini = os.path.join(os.path.dirname(os.path.abspath(data_dir)), "Morrowind.ini")
+    try:
+        with open(ini, encoding="latin-1") as f:
+            sec = ""
+            for ln in f:
+                ln = ln.strip()
+                if ln.startswith("["):
+                    sec = ln.lower()
+                elif sec == "[archives]" and "=" in ln and ln.lower().startswith("archive"):
+                    names.append(ln.split("=", 1)[1].strip())
+    except OSError:
+        pass
+    out = set()
+    try:
+        here = {n.lower(): n for n in os.listdir(data_dir)}
+    except OSError:
+        here = {}
+    import mwdialog_bsa as B
+    for nm in names:
+        real = here.get(nm.lower())
+        if not real:
+            continue
+        try:
+            out |= {x.replace("/", "\\") for x in B.bsa_file_names(os.path.join(data_dir, real))}
+        except Exception:                          # a damaged archive: its names are just not known
+            pass
+    _BSA_NAMES[key] = frozenset(out)
+    return _BSA_NAMES[key]
+
+
+def _image_there(root, rel, bsa, need_dds=False):
+    """Is rel (backslash path, with its extension) a file under root (loose) or in the BSAs, in any IMAGE_DIRS?"""
+    rel_os = rel.replace("\\", os.sep)
+    for d in IMAGE_DIRS:
+        p = os.path.join(root, d, rel_os) if d else os.path.join(root, rel_os)
+        if (_is_dds(p) if need_dds else os.path.isfile(p)):
+            return True
+        if (d + "\\" + rel if d else rel).lower() in bsa:
+            return True
+    return False
+
+
+_IMAGE_NAMES = {}
+
+
+def _image_names(root, bsa):
+    """{lowercase file name: {backslash path under root}} of every image under root's textures and icons, loose
+    and in the BSAs (for I1's unique-name match). Built once per root."""
+    key = (os.path.normcase(os.path.abspath(root)), id(bsa))
+    if key in _IMAGE_NAMES:
+        return _IMAGE_NAMES[key]
+    out = {}
+    for d in ("textures", "icons"):
+        top = os.path.join(root, d)
+        for dp, _dn, fns in os.walk(top):
+            for fn in fns:
+                if fn.lower().endswith((".dds", ".tga", ".bmp")):
+                    rel = os.path.relpath(os.path.join(dp, fn), root).replace("/", "\\")
+                    out.setdefault(fn.lower(), set()).add(rel)
+    for b in bsa:
+        if b.startswith(("textures\\", "icons\\")):
+            out.setdefault(b.rsplit("\\", 1)[-1], set()).add(b)
+    _IMAGE_NAMES[key] = out
+    return out
+
+
+def _one_folder_off(named, found):
+    """named (as written, with or without textures\\ or icons\\ first) and found (a path under Data Files) differ by
+    one folder, one too many or one too few: the same file in a neighbouring folder, not a file of the same name
+    elsewhere. Returns the corrected parts of named (its own spelling, found's for an added folder), else None."""
+    a = [x for x in named.split("\\") if x]
+    b = [x for x in found.split("\\") if x]
+    if a and a[0].lower() not in ("textures", "icons") and b and b[0].lower() in ("textures", "icons"):
+        b = b[1:]
+    if abs(len(a) - len(b)) != 1 or a[-1].lower() != b[-1].lower():
+        return None
+    al, bl = [x.lower() for x in a], [x.lower() for x in b]
+    if len(a) > len(b):
+        for i in range(len(a) - 1):
+            if al[:i] + al[i + 1:] == bl:
+                return a[:i] + a[i + 1:]
+    else:
+        for i in range(len(b) - 1):
+            if bl[:i] + bl[i + 1:] == al:
+                return a[:i] + [b[i]] + a[i:]
+    return None
+
+
+def _concat_next_to(src, mo):
+    """The literal is an operand of '..' (a piece of a path built at run time: not a whole path)."""
+    i, j = mo.start() - 1, mo.end()
+    while i >= 0 and src[i] in " \t":
+        i -= 1
+    while j < len(src) and src[j] in " \t":
+        j += 1
+    return i >= 0 and src[i] == "." or src.startswith("..", j)
+
+
+def image_findings(src, roots, bsa=frozenset()):
+    """I1: a string naming an image the game can't find while the right one is there (loose under `roots` - Data
+    Files, the mod's own package - in their textures\\ or icons\\, or in a loaded BSA). Lua loads images by exact
+    name, with no fallback. High: a .tga/.bmp whose .dds is there (with a real DDS header when loose); a doubled
+    extension (x.dds.dds) whose single one is there. Medium: a path whose file name exists in exactly one place
+    under textures\\ or icons\\ (the folder in the string is wrong)."""
     out = []
     for mo in IMAGE_LIT_RE.finditer(src):
-        name = mo.group(2).replace("/", "\\").replace("\\\\", "\\")
+        raw = mo.group(2)
+        lead = len(raw) - len(raw.lstrip("\\/"))
+        name = raw.replace("/", "\\").replace("\\\\", "\\").lstrip("\\")
         if name.lower().startswith("data files\\"):
             name = name[len("data files\\"):]
-        for root in roots:
-            hit = None
-            for base in (os.path.join(root, name), os.path.join(root, "textures", name)):
-                if not os.path.exists(f"{base}.{mo.group(3)}") and _is_dds(base + ".dds"):
-                    hit = base
+        ext = mo.group(3)
+        full = f"{name}.{ext}"
+        if any(_image_there(r, full, bsa) for r in roots):
+            continue
+        hit = None
+        if ext.lower() in ("tga", "bmp"):
+            for root in roots:
+                if _image_there(root, name + ".dds", bsa, need_dds=True):
+                    hit = Finding(rule="I1", line=src.count("\n", 0, mo.start()) + 1,
+                                  what=f"names '{raw}.{ext}', which is gone; a .dds of that name is there",
+                                  fix="names the .dds", conf="high", edits=[(mo.start(3), mo.end(3), "dds")],
+                                  needs=set())
                     break
-            if hit:
-                out.append(Finding(rule="I1", line=src.count("\n", 0, mo.start()) + 1,
-                                   what=f"names '{mo.group(2)}.{mo.group(3)}', which is gone; a .dds of that name is there",
-                                   fix="names the .dds", conf="high", edits=[(mo.start(3), mo.end(3), "dds")],
-                                   needs=set()))
-                break
+        if hit is None and name.lower().endswith((".dds", ".tga")):
+            single = name
+            if any(_image_there(r, single, bsa) for r in roots):
+                hit = Finding(rule="I1", line=src.count("\n", 0, mo.start()) + 1,
+                              what=f"names '{raw}.{ext}' (the extension twice); '{single}' is there",
+                              fix="one extension", conf="high", edits=[(mo.end(2) - 4, mo.end(2), "")], needs=set())
+        if hit is None and ("\\" in name or "/" in name) and not _concat_next_to(src, mo):
+            fname = full.rsplit("\\", 1)[-1].lower()
+            places = set()
+            for root in roots:
+                places |= _image_names(root, bsa).get(fname, set())
+            low = {p.lower() for p in places}
+            parts = _one_folder_off(full, next(iter(low))) if len(low) == 1 else None
+            if parts:
+                found = sorted(places)[0]
+                sep = "\\\\" if "\\\\" in raw else ("/" if "/" in raw else "\\")
+                new = raw[:lead] + sep.join(parts)
+                new = new[:-(len(ext) + 1)] if new.lower().endswith("." + ext.lower()) else new
+                if new != raw:
+                    hit = Finding(rule="I1", line=src.count("\n", 0, mo.start()) + 1,
+                                  what=f"names '{raw}.{ext}', which is not there; the only file of that name is "
+                                       f"'{found}'", fix="names that file", conf="medium",
+                                  edits=[(mo.start(2), mo.end(2), new)], needs=set())
+        if hit:
+            out.append(hit)
     return out
 
 
@@ -2841,40 +3197,6 @@ end
      '\t\t\tself:clickFilter(button)\n\t\t\tself.pages = {}\n\t\t\tself:distributeLeft(items)', KB4),
 ]
 
-KNOWN_BUGS += [
-    ("KB5", "MUSE 2.02", "music/muse.lua",
-     "category:createOnOffButton\n    (",
-     "category:createOnOffButton(",
-     "two MCM calls split a parenthesized argument after the method name; LuaJIT rejects the file with "
-     "'ambiguous syntax (function call x new statement)', preventing MUSE from loading"),
-]
-
-
-KB51 = ("a newline between MUSE.DebugLog and its opening parenthesis is ambiguous syntax in LuaJIT "
-        "('function call x new statement'), so music/cell.lua, combat.lua, interior.lua and region.lua "
-        "never load and MUSE has no cell, combat, interior or region music (upstream in MUSE 2.02 and "
-        "the official Patch for MUSE 2 v2.02)")
-KNOWN_BUGS += [
-    ("KB51", "MUSE 2.02", "music/cell.lua",
-     "MUSE.DebugLog\n                (",
-     "MUSE.DebugLog(", KB51),
-    ("KB51", "MUSE 2.02", "music/combat.lua",
-     "MUSE.DebugLog\n                (",
-     "MUSE.DebugLog(", KB51),
-    ("KB51", "MUSE 2.02", "music/interior.lua",
-     "MUSE.DebugLog\n\t\t\t\t(",
-     "MUSE.DebugLog(", KB51),
-    ("KB51", "MUSE 2.02", "music/region.lua",
-     "MUSE.DebugLog\n\t\t\t\t\t\t(",
-     "MUSE.DebugLog(", KB51),
-    ("KB51", "MUSE 2.02", "music/region.lua",
-     "MUSE.DebugLog\n\t\t\t\t(",
-     "MUSE.DebugLog(", KB51),
-    ("KB51", "MUSE 2.02", "music/region.lua",
-     "MUSE.DebugLog\n\t\t\t(",
-     "MUSE.DebugLog(", KB51),
-]
-KNOWN_BUGS_WHOLE |= {"KB51"}
 
 KNOWN_BUGS += [
     ("KB6", "OpenUI - MWSE", "spammer/openui - mwse/mod.lua",
@@ -3306,135 +3628,8 @@ KNOWN_BUGS += [
 ]
 
 
-# ---- Targeted frame-drain patches (KP) and timer safe handles (KR), asked for site by site (2026-11-25). Not bugs:
-# each keeps what the mod does and only does less work for it. skipKnown (mwguard.json "luafix") turns one off.
-KP1 = ("rayWorld casts the same 65536-unit eye ray up to four times in one frame while the command wheel is open "
-       "(refreshDynamicLabels every 5th frame: Move, Loot and Action each cast one; updateContextTargetHud every 3rd); "
-       "within one onSimulate pass the world does not change, so one ray per ignore set gives the same answer "
-       "(those callers read only .reference; MWSE reuses one result object per rayTest, so the frame keeps the "
-       "reference, not the result)")
-KNOWN_BUGS += [
-    ("KP1", "Attend Me MWSE", "attendmemwse/actions.lua",
-     "local function rayWorld(ignoreExtra)\n"
-     "    local ignore = { tes3.player }\n"
-     "    if ignoreExtra then table.insert(ignore, ignoreExtra) end\n"
-     "    return tes3.rayTest({\n"
-     "        position = tes3.getPlayerEyePosition(),\n"
-     "        direction = tes3.getPlayerEyeVector(),\n"
-     "        maxDistance = 8192 * 8,\n"
-     "        ignore = ignore,\n"
-     "    })\n"
-     "end",
-     "local localpatch_rays -- local fix (KP1): set while onSimulate runs: one eye ray per ignore set per frame\n"
-     "local function rayWorld(ignoreExtra)\n"
-     "    local memo, key = localpatch_rays, ignoreExtra or false\n"
-     "    if memo and memo[key] ~= nil then return memo[key] or nil end\n"
-     "    local ignore = { tes3.player }\n"
-     "    if ignoreExtra then table.insert(ignore, ignoreExtra) end\n"
-     "    local hit = tes3.rayTest({\n"
-     "        position = tes3.getPlayerEyePosition(),\n"
-     "        direction = tes3.getPlayerEyeVector(),\n"
-     "        maxDistance = 8192 * 8,\n"
-     "        ignore = ignore,\n"
-     "    })\n"
-     "    if memo then -- MWSE reuses one result object per rayTest: keep the reference, which is all onSimulate reads\n"
-     "        memo[key] = hit and { reference = hit.reference } or false\n"
-     "        return memo[key] or nil\n"
-     "    end\n"
-     "    return hit\n"
-     "end\n"
-     "local function localpatch_frameRays(fn) -- local fix (KP1): rays are shared only while fn runs\n"
-     "    return function(...)\n"
-     "        localpatch_rays = {}\n"
-     "        local ok, err = xpcall(fn, debug.traceback, ...)\n"
-     "        localpatch_rays = nil\n"
-     "        if not ok then error(err, 0) end\n"
-     "    end\n"
-     "end", KP1),
-    ("KP1", "Attend Me MWSE", "attendmemwse/actions.lua",
-     "    local hit = tes3.rayTest({\n"
-     "        position = tes3.getPlayerEyePosition(),\n"
-     "        direction = tes3.getPlayerEyeVector(),\n"
-     "        maxDistance = 8192 * 8,\n"
-     "        ignore = { tes3.player },\n"
-     "    })\n"
-     "    if hit and hit.reference == companionRef then",
-     "    local hit = rayWorld() -- local fix (KP1): the same ray (only the player ignored), shared within a frame\n"
-     "    if hit and hit.reference == companionRef then", KP1),
-    ("KP1", "Attend Me MWSE", "attendmemwse/actions.lua",
-     "    event.register(tes3.event.simulate, onSimulate)\n",
-     "    event.register(tes3.event.simulate, localpatch_frameRays(onSimulate)) -- local fix (KP1)\n", KP1),
-]
-
-KP2 = ("recruitment mode casts a 65536-unit eye ray and re-lays-out MenuMulti every frame just to label the NPC under "
-       "the crosshair; the label is refreshed every 3rd frame instead (the command wheel's own TARGET_HUD_EVERY). "
-       "The click still casts its own ray, so who is recruited or dismissed is unchanged")
-KNOWN_BUGS += [
-    ("KP2", "Attend Me MWSE", "attendmemwse/recruit.lua",
-     "local function onSimulate()\n"
-     "    if not active then return end\n"
-     "    if tes3.menuMode() then return end\n"
-     "\n"
-     "    local hit = rayTarget()\n",
-     "local localpatch_frame = 0 -- local fix (KP2): the aim label every 3rd frame, like the wheel's target HUD\n"
-     "local function onSimulate()\n"
-     "    if not active then return end\n"
-     "    if tes3.menuMode() then return end\n"
-     "    localpatch_frame = localpatch_frame + 1\n"
-     "    if localpatch_frame % 3 ~= 1 then return end\n"
-     "\n"
-     "    local hit = rayTarget()\n", KP2),
-]
-
-KP3 = ("refreshCell runs at every refresh (once a second as shipped) over every reference of every active cell and "
-       "normalises each "
-       "one's mesh path with lower() and two gsub()s; the same path always gives the same answer, so it is worked "
-       "out once per path")
-KNOWN_BUGS += [
-    ("KP3", "Keg Drip", "kegdrip/main.lua",
-     "local function normalizeMesh(mesh)\n"
-     "    return mesh and mesh:lower():gsub(\"/\", \"\\\\\"):gsub(\"^meshes\\\\\", \"\")\n"
-     "end",
-     "local localpatch_meshes = {} -- local fix (KP3): each mesh path normalised once, not per reference per refresh\n"
-     "local function normalizeMesh(mesh)\n"
-     "    if not mesh then return mesh end\n"
-     "    local n = localpatch_meshes[mesh]\n"
-     "    if not n then\n"
-     "        n = mesh:lower():gsub(\"/\", \"\\\\\"):gsub(\"^meshes\\\\\", \"\")\n"
-     "        localpatch_meshes[mesh] = n\n"
-     "    end\n"
-     "    return n\n"
-     "end", KP3),
-]
-
-KP4 = ("checkData runs tes3.getReference (a search of every cell's references) for each container item on each "
-       "inventory tile update, uiObjectTooltip and equip; the linked container is found once and kept as a safe "
-       "handle, looked up again only when that handle is no longer valid or the reference was deleted")
-KNOWN_BUGS += [
-    ("KP4", "MWSE Containers Extended", "spammer/g7 containers/main.lua",
-     "local function checkData(itemData)\n"
-     "    local data = itemData and itemData.data and itemData.data.g7containers\n"
-     "    if data then\n"
-     "        return tes3.getReference(data.linkedRef), data.baseObject\n"
-     "    end\n"
-     "end",
-     "local localpatch_linked = {} -- local fix (KP4): the linked container found once, kept as a safe handle\n"
-     "local function checkData(itemData)\n"
-     "    local data = itemData and itemData.data and itemData.data.g7containers\n"
-     "    if data then\n"
-     "        local id = data.linkedRef\n"
-     "        if type(id) ~= \"string\" then return tes3.getReference(id), data.baseObject end\n"
-     "        local h = localpatch_linked[id]\n"
-     "        local ref = h and h:valid() and h:getObject() or nil\n"
-     "        if not ref or ref.deleted then\n"
-     "            ref = tes3.getReference(id)\n"
-     "            localpatch_linked[id] = ref and tes3.makeSafeObjectHandle(ref) or nil\n"
-     "        end\n"
-     "        return ref, data.baseObject\n"
-     "    end\n"
-     "end", KP4),
-]
-
+# ---- Timer safe handles (KR), asked for site by site (2026-11-25). skipKnown (mwguard.json "luafix") turns one off.
+# (KP1-KP4, the frame-drain patches, were removed on 2026-11-26: not bugs; see docs/dev/LUAFIX_KP_HANDOFF.md.)
 KR1 = ("the fade timers keep the sound's reference and call tes3.getSoundPlaying / tes3.removeSound on it for the "
        "whole fade; a reference deleted mid-fade now ends the fade as 'not playing' instead of being used")
 KNOWN_BUGS += [
@@ -3506,7 +3701,7 @@ KNOWN_BUGS += [
      "        callback = function()\n"
      "            if not ref or not localpatch_handle:valid() then return end\n", KR3),
 ]
-KNOWN_BUGS_WHOLE |= {"KP1", "KR1", "KR2"}
+KNOWN_BUGS_WHOLE |= {"KR1", "KR2"}
 
 # KB20 and up: local hand repairs of third-party Lua (asset names, syntax, nil guards, handlers registered again on
 # every load), kept as exact text so the mod can go back to its released files and still get them.
@@ -3880,6 +4075,51 @@ def log_shim(mod_key, cfg):
             .replace("@CFG@", conf) + " ")
 
 
+def _kb_rule(rule):
+    return rule.startswith(("KB", "KR"))
+
+
+def rules_before_kb(findings):
+    """Known Bugs parts apply only where no rule matched: a part whose text a high-confidence rule edit also changes
+    is dropped (the rule fixes it). A Known Bugs rule that applies whole (KNOWN_BUGS_WHOLE) can't lose one part, so
+    there the rule's overlapping edits give way instead (reported). A medium rule edit overlapping a part that stays
+    gives way too, so the result is the same at every --level."""
+    kb = [f for f in findings if _kb_rule(f["rule"]) and any(x[0] != x[1] or x[2] for x in f["edits"])]
+    if not kb:
+        return findings
+    rules = [f for f in findings if not _kb_rule(f["rule"]) and f["edits"] and f["conf"] in ("high", "medium")]
+
+    def spans(f):
+        return [(x[0], x[1]) for x in f["edits"]]
+
+    def ov(s1, e1, s2, e2):                        # shared text, or an insert inside (or at the edge of) the other
+        return max(s1, s2) < min(e1, e2) or s1 == e1 and s2 <= s1 <= e2 or s2 == e2 and s1 <= s2 <= e1
+
+    def hits(a, b):
+        return any(ov(s1, e1, s2, e2) for s1, e1 in spans(a) for s2, e2 in spans(b))
+    drop, demote = set(), set()
+    for k in kb:
+        over = [r for r in rules if hits(k, r)]
+        if not over:
+            continue
+        if k["rule"] in KNOWN_BUGS_WHOLE or not any(r["conf"] == "high" for r in over):
+            demote |= {id(r) for r in over}
+        else:
+            drop.add(id(k))
+            for r in over:
+                r.setdefault("covers", []).append(k["rule"])
+    out = []
+    for f in findings:
+        if id(f) in drop:
+            continue
+        if id(f) in demote:
+            kbs = sorted({k["rule"] for k in kb if id(k) not in drop and hits(k, f)})
+            f = Finding(f, conf="report", edits=[], needs=set(f["needs"]),
+                        fix=f"{f['fix']} - not applied: Known Bugs {', '.join(kbs)} repairs this text")
+        out.append(f)
+    return out
+
+
 def unbrand(src):
     """A file patched by version 4 or older, with this tool's name taken out of what was injected."""
     if "mwluafix" not in src and "mwdialog_luafix" not in src:
@@ -4099,11 +4339,41 @@ def known_text_repair(src, rel, cfg=None):
     return out, found
 
 
+def syntax_text_repair(src, limit=50):
+    """(text, findings) for a file the parser rejects because a table lists two literals with no comma between
+    them on separate lines ("a"\n"b"): that never compiles, so a ',' goes after the first (Y1). Stops at the first
+    error of any other kind; the findings carry an empty edit (the text is already repaired)."""
+    out, found = src, []
+    for _ in range(limit):
+        try:
+            L.parse(out)
+            return out, found
+        except L.LuaSyntaxError as e:
+            if "'}' expected" not in str(e):
+                break
+            try:
+                toks = L.tokenize(out)
+            except L.LuaSyntaxError:
+                break
+            i = next((j for j, t in enumerate(toks) if t.s == e.pos), None)
+            if not i or toks[i].t not in ("str", "num") or toks[i - 1].t not in ("str", "num") or \
+                    toks[i - 1].line >= toks[i].line:
+                break
+            p = toks[i - 1].e
+            found.append(Finding(rule="Y1", line=toks[i - 1].line, what=f"no ',' after {out[toks[i - 1].s:p][:40]} "
+                                 f"in a table: the file doesn't compile, so it never loads", fix="the ',' is added",
+                                 conf="high", edits=[(0, 0, "")], needs=set()))
+            out = out[:p] + "," + out[p:]
+    return src, []
+
+
 def _analyse(src, key, rel, cfg):
     try:
         a = FileAnalysis(src, key, rel, cfg)
     except L.LuaSyntaxError:
-        fixed, found = known_text_repair(src, rel, cfg)
+        fixed, found = syntax_text_repair(src)           # rules first, then the exact Known Bugs repairs
+        fixed, kfound = known_text_repair(fixed, rel, cfg)
+        found += kfound
         if not found:
             raise
         a = FileAnalysis(fixed, key, rel, cfg)    # still raises when the repair is not enough
@@ -4299,9 +4569,9 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
                 a.findings[:] = kept
                 ent["findings"] = _drop_load_like(a.findings, loadlike) + [
                     f for f in ent["findings"] if f["rule"] in ("H5", "H7", "T1")]
-            images = image_findings(a.src, roots)
-            ent["findings"] = [f for f in ent["findings"] if f["rule"] != "I1"] + images
-            findings = a.findings + images
+            images = image_findings(a.src, roots, bsa_names(data_dir))
+            ent["findings"] = rules_before_kb([f for f in ent["findings"] if f["rule"] != "I1"] + images)
+            findings = rules_before_kb(a.findings + images)
             if own_rules is not None:
                 findings = [f for f in findings if f["rule"] in own_rules]
             new, rules = build_patch(a.src, findings, key, cfg, level, want_shim)
@@ -4441,12 +4711,13 @@ def _mark_dead(rep, by_mod, paths, data_dir):
 
 def verify_patch(old, new, rules, checker, key, rel, cfg, level, only_rules=None):
     """{"text", "rules", "ok", "why"}: the patched text parses, a second pass changes nothing more, and the
-    syntax checker compiles it. Only exact Known Bugs fixes may repair a non-compiling original: one must be among
-    the rules (others may come with it, e.g. the log shim), and the patched text must compile."""
+    syntax checker compiles it. Only exact Known Bugs fixes and Y1 (syntax that never compiles) may repair a
+    non-compiling original: one must be among the rules (others may come with it, e.g. the log shim), and the patched
+    text must compile."""
     res = {"text": new, "rules": rules, "ok": False, "why": ""}
     if checker is not None:
         ok, msg = checker.check(old)
-        known_rules = {rule for rule, *_ in KNOWN_BUGS}
+        known_rules = {rule for rule, *_ in KNOWN_BUGS} | SYNTAX_RULES
         known_fix = any(rule in known_rules for rule in rules)
         if not ok and not known_fix:
             res["why"] = f"the original doesn't compile ({msg[:200]}); left alone"
@@ -4686,7 +4957,7 @@ def undo(journal=JOURNAL, force=False, log=print):
 CONF_ORDER = {"high": 0, "report-high": 1, "medium": 2, "report": 3, "trigger": 4, "covered": 5, "shimmed": 5, "info": 6}
 
 
-KNOWN_LABELS = {"KB": "(Known Bugs)", "KP": "(Known Perf)", "KR": "(Ref Safety)"}
+KNOWN_LABELS = {"KB": "(Known Bugs)", "KR": "(Ref Safety)"}
 
 
 def known_label(rule):

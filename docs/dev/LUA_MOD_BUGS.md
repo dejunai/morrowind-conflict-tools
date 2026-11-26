@@ -639,6 +639,8 @@ KB18 (the WBSR save-block conflict stays in `mwsaveguard.wbsr_bard`).
 * **Asset paths (`KB20`-`KB27`)**: Magicka Expanded, DRIP, OAAB Grazelands, The Garden of Dreams, SSQN Patches,
   SSQN LE, and Map Icons name textures or icons that are not shipped (`.tga` where the file is `.dds`,
   `BA_Vamp` for `BA_Vampire`, a doubled `temple.dds.dds`, a wrong Morrowind Traders path).
+* **Retired 2026-11-26**: `KB21`, `KB22`, `KB24`, `KB27` (now `I1`), `KB28`, `KB51` and `KB5` (now `Y1`) - the
+  general rules make the same repairs; the entries are regression fixtures in `tests/fixtures/luafix_retired_kb.py`.
 * **Syntax (`KB28`, `KB51`)**: Creatures and Critters `danae\cc\main.lua` is missing three commas in the
   `_plume` ids list. MUSE 2.02 (and the official Patch for MUSE 2 v2.02) `music\cell.lua`, `combat.lua`,
   `interior.lua` and `region.lua` put a newline between `MUSE.DebugLog` and `(`, which LuaJIT rejects as
