@@ -129,7 +129,7 @@ function mcm.build(main)
         variable = var(config.panel, "objectVfx") })
 
     sel:createKeyBinder({ label = "Selection details hotkey",
-        description = "Press in game, or with the console open, to open the selection details window for the console selection, else what you are looking at, else yourself. Its Show Effects button opens the effect inspector. Default Ctrl+I. With the console open, a key with no Ctrl or Alt (other than F1-F12) is ignored so that typing still works.",
+        description = "Press in game, or with the console open, to open the selection details window for the console selection, else what you are looking at, else yourself. Its Show Effects button opens the effect inspector. Default Alt+I. With the console open, a key with no Ctrl or Alt (other than F1-F12) is ignored so that typing still works.",
         variable = var(config.panel, "hotkey"), allowCombinations = true })
     sel:createButton({ buttonText = "Show my details now", label = "Selection details",
         description = "Opens the selection details window on your character. Needs a loaded game.",

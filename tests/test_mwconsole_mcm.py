@@ -1,4 +1,4 @@
-"""mwconsole's MCM: the selection details hotkey (Ctrl+I) goes through the template registry, its button opens
+"""mwconsole's MCM: the selection details hotkey (Alt+I) goes through the template registry, its button opens
 the details window, and nothing in the menu still refers to the removed mweffectinspector."""
 import os
 import subprocess
@@ -23,10 +23,6 @@ mwse = {
         end
         if SAVED == "altI" then
             return { enabled = true, panel = { hotkey = { keyCode = 23, isAltDown = true, isShiftDown = false, isControlDown = false } } }
-        elseif SAVED == "altImarked" then
-            return { enabled = true, panel = { hotkeyMoved = true, hotkey = { keyCode = 23, isAltDown = true, isShiftDown = false, isControlDown = false } } }
-        elseif SAVED == "other" then
-            return { enabled = true, panel = { hotkey = { keyCode = 23, isAltDown = true, isShiftDown = true, isControlDown = false } } }
         end
         return defaults
     end,
@@ -99,7 +95,7 @@ assert(found, "no hotkey key binder")
 assert(found.data.variable.table == config.panel, "the hotkey lives in config.panel")
 assert(found.data.label == "Selection details hotkey", tostring(found.data.label))
 local k = config.panel.hotkey
-assert(k.keyCode == 23 and k.isControlDown and not k.isAltDown and not k.isShiftDown, "default Ctrl+I")
+assert(k.keyCode == 23 and k.isAltDown and not k.isShiftDown and not k.isControlDown, "default Alt+I")
 assert(config.effects.hotkey == nil, "no hotkey left under effects")
 ''')
 
@@ -145,24 +141,9 @@ assert(config.panel.on == true, "other panel defaults still filled")
 ''', saved="old")
 
 
-def test_a_saved_untouched_alt_i_becomes_ctrl_i_once():
+def test_a_saved_alt_i_stays_alt_i():
     run_lua(r'''
 local k = config.panel.hotkey
-assert(k.keyCode == 23 and k.isControlDown and not k.isAltDown and not k.isShiftDown, "Alt+I moved to Ctrl+I")
-assert(config.panel.hotkeyMoved == true, "and marked as moved")
+assert(k.keyCode == 23 and k.isAltDown and not k.isControlDown and not k.isShiftDown, "saved Alt+I stays")
+assert(config.panel.hotkeyMoved == nil, "no hotkeyMoved flag")
 ''', saved="altI")
-
-
-def test_alt_i_chosen_after_the_move_is_kept():
-    run_lua(r'''
-local k = config.panel.hotkey
-assert(k.keyCode == 23 and k.isAltDown and not k.isControlDown, "a marked Alt+I stays")
-''', saved="altImarked")
-
-
-def test_another_saved_combination_on_i_is_kept():
-    run_lua(r'''
-local k = config.panel.hotkey
-assert(k.keyCode == 23 and k.isAltDown and k.isShiftDown and not k.isControlDown, "Alt+Shift+I stays")
-assert(config.panel.hotkeyMoved == true)
-''', saved="other")

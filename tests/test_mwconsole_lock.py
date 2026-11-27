@@ -1,5 +1,5 @@
 """mwconsole: the selection panel must never end up above the console (the engine only picks world objects for the
-console while MenuConsole is the top menu), and the details hotkey (Ctrl+I) works with the console open without
+console while MenuConsole is the top menu), and the details hotkey (Alt+I) works with the console open without
 typing into the console or reacting to a plain 'i'."""
 import os
 import subprocess
@@ -141,30 +141,30 @@ assert(loadfile(MOD .. "/main.lua"))()
 local function press(e)
     for _, fn in ipairs(handlers.keyDown or {}) do fn(e) end
 end
-local function ctrlI() return { keyCode = 23, isControlDown = true } end
+local function altI() return { keyCode = 23, isAltDown = true } end
 local function plainI() return { keyCode = 23 } end
 """
 
 
-def test_default_hotkey_is_ctrl_i():
+def test_default_hotkey_is_alt_i():
     run_lua(MAIN + r"""
 local k = config.panel.hotkey
-assert(k.keyCode == 23 and k.isControlDown and not k.isAltDown and not k.isShiftDown, "Ctrl+I")
+assert(k.keyCode == 23 and k.isAltDown and not k.isControlDown and not k.isShiftDown, "Alt+I")
 """)
 
 
-def test_ctrl_i_opens_the_details_in_the_world():
+def test_alt_i_opens_the_details_in_the_world():
     run_lua(MAIN + r"""
-press(ctrlI())
+press(altI())
 assert(opened == 1, "opened in the world")
 assert(flushed == 0, "nothing to flush outside the console")
 """)
 
 
-def test_ctrl_i_opens_the_details_with_the_console_open_and_drops_the_typed_character():
+def test_alt_i_opens_the_details_with_the_console_open_and_drops_the_typed_character():
     run_lua(MAIN + r"""
 menuMode = true
-press(ctrlI())
+press(altI())
 assert(opened == 1, "opened with the console open")
 assert(flushed == 1, "the character the keypress would type is dropped")
 """)
@@ -175,10 +175,10 @@ def test_a_plain_i_in_the_console_types_and_opens_nothing():
 menuMode = true
 press(plainI())
 assert(opened == 0 and flushed == 0, "plain i is left to the console")
-press({ keyCode = 23, isAltDown = true })
-assert(opened == 0 and flushed == 0, "the old Alt+I is no longer the key")
-press({ keyCode = 23, isControlDown = true, isShiftDown = true })
-assert(opened == 0 and flushed == 0, "Ctrl+Shift+I is not the key")
+press({ keyCode = 23, isControlDown = true })
+assert(opened == 0 and flushed == 0, "Ctrl+I is not the key")
+press({ keyCode = 23, isAltDown = true, isShiftDown = true })
+assert(opened == 0 and flushed == 0, "Alt+Shift+I is not the key")
 """)
 
 
@@ -186,7 +186,7 @@ def test_the_hotkey_does_nothing_in_other_menus():
     run_lua(MAIN + r"""
 menuMode = true
 consoleVisible = false
-press(ctrlI())
+press(altI())
 assert(opened == 0 and flushed == 0, "inventory, dialogue and so on are left alone")
 """)
 

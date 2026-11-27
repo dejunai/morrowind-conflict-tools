@@ -3,7 +3,7 @@
     * the panel next to the console for the console selection. Never takes focus from the console, never enters
       menu mode itself and is never brought in front of the console (the engine only picks world objects for the
       console while MenuConsole is on top); it goes away with the console.
-    * the details window (the hotkey, default Ctrl+I, works with the console open too): the same rows on the console
+    * the details window (the hotkey, default Alt+I, works with the console open too): the same rows on the console
       selection, else the crosshair target, else the player. It enters menu mode and has a Close button; Esc, a save load and closing menu
       mode close it.
     Both have a Show Effects button that opens the effect inspector on the shown reference (greyed on non-actors).

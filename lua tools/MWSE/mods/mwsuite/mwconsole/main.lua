@@ -6,7 +6,7 @@
 
     Off until switched on in its MCM. Needs UI Expansion's console for completion, the mode keys and the panel;
     without it, registered commands still work through the vanilla console's Enter key.
-    The selection details hotkey is Ctrl+I, in the world or with the console open. The selection panel never goes in
+    The selection details hotkey is Alt+I, in the world or with the console open. The selection panel never goes in
     front of the console (see guard.lua), so console picking keeps working.
 ]]
 local config = require("mwconsole.config")
