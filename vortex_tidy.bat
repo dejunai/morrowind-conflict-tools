@@ -2,7 +2,7 @@
 rem vortex_tidy.bat - tidy the mods in Vortex's Morrowind staging folder (see vortex_tidy.py)
 rem   vortex_tidy.bat                   show the plan (nothing is changed; full plan in plans\vortex_tidy_plan.txt)
 rem   vortex_tidy.bat --only "MUSE*"    the plan for some mods
-rem   vortex_tidy.bat --apply           do it (Purge in Vortex first, Deploy after)
+rem   vortex_tidy.bat --apply           do it (Deploy in Vortex after; Purge first is good practice)
 rem   vortex_tidy.bat --undo            put back what the last --apply changed (moves, Lua, original assets)
 rem   vortex_tidy.bat --no-coins        (with the others) broken models get an empty, invisible model, not the coin
 title vortex_tidy %*

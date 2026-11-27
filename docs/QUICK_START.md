@@ -43,11 +43,11 @@ Skip this step if you don't use Vortex. Mod Organizer 2 isn't supported yet.
 Tidy sorts each mod's folder in Vortex: it moves readmes and screenshots out of the way, sets aside files the game can't use, repairs textures, swaps broken files the game would crash on for harmless stand-ins, and patches known bugs in MWSE Lua mods.
 
 1. Double-click **`vortex_tidy.bat`**. This only makes a **plan** and changes nothing. The plan is in `conflict-tools\plans\vortex_tidy_plan.txt`, so have a read.
-2. In Vortex, click **Purge**.
+2. Optional, but good practice: in Vortex, click **Purge**.
 3. Type `vortex_tidy.bat --apply` (see section 2). It does exactly what the plan said. If anything changed since the plan was made, it refuses and makes a fresh plan for you to read.
-4. In Vortex, click **Deploy**.
+4. In Vortex, click **Deploy**. Vortex removes the files tidy moved and puts the rest in place.
 
-Changed your mind? `vortex_tidy.bat --undo` puts back everything the last `--apply` did (Purge first, Deploy after, as above).
+Changed your mind? `vortex_tidy.bat --undo` puts back everything the last `--apply` did (Deploy after, as above).
 
 ## 5. Fix everything
 

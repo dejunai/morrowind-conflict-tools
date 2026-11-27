@@ -120,7 +120,8 @@ NIFZER0EDIT built in, plus the folder names in vortex_tidy_blacklist.txt (one pe
     either way is left as it is, which the plan says.
 
 It only shows the plan unless you pass --apply. Every move is written to a journal, and --undo puts
-everything back. Purge in Vortex before applying, and Deploy afterwards, so the game folder matches.
+everything back. Deploy in Vortex afterwards, so the game folder matches (Purging before applying is good
+practice, not needed: Vortex removes the moved files on that Deploy).
 Asset repairs are undone the same way: before a mod's files are repaired, every file the repairs can change
 (the file, a same-named file beside it, the mod's plugins and bug reports) is copied to
 <backups folder>\\tidy\\<run>\\assets\\<mod folder>\\ and journaled with its SHA-256; --undo puts each
@@ -2165,7 +2166,7 @@ def apply(moves, staging, progress=None, head_extra=None):
             except OSError as e:
                 print(f"  could not move {src}: {e}", file=sys.stderr)
                 failed.append((src, dst, why))
-    print(f"Moved {done} item(s). Journal: {JOURNAL} (--undo puts them back). Now Deploy in Vortex.")
+    print(f"Moved {done} item(s). Journal: {JOURNAL} (--undo puts them back). Now Deploy in Vortex: it takes the moved files out of the game.")
     return failed
 
 
@@ -4188,12 +4189,40 @@ def fresh_plan(args):
     return text, parts, moves, lres, ares
 
 
+BROKEN_KINDS = {"dummy", "broken", "brokenout", "actorbox", "orphan", "unused"}   # set aside, not repaired
+
+
+def summary_lines(args, moves, lres, ares, done=None):
+    """The few lines tidy ends with, long after each section's own output has scrolled away: one count per kind
+    of fix, planned (done None) or done (done: {"moves": applied moves, "lua": patched paths, "assets": (mod,
+    plan line) set, "convert": converted mods})."""
+    plan = done is None
+    moved = [m for m in (moves if plan else done["moves"]) if m[1]]   # an emptied folder's removal isn't a fix
+    acts = [a for ent in ares["mods"].values() for a in asset_action_lines(ent)] if ares and plan \
+        else [a for _d, a in (done or {}).get("assets", ())]
+    broken = sum(1 for a in acts if a.startswith("repair ") and a.split()[1] in BROKEN_KINDS)
+    lua = lres["n_ok"] if lres and plan else len((done or {}).get("lua", ()))
+    rows = [("Files to move" if plan else "Files moved", len(moved)),
+            ("Assets to repair" if plan else "Assets repaired", len(acts) - broken),
+            ("Broken assets to set aside" if plan else "Broken assets set aside", broken),
+            ("Lua scripts to patch" if plan else "Lua scripts patched", lua)]
+    conv = CONVERT if plan else done["convert"]
+    if conv:
+        rows.append(("OpenMW mods to convert" if plan else "OpenMW mods converted", len(conv)))
+    if REVIEW:
+        rows.append(("Mods that need a look", len(REVIEW)))
+    w = max(len(k) for k, _n in rows)
+    return ["", f"vortex_tidy summary ({'plan' if plan else 'done'}):"] + [f"  {k + ':':<{w + 1}} {n:>6,}"
+                                                                          for k, n in rows]
+
+
 def plan_main(args):
     text, _parts, moves, lres, ares = fresh_plan(args)
     PF.write_atomic(PLAN, text)
+    print("\n".join(summary_lines(args, moves, lres, ares)))
     print(f"\nFull plan: {PLAN}")
     if moves or REVIEW or CONVERT or (lres and lres["n_ok"]) or assets_pending(ares):
-        print("\nNothing changed. Purge in Vortex, review the plan, run again with --apply, then Deploy.")
+        print("\nNothing changed. Review the plan, run again with --apply, then Deploy in Vortex.")
     else:
         print("\nNothing to fix.")
     return 0
@@ -4239,7 +4268,7 @@ def apply_main(args):
         if moves or gone or conv:
             what = f"{sum(1 for m in moves if m[1])} move(s)" + (f" and delete {len(gone)} mod(s)" if gone else "") \
                 + (f" and convert {len(conv)} OpenMW-only mod(s) with omw2mwse ({CONVERTER['mode']})" if conv else "")
-            if not args.yes and input(f"\nApply {what}? Purge in Vortex first. [y/N] ").strip().lower() not in \
+            if not args.yes and input(f"\nApply {what}? [y/N] ").strip().lower() not in \
                     ("y", "yes"):
                 print("Nothing changed.")
                 return 0
@@ -4261,6 +4290,12 @@ def apply_main(args):
         st["finished"] = True
     finally:
         left = _finish_plan(args, st, reviewed, audit)
+    left_conv = set(st["convert_left"] or ())
+    print("\n".join(summary_lines(args, moves, lres, ares, done={
+        "moves": [st["moves"][i] for i in st["progress"]], "lua": (lres or {}).get("done") or [],
+        "assets": (ares or {}).get("done") or set(), "convert": [m for m in st["convert"] if m not in left_conv]})))
+    if left:
+        print(f"  Not everything was done: what is left is in {PLAN}")
     return 0 if not left else 1
 
 

@@ -5,6 +5,7 @@ WARNING line and the usual move; a conflict (exit 4) is one WARNING line and the
 stub script that answers like the real one. Temporary folders only; tidy never runs on live data. Python 3.9+."""
 import json
 import os
+import re
 import sys
 import types
 
@@ -407,3 +408,15 @@ def test_a_mod_set_aside_without_the_converter_is_converted_once_it_is_found(tid
     assert "convert with omw2mwse (normal): OpenMW-only, no MWSE Lua" in tidy.plan()
     (dry,) = tidy.calls()
     assert dry[:2] == ["--staged-root", str(mod)] and "--dry-run" in dry
+
+
+def test_the_run_ends_with_a_short_summary_of_what_it_plans_and_then_did(tidy, capsys):
+    openmw_mod(tidy.staging, "Lights")                                         # 4 files, whole package to Off\
+    assert tidy.run() == 0
+    out = capsys.readouterr().out
+    tail = out[out.index("vortex_tidy summary (plan):"):]
+    assert re.search(r"Files to move: +4\n", tail) and re.search(r"Lua scripts to patch: +0\n", tail)
+    assert "Assets to repair:" in tail and "Broken assets to set aside:" in tail
+    assert tidy.run("--apply", "--yes") == 0
+    tail = capsys.readouterr().out.split("vortex_tidy summary (done):")[1]
+    assert re.search(r"Files moved: +4\n", tail)
