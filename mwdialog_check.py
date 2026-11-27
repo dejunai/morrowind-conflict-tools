@@ -1203,6 +1203,10 @@ class World:
         self._check_lua_orphans()
         self._check_big_textures()
         self._check_text_keys()
+        try:
+            self._deployed_mesh_textures()
+        except Exception as e:                      # never let it stop the scan
+            print(f"(texture check of every model failed: {e})", file=sys.stderr)
         ign = sorted(getattr(self.assets, "ignored_normals", ()))
         if ign:
             try:
@@ -1311,21 +1315,84 @@ class World:
                 continue
             mesh_owner = self._mesh_owner(v)
             blamed, blamed_dir = mesh_owner if mesh_owner else (win[1], None)
-            for t in A.missing_textures(v):
+            self._missing_texture_stand_ins(v, A.missing_textures(v), blamed, blamed_dir)
+
+    def _missing_texture_stand_ins(self, v, missing, blamed, blamed_dir):
+        """Stand-ins for the textures `missing` (paths under Textures, as model v names them): the file from
+        .Orphaned or an undeployed Vortex folder, else a placeholder (a flat one for a normal map)."""
+        A = self.assets
+        for t in missing:
+            rel_t = re.sub(r"^[\\/]+", "", t)
+            orphan = A.find_orphaned("textures", rel_t, any_ext=True)
+            if orphan:
+                self.generated.append((os.path.join("Textures", os.path.splitext(rel_t)[0] + os.path.splitext(orphan)[1]),
+                                       f"model '{v}' ({blamed})", orphan, blamed, blamed_dir))
+                continue
+            hit = self.vortex.find("textures", rel_t, any_ext=True) if self.vortex is not None else None
+            if hit:
+                rel = os.path.join("Textures", os.path.splitext(rel_t)[0] + os.path.splitext(hit[0])[1].lower())
+                self.generated.append((rel, f"model '{v}' ({blamed}) from Vortex mod '{hit[1]}'",
+                                       hit[0], blamed, blamed_dir))
+            else:
+                self.generated.append((os.path.join("Textures", os.path.splitext(rel_t)[0] + ".dds"),
+                                       f"model '{v}' ({blamed})", None, blamed, blamed_dir))
+
+    def _texture_found_by_game(self, t):
+        """Whether the game finds texture t (a path under Textures, as a model names it): the path itself
+        with any of .dds/.tga/.bmp, loose or in a BSA; else the same file name directly under Textures
+        (what the game tries next: textures\\betcreat\\a_nm.dds is found as textures\\a_nm.dds, never in
+        another subfolder)."""
+        A = self.assets
+        stem = os.path.splitext(t.replace("/", "\\").lower().strip("\\"))[0]
+        return stem in A.tex_stems or stem.rpartition("\\")[2] in A.tex_stems
+
+    def _deployed_mesh_textures(self):
+        """--asset-check: every model the game can load, not only the ones records name (the x-prefixed twin a
+        creature is drawn with, body parts, models scripts or other models pull in): each winning loose file
+        under Meshes and each BSA copy. Every texture it names, in any slot (base, dark, detail, glow, and the
+        normal / bump maps some authors name for engines that use them: the game still loads each one and
+        warns "tex not found"), is looked up the way the game does (_texture_found_by_game); one that exists
+        nowhere gets the usual stand-in (_missing_texture_stand_ins). Reported per mod."""
+        A = self.assets
+        def key(rel):                              # a stand-in's path without extension: .tga copies count too
+            return os.path.splitext(rel.replace("/", "\\").lower())[0]
+        have = {key(g[0]) for g in self.generated}
+        by_owner = defaultdict(lambda: [set(), set()])            # owner -> [models, missing textures]
+        ign = self.assets.__dict__.setdefault("ignored_normals", set())
+        for m in sorted(set(A.mesh_loose) | set(A.mesh_bsa)):
+            if not m.endswith(".nif"):
+                continue
+            try:
+                names = A.texture_names(m)
+            except Exception:                    # a damaged model: the model checks report it
+                continue
+            miss = []
+            for t in names:
                 rel_t = re.sub(r"^[\\/]+", "", t)
-                orphan = A.find_orphaned("textures", rel_t, any_ext=True)
-                if orphan:
-                    self.generated.append((os.path.join("Textures", os.path.splitext(rel_t)[0] + os.path.splitext(orphan)[1]),
-                                           f"model '{v}' ({blamed})", orphan, blamed, blamed_dir))
+                if self._texture_found_by_game(rel_t):
                     continue
-                hit = self.vortex.find("textures", rel_t, any_ext=True) if self.vortex is not None else None
-                if hit:
-                    rel = os.path.join("Textures", os.path.splitext(rel_t)[0] + os.path.splitext(hit[0])[1].lower())
-                    self.generated.append((rel, f"model '{v}' ({blamed}) from Vortex mod '{hit[1]}'",
-                                           hit[0], blamed, blamed_dir))
-                else:
-                    self.generated.append((os.path.join("Textures", os.path.splitext(rel_t)[0] + ".dds"),
-                                           f"model '{v}' ({blamed})", None, blamed, blamed_dir))
+                gen = key("textures\\" + rel_t)
+                if IGNORED_MAP_RE.search(os.path.splitext(rel_t)[0].replace("/", "\\").rpartition("\\")[2]):
+                    ign.add(("Meshes\\" + m, rel_t))
+                if gen in have:
+                    continue
+                have.add(gen)
+                miss.append(rel_t)
+            if not miss:
+                continue
+            owner = self._mesh_owner(m)
+            blamed, blamed_dir = owner if owner else ("Data Files", None)
+            by_owner[blamed][0].add(m)
+            by_owner[blamed][1].update(miss)
+            self._missing_texture_stand_ins("Meshes\\" + m, miss, blamed, blamed_dir)
+        for blamed, (models, miss) in sorted(by_owner.items()):
+            ex = sorted(models)[0]
+            names = sorted(t.replace("/", "\\").rpartition("\\")[2] for t in miss)
+            self.r.add("INFO", blamed, "", "",
+                       f"{len(models)} model(s) it ships (e.g. Meshes\\{ex}) name {len(miss)} texture(s) that exist "
+                       f"nowhere ({', '.join(names[:3])}{' ...' if len(names) > 3 else ''}); the game warns "
+                       f"\"tex not found\" for each: --fix puts a stand-in in place (the file from a Vortex mod "
+                       f"folder, else a placeholder)")
 
     def _fallback_pool(self):
         """Working files by (record type, subtype, field), counted over the winning records."""
