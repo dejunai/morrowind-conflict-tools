@@ -5,8 +5,8 @@ asks again for a swallowed save. (3) mwperformers counts MWSE's "Animation file 
 as loaded (the model was swapped before the throw), so the performer's own animation comes back, with a backstop."""
 import subprocess
 
-from test_cr18_suite_logging import SAVEGUARD, need_lua, own_log, run, wbsr_harness
-from test_performers_bards import ANIM_SCRIPT, CELL_SCRIPT, LUAJIT, MOD
+from test_cr18_suite_logging import SAVEGUARD, LUAJIT, need_lua, own_log, run, wbsr_harness
+from test_performers_bards import ANIM_SCRIPT, CELL_SCRIPT, MOD
 
 import pytest
 
@@ -176,6 +176,7 @@ THROWS = ('loadAnimation = function(p) calls[#calls + 1] = "load:" .. tostring(p
           'if p.file then error("Animation file failed to load.") end end,')
 
 
+@need_lua
 def test_the_dialogue_animation_comes_back_though_the_plain_load_throws():
     script = ANIM_SCRIPT.replace("DIALOGUE_ANIMATION", "true").replace("[[MOD]]", "[[" + MOD + "]]")
     old = 'loadAnimation = function(p) calls[#calls + 1] = "load:" .. tostring(p.file or "own") end,'
@@ -227,6 +228,7 @@ print("ok")
 ''')
 
 
+@need_lua
 def test_one_performer_per_inn_when_the_plain_load_throws():
     script = CELL_SCRIPT.replace("[[MOD]]", "[[" + MOD + "]]")
     old = 'loadAnimation = function(p) anims[p.reference] = p.file or "own"; p.reference.sceneNode = { n = 2 } end,'
@@ -247,6 +249,7 @@ def test_restore_pause_is_a_game_time_timer_with_a_slider():
     assert "restoreDelay = 3" in main and "type = timer.simulate" in main
     assert 'id = "restoreDelay"' in main and "createSlider" in main
 
+@need_lua
 def test_expected_animation_error_is_announced_in_mwse_log_before_it_happens():
     script = ANIM_SCRIPT.replace("DIALOGUE_ANIMATION", "true").replace("[[MOD]]", "[[" + MOD + "]]")
     head = script.split('\nfire("initialized")\n')[0]
