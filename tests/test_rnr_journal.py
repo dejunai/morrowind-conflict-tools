@@ -1,6 +1,6 @@
 """mwpluginpatches: the Ruins'n'Relics Old Journal intercept (patches/ruinesRelicsJournal.lua).
 
-The mod's loaded handler is swapped for ours when it registers: the journal is never added by the mod and its message
+The mod's onLoadJournal is swapped for ours when it registers (the luafix log shim on line 1 is left alone): the journal is never added by the mod and its message
 never shows. The book is created once in the Seyda Neen Census and Excise Office (new game) or added silently (a
 character already past chargen). Once it is in the inventory, or the done flag is already set on load, every listener
 of ours comes off and the mod's original loaded handler is never put back. The mod is faked with a small stand-in
@@ -18,7 +18,8 @@ MOD = os.path.join(ROOT, "lua tools", "MWSE", "mods", "mwsuite", "mwpluginpatche
 SUITE = os.path.join(ROOT, "lua tools", "MWSE", "mods", "mwsuite").replace("\\", "/")
 pytestmark = pytest.mark.skipif(not os.path.isfile(LUAJIT), reason="LuaJIT not available")
 
-FAKE_RNR = r"""local journalid = "rnr_old_journal"
+FAKE_RNR = r"""event.register("loaded", function() shimRan = (shimRan or 0) + 1 end)
+local journalid = "rnr_old_journal"
 local function onLoadJournal(e)
     modRan = (modRan or 0) + 1
     tes3.messageBox("You have been given an old adventurers journal.")
@@ -117,11 +118,18 @@ tes3.createReference = function(p)
   if world.createFails then error("cell is not loaded") end
   local cellId = type(p.cell) == "table" and p.cell.id or p.cell
   local ref = { id = p.object, object = { id = p.object }, kind = "book", params = p, deleted = false, disabled = false }
+  function ref:delete()
+    self.deleted = true
+    for _, list in pairs(worldRefs) do
+      for i = #list, 1, -1 do if list[i] == self then table.remove(list, i) end end
+    end
+  end
   created[#created + 1] = ref
   worldRefs[cellId] = worldRefs[cellId] or {}
   worldRefs[cellId][#worldRefs[cellId] + 1] = ref
   return ref
 end
+tes3.setEnabled = function(p) if p.reference then p.reference.disabled = p.enabled == false end end
 local config = setmetatable({
   enabled = true, ruinesRelicsJournalEnabled = @@FLAG@@,
   isRuinesRelicsInstalled = function() return @@INSTALLED@@ end,
@@ -139,7 +147,9 @@ local function newCharacter()
   playerCell = { id = "Seyda Neen, Docks" }
 end
 local function ourListeners()
-  return count("loaded") + count("cellChanged") + count("activate")
+  local n = count("cellChanged") + count("activate")
+  if event.isRegistered("loaded", patch.ourLoaded) then n = n + 1 end
+  return n
 end
 """
 
@@ -168,7 +178,8 @@ assert(p.position[1] == 145 and p.position[2] == -228 and p.position[3] == 263.9
 assert(p.orientation[1] == 0 and p.orientation[2] == 0 and math.abs(p.orientation[3] - math.pi / 2) < 1e-4)
 assert(p.scale == 0.8)
 assert(tes3.player.data.mwsuite_rnrJournalPlaced == nil, "the done flag must wait until the book is picked up")
-assert(count("loaded") == 2, "our wrapper and the other mod's handler")
+assert(count("loaded") == 3, "the log shim, our wrapper and the other mod's handler")
+assert(shimRan == 1, "the luafix log shim must still run")
 assert(count("activate") == 1 and count("cellChanged") == 1)
 assert(otherRan == 1, "another mod's loaded handler must still run")
 print("ok")
@@ -182,7 +193,7 @@ load("Ruines'n'relics/main.lua")
 assert(event.isRegistered("loaded", modLoadedHandler) == true)
 event.unregister("loaded", modLoadedHandler)
 assert(event.isRegistered("loaded", modLoadedHandler) == false)
-assert(count("loaded") == 0)
+assert(count("loaded") == 1, "the log shim stays registered")
 print("ok")
 """, mods)
 
@@ -216,17 +227,19 @@ def test_pickup_unloads_every_listener_and_never_restores_the_original(mods):
 assert(patch.init() == true)
 load("Ruines'n'relics/main.lua") load("someOtherMod/main.lua")
 fire("loaded", { newGame = true })
-assert(count("activate") == 1 and count("loaded") == 2)
+assert(count("activate") == 1 and count("loaded") == 3)
+assert(event.isRegistered("activate", patch.onActivate, { filter = "rnr_old_journal" }) == true)
 inventory = 1
-fire("activate", { target = created[1] }, { filter = created[1] })
+fire("activate", { target = created[1] }, { filter = "rnr_old_journal" })
 assert(tes3.player.data.mwsuite_rnrJournalPlaced == true)
 assert(count("activate") == 0 and count("cellChanged") == 0)
 assert(event.isRegistered("loaded", modLoadedHandler) == false)
 assert(event.isRegistered("loaded", patch.ourLoaded) == false)
-assert(count("loaded") == 1, "only the other mod's loaded handler should remain")
+assert(count("loaded") == 2, "the log shim and the other mod's loaded handler should remain")
+assert(shimRan == 1)
 assert(#boxes == 0 and modRan == nil)
 fire("loaded", { newGame = true })   -- a second new game in this session: we stay unloaded
-assert(#created == 1 and #added == 0 and otherRan == 2 and modRan == nil)
+assert(#created == 1 and #added == 0 and otherRan == 2 and shimRan == 2 and modRan == nil)
 print("ok")
 """, mods)
 
@@ -292,10 +305,10 @@ fire("cellChanged", {})
 assert(#created == 1 and created[1].params.cell == playerCell)
 assert(tes3.player.data.mwsuite_rnrJournalPlaced == nil)
 assert(count("cellChanged") == 1, "cellChanged stays as a pickup check")
-assert(count("activate") == 1 and count("loaded") == 1)
+assert(count("activate") == 1 and event.isRegistered("loaded", patch.ourLoaded) == true)
 assert(#boxes == 0 and modRan == nil)
 inventory = 1
-fire("activate", { target = created[1] }, { filter = created[1] })
+fire("activate", { target = created[1] }, { filter = "rnr_old_journal" })
 assert(tes3.player.data.mwsuite_rnrJournalPlaced == true)
 assert(ourListeners() == 0)
 print("ok")
@@ -386,6 +399,45 @@ event.register("loaded", function() directRan = true end)   -- registered from t
 load("someOtherMod/main.lua")
 fire("loaded", { newGame = true })
 assert(directRan == true and otherRan == 1)
+print("ok")
+""", mods)
+
+
+def test_the_log_shim_is_not_wrapped_and_the_journal_is_placed_once(mods):
+    run(r"""
+assert(patch.init() == true)
+load("Ruines'n'relics/main.lua")
+fire("loaded", { newGame = true })
+assert(shimRan == 1 and modRan == nil and #created == 1)
+local n = 0
+for _, l in ipairs(logs) do if l:find("the Old Journal is on the table", 1, true) then n = n + 1 end end
+assert(n == 1, "claimed placement more than once")
+worldRefs = {}
+fire("loaded", { newGame = true })
+assert(#created == 1)
+n = 0
+for _, l in ipairs(logs) do if l:find("the Old Journal is on the table", 1, true) then n = n + 1 end end
+assert(n == 1)
+print("ok")
+""", mods)
+
+
+def test_pickup_deletes_a_leftover_world_copy(mods):
+    run(r"""
+assert(patch.init() == true)
+load("Ruines'n'relics/main.lua")
+fire("loaded", { newGame = true })
+local extra = tes3.createReference({
+    object = "rnr_old_journal", cell = "Seyda Neen, Census and Excise Office",
+    position = { 145, -228, 263.9 }, orientation = { 0, 0, 1.5707964 }, scale = 0.8,
+})
+assert(#created == 2)
+inventory = 1
+created[1]:delete()
+fire("activate", { target = created[1] }, { filter = "rnr_old_journal" })
+assert(tes3.player.data.mwsuite_rnrJournalPlaced == true)
+assert(extra.deleted == true, "the leftover world copy was not removed")
+assert(ourListeners() == 0)
 print("ok")
 """, mods)
 
