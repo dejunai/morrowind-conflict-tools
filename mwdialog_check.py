@@ -10398,7 +10398,7 @@ def check_parser():
                     help="keep a game in progress working (the bare flag means basic): skip --soundfix "
                          "(it adds script variables), the topic renames, any rebuild of Cell Fixes that would "
                          "bring back an object it deletes, and setting aside an earlier version's Performers "
-                         "patch. --preserve-saves strict or --preserve-saves=strict also keeps the active "
+                         "patch. --preserve-saves=strict (or --preserve-saves strict) also keeps the active "
                          "plugins, the auto-merge and those patches exactly as they are, and skips the "
                          "reference clean-ups and persistence flips (--full then has no reset, unmerge or "
                          "redundant step); what it holds back is reported")

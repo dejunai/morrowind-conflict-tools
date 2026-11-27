@@ -96,7 +96,7 @@ rem                                                 to Off\cleanup under the bac
 rem    mwdialog_check.bat --clean-up-undo          (put back the backups the last --clean-up moved to Off)
 rem    mwdialog_check.bat --preserve-saves        (keep a game in progress; the bare flag means basic,
 rem                                                 and a following Data Files path is still the folder)
-rem    mwdialog_check.bat --preserve-saves strict
+rem    mwdialog_check.bat --preserve-saves=strict
 rem    mwdialog_check.bat --merge "Merged.esp" "Extras\some-folder" --dry-run   (preview a merge)
 rem    mwdialog_check.bat --merge "Merged.esp" a.esp b.esp ...   (merge; inputs for uninstalled mods are left out)
 rem    mwdialog_check.bat --auto-merge --dry-run   (find small script-free plugins that can be merged)
