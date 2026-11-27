@@ -233,6 +233,12 @@ def test_one_performer_per_inn_when_the_plain_load_throws():
     assert old in script
     script = script.replace(old, 'loadAnimation = function(p) anims[p.reference] = p.file or "own"; p.reference.sceneNode = { n = 2 } '
                                  'if p.file then error("Animation file failed to load.") end end,')
+    assert "mwse = { loadConfig" in script and script.rstrip().endswith('print("ok")')
+    script = script.replace("mwse = { loadConfig", "NOTES = {}; mwse = { log = function(f, ...) NOTES[#NOTES + 1] = string.format(f, ...) end, loadConfig")
+    script = script.rstrip()[:-len('print("ok")')] + '''
+assert(#NOTES >= 1 and NOTES[1]:find("expected and harmless", 1, true) and NOTES[1]:find("lutist", 1, true), tostring(NOTES[1]))
+print("ok")
+'''
     lua(script)
 
 def test_restore_pause_is_a_game_time_timer_with_a_slider():
@@ -240,3 +246,24 @@ def test_restore_pause_is_a_game_time_timer_with_a_slider():
         main = f.read()
     assert "restoreDelay = 3" in main and "type = timer.simulate" in main
     assert 'id = "restoreDelay"' in main and "createSlider" in main
+
+def test_expected_animation_error_is_announced_in_mwse_log_before_it_happens():
+    script = ANIM_SCRIPT.replace("DIALOGUE_ANIMATION", "true").replace("[[MOD]]", "[[" + MOD + "]]")
+    head = script.split('\nfire("initialized")\n')[0]
+    lua(head + r'''
+fire("initialized")
+speaker = performer("am\\am_bard2.nif", "DM_Bard_script", { 0, 0, 255 }, true)
+speaker.reference.object.name = "Raflod the Braggart"
+local orderAtThrow
+tes3.loadAnimation = function(p) if p.file then orderAtThrow = #MWLOG end calls[#calls + 1] = "load:" .. tostring(p.file or "own") end
+fire("uiActivated")
+check(#MWLOG == 1 and orderAtThrow == 1, "the notice is written before the swap: " .. tostring(orderAtThrow))
+local m = MWLOG[1]
+check(m:find("NOTICE", 1, true) and m:find("Raflod the Braggart (bard)", 1, true), "it names the NPC: " .. m)
+check(m:find("'base_anim.nif'", 1, true), "it names the file: " .. m)
+check(m:find("Animation file failed to load", 1, true) and m:find("expected and harmless", 1, true)
+      and m:find("restore of the performer's own animation are unaffected", 1, true), "it says what follows is harmless: " .. m)
+fire("menuExit"); fireTimers()
+check(#MWLOG == 1, "the restore is not announced: it does not throw")
+print("ok")
+''')

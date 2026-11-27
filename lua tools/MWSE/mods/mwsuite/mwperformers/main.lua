@@ -160,6 +160,23 @@ local function holdScript(script)
     end
 end
 
+-- MWSE logs "An unhandled exception occurred: Animation file failed to load." from its C++ side for every plain-animation
+-- swap, even inside pcall (the plain animation has no custom animation layer, which MWSE checks for after it has
+-- already swapped the model). The swap works; the entry is harmless. So the entry is never a mystery in MWSE.log,
+-- a notice naming the NPC and the file is written just before it, always (not only when the mod's own log is on).
+local function noticeExpectedThrow(ref, file)
+    local ok, who = pcall(describe, ref)
+    local text = string.format(
+        "[mwperformers] NOTICE: stopping the performance of %s by loading the plain animation '%s'. This animation "
+        .. "has no custom (override) animation file, so MWSE will log 'An unhandled exception occurred: Animation "
+        .. "file failed to load.' immediately after this line. That entry is expected and harmless: the plain "
+        .. "animation is applied, and playback and the restore of the performer's own animation are unaffected. "
+        .. "No action is needed.",
+        ok and who or "an NPC", tostring(file))
+    pcall(mwse.log, "%s", text)
+    log("%s", text)
+end
+
 local function plainAnim(base)
     local race = base.race
     if race and race.isBeast then return "base_animkna.nif" end
@@ -178,7 +195,9 @@ local function stopPerforming(ref)
         elseif node then
             -- MWSE swaps the model first and only then looks for an override layer; a plain animation has none, so it
             -- throws "Animation file failed to load" with the plain animation loaded all the same. Count it as loaded.
-            pcall(tes3.loadAnimation, { reference = ref, file = plainAnim(base) })
+            local file = plainAnim(base)
+            noticeExpectedThrow(ref, file)
+            pcall(tes3.loadAnimation, { reference = ref, file = file })
             animStopped[ref] = ref.sceneNode
         end
     end
@@ -378,7 +397,9 @@ local function stopAnimation(ref)
         -- then throws "Animation file failed to load" (its check for an override layer fails). The performer has the
         -- plain animation on him all the same: count it as loaded, or restoreAnimation never gives his own back.
         touched[ref] = state.handle
-        local ok, err = pcall(tes3.loadAnimation, { reference = ref, file = plainAnim(base) })
+        local file = plainAnim(base)
+        noticeExpectedThrow(ref, file)
+        local ok, err = pcall(tes3.loadAnimation, { reference = ref, file = file })
         if not ok and not loggedPlainThrow then
             loggedPlainThrow = true
             log("%s: MWSE says '%s' for the plain animation; it is on him all the same", describe(ref), tostring(err))

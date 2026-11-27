@@ -265,9 +265,10 @@ tes3 = { objectType = { npc = 1, armor = 2 }, armorSlot = { shield = 8 }, animat
          end }
 tes3ui = { getServiceActor = function() return speaker end, findMenu = function() end }
 include = function() end
+MWLOG = {}
 local seen = {}                              -- another mod's handler (Animated Dialogue's), registered before ours
 event.register("uiActivated", function() seen[#seen + 1] = calls[1] end)
-mwse = { loadConfig = function(_, d) d.enabled = true; d.log = false; d.dialogueAnimation = DIALOGUE_ANIMATION; CFG = d; return d end, saveConfig = function() end }
+mwse = { loadConfig = function(_, d) d.enabled = true; d.log = false; d.dialogueAnimation = DIALOGUE_ANIMATION; CFG = d; return d end, saveConfig = function() end, log = function(fmt, ...) MWLOG[#MWLOG + 1] = string.format(fmt, ...) end }
 dofile([[MOD]])
 local function check(ok, what) if not ok then error(what .. " / " .. table.concat(calls, ", "), 2) end end
 local function last() return calls[#calls] end
