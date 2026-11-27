@@ -111,6 +111,7 @@ local function onActivate(e)
     ownedBookOpen = false
     if not config.enabled or e.activator ~= tes3.player then return end
     local ref = e.target
+    if config.factionOwnership then core.fixFactionRank(ref) end
     if tes3.worldController.inputController:isShiftDown() then
         addToBlacklist(ref)
         return false
@@ -226,6 +227,11 @@ local function onTargetChanged(e)
     end
 end
 
+-- ahead of Quick Loot (priority 0), which reads the owner once when it builds its menu for the target
+local function onFactionTarget(e)
+    if config.enabled and config.factionOwnership and e.current then core.fixFactionRank(e.current) end
+end
+
 local function onCellChanged(e)
     if opener and e.previousCell == opener.cell then restoreOpener() end
 end
@@ -263,6 +269,7 @@ event.register(tes3.event.initialized, function()
     event.register(tes3.event.uiActivated, onBookMenu, { filter = "MenuScroll" })
     event.register(tes3.event.detectSneak, onDetectSneak, { priority = 2000 })
     event.register(tes3.event.cellChanged, onCellChanged)
+    event.register(tes3.event.activationTargetChanged, onFactionTarget, { priority = 1000 })
     local ok, interop = pcall(require, "Essential Indicators.interop")
     if ok and type(interop) == "table" then
         ei = interop

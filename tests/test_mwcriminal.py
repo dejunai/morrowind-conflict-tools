@@ -689,3 +689,118 @@ handlers.detectSneak({ target = tes3.mobilePlayer, isDetected = true, detector =
 check(#logs == 0, "suppressions must stay out of MWSE.log")
 check(table.concat(written):find("chicken00", 1, true), "the suppression is not in mwcriminal.log")
 ''')
+
+
+FACTION = r'''
+-- tes3.getOwner and tes3.hasOwnershipAccess as MWSE has them: owner and rank from the item data, and a player
+-- rank of -1 outside the faction compared with the requirement
+tes3.getOwner = function(p)
+  local d = p.reference.itemData
+  if type(d) ~= "table" or not d.owner then return nil end
+  return d.owner, d.requirement
+end
+tes3.hasOwnershipAccess = function(p)
+  local d = p.target.itemData
+  if type(d) ~= "table" or not d.owner then return true end
+  if d.owner.objectType == tes3.objectType.faction then
+    return (d.owner.playerJoined and d.owner.playerRank or -1) >= d.requirement
+  end
+  return false
+end
+function faction(joined, rank) return { id = "Fighters Guild", name = "Fighters Guild", objectType = tes3.objectType.faction, playerJoined = joined, playerRank = joined and rank or -1 } end
+function factionThing(type, guild, required)
+  local t = item(type)
+  t.itemData = { owner = guild, requirement = required }
+  return t
+end
+local factionTarget
+local register = event.register
+event.register = function(name, fn, opts)
+  if name == "activationTargetChanged" and opts and opts.priority == 1000 then factionTarget = fn end
+  return register(name, fn, opts)
+end
+handlers.initialized()
+function look(ref) factionTarget({ current = ref }) end
+config.factionOwnership = true
+'''
+
+
+def test_faction_goods_at_rank_minus_one_are_owned_for_outsiders():
+    run(FACTION + r'''
+local outsider = faction(false)
+local potion = factionThing(tes3.objectType.miscItem, outsider, -1)
+check(tes3.hasOwnershipAccess({ target = potion }), "MWSE itself lets a stranger take it (the bug)")
+check(activate(potion) == false, "standing, a stranger can't take a faction's rank -1 thing")
+check(potion.itemData.requirement == 0, "activating it fixes the rank for the engine's own theft check")
+check(not tes3.hasOwnershipAccess({ target = potion }), "so the engine now sees the take as theft")
+sneak(true)
+check(activate(potion) == nil, "sneaking, it can be stolen")
+sneak(false)
+local member = faction(true, 0)
+check(activate(factionThing(tes3.objectType.miscItem, member, -1)) == nil, "any member takes it freely")
+check(activate(factionThing(tes3.objectType.miscItem, member, 0)) == nil, "rank 0 requirement, rank 0 member: vanilla access")
+check(activate(factionThing(tes3.objectType.miscItem, faction(true, 2), 3)) == false, "below the required rank it is theft")
+check(activate(factionThing(tes3.objectType.miscItem, faction(true, 4), 3)) == nil, "at or above it, it is the member's")
+check(activate(factionThing(tes3.objectType.miscItem, outsider, 0)) == false, "an outsider with a set rank: theft, as before")
+config.factionOwnership = false
+local left = factionThing(tes3.objectType.miscItem, outsider, -1)
+check(activate(left) == false and left.itemData.requirement == -1,
+  "with the switch off the data is left alone, and must-sneak still counts it as owned")
+''')
+
+
+def test_faction_containers_own_their_contents():
+    run(FACTION + r'''
+local chest = factionThing(tes3.objectType.container, faction(false), -1)
+look(chest)
+check(chest.itemData.requirement == 0, "looking at it fixes the rank before Quick Loot reads the owner")
+check(not tes3.hasOwnershipAccess({ target = chest }),
+  "Quick Loot, UI Expansion and the engine's contents menu now see its contents as the faction's")
+check(activate(chest) == false, "standing, a faction chest doesn't open for a stranger")
+sneak(true)
+check(activate(chest) == nil, "sneaking, it opens to be robbed")
+sneak(false)
+local guildChest = factionThing(tes3.objectType.container, faction(true, 1), -1)
+look(guildChest)
+check(activate(guildChest) == nil and tes3.hasOwnershipAccess({ target = guildChest }), "a member opens it freely")
+local npcChest = item(tes3.objectType.container)
+npcChest.itemData = { owner = npc("arrille").object }
+look(npcChest)
+check(npcChest.itemData.requirement == nil and activate(npcChest) == false, "NPC owners are untouched")
+look(nil)
+config.enabled = false
+local off = factionThing(tes3.objectType.container, faction(false), -1)
+look(off)
+check(off.itemData.requirement == -1, "nothing is changed while mwcriminal is off")
+''')
+
+
+def test_faction_doors_at_rank_minus_one_stay_locked_for_outsiders():
+    run(FACTION + r'''
+config.knocking = false
+hour(22)
+local hall = cell("Balmora, Redoran Quarters", true, { npc("guildguard") })
+local quarters = door(hall, { locked = true })
+quarters.itemData = { owner = faction(false), requirement = -1 }
+quarters.owner = nil
+config.factionOwnership = false
+check(activate(quarters) == false and quarters.locked, "a stranger's guild door isn't opened for them")
+local mine = door(hall, { locked = true })
+mine.itemData = { owner = faction(true, 0), requirement = -1 }
+check(activate(mine) == nil and not mine.locked, "a member's guild door opens")
+''')
+
+
+def test_faction_ownership_follows_must_sneak_to_steal_until_set():
+    run_config(r'''
+local config = require("mwcriminal.config")
+check(config.factionOwnership == true, "an install with must-sneak on gets it on")
+''', "{ sneakToSteal = true, imported = true, plainPaperSettingsImported = true, bookFixSettingsImported = true, companionSettingsImported = true }")
+    run_config(r'''
+local config = require("mwcriminal.config")
+check(config.factionOwnership == false, "a fresh install starts off")
+''', "nil")
+    run_config(r'''
+local config = require("mwcriminal.config")
+check(config.factionOwnership == false, "a choice made in the MCM is kept")
+''', "{ sneakToSteal = true, factionOwnership = false, imported = true }")

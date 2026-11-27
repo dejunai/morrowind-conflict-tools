@@ -458,3 +458,31 @@ local mixedActor = actor("MixedCaseActor", { package = "follow" })
 check(core.isBlacklisted(mixedActor.reference), "isBlacklisted matches preserved casing from MCM")
 ''')
 
+
+
+def test_quick_loot_pickpocket_menu_is_blocked_on_a_follower_while_sneaking():
+    run(r'''
+local pick, reactivate = handlers["herbert:MQL.pick_container"], handlers["herbert:MQL.reactivate_container"]
+check(pick and reactivate, "both More QuickLoot menu events are hooked")
+local f = actor("f", { package = "follow" })
+local stranger = actor("stranger")
+local function picked(ref) local e = { ref = ref, block = false, claim = false }; pick(e); return e.block end
+tes3.mobilePlayer.isSneaking = true
+check(not picked(f.reference), "nothing is blocked while the switch is off")
+on("noSneakActivate")
+check(picked(f.reference), "no pickpocket menu on a follower while sneaking")
+check(not picked(stranger.reference), "strangers can still be pickpocketed")
+tes3.mobilePlayer.isSneaking = false
+check(not picked(f.reference), "standing, the follower's other menus (services) are left to Quick Loot")
+tes3.mobilePlayer.isSneaking = true
+local e = { container = { handle = { getObject = function() return f.reference end } }, block = false }
+reactivate(e)
+check(e.block, "a pickpocket menu kept from before isn't shown again on a follower")
+e = { container = { handle = { getObject = function() return stranger.reference end } }, block = false }
+reactivate(e)
+check(not e.block, "a kept menu on a stranger comes back as before")
+for _, bad in ipairs({ {}, { ref = {} }, { container = {} }, { container = { handle = { getObject = function() error("gone") end } } } }) do
+  pick(bad); reactivate(bad)
+  check(not bad.block, "a payload Quick Loot changed or emptied is left alone")
+end
+''')

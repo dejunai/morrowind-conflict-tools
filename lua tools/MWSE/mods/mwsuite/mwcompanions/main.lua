@@ -245,10 +245,39 @@ local function onInfoFilter(e)
     if ref and ref.mobile and core.isFollower(ref.mobile) then e.passes = false end
 end
 
+local function sneakingAtFollower(ref)
+    if not (config.enabled and config.noSneakActivate) then return false end
+    local me = tes3.mobilePlayer
+    local mob = ref and ref.mobile
+    return me ~= nil and me.isSneaking == true and mob ~= nil and core.isFollower(mob)
+end
+
 local function onActivate(e)
-    if not (config.enabled and config.noSneakActivate) or e.activator ~= tes3.player then return end
-    local mob = e.target.mobile
-    if mob and tes3.mobilePlayer.isSneaking and core.isFollower(mob) then return false end
+    if e.activator ~= tes3.player then return end
+    if sneakingAtFollower(e.target) then return false end
+end
+
+-- More QuickLoot (herbert100) opens its pickpocket menu on whoever the crosshair rests on while sneaking. Activating
+-- a follower then does nothing (above), so that menu is only a way to rob them by mistake. Its own events decide
+-- which menu a target gets: "pick_container" (any handler may set block, checked before the menu is built) and
+-- "reactivate_container" (the menu kept for a target looked at again). Ours run first and block both for a
+-- follower. Without Quick Loot nobody triggers them; a payload without a reference is left alone.
+local QL_PICK = "herbert:MQL.pick_container"
+local QL_REACTIVATE = "herbert:MQL.reactivate_container"
+
+local function onQuickLootPick(e)
+    if type(e) ~= "table" or e.block then return end
+    local ok, follower = pcall(sneakingAtFollower, e.ref)
+    if ok and follower then e.block = true end
+end
+
+local function onQuickLootReactivate(e)
+    if type(e) ~= "table" or e.block or type(e.container) ~= "table" then return end
+    local ok, follower = pcall(function()
+        local handle = e.container.handle
+        return sneakingAtFollower(handle and handle:getObject())
+    end)
+    if ok and follower then e.block = true end
 end
 
 local function onCellChanged(e)
@@ -293,6 +322,9 @@ event.register(tes3.event.initialized, function()
     event.register(tes3.event.combatStarted, onCombatStarted)
     event.register(tes3.event.infoFilter, onInfoFilter)
     event.register(tes3.event.activate, onActivate)
+    event.register(QL_PICK, onQuickLootPick, { filter = tes3.objectType.npc, priority = 1000 })
+    event.register(QL_PICK, onQuickLootPick, { filter = tes3.objectType.creature, priority = 1000 })
+    event.register(QL_REACTIVATE, onQuickLootReactivate, { priority = 1000 })
     event.register(tes3.event.cellChanged, onCellChanged)
     if config.enabled then warnOverlaps() end
 end)

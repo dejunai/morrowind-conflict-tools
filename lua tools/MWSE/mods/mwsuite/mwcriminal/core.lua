@@ -25,8 +25,39 @@ function core.isSneaking()
     return tes3.mobilePlayer ~= nil and tes3.mobilePlayer.isSneaking
 end
 
+-- A faction owner whose plugin left the rank at -1 ("any rank": 5244 placed things in Dej's load order, 2516 of
+-- them in TR_Mainland, 45 in Morrowind.esm) is open to everyone through tes3.hasOwnershipAccess: MWSE compares the
+-- player's rank, -1 for a non-member, with the requirement, and -1 >= -1. OpenMW asks for membership first, and so
+-- does mwcriminal: -1 means any member, never a stranger. Members keep the vanilla exception (rank >= requirement).
+local function factionOwner(ref)
+    local ok, owner, rank = pcall(tes3.getOwner, { reference = ref })
+    if not ok or not owner or owner.objectType ~= tes3.objectType.faction then return nil end
+    return owner, tonumber(rank) or 0
+end
+
+function core.isFactionGap(ref)
+    local owner, rank = factionOwner(ref)
+    return owner ~= nil and rank < 0 and owner.playerJoined ~= true
+end
+
+function core.hasAccess(ref)
+    return tes3.hasOwnershipAccess({ target = ref }) and not core.isFactionGap(ref)
+end
+
 function core.isOwned(ref)
-    return not tes3.hasOwnershipAccess({ target = ref })
+    return not core.hasAccess(ref)
+end
+
+-- the -1 rank becomes 0, the lowest rank, on the thing the player looks at: a member keeps access, and the engine,
+-- Quick Loot, UI Expansion and Stealth Overhaul (all asking tes3.hasOwnershipAccess) now see a stranger's take from
+-- it, or from the container it is, as theft. The reference isn't marked changed for it: once the plugin's -1 is
+-- back (a reload), it is fixed again the next time the thing is looked at.
+function core.fixFactionRank(ref)
+    if not ref then return false end
+    local owner, rank = factionOwner(ref)
+    if not owner or rank >= 0 then return false end
+    local ok = pcall(function() ref.itemData.requirement = 0 end)
+    return ok
 end
 
 function core.isOutside(cell)
@@ -126,10 +157,10 @@ function core.lockVerdict(door, hour)
     if core.isPublic(dest) then return "unlock" end
     local owner = tes3.getOwner({ reference = door })
     if owner and owner.objectType == tes3.objectType.faction then
-        if tes3.hasOwnershipAccess({ target = door }) then return "open" end
+        if core.hasAccess(door) then return "open" end
     elseif owner and owner.objectType == tes3.objectType.npc then
         if not core.npcAlive(owner) then return "open" end
-        if tes3.hasOwnershipAccess({ target = door }) then return "unlock" end
+        if core.hasAccess(door) then return "unlock" end
         if not inside(owner, dest) then return "lock" end  -- home empty, owner alive elsewhere
         return core.isEvening(hour) and "lock" or "unlock"
     end

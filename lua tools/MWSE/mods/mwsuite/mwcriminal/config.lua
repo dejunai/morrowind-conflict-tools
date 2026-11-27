@@ -4,6 +4,8 @@ local NAME = "mwcriminal"
 local defaults = {
     enabled = false,
     sneakToSteal = false,       -- owned things need sneaking (Accidental Theft Protection)
+    -- factionOwnership: a faction's things left at rank -1 count as owned for non-members (engine and other mods
+    -- too); unset until first load, then it follows sneakToSteal (below), so a fresh install still starts off
     readStanding = false,       -- owned books open standing, Take is red (NAT book fix)
     plainPaper = false,         -- blank sheets skip the scroll window (mwplainpaperfix)
     plainPaperRequireSneak = true,
@@ -47,6 +49,7 @@ end
 for key, value in pairs(defaults) do
     if config[key] == nil then config[key] = value end
 end
+if config.factionOwnership == nil then config.factionOwnership = config.sneakToSteal == true end
 config.companionBlacklist = config.companionBlacklist or {}
 config.blacklist = config.blacklist or {}
 config.inspectorKey = config.inspectorKey or defaults.inspectorKey

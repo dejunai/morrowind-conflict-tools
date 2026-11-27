@@ -22,6 +22,8 @@ page:createYesNoButton({ label = "Enable mwcriminal", description = "Master swit
 local theft = page:createCategory("Theft")
 yesNo(theft, "sneakToSteal", "Must sneak to steal",
     "Things that belong to someone (items, containers) can only be taken or opened while sneaking, so a stray click is never a theft. Replaces Accidental Theft Protection.")
+yesNo(theft, "factionOwnership", "Faction goods are owned for outsiders",
+    "Some plugins (Tamriel Rebuilt most of all) give a faction's things no rank, and the game then lets anyone take them, or anything in a container like that, as if nobody owned them. With this on they belong to the faction: members of any rank take them freely, everyone else steals them (sneak first with 'Must sneak to steal'), in the inventory and in Quick Loot alike. Rank requirements a plugin does set work as in vanilla.")
 yesNo(theft, "readStanding", "Read owned books standing (Take is red)",
     "Owned books and scrolls open for reading without sneaking; the Take button turns red because taking them is a crime. Replaces the mwpluginpatches book fix.")
 yesNo(theft, "plainPaper", "Plain paper skips the scroll window",

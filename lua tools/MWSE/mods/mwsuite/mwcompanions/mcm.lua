@@ -37,7 +37,7 @@ yesNo(move, "followerTraits", "Follower traits",
 yesNo(move, "muteOnCellChange", "Quiet followers after a cell change",
     "Followers skip their attack and greeting lines for 3 seconds after you go through a door, so they don't all talk at once.")
 yesNo(move, "noSneakActivate", "Don't activate followers while sneaking",
-    "Pressing activate on a follower while sneaking does nothing, so you don't pickpocket a companion by accident.")
+    "Pressing activate on a follower while sneaking does nothing, so you don't pickpocket a companion by accident. More QuickLoot's pickpocket menu doesn't open on them either.")
 
 local fight = page:createCategory("Combat")
 yesNo(fight, "noFriendlyFire", "No friendly fire",
