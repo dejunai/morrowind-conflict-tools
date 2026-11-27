@@ -280,24 +280,6 @@ def test_readiness_reads_a_symbols_map_and_says_nothing_extra_without_one():
     assert vt.partial_api({"partialApi": "nonsense"}) == []
 
 
-# ---------------------------------------------------------------- 4. what ships
-
-def test_with_the_marked_dev_line_removed_the_default_is_normal():
-    """ready_to_ship.py flags the marked line; once it is deleted (not just set False) tidy still works and
-    converts in normal mode, and an explicit hardcode still works."""
-    with open(vt.__file__, encoding="utf-8") as f:
-        src = f.read()
-    marker = "remove before " + "shipping"
-    kept = [ln for ln in src.splitlines(True) if not (ln.startswith("CONVERT_DEV_HARDCODE") and marker in ln.casefold())]
-    assert len(kept) == len(src.splitlines(True)) - 1
-    ns = {"__name__": "vortex_tidy_shipped", "__file__": vt.__file__}
-    exec(compile("".join(kept), vt.__file__, "exec"), ns)
-    assert "CONVERT_DEV_HARDCODE" not in ns
-    assert ns["convert_mode"]() == "normal"
-    assert ns["convert_mode"]("hardcode") == "hardcode" and ns["convert_mode"](None) is None
-    assert sys.modules.get("vortex_tidy_shipped") is None
-
-
 # ---------------------------------------------------------------- the converter's path contract and recovery journal
 
 def test_relative_dot_and_old_absolute_paths_journal_the_same(tmp_path):

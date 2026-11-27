@@ -4709,6 +4709,18 @@ def apply_report(rep, journal=JOURNAL, backup_root=BACKUP_ROOT, head_extra=None,
     if not todo:
         return 0, refused
     bdir = bdir or run_backup_dir(backup_root)
+    roots = {}
+
+    def short_backup(p, rel):
+        """<n> <owning mod folder>\\<path under MWSE>: a full-path mirror passes Windows' 260-character limit.
+        n numbers each root, so two mods with the same folders never share a backup."""
+        full = os.path.abspath(p)
+        root = full[:len(full) - len(rel)].rstrip("\\/")
+        parts = re.split(r"[\\/]+", root)
+        low = [s.lower() for s in parts]
+        owner = parts[len(low) - 1 - low[::-1].index("mwse") - 1] if "mwse" in low[1:] else parts[-1]
+        n = roots.setdefault(os.path.normcase(root), len(roots) + 1)
+        return os.path.join(bdir, f"{n} {owner[:40].rstrip()}", *rel.split("/"))
     written = 0
     os.makedirs(os.path.dirname(os.path.abspath(journal)), exist_ok=True)
     with open(journal, "a", encoding="utf-8") as j:
@@ -4728,6 +4740,9 @@ def apply_report(rep, journal=JOURNAL, backup_root=BACKUP_ROOT, head_extra=None,
                         refused.append((p, f"outside backup-relative root {backup_relative_to}"))
                         continue
                     bpath = os.path.join(bdir, relative)
+                elif e.get("rel") and os.path.abspath(p).replace("\\", "/").lower().endswith(
+                        "/" + e["rel"].lower()):
+                    bpath = short_backup(p, e["rel"])
                 else:
                     drive, tail = os.path.splitdrive(os.path.abspath(p))
                     bpath = os.path.join(bdir, drive.rstrip(":\\/") or "root", tail.lstrip("\\/"))

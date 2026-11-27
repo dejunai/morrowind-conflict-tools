@@ -18,7 +18,6 @@ exclude tes3diff.py                     # dev: record-level plugin diff through 
 exclude dummy assets/**                 # stand-ins are made in code or copied out of Morrowind.bsa at run time:
 exclude **/dummy/**                     # never shipped (they live in <tools>\generated\dummy\)
 include *.bat
-exclude Play Morrowind.bat              # the game-folder launcher: it lives beside Morrowind.exe, not in conflict-tools
 
 # What the tools deploy and run: the suite's MWSE Lua (laid out as in Data Files) and the bundled programs
 # (tools/tes3conv: tes3conv.exe with LICENSE*, NOTICE.md; the licenses always go where the program goes)

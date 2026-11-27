@@ -10100,9 +10100,19 @@ def _ensure_vortex_paths(args):
                       and (want_staging or bool(getattr(args, "vortex_downloads", None))))
     if want_staging:
         cli = getattr(args, "vortex_dir", None)
-        args.vortex_dir = MP.resolve_staging(cli=cli, required=True)
-        src = "--vortex-dir/--staging" if cli else "Vortex settings"
-        print(f"Vortex staging: {args.vortex_dir}  (from {src})")
+        try:
+            args.vortex_dir = MP.resolve_staging(cli=cli, required=True)
+        except MP.VortexPathError:
+            # Vortex not installed at all (manual installs, other managers): run as --no-vortex instead of failing
+            if cli or os.path.isdir(MP.vortex_appdata() or ""):
+                raise
+            args.no_vortex = True
+            if MAIN_DEPTH <= 1:
+                print("Vortex is not installed: scanning Data Files only (as --no-vortex).")
+            want_downloads = want_downloads and bool(getattr(args, "vortex_downloads", None))
+        else:
+            src = "--vortex-dir/--staging" if cli else "Vortex settings"
+            print(f"Vortex staging: {args.vortex_dir}  (from {src})")
     if want_downloads:
         cli = getattr(args, "vortex_downloads", None)
         args.vortex_downloads = MP.resolve_downloads(cli=cli, required=True)

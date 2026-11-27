@@ -10,9 +10,21 @@ The suite is engineered for massive, complex mod lists (hundreds of plugins, ten
 > **Detailed Function Architecture & Empirical Fix Catalog**:
 > For the architecture of all 36 modules, command-line switches, and empirical fix examples from the historical fix archives, consult **[MORE_INFO.md](docs/MORE_INFO.md)**.
 
+## Install (beta)
+
+1. Install [Python](https://www.python.org/downloads/windows/) 3.9 or newer (tick "Add python.exe to PATH").
+2. Download `conflict-tools-<version>.zip` from the GitHub Releases page (not "Code > Download ZIP", which holds the developer files too).
+3. Unzip it into your Morrowind folder, so you get `Morrowind\conflict-tools\` beside `Morrowind.exe`.
+4. Double-click `conflict-tools\mwdialog_check.bat`. It only reads: it writes a report and opens it in Notepad. Nothing in your game changes until you run a fix switch.
+5. To play, double-click `conflict-tools\Play Morrowind.bat` (or copy it into the Morrowind folder).
+
+Vortex is optional: without it the tools scan `Data Files` only. Mod Organizer 2 is not supported (its mods are not in `Data Files`).
+
 ---
 
 ## Table of Contents
+
+- [Install (beta)](#install-beta)
 
 - [Core Tools Overview](#core-tools-overview)
   - [vortex_tidy.py - Mod Staging Sanitizer & Pipeline](#vortex_tidypy---mod-staging-sanitizer--pipeline)
@@ -38,6 +50,7 @@ The suite is engineered for massive, complex mod lists (hundreds of plugins, ten
   - [deploy.py](#deploypy)
   - [doc_scan.py](#doc_scanpy)
   - [sync.py](#syncpy)
+  - [release.py](#releasepy)
   - [tes3diff.py](#tes3diffpy)
 - [License](#license)
 
@@ -57,8 +70,8 @@ The suite is engineered for massive, complex mod lists (hundreds of plugins, ten
    - A root folder holding a mod's readme (named after the mod or one of its plugins, or holding nothing but documents) becomes part of `Docs\`; anything in it that is not a document goes to `Extras\`. Everything else at the root that is not game data (FOMOD option folders, `meta.ini`, `.bak` files...) goes to `Extras\<mod name>\`, where `<mod name>` is the folder name without Vortex's Nexus id, version and download stamp.
    - Moves MGE XE grass plugins (only statics, activators and cells, mostly grass) into `Grass\`, where MGE XE's distant land generator reads them; the game never loads them.
    - Moves the OpenMW-specific files of a mod that also has MWSE Lua (`*.omwscripts` and the `scripts`, `l10n`, `animations` and `playlists` folders, plus an `OpenMW\` folder an earlier run made) to `Off\<plugin>\OpenMW\`: the MWSE side is the one that is used. An `.omwaddon` with no `.esp`/`.esm` beside it is renamed `.esp` when the mod has no OpenMW scripts; with scripts, the plan flags it, and `--apply` stops at it, offers to open its folder, and offers to delete the mod (moved to `<staging> - deleted by vortex_tidy` beside the staging folder, so `--undo` can bring it back).
-   - **OpenMW-only mods** (OpenMW scripts and no MWSE Lua of their own) are converted for MWSE when tidy can find the OpenMW converter, `omw2mwse` 0.3.1 or later (on PATH, or beside these tools). Tidy calls it through the converter's tidy interface (openmw-mwse `docs/TIDY_INTERFACE.md`): `--apply` runs `omw2mwse --staged-root <staged mod> --result-json <temp file> --mode normal`, and passes the mod's title and author from Vortex when it has them; the plan shows a `--dry-run` preview. The converter works only in the staged mod folder, never in Data Files; the result file is a temporary file outside staging and the game, deleted after. `--convert-omwscripts=hardcode` picks the converter's other mode (hard-coded values become MCM settings; runs with `--accept-hardcode-conversions`), and `--no-convert-omwscripts` turns conversion off. Tidy follows the converter's exit code: `0` converted (the converter moves the originals to `Off\<plugin>\OpenMW\` and lists every file it wrote, removed or moved, which is what `--undo` puts back); `1` blocked or `2` failed: the converter wrote nothing, the mod is treated as not converted (one WARNING line) and tidy sets its OpenMW package aside; a mod whose original author has asked to be excluded from conversion is treated the same way, and the WARNING tells you to contact the original mod author; `3` (a refused target), `64` or `70` is an error. Tidy never renames, moves or enables a converted mod's plugins. See [OpenMW Converter](#openmw-converter-experimental).
-   - **OpenMW-only mods that are not converted** (no converter found, a failed or blocked conversion, or `--no-convert-omwscripts`) move as one whole package to `Off\<plugin name>\OpenMW\`, named the way the converter names it (the stem of the mod's first `.omwscripts`; for example `Off\wildlife_attacks_npc\OpenMW\`): plugins, scripts, data folders (`textures\`, `meshes\`, `sound\`...) and tidy's `Docs\` and `Screenshots\`. The mod folder keeps only `Off\` (and Vortex's marker file), so a mod still enabled in Vortex deploys nothing else. Without the converter you get one WARNING line. Current omw2mwse declares Python 3.9+ (`requires-python` in its `pyproject.toml`, and `requiresPython` in its `--json`). Tidy probes the Python that would run it and uses that declared minimum (or, if nothing is declared, 3.11); when the interpreter is older, it treats the converter as missing (one WARNING; the mod's package goes to `Off\` as above). A package an older tidy run set aside at `Off\OpenMW\<mod name>\` is moved to the new place (merged with what is there) on the next run.
+   - **OpenMW-only mods** (OpenMW scripts and no MWSE Lua of their own): an optional, and very experimental, OpenMW-to-MWSE converter is being developed separately. It is not released, not included and not needed. Tidy is prepared for it: if/when it is found (on PATH, or beside these tools), `--apply` converts such a mod in its staged folder only (never in Data Files), the plan shows a preview first, and `--undo` reverses the conversion. `--convert-omwscripts=hardcode` picks the converter's other mode (hard-coded values become MCM settings) and `--no-convert-omwscripts` turns conversion off. A conversion that is blocked or fails writes nothing: one WARNING line, and the mod is set aside as below. A mod whose original author has asked to be excluded from conversion is set aside too, and the WARNING tells you to contact the original mod author. Tidy never renames, moves or enables a converted mod's plugins. See [OpenMW Converter](#openmw-converter-experimental).
+   - **OpenMW-only mods that are not converted** (no converter found, a failed or blocked conversion, or `--no-convert-omwscripts`) move as one whole package to `Off\<plugin name>\OpenMW\` (the stem of the mod's first `.omwscripts`; for example `Off\wildlife_attacks_npc\OpenMW\`): plugins, scripts, data folders (`textures\`, `meshes\`, `sound\`...) and tidy's `Docs\` and `Screenshots\`. The mod folder keeps only `Off\` (and Vortex's marker file), so a mod still enabled in Vortex deploys nothing else. Without the converter the plan has one NOTE line. Nothing is lost: every tidy run looks at set-aside packages again, so the first run after the converter is found offers to convert them. A converter that needs a newer Python than the one that would run it counts as not found (one WARNING). A package an older tidy run set aside at `Off\OpenMW\<mod name>\` is moved to the new place (merged with what is there) on the next run.
    - A mod's `bugreports\` folder is made when a bug report is written, and can be left empty when a report is deleted again. At the end of every run (`--apply`, a dry run or `--undo`), tidy removes a `bugreports\` folder that is empty and that it made or emptied during the run; one that was already empty when the run began, or that has anything in it, stays.
    - Moves OpenMW-only normal maps (`*_n` / `*_nm` / `*_normal` / `*_nrm`) whose diffuse texture exists to `Off\<plugin>\normal maps\`, so they are not deployed to vanilla Morrowind with MGE XE.
 2. **Asset Sanitization & Optimization**:
@@ -125,7 +138,7 @@ The suite is engineered for massive, complex mod lists (hundreds of plugins, ten
 | `--skip` | `<PATTERN ...>` | Skips specified mod staging folder names this run. To always skip one, add it to `vortex_tidy_blacklist.txt`. |
 | `--apply` | *(flag)* | Enacts the reviewed plan in `plans\vortex_tidy_plan.txt`. Refuses if the plan was modified or is out of date. |
 | `--yes` | *(flag)* | With `--apply`: don't ask first. |
-| `--undo` | *(flag)* | Reverts the whole last `--apply` from the journal: original asset files back at their own paths (files the repairs made deleted), Lua patches, then moves. Again: the `--apply` before that. Stops, changing nothing, when an original is missing or altered or a file changed since. It also reverses omw2mwse conversions: the files the converter wrote are deleted (one you edited since stays, with a warning), the original package goes back to its own paths, and the shared `MWSE\lib\omwcompat` runtime goes only when no converted mod is left. |
+| `--undo` | *(flag)* | Reverts the whole last `--apply` from the journal: original asset files back at their own paths (files the repairs made deleted), Lua patches, then moves. Again: the `--apply` before that. Stops, changing nothing, when an original is missing or altered or a file changed since. It also reverses conversions made by the optional OpenMW converter: the files it wrote are deleted (one you edited since stays, with a warning), the original package goes back to its own paths, and the converter's shared runtime goes only when no converted mod is left. |
 | `--force` | *(flag)* | With `--undo`: overwrite files changed since the `--apply` (only with an original whose hash matches). |
 | `--no-assets` | *(flag)* | Skips the asset check of each mod's files. |
 | `--no-lua` | *(flag)* | Skips the Lua check (`mwdialog_luafix`). |
@@ -136,7 +149,7 @@ The suite is engineered for massive, complex mod lists (hundreds of plugins, ten
 | `--no-reduce-textures` | *(flag)* | Prevents downscaling of textures larger than 2048x2048. |
 | `--no-reduce-splash` | *(flag)* | Prevents downscaling of splash screens wider than 2048 (they are still made 24-bit RLE TGA). |
 | `--no-coins` | *(flag)* | A broken or missing model gets an empty, invisible model (made in code) instead of the default Dwemer coin from `Morrowind.bsa`. Use the same setting for the plan and `--apply`: the plan line names the kind. Dummies already in place are left alone either way. |
-| `--convert-omwscripts` | `normal` / `hardcode` | OpenMW-only mods (OpenMW scripts, no MWSE Lua) are converted for MWSE by the OpenMW converter (`omw2mwse`, found on PATH or beside these tools). Default and bare flag: `normal`; `--convert-omwscripts=hardcode` picks the converter's other mode (hard-coded values become MCM settings; runs with `--accept-hardcode-conversions`). Converter not found: one warning, and the mod is set aside whole in `Off\<plugin name>\OpenMW\`. |
+| `--convert-omwscripts` | `normal` / `hardcode` | OpenMW-only mods (OpenMW scripts, no MWSE Lua) are converted for MWSE if/when the optional, very experimental OpenMW converter (in development, not included) is found on PATH or beside these tools. Default and bare flag: `normal`; `--convert-omwscripts=hardcode` picks its other mode (hard-coded values become MCM settings). Converter not found: one note, and the mod is set aside whole in `Off\<plugin name>\OpenMW\`, where later runs look at it again. |
 | `--no-convert-omwscripts` | *(flag)* | Don't convert: OpenMW-only mods get their whole package moved to `Off\<plugin name>\OpenMW\`. |
 | `--pack-report` | *(flag)* | For a bug report: copies `MWSE.log`, `Data Files\MWSE\logs\` and `conflict-tools\generated\` (only those; a missing one is noted in the summary), replaces your folders with `<MORROWIND>`, `<STAGING>`, `<DOWNLOADS>` and `<USERPROFILE>` (longest match first, either slash style, doubled backslashes, any case) and your Windows user name with `<USERNAME>` in the copies, and packs them with `scrub-summary.txt` (replacements per file, and what was skipped or excluded, no contents) into `conflict-tools\reports\conflict-tools-report-YYYYMMDD-HHMMSS.zip`. Prints that path as one line; no 7-Zip: an error and a non-zero exit. Read-only on the game: files are copied, never changed, moved or deleted, and nothing is written to Data Files. Binary files (an SQLite cache, anything with a NUL byte or a binary extension, UTF-16 text) are left out and listed, not scrubbed. Stands alone: not with `--apply`, `--undo` or `--lua-only`. |
 | `--after-mwse-update` | `<EXIT_CODE>` | For a caller that just ran `MWSE-Update.exe` (MWManager; these tools never start it): the updater's exit code. On a successful update (exit code `0` and `<game>\mwse-version.txt` present and different from `--mwse-version-before`), only the MWSE core Known Bugs patches are re-applied (`mwdialog_luafix.py --core-only`: a dry run first, then apply, with luafix's usual backup and journal). No staged tidy run and no other tidy function. `Morrowind.exe` must be closed (nothing is killed); if it is running, the hook refuses with a non-zero exit and writes nothing. A failed updater or no update skips the hook and exits `0`. In Python: `vortex_tidy.tidy_after_mwse_update(returncode, version_before)`. |
@@ -170,7 +183,7 @@ The suite is engineered for massive, complex mod lists (hundreds of plugins, ten
 | `--ini` | `<PATH>` | Path to `Morrowind.ini` (default: the one in the game folder; its `[Archives]` are read). The plugin list is `generated\mwdialog_load_order.txt`, made from this ini the first time, and written back into it whenever a run changes it, and by `--play`. |
 | `--openmw-cfg` | `<PATH>` | Reads `content=` and `data=` from `openmw.cfg`. With it (or `--plugins`), `Morrowind.ini` is never written; with it, `--fix` also skips SoundFix, the MWSE suite data and the sound cache. |
 | `--vortex-dir`, `--staging` | `<PATH>` | Vortex's mod staging folder, searched for files that exist there but were never deployed (default: Vortex's own setting). |
-| `--no-vortex` | *(flag)* | Disables Vortex staging integration. |
+| `--no-vortex` | *(flag)* | Disables Vortex staging integration. Automatic when Vortex is not installed (no `%APPDATA%\Vortex`). Mod Organizer 2 is not supported: its mods are not in Data Files. |
 | `--vortex-downloads`, `--downloads` | `<PATH>` | Vortex download folder, to read a plugin's original header from its download archive when `--fix` has rewritten it (default: Vortex's own setting). |
 | `--no-archive-lookup` | *(flag)* | Don't open download archives for the master check. |
 | `--encoding` | `<NAME>` | Text encoding of plugin strings (default `cp1252`; `cp1251` Russian, `cp1250` Polish). |
@@ -414,9 +427,9 @@ Other suite modules include `mwcollide`, `mwstranded`, `mwperformers`, `mwinfolo
 
 ## OpenMW Converter (experimental)
 
-A separate project, the **OpenMW Converter** ([dejunai/openmw-mwse](https://github.com/dejunai/openmw-mwse)), is aimed at turning OpenMW-oriented content (OpenMW Lua scripts) toward MWSE. It is experimental and in early development, and its repository is private for now; see that project's own README for current status. These tools do not need it and do not include it.
+An optional, and very experimental, OpenMW-to-MWSE converter (turning mods written for OpenMW's Lua into MWSE mods) is being developed as a separate project. It is not released and not included, and these tools do not need it.
 
-What this suite does with it is small, and separate from tidy's other OpenMW handling (the `.omwaddon` rename, a hybrid mod's OpenMW files in `Off\OpenMW\<mod name>\`, OpenMW-only normal maps in `Off\normal maps\`): when `vortex_tidy --apply` finds the converter's `omw2mwse` command (on PATH, or beside these tools), it runs it in `normal` mode on each OpenMW-only mod (`--convert-omwscripts=hardcode` picks the other mode). Without it, an OpenMW-only mod is set aside whole in `Off\<plugin name>\OpenMW\`. `--undo` reverses either. `mwdialog_check --play`, luafix, the scans and tidy recognise the converter's output by its markers (its manifest, its loader header, the `omwcompat` runtime) and leave it alone.
+Tidy is prepared for it if/when it is found (on PATH, or beside these tools): `vortex_tidy --apply` converts each OpenMW-only mod in `normal` mode (`--convert-omwscripts=hardcode` picks the other mode). Until then an OpenMW-only mod is set aside whole in `Off\<plugin name>\OpenMW\`. Nothing is lost: every tidy run looks at set-aside packages again, so the first run after the converter is found offers to convert them. `--undo` reverses either. This is separate from tidy's other OpenMW handling (the `.omwaddon` rename, a hybrid mod's OpenMW files in `Off\OpenMW\<mod name>\`, OpenMW-only normal maps in `Off\normal maps\`). `mwdialog_check --play`, luafix, the scans and tidy recognise a converted mod's files by their markers and leave them alone.
 
 ---
 
@@ -508,11 +521,15 @@ python doc_scan.py [DIR]
 python doc_scan.py -h | --help
 ```
 
-It reads `README.md` and `docs\*.md` (not `docs\dev\`, and not a local `docs\CHANGES.md` if one is present), and the switches the tools define (argparse calls and hand-written parsers). It prints one line per documented switch the code doesn't have (file, line, and the tool it was checked against) and one per switch the code has that no doc mentions, then a summary. A switch hidden with `help=argparse.SUPPRESS` (retired or internal) is not listed as undocumented. Switches of other programs (`omw2mwse`, `luajit`, `git`...) written after that program's name are left out. `DIR` checks another copy of the project. Exit codes: `0` clean, `1` something to fix, `2` an unknown switch.
+It reads `README.md` and `docs\*.md` (not `docs\dev\`, and not a local `docs\CHANGES.md` if one is present), and the switches the tools define (argparse calls and hand-written parsers). It prints one line per documented switch the code doesn't have (file, line, and the tool it was checked against) and one per switch the code has that no doc mentions, then a summary. A switch hidden with `help=argparse.SUPPRESS` (retired or internal) is not listed as undocumented. Switches of other programs (`luajit`, `git`...) written after that program's name are left out. `DIR` checks another copy of the project. Exit codes: `0` clean, `1` something to fix, `2` an unknown switch.
 
 ### sync.py
 
 `sync.py` is a local developer script on this machine, not part of the package: it is listed in `.gitignore`, is not committed, and is never deployed (`deploy.py` refuses it). A fresh clone does not include it. On a machine that has the script, it carries the tools from the checkout into MWManager, one way, and never writes to a Morrowind install (`deploy.py` is the only tool that does). The MWManager path is saved in `sync.ini` beside it (also ignored).
+
+### release.py
+
+`python release.py [VERSION]` builds `dist\conflict-tools-<VERSION>.zip` for a GitHub release: a `conflict-tools\` folder holding exactly what `deploy.py` ships, taken from the last commit (`git archive`, so `.bat` files are CRLF and everything else LF). VERSION defaults to `git describe --tags --always`. It warns when shipped files have uncommitted changes. It is never deployed.
 
 ### tes3diff.py
 

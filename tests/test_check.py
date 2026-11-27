@@ -489,3 +489,16 @@ def test_a_missing_video_gets_a_line_in_the_bug_report():
     world = types.SimpleNamespace(masters={}, generated=[], missing_files=[(r"Video\intro.bik", "script s", "A.esp")])
     per = BR.collect(mm, [("A.esp", "A.esp")], report, world)
     assert per["a.esp"]["missing"] == [r"  - Video\intro.bik (needed by script s); the game skips it"]
+
+
+def test_no_vortex_installed_runs_as_no_vortex_but_a_broken_vortex_still_errors(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("APPDATA", str(tmp_path / "Roaming"))
+    monkeypatch.setattr(m.MP, "_marker_fallback", lambda *a, **k: None)
+    m.MP.clear_vortex_settings_cache()
+    args = argparse.Namespace(no_vortex=False, vortex_dir=None, vortex_downloads=None)
+    m._ensure_vortex_paths(args)
+    assert args.no_vortex and "Vortex is not installed" in capsys.readouterr().out
+    (tmp_path / "Roaming" / "Vortex").mkdir(parents=True)      # installed but unreadable: keep the error
+    m.MP.clear_vortex_settings_cache()
+    with pytest.raises(m.MP.VortexPathError):
+        m._ensure_vortex_paths(argparse.Namespace(no_vortex=False, vortex_dir=None, vortex_downloads=None))

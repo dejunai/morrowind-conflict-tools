@@ -125,3 +125,6 @@ sync.ini.tmp
 
 # Private helper: pulls Lua edited in the Steam install back into the repo. Never committed or deployed.
 gather_steam_lua.py
+
+# release.py output
+dist/

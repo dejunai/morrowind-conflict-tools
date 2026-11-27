@@ -637,7 +637,6 @@ PREVIEW_CHECK = {}     # converted-to-be mod folder -> {"digest", "identity", "l
 BLOCKED_PLAN = []      # warning texts: mods omw2mwse's dry run judged blocked (they get the usual Off\\ move)
 CONVERT_MODES = ("normal", "hardcode")          # omw2mwse's own --convert-omwscripts modes
 CONVERT_DEFAULT = "normal"                      # what ships: end users get this unless they pass --convert-omwscripts=hardcode
-CONVERT_DEV_HARDCODE = True                     # --remove before shipping: developer-only, forces omw2mwse into hardcode mode
 _CONVERT_UNSET = object()                       # argparse: --convert-omwscripts was not given
 CONVERT_ACTION = "convert with omw2mwse"
 CONVERTER = {"mode": None, "cmd": None, "env": None, "why": "", "python": ""}   # set by main(): the mode, how to run it
@@ -810,12 +809,10 @@ def converter_python_problem(cmd, where="", requires=None):
 
 def convert_mode(chosen=_CONVERT_UNSET):
     """The omw2mwse mode tidy will run: `chosen` when it is one of CONVERT_MODES or None
-    (--no-convert-omwscripts); when nothing was chosen, CONVERT_DEFAULT, except CONVERT_DEV_HARDCODE
-    forces hardcode."""
+    (--no-convert-omwscripts); when nothing was chosen, CONVERT_DEFAULT."""
     if chosen is not _CONVERT_UNSET:
         return chosen
-    # read by name: ready_to_ship.py has the marked line removed before shipping, and then this is CONVERT_DEFAULT
-    return "hardcode" if globals().get("CONVERT_DEV_HARDCODE", False) else CONVERT_DEFAULT
+    return CONVERT_DEFAULT
 
 
 def setup_converter(mode):
@@ -2054,8 +2051,9 @@ def run_plan(args):
         head.append(f"  - WARNING: {CONVERTER['python']}, so it is not used: "
                     f"{CONVERTER['missed']} OpenMW-only mod(s) get their whole package moved to Off\\<plugin>\\OpenMW\\ instead")
     elif CONVERTER.get("missed"):                    # one line: the converter isn't there
-        head.append(f"  - WARNING: omw2mwse (the OpenMW converter) was not found on PATH or beside these tools: "
-                    f"{CONVERTER['missed']} OpenMW-only mod(s) get their whole package moved to Off\\<plugin>\\OpenMW\\ instead")
+        head.append(f"  - NOTE: {CONVERTER['missed']} OpenMW-only mod(s) get their whole package moved to "
+                    f"Off\\<plugin>\\OpenMW\\: they need the optional OpenMW-to-MWSE converter, still in "
+                    f"development and not installed. Every run looks at them again.")
     pend = pending_intent_line()
     if pend:
         head.append(f"  - {pend}")
@@ -4076,9 +4074,10 @@ def _main():
                          "coin (the default, so the gap is easy to spot)")
     ap.add_argument("--convert-omwscripts", nargs="?", const=CONVERT_DEFAULT, default=_CONVERT_UNSET,
                     choices=CONVERT_MODES, metavar="MODE",
-                    help="OpenMW-only mods (OpenMW scripts, no MWSE Lua) are converted for MWSE by omw2mwse, found "
-                         "on PATH or beside these tools, in this mode: normal (the default) or hardcode (hard-coded "
-                         "values become MCM settings; runs with --accept-hardcode-conversions). "
+                    help="OpenMW-only mods (OpenMW scripts, no MWSE Lua) are converted for MWSE if/when the optional, "
+                         "very experimental OpenMW converter (in development, not included) is found on PATH or "
+                         "beside these tools, in this mode: normal (the default) or hardcode (hard-coded "
+                         "values become MCM settings). "
                          "Pass --convert-omwscripts=hardcode to pick hardcode. Mods with MWSE Lua are never "
                          "converted: their OpenMW files go to Off\\<plugin>\\OpenMW\\. An OpenMW-only mod that is "
                          "not converted gets its whole package moved to Off\\<plugin name>\\OpenMW\\")

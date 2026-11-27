@@ -2210,3 +2210,18 @@ def test_P1_data_on_a_non_actor_without_modified():
             "    e.target.data.talked = true\n  end\nend\nevent.register('activate', onAct2)\n"
             "event.register('loaded', function() tes3.player.data.x = 1 end)\n")
     assert "P1" not in rules(analyse(good))
+
+
+def test_backups_are_relative_to_the_shared_folder_not_a_full_path_mirror(tmp_path):
+    data, root = mod_tree(tmp_path, {"main.lua": PUDDLE})
+    twin = tmp_path / "Twin" / "MWSE" / "mods" / "testmod"           # a second mod with the same folders
+    twin.mkdir(parents=True)
+    (twin / "main.lua").write_text(PUDDLE.replace("bigger", "twin"))
+    j, bk = tmp_path / "j.jsonl", tmp_path / "bk"
+    rep = lf.check_paths([str(data), str(tmp_path / "Twin")], CFG, checker=OkChecker(), use_cache=False)
+    w, _refused = lf.apply_report(rep, journal=str(j), backup_root=str(bk), log=lambda s: 0)
+    ops = [json.loads(s) for s in j.read_text().splitlines() if '"backup"' in s]
+    rels = sorted(os.path.relpath(op["backup"], str(bk)).split(os.sep, 1)[1] for op in ops)
+    assert w == 2 and rels == [os.path.join("1 Mod", "testmod", "main.lua"), os.path.join("2 Twin", "testmod", "main.lua")]
+    assert lf.undo(str(j), log=lambda s: 0) == 0 and (root / "main.lua").read_text() == PUDDLE
+    assert (twin / "main.lua").read_text() == PUDDLE.replace("bigger", "twin")

@@ -98,7 +98,7 @@ def test_rules_in_the_manifest_cannot_ship_a_never_file(tmp_path):
     tracked = ["tests/test_x.py", "a/tests/b.py", ".gitignore", ".github/x.yml", "deploy.py", "sync.py",
                "CODEX_AUDIT-1.MD", "_backup/n.txt", "backups/b.zip", "docs/dev/OFF-LAYOUT.md", "docs/CHANGES.md", "mwdialog_x.py",
                "tes3diff.py", "dummy assets/mwdialog_dummy.nif", "generated/dummy/mwdialog_dummy.nif", "x/dummy/y.nif",
-               "generated/mwdialog_play_hashes.json"]
+               "generated/mwdialog_play_hashes.json", "release.py", "dist/conflict-tools-v1.zip"]
     assert [d for _r, d in dep.ship_list(tracked, rules)] == ["mwdialog_x.py"]
 
 
@@ -107,7 +107,8 @@ def test_a_deploy_ships_the_manifest_set_and_nothing_dev(proj, capsys):
     target, backups = tmp / "game" / "conflict-tools", tmp / "bk"
     assert run(dep, p, str(target), "--backups", str(backups)) == 0
     got = tree(target)
-    assert set(got) == {"vortex_tidy.py", "mwdialog_x.py", "tidy.bat", "README.md", "LICENSE", "docs/MORE_INFO.md",
+    assert set(got) == {"vortex_tidy.py", "mwdialog_x.py", "tidy.bat", "Play Morrowind.bat", "README.md", "LICENSE",
+                        "docs/MORE_INFO.md",
                         "lua tools/MWSE/mods/mwsuite/mwguard/main.lua",
                         "lua tools/mwsuite-metadata.toml", "tools/luajit/luajit.exe"}
     assert not [r for r in got if is_dev(r)]                              # the deployed tree has no test/dev file

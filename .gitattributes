@@ -1,2 +1,6 @@
-*.sh text eol=lf
+# Every text file is LF in the repo and in every checkout (the suite's Lua and the test fixtures must be LF);
+# batch files stay CRLF because cmd.exe mis-reads labels in LF batch files.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
 tools/tes3conv/** -text
