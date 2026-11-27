@@ -31,8 +31,9 @@
 -- the loaded wrapper, the cellChanged waiter and the activate pickup detector are all unregistered (afterDispatch,
 -- the one-shot pattern used by Ahead of the Classes and Jiub). The mod's original loaded handler is never put back;
 -- it is unregistered (or already replaced by our wrapper, which then comes off too). Nothing of ours stays resident.
--- A later new game, or another save that still needs the journal, in the same session will not place it and will not
--- show the pop-up either; restarting the game re-arms. Stands down when the toggle is off, the mod is missing, or
+-- A second new game in one session is blocked outright by mwexitguard/newgame.lua (MGE XE does not reset in-session),
+-- so that case no longer comes up. Another save that still needs the journal, loaded in the same session, will not place
+-- it and will not show the pop-up either; restarting the game re-arms. Stands down when the toggle is off, the mod is missing, or
 -- rnr_old_journal is not in the load order (then nothing is added and no message shows).
 
 local config = require("mwpluginpatches.config")

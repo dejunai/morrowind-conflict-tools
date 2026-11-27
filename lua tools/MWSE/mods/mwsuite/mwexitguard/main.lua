@@ -5,6 +5,9 @@
     Eliminates Morrowind's notorious on-exit freeze and d3d8.dll / MGE XE renderer unloading crash.
     Intercepts MenuOptions exit, MenuMessage exit confirmation, and Alt+F4 to terminate the process
     immediately via Win32 ExitProcess(0), allowing Windows to reclaim all heap and GPU resources in 0 ms.
+
+    newgame.lua (own switch, blockNewGameInSession, independent of enabled): once a game has been loaded in this
+    session, New Game is blocked until Morrowind is restarted, because MGE XE does not reset in-session.
 ]]--
 
 local config = require("mwexitguard.config")
@@ -100,6 +103,9 @@ local function onInitialized()
     event.register("uiActivated", onMenuOptionsActivated, { filter = "MenuOptions" })
     event.register("uiActivated", onMenuMessage, { filter = "MenuMessage" })
     event.register("keyDown", onKeyDown, { filter = tes3.scanCode.f4 })   -- only F4 presses reach it
+
+    local ok, err = pcall(function() require("mwexitguard.newgame").init() end)
+    if not ok then mwse.log("[mwexitguard] New Game block did not start: %s", tostring(err)) end
 
     mwse.log("[mwexitguard] Initialized clean fast exit protection suite tool.")
 end

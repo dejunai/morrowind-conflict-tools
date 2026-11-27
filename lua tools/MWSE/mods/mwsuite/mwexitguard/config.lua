@@ -4,6 +4,7 @@ local defaultConfig = {
     enabled = false,
     skipConfirmation = false,
     enableAltF4 = true,
+    blockNewGameInSession = true,   -- no second New Game in one session (newgame.lua); separate from `enabled`
     logToMWSE = true,
 }
 
