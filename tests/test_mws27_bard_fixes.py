@@ -191,23 +191,29 @@ fire("uiActivated")
 check(calls[1] == "load:base_anim.nif", "the plain animation was asked for")
 check(calls[2] == "play group=0" and calls[3] == "update t=0", "the dialogue goes on to the idle after the throw")
 fire("menuExit")
+check(not has("load:own"), "he waits plain for the pause")
+fireTimers()
 check(has("load:own"), "his own animation is given back although the plain load threw")
 local n = #calls
-fire("menuExit"); fire("cellChanged")
+fire("menuExit"); fireTimers(); fire("cellChanged")
 check(#calls == n, "nothing more is done once it is back")
 
 -- the backstop: the restore itself missed him (his handle flapped), so the next menuExit gives it back
 reset()
-local flap = 0
+local flapNext = false
 local real = tes3.makeSafeObjectHandle
 tes3.makeSafeObjectHandle = function(r)
-  return { valid = function() flap = flap + 1 return flap ~= 1 end, getObject = function() return r end }
+  return { valid = function() if flapNext then flapNext = false return false end return true end,
+           getObject = function() return r end }
 end
 speaker = performer("am\\am_bard2.nif", "DM_Bard_script", { 0, 0, 255 }, true)
 fire("uiActivated")
 check(not has("load:own"), "not given back yet")
 fire("menuExit")
-check(has("load:own"), "the backstop gives his own animation back")
+check(not has("load:own"), "waiting out the pause")
+flapNext = true                              -- the restore does not find him ...
+fireTimers()
+check(has("load:own"), "... the backstop gives his own animation back")
 tes3.makeSafeObjectHandle = real
 
 -- a dead performer is never touched by the backstop
@@ -215,7 +221,7 @@ reset()
 speaker = performer("am\\am_bard2.nif", "DM_Bard_script", { 0, 0, 255 }, true)
 fire("uiActivated")
 speaker.reference.mobile.isDead = true
-fire("menuExit"); fire("cellChanged")
+fire("menuExit"); fireTimers(); fire("cellChanged")
 check(not has("load:own"), "a dead performer is left as he is")
 print("ok")
 ''')
@@ -228,3 +234,9 @@ def test_one_performer_per_inn_when_the_plain_load_throws():
     script = script.replace(old, 'loadAnimation = function(p) anims[p.reference] = p.file or "own"; p.reference.sceneNode = { n = 2 } '
                                  'if p.file then error("Animation file failed to load.") end end,')
     lua(script)
+
+def test_restore_pause_is_a_game_time_timer_with_a_slider():
+    with open(MOD, encoding="utf-8") as f:
+        main = f.read()
+    assert "restoreDelay = 3" in main and "type = timer.simulate" in main
+    assert 'id = "restoreDelay"' in main and "createSlider" in main

@@ -245,11 +245,12 @@ end
 local AD_START, AD_END, AD_INT = "tauer.animatedDialogue.dialogueStarted", "tauer.animatedDialogue.dialogueEnded", "tauer.animatedDialogue.dialogueInterrupted"
 local calls, speaker = {}, nil
 local timers = {}
-timer = { real = 2, delayOneFrame = function() end,
-          start = function(t) local h = { cb = t.callback, cancelled = false }
+timer = { real = 2, simulate = 1, delayOneFrame = function() end,
+          start = function(t) local h = { cb = t.callback, cancelled = false, type = t.type, duration = t.duration }
                               h.cancel = function() h.cancelled = true end
                               timers[#timers + 1] = h return h end }
 local function fireTimers() local l = timers timers = {} for _, h in ipairs(l) do if not h.cancelled then h.cb() end end end
+local function live() local n, last = 0, nil for _, h in ipairs(timers) do if not h.cancelled then n = n + 1 last = h end end return n, last end
 tes3 = { objectType = { npc = 1, armor = 2 }, armorSlot = { shield = 8 }, animationGroup = { idle = 0 },
          event = setmetatable({}, { __index = function(_, k) return k end }),
          getActiveCells = function() return {} end,
@@ -266,7 +267,7 @@ tes3ui = { getServiceActor = function() return speaker end, findMenu = function(
 include = function() end
 local seen = {}                              -- another mod's handler (Animated Dialogue's), registered before ours
 event.register("uiActivated", function() seen[#seen + 1] = calls[1] end)
-mwse = { loadConfig = function(_, d) d.enabled = true; d.log = false; d.dialogueAnimation = DIALOGUE_ANIMATION; return d end, saveConfig = function() end }
+mwse = { loadConfig = function(_, d) d.enabled = true; d.log = false; d.dialogueAnimation = DIALOGUE_ANIMATION; CFG = d; return d end, saveConfig = function() end }
 dofile([[MOD]])
 local function check(ok, what) if not ok then error(what .. " / " .. table.concat(calls, ", "), 2) end end
 local function last() return calls[#calls] end
@@ -296,18 +297,24 @@ check(#calls == n, "a second activation of the same dialogue does not stop it ag
 fire("menuExit")
 check(#calls == n and #timers == 1, "with Animated Dialogue the end is left to it, with a backstop timer")
 fire(AD_END, {})
+check(#calls == n and live() == 1, "the dialogue is over: he stays plain for a moment, one timer")
+local _, soft = live()
+check(soft.type == 1 and soft.duration == 3, "a game-time timer of 3 s: " .. tostring(soft.type) .. "/" .. tostring(soft.duration))
+fireTimers()
 check(calls[n + 1] == "load:own" and calls[n + 2] == "play group=0" and #calls == n + 2, "its own animation back, idle restarted: " .. tostring(calls[n + 1]))
 fireTimers()
-check(#calls == n + 2, "the backstop does nothing once it is back")
+check(#calls == n + 2, "nothing more once it is back")
 
 -- 2. no Animated Dialogue (or it isn't handling this one): back when the menu closes
 reset()
 speaker = performer("am\\anim_lute.nif", nil, { 0, 0, 255 }, true)
 fire("uiActivated")
 fire("menuExit")
-check(calls[1] == "load:base_anim.nif" and calls[4] == "load:own", "restored at menuExit")
+check(#calls == 3 and live() == 1, "he stands plain while the pause runs")
+fireTimers()
+check(calls[1] == "load:base_anim.nif" and calls[4] == "load:own", "restored after the pause")
 local n2 = #calls
-fire("menuExit")
+fire("menuExit"); fireTimers()
 check(#calls == n2, "once")
 
 -- 3. the backstop restores it if Animated Dialogue never ends
@@ -315,6 +322,8 @@ reset()
 speaker = performer("am\\anim_lute.nif", nil, { 0, 0, 255 }, true)
 fire("uiActivated"); fire(AD_START, {}); fire("menuExit")
 local n3 = #calls
+fireTimers()                                 -- the backstop: the end never came; the pause starts then
+check(#calls == n3 and live() == 1, "backstop starts the pause")
 fireTimers()
 check(calls[n3 + 1] == "load:own", "backstop restores")
 
@@ -323,11 +332,11 @@ reset()
 speaker = performer("base_anim.nif", "DM_Bard_script", { 5, 5, 255 }, false)
 fire("uiActivated")
 check(calls[1] == "play group=0" and not calls[1]:find("load"), "no animation file is swapped for a group player")
-fire(AD_START, {}); fire(AD_END, {})
+fire(AD_START, {}); fire(AD_END, {}); fireTimers()
 check(last() == "play group=5", "the same group again: " .. last())
 reset()
 speaker = performer("base_anim.nif", "DM_Bard_script", { 0, 7, 3 }, false)
-fire("uiActivated"); fire("menuExit")
+fire("uiActivated"); fire("menuExit"); fireTimers()
 check(last() == "play upper=7 shield=3", "body sections kept apart: " .. last())
 
 -- 5. a script performer between songs, nothing playing: left alone
@@ -342,20 +351,20 @@ speaker = performer("am\\anim_lute.nif", nil, { 0, 0, 255 }, true)
 fire("uiActivated")
 speaker.reference.mobile.isDead = true
 local n6 = #calls
-fire("menuExit")
+fire("menuExit"); fireTimers()
 check(#calls == n6, "a performer who died is not given anything")
 reset()
 speaker = performer("am\\anim_lute.nif", nil, { 0, 0, 255 }, true)
 fire("uiActivated")
 speaker.reference.gone = true
 n6 = #calls
-fire("menuExit")
+fire("menuExit"); fireTimers()
 check(#calls == n6, "a performer who is gone is not touched")
 reset()
 speaker = performer("am\\anim_lute.nif", nil, { 4, 4, 255 }, true)
 fire("uiActivated")
 speaker.reference.mobile.inCombat = true
-fire("menuExit")
+fire("menuExit"); fireTimers()
 check(calls[4] == "load:own" and #calls == 4, "in a fight his own animation is back, but nothing is started for him")
 reset()
 speaker = performer("am\\anim_lute.nif", nil, { 0, 0, 255 }, true)
@@ -388,6 +397,73 @@ seen = {}
 speaker = performer("am\\\\anim_lute.nif", nil, { 0, 0, 255 }, true)
 fire("uiActivated")
 check(seen[1] == "load:base_anim.nif", "ours ran before another mod's uiActivated handler")
+
+-- 9. the pause after the dialogue: plain and idle meanwhile, one timer, cancelled by what ends his wait
+local function dialogueEnded(groups)
+  fire("loaded")                           -- whatever an earlier case left pending
+  reset()
+  speaker = performer("am\\anim_lute.nif", nil, groups or { 0, 0, 255 }, true)
+  fire("uiActivated"); fire("menuExit")
+end
+dialogueEnded()
+local m = #calls
+check(m == 3 and live() == 1, "waiting, plain")
+fire("menuExit"); fire("menuExit"); fire(AD_END, {}); fire(AD_INT, {})
+check(live() == 1 and #calls == m, "timers are never stacked")
+fireTimers()
+check(calls[m + 1] == "load:own" and #calls == m + 2, "restarts after the pause")
+
+dialogueEnded()                              -- he is talked to again during the pause: it is cancelled
+m = #calls
+fire("uiActivated")
+check(live() == 0 and #calls == m, "a new dialogue cancels the pause and stops nothing twice")
+fire("menuExit")
+check(live() == 1, "and the next end starts a new one")
+fireTimers()
+check(calls[m + 1] == "load:own", "restored after that")
+
+dialogueEnded()                              -- he dies during the pause
+m = #calls
+fire("death", { reference = speaker.reference })
+check(live() == 0 and #calls == m, "death cancels the pause")
+fire("menuExit"); fireTimers()
+check(#calls == m, "and he is left as he is")
+
+dialogueEnded()                              -- a cell change: restored at once, the timer is gone
+m = #calls
+fire("cellChanged")
+check(calls[m + 1] == "load:own" and live() == 0, "a cell change restores him and cancels the pause")
+
+dialogueEnded()                              -- a load
+m = #calls
+fire("loaded")
+check(live() == 0 and #calls == m, "a load cancels the pause")
+fire("menuExit"); fireTimers()
+check(#calls == m, "and forgets him")
+
+dialogueEnded()                              -- another one's death does nothing
+m = #calls
+fire("death", { reference = performer("base_anim.nif", nil, {}, false).reference })
+check(live() == 1, "someone else dying leaves the pause alone")
+
+-- the setting: 0 is at once, anything silly is clamped, and a timer that cannot start restores at once
+CFG.restoreDelay = 0
+dialogueEnded()
+check(calls[4] == "load:own" and live() == 0, "0 s: at once")
+CFG.restoreDelay = 99
+dialogueEnded()
+local _, long = live()
+check(long.duration == 10, "clamped to 10 s")
+CFG.restoreDelay = "x"
+dialogueEnded()
+_, long = live()
+check(long.duration == 3, "an unusable value means 3 s")
+CFG.restoreDelay = 3
+local realStart = timer.start
+timer.start = function() error("no timer") end
+dialogueEnded()
+check(calls[4] == "load:own", "no timer to wait with: he is not left plain")
+timer.start = realStart
 print("ok")
 """
 

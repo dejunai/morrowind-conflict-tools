@@ -18,14 +18,15 @@
     While it is on, a bard also stops singing while you talk to them, and holds their lute (Weapon
     Sheathing showed it on the back, as it is a shield). The performing animation (the lute) stops at the same
     moment, for any performer, and comes back when the dialogue ends; Animated Dialogue is not patched, it
-    just finds the plain animation where it would have found the lute.
+    just finds the plain animation where it would have found the lute. After the dialogue he stands plainly for
+    a pause (3 s of game time by default, Mod Config slider) before the animation restarts.
     MWSE throws "Animation file failed to load" for a plain animation (it has no override layer) AFTER it has
     swapped the model, so that throw counts as loaded and the restore (tes3.loadAnimation{reference}) always
     runs; menuExit / cellChanged are a backstop for any performer left plain.
 ]]
 
 local CONFIG_NAME = "mwperformers"
-local config = mwse.loadConfig(CONFIG_NAME, { enabled = false, log = true, dialogueAnimation = true })
+local config = mwse.loadConfig(CONFIG_NAME, { enabled = false, log = true, dialogueAnimation = true, restoreDelay = 3 })
 
 local ANIM_PATTERNS = { "bard", "lute", "drum", "perform", "musician" }
 local SCRIPT_PATTERNS = { "bard", "lute", "drum", "perform", "musician", "minstrel" }
@@ -319,6 +320,8 @@ local BACKSTOP = 1.5                          -- seconds: the animation comes ba
 
 local pendingAnim                             -- { handle, plain, groups, ad }: the performer whose animation is stopped
 local backstop                                -- real-time timer for the above
+local settle                                  -- game-time timer: the pause after the dialogue before the animation restarts
+local RESTORE_DELAY = 3                       -- seconds of game time (the Mod Config slider's default; 0 = at once)
 
 local function idleGroup() return tes3.animationGroup and tes3.animationGroup.idle or 0 end
 
@@ -341,6 +344,21 @@ local function cancelBackstop()
         pcall(function() backstop:cancel() end)
         backstop = nil
     end
+end
+
+local function cancelSettle()
+    if settle then
+        pcall(function() settle:cancel() end)
+        settle = nil
+    end
+end
+
+local function cancelTimers() cancelBackstop() cancelSettle() end
+
+local function restoreDelay()
+    local d = tonumber(config.restoreDelay)
+    if not d then return RESTORE_DELAY end
+    return math.max(0, math.min(d, 10))
 end
 
 local loggedPlainThrow = false
@@ -376,7 +394,7 @@ end
 local function restoreAnimation()
     local state = pendingAnim
     pendingAnim = nil
-    cancelBackstop()
+    cancelTimers()
     if not state or not state.handle:valid() then return end
     local ref = state.handle:getObject()
     if not ref or ref.disabled or ref.deleted or not ref.sceneNode then             -- gone: its animation goes with it
@@ -439,22 +457,55 @@ local function beginAnimation(ref)
     end
 end
 
+-- The dialogue is over. He keeps standing with the plain animation and idle for a moment (restoreDelay seconds of
+-- game time, so it does not run in a menu), then gets his own animation back. One timer at a time; a new dialogue,
+-- his death, a cell change or a load cancels it (the cell change and the load restore him first where they can).
+-- Without a usable timer he is restored at once: he never stays plain.
+local function scheduleRestore()
+    local state = pendingAnim
+    if not state then return end
+    if settle then return end                                    -- already counting: never stacked
+    local delay = restoreDelay()
+    if delay <= 0 then return restoreAnimation() end
+    cancelBackstop()
+    local ok = pcall(function()
+        settle = timer.start({ type = timer.simulate, duration = delay, callback = function()
+            settle = nil
+            restoreAnimation()
+            healTouched()                                        -- and whoever the restore missed
+        end })
+    end)
+    if not ok or not settle then settle = nil return restoreAnimation() end
+end
+
 -- the dialogue is over: now, or once Animated Dialogue has taken its last picture of the pose (it eases out of it)
 local function onMenuExitAnimation()
     local state = pendingAnim
-    if not state then return end
-    if not state.ad then return restoreAnimation() end
+    if not state or settle then return end
+    if not state.ad then return scheduleRestore() end
     cancelBackstop()
     pcall(function()
-        backstop = timer.start({ type = timer.real, duration = BACKSTOP, callback = restoreAnimation })
+        backstop = timer.start({ type = timer.real, duration = BACKSTOP, callback = function()
+            backstop = nil
+            scheduleRestore()
+        end })
     end)
 end
 
 event.register(AD_STARTED, function() if pendingAnim then pendingAnim.ad = true end end, { priority = AD_LAST })
-event.register(AD_ENDED, restoreAnimation, { priority = AD_LAST })
-event.register(AD_INTERRUPTED, restoreAnimation, { priority = AD_LAST })
+event.register(AD_ENDED, scheduleRestore, { priority = AD_LAST })
+event.register(AD_INTERRUPTED, scheduleRestore, { priority = AD_LAST })
 event.register(tes3.event.cellChanged, function() restoreAnimation() healTouched() end)
-event.register(tes3.event.loaded, function() pendingAnim = nil touched = weak() cancelBackstop() end)    -- the old references are gone
+event.register(tes3.event.loaded, function() pendingAnim = nil touched = weak() cancelTimers() end)    -- the old references are gone
+-- he died while waiting: nothing to give back (a dead performer's animation is left as it is)
+event.register(tes3.event.death, function(e)
+    if pendingAnim and e.reference and sameRef(pendingAnim, e.reference) then
+        local ref = e.reference
+        pendingAnim = nil
+        cancelTimers()
+        touched[ref] = nil
+    end
+end)
 
 local function onMenuDialogActivated(e)
     local target = tes3ui.getServiceActor()
@@ -465,6 +516,7 @@ local function onMenuDialogActivated(e)
     local ref = target and target.reference
     endQuiet()
     if pendingAnim and not (ref and sameRef(pendingAnim, ref)) then restoreAnimation() end
+    if pendingAnim then cancelTimers() end                -- the same performer again: he stays plain for this one too
     if not config.enabled or not ref or not isBardRef(ref) then return end
     quietBard = tes3.makeSafeObjectHandle(ref)
     skipScriptFrame(ref)                 -- first, or the script starts the next song
@@ -501,6 +553,13 @@ event.register(tes3.event.modConfigReady, function()
         description = "While you talk to a performer, the lute (or drum) animation stops along with the singing, and "
             .. "it is back when the dialogue ends. Off: only the singing stops.",
         variable = mwse.mcm.createTableVariable({ id = "dialogueAnimation", table = config }),
+    })
+    page:createSlider({
+        label = "Pause before the animation restarts (seconds)",
+        description = "After a dialogue with a performer ends, he stands for this long (game time, it does not run "
+            .. "in a menu) before the lute or drum animation starts again. 0 = at once. Default 3.",
+        min = 0, max = 10, step = 0.5, jump = 1, decimalPlaces = 1,
+        variable = mwse.mcm.createTableVariable({ id = "restoreDelay", table = config }),
     })
     page:createButton({
         buttonText = "Pick again here now",
