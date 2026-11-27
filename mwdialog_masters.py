@@ -85,7 +85,10 @@ def master_closure(world, plugins, patched):
 
 
 def write_inplace(path, out, backup=True, read_as=None):
-    """Write records over a plugin in place: .bak first, record count set, date kept (hard links stay)."""
+    """Write records over a plugin in place: .bak first, record count set, date kept (hard links stay).
+    A master (.esm) is never edited: its fixes go into the ESM fixes patch, so this refuses one."""
+    if str(path).lower().endswith(".esm"):
+        raise OSError(f"{os.path.basename(path)} is a master; a master is never edited (its fixes go in the patch)")
     out[0] = set_hedr_count(out[0], len(out) - 1)
     if read_as is not None:                     # read_as: content_id() of what `out` was made from
         with open(path, "rb") as f:

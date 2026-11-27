@@ -1754,6 +1754,45 @@ HIGH_BYTE_RE = re.compile(rb"[\x80-\xff]+")
 FILE_EXT_RE = re.compile(rb"\.(?:nif|kf|dds|tga|bmp|wav|mp3)\b")
 
 
+_OWN_MASTER_TEXT = {}
+
+
+def _high_byte_text(full):
+    """The parts of a plugin near a non-ASCII byte that name a file (lower bytes), for name searches."""
+    data = open(full, "rb").read()
+    bits, last = [], -1
+    for mm in HIGH_BYTE_RE.finditer(data):
+        k = mm.start()
+        if k < last:
+            continue
+        win = data[max(0, k - 200):k + 200].lower()
+        last = k + 200
+        if FILE_EXT_RE.search(win):
+            bits.append(win)
+    return b"\0".join(bits)
+
+
+def _own_masters_naming(name_b, root):
+    """This mod's own .esm files that hold name_b (lower bytes, either slash). A master is never edited, so a
+    file one of them names keeps its name."""
+    out = []
+    for fn in sorted(os.listdir(root)):
+        full = os.path.join(root, fn)
+        if not fn.lower().endswith(".esm") or not os.path.isfile(full):
+            continue
+        try:
+            st = os.stat(full)
+            key = (os.path.normcase(full), st.st_size, st.st_mtime_ns)
+            if key not in _OWN_MASTER_TEXT:
+                _OWN_MASTER_TEXT[key] = _high_byte_text(full)
+        except OSError:
+            continue
+        text = _OWN_MASTER_TEXT[key]
+        if name_b in text or name_b.replace(b"\\", b"/") in text:
+            out.append(fn)
+    return out
+
+
 def _other_plugins_naming(name_b, root, data_dir):
     """Active-folder plugins (Data Files) other than this mod's own that hold name_b (lower bytes). Before deploy
     (data_dir a mwdialog_staged.StagedData) the other staged mods' plugins instead; Data Files is not read."""
@@ -1910,8 +1949,13 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None, stats=None):
             except UnicodeEncodeError:
                 tail_b = None                  # Cyrillic etc.: no plugin can name it the way Windows needs
             others = _other_plugins_naming(tail_b, root, data_dir) if tail_b else []
+            own_masters = _own_masters_naming(tail_b, root) if tail_b else []
             base_b = tail_b.replace(b"\\", b"/").rsplit(b"/", 1)[-1] if tail_b else None   # ntpath decodes bytes as UTF-8
-            if not others and base_b and _models_naming(base_b, root):
+            if own_masters:
+                issues.append(("WARN", rel, f"non-ASCII file name, named so by this mod's {', '.join(own_masters[:3])}; "
+                                            f"left as it is (a master is never edited, and renaming the file "
+                                            f"would leave the master without it)"))
+            elif not others and base_b and _models_naming(base_b, root):
                 issues.append(("WARN", rel, "non-ASCII file name, named so by a model (.nif) in this mod; left "
                                             "as it is (renaming it would leave the model without it)"))
             elif others:
@@ -2162,7 +2206,7 @@ def rename_ascii(root, full, rel, new_rel, log):
         return
     import mwdialog_check as _m
     for pf in os.listdir(root):
-        if not pf.lower().endswith((".esp", ".esm", ".omwaddon")):
+        if not pf.lower().endswith((".esp", ".omwaddon")):      # a master (.esm) is never edited
             continue
         pp = os.path.join(root, pf)
         try:

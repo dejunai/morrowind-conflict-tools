@@ -217,3 +217,35 @@ def test_tidy_removes_the_stand_in_fix_put_over_a_broken_model(tmp_path, monkeyp
     assert [(f[0], f[3]) for f in fixes] == [("brokenout", "stand-in")]
     ah.apply_folder(str(mod), fixes, m, str(tmp_path), "mod")
     assert not (mod / rel).exists() and (mod / "Off" / "mod" / "broken" / rel).read_bytes() == _nif(2, 7)
+
+
+def test_I6_a_master_is_never_edited_and_a_file_it_names_keeps_its_name(tmp_path):
+    """We never edit an .esm: rename_ascii leaves the mod's master as it is, and check_folder does not plan
+    the rename of a file the mod's own master names (renaming it would leave the master without it)."""
+    root = tmp_path / "Mod"
+    (root / "Meshes" / "x").mkdir(parents=True)
+    (root / "Meshes" / "x" / "caf\u00e9.nif").write_bytes(b"NIF")
+    master = root / "Mod.esm"
+    plugin(master, [], [rec("MISC", sub("NAME", z("m")) + sub("MODL", z("x\\caf\u00e9.nif")))])
+    before = master.read_bytes()
+    assert ah._own_masters_naming("x\\caf\u00e9.nif".encode("cp1252"), str(root)) == ["Mod.esm"]
+    assert ah._own_masters_naming(b"x\\other\xe9.nif", str(root)) == []
+    ah.rename_ascii(str(root), str(root / "Meshes" / "x" / "caf\u00e9.nif"), "Meshes/x/caf\u00e9.nif",
+                    "Meshes/x/cafe.nif", lambda _t: None)
+    assert master.read_bytes() == before
+
+
+def test_write_inplace_refuses_a_master(tmp_path):
+    import mwdialog_masters as MM
+    master = tmp_path / "Base.esm"
+    plugin(master, [], [rec("MISC", sub("NAME", z("m")))])
+    before = master.read_bytes()
+    recs = [before[o:o + 16 + len(b)] for o, _t, _f, b in m.iter_records(before)]
+    try:
+        MM.write_inplace(str(master), recs)
+    except OSError as e:
+        assert "never edited" in str(e)
+    else:
+        raise AssertionError("an .esm was written")
+    assert master.read_bytes() == before and not list(tmp_path.glob("*.bak*"))
+
