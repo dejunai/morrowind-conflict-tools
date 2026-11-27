@@ -9,6 +9,10 @@
       menu mode ends (a window can't be used without the cursor).
     * Esc closes only the window on top (the one opened last), so Esc in the effect inspector opened from the
       selection details window leaves the details window open.
+    * keepConsoleOnTop: the selection panel sits next to the console and must never end up above it. The engine only
+      lets a click in the world pick a console object while MenuConsole is the top menu, so a window with this flag is
+      never moved to the front; the console is put back on top after the window is built or refreshed (unless a normal
+      window such as the details window is open, which is meant to be on top).
 ]]
 local log = require("mwconsole.log")
 
@@ -86,6 +90,23 @@ function guard.focusConsole()
     end)
 end
 
+--- put MenuConsole back on top of the menus. Returns true if it was moved. Does nothing while a normal window
+--- (one without keepConsoleOnTop) is open, since that one is meant to be above the console.
+function guard.raiseConsole()
+    for _, w in pairs(windows) do
+        if not w.closed and not w.keepConsoleOnTop then return false end
+    end
+    local ok, moved = pcall(function()
+        local console = tes3ui.findMenu("MenuConsole")
+        if console and console.visible then
+            tes3ui.moveMenuToFront(console)
+            return true
+        end
+        return false
+    end)
+    return ok and moved == true
+end
+
 local Window = {}
 Window.__index = Window
 
@@ -136,6 +157,7 @@ end
       id = "mwconsole:Inspector", title = "...", where = "open the effect inspector",
       build = function(menu, win) end,   -- builds the contents; may be called again on refresh
       modal = true,                      -- enters menu mode
+      keepConsoleOnTop = true,           -- never in front of MenuConsole (see the header)
       needsGame = true, dragFrame = false, onClose = function(win, reason) end, statusSetter = fn }
    returns the window record or nil ]]
 function guard.openWindow(spec)
@@ -154,12 +176,17 @@ function guard.openWindow(spec)
             existing.menu:updateLayout()
         end)
         if not ok then existing:close("error") return nil end
-        pcall(tes3ui.moveMenuToFront, existing.menu)
+        if existing.keepConsoleOnTop then
+            guard.raiseConsole()
+        else
+            pcall(tes3ui.moveMenuToFront, existing.menu)
+        end
         return existing
     end
     openSeq = openSeq + 1
     local win = setmetatable({ id = spec.id, build = spec.build, onClose = spec.onClose, events = {}, seq = openSeq,
-                               callbacks = {}, elements = {}, closed = false, enteredMenuMode = false }, Window)
+                               callbacks = {}, elements = {}, closed = false, enteredMenuMode = false,
+                               keepConsoleOnTop = spec.keepConsoleOnTop == true }, Window)
     windows[spec.id] = win
     updateLoadHandler()
     local ok = guard.run(where, function()
@@ -174,6 +201,7 @@ function guard.openWindow(spec)
             tes3ui.enterMenuMode(spec.id)
             win.enteredMenuMode = not wasMenuMode
         end
+        if win.keepConsoleOnTop then guard.raiseConsole() end
         win:on("keyDown", function(e)
             if win.closed or (type(e) == "table" and e.mwconsoleEscape) then return end
             if guard.topWindow() ~= win then return end

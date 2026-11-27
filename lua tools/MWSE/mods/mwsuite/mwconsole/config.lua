@@ -22,7 +22,9 @@ local defaults = {
     complete = { on = true, live = true, minChars = 2, prebuild = false, topics = false, runtimeObjects = false },
     panel = { on = true, requireCtrl = false, right = true, alpha = 0.85, objectVfx = false,
               widthPct = 35, heightPct = 75,
-              hotkey = { keyCode = 23, isShiftDown = false, isAltDown = true, isControlDown = false } },  -- Alt+I
+              -- Ctrl+I. (Alt+I was the first default; it was tied to menu mode and could not work with the console open.
+              -- hotkeyMoved marks that the Alt+I -> Ctrl+I move below has been considered, so a later Alt+I sticks.)
+              hotkey = { keyCode = 23, isShiftDown = false, isAltDown = false, isControlDown = true }, hotkeyMoved = true },
     effects = {
         showSpells = true, showEquipment = true, showVFX = true,
         vfxWords = "vfx, magic, shield, spell, aura, effect",
@@ -41,6 +43,16 @@ if type(config.effects) == "table" and type(config.effects.hotkey) == "table" th
     if type(config.panel) ~= "table" then config.panel = {} end
     if config.panel.hotkey == nil then config.panel.hotkey = config.effects.hotkey end
     config.effects.hotkey = nil
+end
+
+-- a saved, untouched Alt+I (the old default) becomes Ctrl+I once; any other saved key is kept
+if type(config.panel) == "table" and not config.panel.hotkeyMoved then
+    local k = config.panel.hotkey
+    if type(k) == "table" and k.keyCode == 23 and k.isAltDown and not k.isControlDown and not k.isShiftDown then
+        k.isAltDown = false
+        k.isControlDown = true
+    end
+    config.panel.hotkeyMoved = true
 end
 
 -- mwse.loadConfig merges only the top level: fill missing keys of the nested tables too

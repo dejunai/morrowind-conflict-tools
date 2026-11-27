@@ -1,9 +1,10 @@
 --[[
     mwconsole selection details, shown two ways, both built and closed through guard:
-    * the panel next to the console for the console selection. Never takes focus from the console and never
-      enters menu mode itself; it goes away with the console.
-    * the details window (the hotkey, default Alt+I): the same rows on the console selection, else the crosshair
-      target, else the player. It enters menu mode and has a Close button; Esc, a save load and closing menu
+    * the panel next to the console for the console selection. Never takes focus from the console, never enters
+      menu mode itself and is never brought in front of the console (the engine only picks world objects for the
+      console while MenuConsole is on top); it goes away with the console.
+    * the details window (the hotkey, default Ctrl+I, works with the console open too): the same rows on the console
+      selection, else the crosshair target, else the player. It enters menu mode and has a Close button; Esc, a save load and closing menu
       mode close it.
     Both have a Show Effects button that opens the effect inspector on the shown reference (greyed on non-actors).
 ]]
@@ -172,7 +173,7 @@ function panel.refresh()
     if config.panel.requireCtrl and not ctrlDown() then return panel.close("ctrl") end
     if not guard.isGameLoaded() then return panel.close("no game") end
     local win = guard.openWindow({
-        id = panel.ID, where = "show the selection panel", modal = false,
+        id = panel.ID, where = "show the selection panel", modal = false, keepConsoleOnTop = true,
         build = function(menu, win) build(menu, win, ref) end,
     })
     guard.focusConsole()          -- the panel never keeps keyboard focus

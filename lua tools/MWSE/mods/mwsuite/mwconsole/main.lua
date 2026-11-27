@@ -6,6 +6,8 @@
 
     Off until switched on in its MCM. Needs UI Expansion's console for completion, the mode keys and the panel;
     without it, registered commands still work through the vanilla console's Enter key.
+    The selection details hotkey is Ctrl+I, in the world or with the console open. The selection panel never goes in
+    front of the console (see guard.lua), so console picking keeps working.
 ]]
 local config = require("mwconsole.config")
 local log = require("mwconsole.log")
@@ -115,12 +117,43 @@ local function onReferenceChanged()
     guard.run("show the selection panel", panel.refresh)
 end
 
+local function consoleOpen()
+    local ok, open = pcall(function()
+        local console = tes3ui.findMenu("MenuConsole")
+        return console ~= nil and console.visible == true
+    end)
+    return ok and open == true
+end
+
+--- a hotkey with no Ctrl or Alt (and not F1-F12) would be typed into the console's input while it is open
+local function typesText(k)
+    if k.isControlDown or k.isAltDown then return false end
+    local c = k.keyCode or 0
+    return not ((c >= 59 and c <= 68) or c == 87 or c == 88)
+end
+
+--- the hotkey's own character must not reach the console input (UI Expansion does the same for Ctrl+C/X/V)
+local function dropTypedText()
+    pcall(function() tes3.worldController.menuController.inputController:flushBufferedTextEvents() end)
+end
+
 local function onKeyDown(e)
     if not config.enabled then return end
-    -- the selection details hotkey (outside menus): console selection, else the crosshair target, else the player
-    if not tes3.menuMode() and tes3.isKeyEqual({ actual = e, expected = config.panel.hotkey }) then
-        guard.run("open the selection details", panel.openDetails)
+    local hotkey = config.panel.hotkey
+    if type(hotkey) ~= "table" then return end
+    -- the selection details hotkey: in the world, or with the console open (menu mode, top menu is the console or
+    -- our own windows); never in any other menu. Target: console selection, else the crosshair target, else the player
+    local inConsole = false
+    if tes3.menuMode() then
+        inConsole = consoleOpen()
+        if not inConsole then return end
     end
+    if not tes3.isKeyEqual({ actual = e, expected = hotkey }) then return end
+    if inConsole then
+        if typesText(hotkey) then return end
+        dropTypedText()
+    end
+    guard.run("open the selection details", panel.openDetails)
 end
 
 local function onCtrl()
