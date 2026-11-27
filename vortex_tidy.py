@@ -871,7 +871,8 @@ def converter_target_problem(mod_dir):
 #   * the updater did not start (exit code None) or exited non-zero  -> "failed": tidy is skipped;
 #   * exit 0 but <game>\mwse-version.txt is missing or empty afterwards -> "failed" (nothing proves the update);
 #   * exit 0 and mwse-version.txt is the same as before the updater ran -> "no-update": tidy is skipped;
-#   * exit 0 and mwse-version.txt changed                                  -> "updated": tidy runs.
+#   * exit 0 and mwse-version.txt changed                                  -> "updated": only the MWSE core
+#     patches are re-applied (luafix --core-only); no staged tidy run.
 MWSE_VERSION_FILE = "mwse-version.txt"
 
 
@@ -898,16 +899,67 @@ def mwse_update_outcome(returncode, version_before, version_after):
     return "updated", f"MWSE updated ({before[:12] or 'none'} -> {after[:12]})"
 
 
-def tidy_after_mwse_update(returncode, version_before, game_dir=None, run=None, log=print):
-    """Run tidy after the MWSE updater, only when it updated (mwse_update_outcome). run() does the tidy (default:
-    this module's main() with the caller's own command line); returns (outcome, reason, run()'s exit code or
-    None when skipped)."""
-    outcome, reason = mwse_update_outcome(returncode, version_before, read_mwse_version(game_dir or HERE))
+def morrowind_process_running():
+    """True if Morrowind.exe appears to be running. Never tries to stop it."""
+    if os.name != "nt":
+        return False
+    try:
+        out = subprocess.run(["tasklist", "/FI", "IMAGENAME eq Morrowind.exe", "/NH"],
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return b"morrowind.exe" in (out or b"").lower()
+
+
+def reapply_mwse_core(game_dir, log=print):
+    """Dry-run first, then apply pending Known Bugs patches on Data Files\\MWSE\\core (luafix --core-only),
+    with its usual backup and journal. Refuse (exit 2, nothing written) when Morrowind.exe is running.
+    Writes under MWSE\\core are allowed (mwdialog_staged.allow_core_writes); every other Data Files write
+    is still refused. Returns the luafix --core-only exit code (0 / 1 lock / 2 refused / 3 partial)."""
+    if morrowind_process_running():
+        log("Morrowind.exe is running; close it before MWSE core files are written. "
+            "Nothing was killed and nothing was written.")
+        return 2
+    import mwdialog_luafix as lf
+    try:
+        game, data_dir = lf.core_data_dir(os.path.join(game_dir, "Data Files"))
+    except ValueError as e:
+        log(str(e))
+        return 2
+    if not (MP.acquire_run_lock() and MP.acquire_game_lock(game)):
+        log(MP.RUN_LOCKED_MESSAGE)
+        return 1
+    checker = lf.find_checker(None, game)
+    kw = dict(game_dir=game, checker=checker)
+    with MS.staged_run([], game, data_dir):
+        with MS.allow_core_writes():
+            preview = lf.apply_core_known_bugs(data_dir, True, **kw)
+            for line in lf.core_result_lines(preview, True):
+                log(line)
+            code = lf.core_exit_code(preview)
+            if code:
+                return code
+            if not any(r.status == "applied" for r in preview):
+                log("MWSE core patches already current; nothing written.")
+                return 0
+            results = lf.apply_core_known_bugs(data_dir, False, **kw)
+            for line in lf.core_result_lines(results, False):
+                log(line)
+            return lf.core_exit_code(results)
+
+
+def tidy_after_mwse_update(returncode, version_before, game_dir=None, log=print):
+    """After the MWSE updater (mwse_update_outcome): on a successful update, re-apply only the MWSE core
+    patches (reapply_mwse_core / luafix --core-only). No staged tidy, no converter, no other tidy function.
+    On failure or no update, skip (exit 0, nothing written). Returns (outcome, reason, exit code or None
+    when skipped)."""
+    game = game_dir or HERE
+    outcome, reason = mwse_update_outcome(returncode, version_before, read_mwse_version(game))
     if outcome != "updated":
         log(f"Tidy after the MWSE updater: skipped, {reason}.")
         return outcome, reason, None
-    log(f"Tidy after the MWSE updater: {reason}; running tidy.")
-    return outcome, reason, (run or main)()
+    log(f"Tidy after the MWSE updater: {reason}; re-applying MWSE core patches (luafix --core-only).")
+    return outcome, reason, reapply_mwse_core(game, log=log)
 
 
 def converter_argv(mod_dir, mode, result_json, dry_run=False):
@@ -4039,9 +4091,11 @@ def _main():
                          "pack them with a scrub summary into conflict-tools\\reports\\conflict-tools-report-"
                          "<date>-<time>.zip. Prints that path (one line). Binary files are left out and listed")
     ap.add_argument("--after-mwse-update", type=int, metavar="EXIT_CODE",
-                    help="for a caller that just ran MWSE-Update.exe (MWManager): its exit code. Tidy runs only when "
-                         "the update succeeded: exit 0 and mwse-version.txt changed from --mwse-version-before; "
-                         "otherwise nothing is done (exit 0)")
+                    help="for a caller that just ran MWSE-Update.exe (MWManager): its exit code. Only the MWSE "
+                         "core patches are re-applied (luafix --core-only: a dry run, then apply, with its backup "
+                         "and journal) when the update succeeded: exit 0 and mwse-version.txt changed from "
+                         "--mwse-version-before. Morrowind.exe must be closed (nothing is killed). A failed "
+                         "updater or no update: nothing is done (exit 0)")
     ap.add_argument("--mwse-version-before", default="", metavar="TEXT",
                     help="with --after-mwse-update: mwse-version.txt as it was before the updater ran")
     args = ap.parse_args()
@@ -4050,11 +4104,11 @@ def _main():
             ap.error("--pack-report stands alone (it only copies logs; it changes nothing)")
         return pack_report_main(args)
     if args.after_mwse_update is not None:
-        outcome, _why, _rc = tidy_after_mwse_update(args.after_mwse_update, args.mwse_version_before,
-                                                    run=lambda: None)
-        if outcome != "updated":
-            return 0
-    elif args.mwse_version_before:
+        if args.apply or args.undo or args.lua_only:
+            ap.error("--after-mwse-update stands alone (it only re-applies MWSE core patches)")
+        outcome, _why, rc = tidy_after_mwse_update(args.after_mwse_update, args.mwse_version_before)
+        return 0 if rc is None else rc
+    if args.mwse_version_before:
         ap.error("--mwse-version-before goes with --after-mwse-update")
     setup_converter(convert_mode(args.convert_omwscripts))
     global NO_COINS

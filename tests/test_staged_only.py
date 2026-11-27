@@ -530,6 +530,10 @@ def test_only_init_is_exempt(game):
         assert MS.require_write_root(target, str(game.dir), str(game.data), mode="init")
         for mode in ("tidy", "converter", "luafix", "Init", "init ", "--init", "data-files", ""):
             assert MS.write_root_problem(target, str(game.dir), str(game.data), mode=mode), (target, mode)
+    core = game.data / "MWSE" / "core" / "x.lua"
+    assert MS.write_root_problem(core, str(game.dir), str(game.data), mode=MS.CORE_MODE) == ""
+    assert MS.write_root_problem(game.data, str(game.dir), str(game.data), mode=MS.CORE_MODE)
+    assert MS.write_root_problem(game.data / "MWSE" / "mods" / "x.lua", str(game.dir), str(game.data), mode=MS.CORE_MODE)
 
 
 @pytest.mark.parametrize("which", ["data", "game", "data_alias", "game_alias", "data_upper"])
@@ -626,24 +630,143 @@ def test_mwse_update_outcome(rc, before, after, outcome):
 
 
 @pytest.mark.parametrize("rc,before,after,runs", [
-    (0, "aaa111", "bbb222", True),                 # success: tidy runs
+    (0, "aaa111", "bbb222", True),                 # success: core is re-patched
     (3, "aaa111", "bbb222", False),                # failure: skipped
     (0, "aaa111", "aaa111", False),                # no update: skipped
 ])
-def test_tidy_after_mwse_update_runs_only_after_a_successful_update(game, rc, before, after, runs):
+def test_tidy_after_mwse_update_runs_only_after_a_successful_update(game, monkeypatch, rc, before, after, runs):
+    _prep_core(game, monkeypatch)
     put(game.dir / "mwse-version.txt", after)
-    ran, logs = [], []
-    outcome, reason, result = vt.tidy_after_mwse_update(rc, before, str(game.dir), run=lambda: ran.append(1) or 0,
-                                                       log=logs.append)
-    assert bool(ran) is runs and (result == 0) is runs
-    assert ("running tidy" in logs[0]) is runs and ("skipped" in logs[0]) is (not runs)
+    calls = []
+    monkeypatch.setattr(vt, "plan_main", lambda *a, **k: calls.append("plan") or 0)
+    monkeypatch.setattr(vt, "apply_main", lambda *a, **k: calls.append("apply") or 0)
+    monkeypatch.setattr(vt, "run_converter", lambda *a, **k: calls.append("converter") or (None, None, "no"))
+    logs = []
+    outcome, reason, result = vt.tidy_after_mwse_update(rc, before, str(game.dir), log=logs.append)
+    assert calls == []                                         # no other tidy function
+    if runs:
+        assert outcome == "updated" and result == 0
+        assert "luafix --core-only" in logs[0]
+        assert b"localpatch" in (game.data / "MWSE" / "core" / "mcm" / "components" / "pages" /
+                                 "ExclusionsPage.lua").read_bytes()
+    else:
+        assert result is None and "skipped" in logs[0]
+        assert (game.data / "MWSE" / "core" / "mcm" / "components" / "pages" /
+                "ExclusionsPage.lua").read_bytes() == _stock_core()
 
 
-@pytest.mark.parametrize("rc,after,ran", [("0", "bbb222", True), ("1", "bbb222", False), ("0", "aaa111", False)])
-def test_cli_after_mwse_update(game, watch, monkeypatch, rc, after, ran):
+def test_cli_after_mwse_update_patches_core_only(game, watch, monkeypatch, capsys):
+    _prep_core(game, monkeypatch)
+    put(game.dir / "mwse-version.txt", "bbb222")
+    calls = []
+    monkeypatch.setattr(vt, "plan_main", lambda *a, **k: calls.append("plan") or 0)
+    monkeypatch.setattr(vt, "apply_main", lambda *a, **k: calls.append("apply") or 0)
+    monkeypatch.setattr(vt, "run_converter", lambda *a, **k: calls.append("converter") or (None, None, "no"))
+    core = game.data / "MWSE" / "core" / "mcm" / "components" / "pages" / "ExclusionsPage.lua"
+    before = snapshot(game.data)
+    g = watch(game.data)
+    assert run_tidy(monkeypatch, game.staging, "--after-mwse-update", "0", "--mwse-version-before", "aaa111") == 0
+    assert calls == []
+    assert b"localpatch" in core.read_bytes()
+    # the only Data Files write is the core file itself (the documented exemption)
+    rels = []
+    for p in g.writes:
+        p = p.split(" (written", 1)[0]
+        rels.append(os.path.normcase(os.path.relpath(p, game.data)))
+    assert rels and all(r.startswith(os.path.normcase(os.path.join("MWSE", "core")) + os.sep) for r in rels)
+    # everything else in Data Files (plugin, loose texture, mwguard.json) is unchanged
+    after = snapshot(game.data)
+    for rel, val in before.items():
+        if "exclusionspage.lua" in rel.lower():
+            assert after[rel] != val
+        else:
+            assert after[rel] == val
+
+
+@pytest.mark.parametrize("rc,after", [(1, "bbb222"), (0, "aaa111")])
+def test_cli_after_mwse_update_skips_on_failure_or_no_update(game, watch, monkeypatch, rc, after):
+    _prep_core(game, monkeypatch)
     put(game.dir / "mwse-version.txt", after)
-    assets_mod(game.staging)
-    called = []
-    monkeypatch.setattr(vt, "plan_main", lambda args: called.append(args.staging) or 0)
-    assert run_tidy(monkeypatch, game.staging, "--after-mwse-update", rc, "--mwse-version-before", "aaa111") == 0
-    assert bool(called) is ran
+    calls = []
+    monkeypatch.setattr(vt, "plan_main", lambda *a, **k: calls.append("plan") or 0)
+    core = game.data / "MWSE" / "core" / "mcm" / "components" / "pages" / "ExclusionsPage.lua"
+    stock = core.read_bytes()
+    g = watch(game.data)
+    assert run_tidy(monkeypatch, game.staging, "--after-mwse-update", str(rc), "--mwse-version-before", "aaa111") == 0
+    assert calls == [] and core.read_bytes() == stock and g.writes == []
+
+
+def test_after_mwse_update_refuses_when_morrowind_is_running(game, watch, monkeypatch):
+    _prep_core(game, monkeypatch)
+    put(game.dir / "mwse-version.txt", "bbb222")
+    monkeypatch.setattr(vt, "morrowind_process_running", lambda: True)
+    calls = []
+    monkeypatch.setattr(vt, "plan_main", lambda *a, **k: calls.append("plan") or 0)
+    monkeypatch.setattr(lf, "apply_core_known_bugs", lambda *a, **k: calls.append("core") or [])
+    core = game.data / "MWSE" / "core" / "mcm" / "components" / "pages" / "ExclusionsPage.lua"
+    stock = core.read_bytes()
+    g = watch(game.data)
+    assert run_tidy(monkeypatch, game.staging, "--after-mwse-update", "0", "--mwse-version-before", "aaa111") == 2
+    assert calls == [] and core.read_bytes() == stock and g.writes == []
+
+
+def test_after_mwse_update_morrowind_running_message(game, monkeypatch, capsys):
+    _prep_core(game, monkeypatch)
+    put(game.dir / "mwse-version.txt", "bbb222")
+    monkeypatch.setattr(vt, "morrowind_process_running", lambda: True)
+    rc = run_tidy(monkeypatch, game.staging, "--after-mwse-update", "0", "--mwse-version-before", "aaa111")
+    assert rc == 2
+    text = fold(capsys.readouterr().out + capsys.readouterr().err)
+    assert "Morrowind.exe is running" in text and "Nothing was killed" in text
+
+
+def test_after_mwse_update_is_idempotent_on_a_second_run(game, monkeypatch):
+    _prep_core(game, monkeypatch)
+    put(game.dir / "mwse-version.txt", "bbb222")
+    assert vt.tidy_after_mwse_update(0, "aaa111", str(game.dir), log=lambda *a: None)[2] == 0
+    core = game.data / "MWSE" / "core" / "mcm" / "components" / "pages" / "ExclusionsPage.lua"
+    patched = core.read_bytes()
+    assert b"localpatch" in patched
+    # a second successful-update call (same new marker) dry-runs, sees already-patched, writes nothing
+    mtime = core.stat().st_mtime_ns
+    outcome, reason, rc = vt.tidy_after_mwse_update(0, "aaa111", str(game.dir), log=lambda *a: None)
+    assert outcome == "updated" and rc == 0
+    assert core.read_bytes() == patched and core.stat().st_mtime_ns == mtime
+
+
+def test_allow_core_writes_is_limited_to_mwse_core(game):
+    core = game.data / "MWSE" / "core" / "x.lua"
+    other = game.data / "Loose.esp"
+    mods = game.data / "MWSE" / "mods" / "x.lua"
+    with MS.staged_run(str(game.staging), str(game.dir)):
+        with pytest.raises(MS.DataFilesWriteError):
+            MS.check_write(str(core))
+        with MS.allow_core_writes():
+            MS.check_write(str(core))
+            with pytest.raises(MS.DataFilesWriteError):
+                MS.check_write(str(other))
+            with pytest.raises(MS.DataFilesWriteError):
+                MS.check_write(str(mods))
+        with pytest.raises(MS.DataFilesWriteError):
+            MS.check_write(str(core))
+
+
+def _stock_core():
+    with open(os.path.join(os.path.dirname(__file__), "fixtures", "mwse", "ExclusionsPage.lua"), "rb") as f:
+        return f.read().replace(b"\r\n", b"\n")
+
+
+class _OkChecker:
+    name = "fake"
+
+    def check(self, text):
+        return True, ""
+
+
+def _prep_core(game, monkeypatch):
+    """Stock unpatched ExclusionsPage.lua, a fake syntax checker, no Morrowind, and free locks."""
+    put(game.data / "MWSE" / "core" / "mcm" / "components" / "pages" / "ExclusionsPage.lua", _stock_core())
+    monkeypatch.setattr(vt, "morrowind_process_running", lambda: False)
+    monkeypatch.setattr(lf, "find_checker", lambda *a, **k: _OkChecker())
+    monkeypatch.setattr(vt.MP, "acquire_run_lock", lambda: True)
+    monkeypatch.setattr(vt.MP, "acquire_game_lock", lambda *a, **k: True)

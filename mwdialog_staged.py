@@ -70,6 +70,8 @@ def _under(path, base):
 
 
 INIT_MODE = "init"                # MWManager's tidy --init: the core install, never staged, may act on Data Files
+CORE_MODE = "core"                # after a successful MWSE update: luafix --core-only may write Data Files\\MWSE\\core only
+CORE_WRITE = "mwse\\core"         # relative to Data Files, normcased
 GAME_MARKERS = ("morrowind.ini", "morrowind.exe")
 
 
@@ -89,9 +91,13 @@ def write_root_problem(path, game_dir=None, data_dir=None, mode="tidy"):
     is refused like the folder itself. data_dir/game_dir name the install when known; any folder above the target
     named "Data Files" or holding the game (Morrowind.ini / Morrowind.exe / Data Files\\Morrowind.esm) counts too.
     mode INIT_MODE ("init", MWManager's tidy --init: the core install is never staged, and it lets a user start
-    without a purge) is the one exemption. The same rule as MWManager's workflow_safety.require_staging_write_root
+    without a purge) is a full exemption. mode CORE_MODE ("core", tidy --after-mwse-update) allows only
+    Data Files\\MWSE\\core (the files luafix --core-only patches); everything else is still refused. The same
+    rule as MWManager's workflow_safety.require_staging_write_root
     (6590bbd), and stricter: anywhere under the game folder is refused, not just the folder itself."""
     if mode == INIT_MODE:
+        return ""
+    if mode == CORE_MODE and _is_core_rel(path, data_dir, game_dir):
         return ""
     forms = _forms(path)
     if data_dir:
@@ -196,9 +202,45 @@ def is_read_exception(path, data_dir):
     return False
 
 
+def _is_core_rel(path, data_dir=None, game_dir=None):
+    """True when `path` is Data Files\\MWSE\\core or a file under it (the --core-only write target)."""
+    bases = list(_forms(data_dir) if data_dir else _STATE["data"])
+    if game_dir and not bases:
+        bases.extend(_forms(os.path.join(game_dir, "Data Files")))
+    for b in bases:
+        for p in _forms(path):
+            if _under_key(p, b):
+                rel = p[len(b):].lstrip("\\/")
+                if rel == CORE_WRITE or rel.startswith(CORE_WRITE + "\\"):
+                    return True
+    return False
+
+
+_CORE_OK = False                  # True inside allow_core_writes(): check_write lets MWSE\\core through
+
+
+class allow_core_writes:
+    """Temporarily allow writes under Data Files\\MWSE\\core (luafix --core-only after a successful MWSE
+    update). Every other Data Files write is still refused while a staged run is active."""
+
+    def __enter__(self):
+        global _CORE_OK
+        self.prev = _CORE_OK
+        _CORE_OK = True
+        return self
+
+    def __exit__(self, *exc):
+        global _CORE_OK
+        _CORE_OK = self.prev
+        return False
+
+
 def check_write(path):
-    """Raise DataFilesWriteError when a staged run is active and `path` is inside Data Files."""
+    """Raise DataFilesWriteError when a staged run is active and `path` is inside Data Files, except
+    Data Files\\MWSE\\core while allow_core_writes() is active."""
     if _STATE["data"] and in_data_files(path):
+        if _CORE_OK and _is_core_rel(path):
+            return
         raise DataFilesWriteError(f"{path}: refusing to write into Data Files before deploy "
                                   f"(tidy and luafix work on staged files only)")
 
