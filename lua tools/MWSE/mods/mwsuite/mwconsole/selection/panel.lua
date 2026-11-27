@@ -72,9 +72,23 @@ end
 local function build(menu, win, ref, standalone)
     win.ref = ref
     local vw, vh = tes3ui.getViewportSize()
-    menu.width = math.floor(vw * (config.panel.widthPct or 35) / 100)
-    menu.maxHeight = math.floor(vh * (config.panel.heightPct or 75) / 100)
-    menu.autoHeight = true
+    if type(vw) ~= "number" or vw < 1 then vw = 1024 end
+    if type(vh) ~= "number" or vh < 1 then vh = 768 end
+    -- explicit pixel size: autoHeight plus a scroll pane that is also autoHeight collapses the
+    -- frame (fixedFrame also auto-sizes width unless autoWidth is off, so widthProportional children
+    -- and the frame size each other and shrink to the border). Same pattern as the effect inspector.
+    local width = math.max(320, math.floor(vw * (config.panel.widthPct or 35) / 100))
+    local height = math.max(240, math.floor(vh * (config.panel.heightPct or 75) / 100))
+    menu.autoWidth = false
+    menu.autoHeight = false
+    menu.minWidth = 320
+    menu.minHeight = 240
+    -- keep a size the user already dragged the details window to (rebuild would otherwise reset it)
+    if not (standalone and win.sized and menu.width >= 320 and menu.height >= 240) then
+        menu.width = width
+        menu.height = height
+    end
+    if standalone then win.sized = true end
     menu.flowDirection = "top_to_bottom"
     if standalone then
         menu.absolutePosAlignX = 0.5
@@ -129,7 +143,8 @@ local function build(menu, win, ref, standalone)
 
     local scroll = menu:createVerticalScrollPane({})
     scroll.widthProportional = 1.0
-    scroll.autoHeight = true
+    scroll.heightProportional = 1.0
+    scroll.autoHeight = false
     local body = scroll:getContentElement()
     body.flowDirection = "top_to_bottom"
     body.widthProportional = 1.0
