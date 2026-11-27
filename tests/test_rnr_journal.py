@@ -2,7 +2,9 @@
 
 The mod's loaded handler is swapped for ours when it registers: the journal is never added by the mod and its message
 never shows. The book is created once in the Seyda Neen Census and Excise Office (new game) or added silently (a
-character already past chargen). The mod is faked with a small stand-in written for the test; nothing of its is copied.
+character already past chargen). Once it is in the inventory, or the done flag is already set on load, every listener
+of ours comes off and the mod's original loaded handler is never put back. The mod is faked with a small stand-in
+written for the test; nothing of its is copied.
 """
 import os
 import subprocess
@@ -42,24 +44,53 @@ def mods(tmp_path):
 
 BOOT = r"""
 local handlers, logs, boxes = {}, {}, {}
-local function list(name) handlers[name] = handlers[name] or {} return handlers[name] end
+local function key(name, options)
+  local filter = type(options) == "table" and options.filter or nil
+  return tostring(name) .. "|" .. tostring(filter)
+end
+local function list(name, options) local k = key(name, options) handlers[k] = handlers[k] or {} return handlers[k] end
 event = {
-  register = function(name, fn) local l = list(name) for _, f in ipairs(l) do if f == fn then return end end l[#l + 1] = fn end,
-  unregister = function(name, fn) local l = list(name) for i = #l, 1, -1 do if l[i] == fn then table.remove(l, i) end end end,
-  isRegistered = function(name, fn) for _, f in ipairs(list(name)) do if f == fn then return true end end return false end,
+  register = function(name, fn, options)
+    local l = list(name, options) for _, f in ipairs(l) do if f == fn then return end end l[#l + 1] = fn
+  end,
+  unregister = function(name, fn, options)
+    local l = list(name, options) for i = #l, 1, -1 do if l[i] == fn then table.remove(l, i) end end
+  end,
+  isRegistered = function(name, fn, options)
+    for _, f in ipairs(list(name, options)) do if f == fn then return true end end return false
+  end,
 }
-function fire(name, e) e = e or {} for _, f in ipairs({ unpack(list(name)) }) do f(e) end return e end
-function count(name) return #list(name) end
+function fire(name, e, options)
+  e = e or {}
+  local seen = {}
+  local function run(l)
+    for _, f in ipairs({ unpack(l) }) do if not seen[f] then seen[f] = true f(e) end end
+  end
+  if options ~= nil then
+    run(list(name, options))
+  else
+    local prefix = tostring(name) .. "|"
+    for k, l in pairs(handlers) do
+      if k:sub(1, #prefix) == prefix then run(l) end
+    end
+  end
+  return e
+end
+function count(name)
+  local n, prefix = 0, tostring(name) .. "|"
+  for k, l in pairs(handlers) do if k:sub(1, #prefix) == prefix then n = n + #l end end
+  return n
+end
 mwse = { log = function(fmt, ...) logs[#logs + 1] = string.format(fmt, ...) end }
 function logged(text) for _, l in ipairs(logs) do if l:find(text, 1, true) then return true end end return false end
 mwscript = { addItem = function() mwscriptAdds = (mwscriptAdds or 0) + 1 end }
 local ITEM_PRESENT = @@ITEM@@
-created, added = {}, {}
+created, added, worldRefs = {}, {}, {}
 world = { createFails = false }
 inventory = 0
 globals = { CharGenState = { value = 10 } }
 playerCell = { id = "Seyda Neen, Docks" }
-tes3 = { event = setmetatable({}, { __index = function(_, k) return k end }) }
+tes3 = { event = setmetatable({}, { __index = function(_, k) return k end }), objectType = { book = "book" } }
 tes3.player = { data = {} }
 tes3.messageBox = function(first, ...) boxes[#boxes + 1] = type(first) == "table" and first.message or string.format(first, ...) end
 tes3.findGlobal = function(id) return globals[id] end
@@ -67,11 +98,29 @@ tes3.getObject = function(id) if ITEM_PRESENT and id == "rnr_old_journal" then r
 tes3.getItemCount = function(p) return inventory end
 tes3.getPlayerCell = function() return playerCell end
 tes3.addItem = function(p) added[#added + 1] = p inventory = inventory + p.count return p.count end
+tes3.getCell = function(p)
+  local id = type(p) == "table" and p.id or p
+  return {
+    id = id,
+    iterateReferences = function(self, typ)
+      local list, i = worldRefs[id] or {}, 0
+      return function()
+        i = i + 1
+        local r = list[i]
+        while r and typ and r.kind and r.kind ~= typ do i = i + 1 r = list[i] end
+        return r
+      end
+    end,
+  }
+end
 tes3.createReference = function(p)
-    if world.createFails then error("cell is not loaded") end
-    local ref = { id = p.object, params = p }
-    created[#created + 1] = ref
-    return ref
+  if world.createFails then error("cell is not loaded") end
+  local cellId = type(p.cell) == "table" and p.cell.id or p.cell
+  local ref = { id = p.object, object = { id = p.object }, kind = "book", params = p, deleted = false, disabled = false }
+  created[#created + 1] = ref
+  worldRefs[cellId] = worldRefs[cellId] or {}
+  worldRefs[cellId][#worldRefs[cellId] + 1] = ref
+  return ref
 end
 local config = setmetatable({
   enabled = true, ruinesRelicsJournalEnabled = @@FLAG@@,
@@ -84,7 +133,14 @@ table.insert(package.loaders, 2, function(name)
 end)
 local patch = require("mwpluginpatches.patches.ruinesRelicsJournal")
 local function load(rel) assert(loadfile("@@MODS@@/" .. rel))() end
-local function newCharacter() tes3.player = { data = {} } inventory = 0 created, added = {}, {} end
+local function newCharacter()
+  tes3.player = { data = {} }
+  inventory, created, added, worldRefs = 0, {}, {}, {}
+  playerCell = { id = "Seyda Neen, Docks" }
+end
+local function ourListeners()
+  return count("loaded") + count("cellChanged") + count("activate")
+end
 """
 
 
@@ -111,7 +167,9 @@ assert(p.object == "rnr_old_journal" and p.cell == "Seyda Neen, Census and Excis
 assert(p.position[1] == 145 and p.position[2] == -228 and p.position[3] == 263.9)
 assert(p.orientation[1] == 0 and p.orientation[2] == 0 and math.abs(p.orientation[3] - math.pi / 2) < 1e-4)
 assert(p.scale == 0.8)
-assert(tes3.player.data.mwsuite_rnrJournalPlaced == true)
+assert(tes3.player.data.mwsuite_rnrJournalPlaced == nil, "the done flag must wait until the book is picked up")
+assert(count("loaded") == 2, "our wrapper and the other mod's handler")
+assert(count("activate") == 1 and count("cellChanged") == 1)
 assert(otherRan == 1, "another mod's loaded handler must still run")
 print("ok")
 """, mods)
@@ -139,7 +197,7 @@ print("ok")
 """, mods)
 
 
-def test_placed_once_per_character_and_again_for_a_new_character(mods):
+def test_placed_once_and_reload_does_not_create_a_second_copy(mods):
     run(r"""
 assert(patch.init() == true)
 load("Ruines'n'relics/main.lua")
@@ -147,14 +205,33 @@ fire("loaded", { newGame = true })
 fire("loaded", { newGame = false })
 fire("loaded", { newGame = true })
 assert(#created == 1 and #added == 0)
-newCharacter()
-fire("loaded", { newGame = true })   -- a second new game in the same session
-assert(#created == 1 and tes3.player.data.mwsuite_rnrJournalPlaced == true)
+assert(tes3.player.data.mwsuite_rnrJournalPlaced == nil)
+assert(count("activate") == 1)
 print("ok")
 """, mods)
 
 
-def test_character_past_chargen_gets_it_silently(mods):
+def test_pickup_unloads_every_listener_and_never_restores_the_original(mods):
+    run(r"""
+assert(patch.init() == true)
+load("Ruines'n'relics/main.lua") load("someOtherMod/main.lua")
+fire("loaded", { newGame = true })
+assert(count("activate") == 1 and count("loaded") == 2)
+inventory = 1
+fire("activate", { target = created[1] }, { filter = created[1] })
+assert(tes3.player.data.mwsuite_rnrJournalPlaced == true)
+assert(count("activate") == 0 and count("cellChanged") == 0)
+assert(event.isRegistered("loaded", modLoadedHandler) == false)
+assert(event.isRegistered("loaded", patch.ourLoaded) == false)
+assert(count("loaded") == 1, "only the other mod's loaded handler should remain")
+assert(#boxes == 0 and modRan == nil)
+fire("loaded", { newGame = true })   -- a second new game in this session: we stay unloaded
+assert(#created == 1 and #added == 0 and otherRan == 2 and modRan == nil)
+print("ok")
+""", mods)
+
+
+def test_character_past_chargen_gets_it_silently_and_unloads(mods):
     run(r"""
 assert(patch.init() == true)
 load("Ruines'n'relics/main.lua")
@@ -163,6 +240,8 @@ fire("loaded", { newGame = false })
 assert(#created == 0 and #boxes == 0 and modRan == nil)
 assert(#added == 1 and added[1].item == "rnr_old_journal" and added[1].count == 1 and added[1].playSound == false)
 assert(tes3.player.data.mwsuite_rnrJournalPlaced == true)
+assert(ourListeners() == 0)
+assert(event.isRegistered("loaded", modLoadedHandler) == false)
 fire("loaded", { newGame = false })
 assert(#added == 1)
 print("ok")
@@ -175,26 +254,29 @@ assert(patch.init() == true)
 load("Ruines'n'relics/main.lua")
 fire("loaded", { newGame = false })   -- CharGenState is 10: character creation is not over
 assert(#created == 1 and #added == 0)
+assert(tes3.player.data.mwsuite_rnrJournalPlaced == nil)
+assert(count("activate") == 1)
 print("ok")
 """, mods)
 
 
-def test_a_journal_already_held_or_flagged_by_the_mod_is_not_duplicated(mods):
+def test_a_journal_already_held_or_flagged_by_the_mod_unloads_without_a_duplicate(mods):
     run(r"""
 assert(patch.init() == true)
 load("Ruines'n'relics/main.lua")
 inventory = 1
 fire("loaded", { newGame = false })
 assert(#created == 0 and #added == 0 and tes3.player.data.mwsuite_rnrJournalPlaced == true)
+assert(ourListeners() == 0)
 newCharacter()
 tes3.player.data.journalid = { doOnce = true }   -- the mod's own old flag
-fire("loaded", { newGame = true })
-assert(#created == 0 and #added == 0 and tes3.player.data.mwsuite_rnrJournalPlaced == true)
+fire("loaded", { newGame = true })               -- already unloaded this session
+assert(#created == 0 and #added == 0)
 print("ok")
 """, mods)
 
 
-def test_when_the_cell_cannot_be_filled_yet_it_waits_for_the_office_then_removes_its_listener(mods):
+def test_when_the_cell_cannot_be_filled_yet_it_waits_then_watches_pickup(mods):
     run(r"""
 assert(patch.init() == true)
 load("Ruines'n'relics/main.lua")
@@ -208,14 +290,33 @@ world.createFails = false
 playerCell = { id = "Seyda Neen, Census and Excise Office" }
 fire("cellChanged", {})
 assert(#created == 1 and created[1].params.cell == playerCell)
-assert(tes3.player.data.mwsuite_rnrJournalPlaced == true)
-assert(count("cellChanged") == 0, "the cellChanged listener was left registered")
+assert(tes3.player.data.mwsuite_rnrJournalPlaced == nil)
+assert(count("cellChanged") == 1, "cellChanged stays as a pickup check")
+assert(count("activate") == 1 and count("loaded") == 1)
 assert(#boxes == 0 and modRan == nil)
+inventory = 1
+fire("activate", { target = created[1] }, { filter = created[1] })
+assert(tes3.player.data.mwsuite_rnrJournalPlaced == true)
+assert(ourListeners() == 0)
 print("ok")
 """, mods)
 
 
-def test_a_new_game_drops_the_wait_of_the_previous_character(mods):
+def test_leaving_the_office_with_the_book_unloads(mods):
+    run(r"""
+assert(patch.init() == true)
+load("Ruines'n'relics/main.lua")
+fire("loaded", { newGame = true })
+inventory = 1
+playerCell = { id = "Seyda Neen, Docks" }
+fire("cellChanged", {})
+assert(tes3.player.data.mwsuite_rnrJournalPlaced == true)
+assert(count("activate") == 0 and event.isRegistered("loaded", patch.ourLoaded) == false)
+print("ok")
+""", mods)
+
+
+def test_a_new_game_before_unload_still_places_for_the_new_character(mods):
     run(r"""
 assert(patch.init() == true)
 load("Ruines'n'relics/main.lua")
@@ -225,7 +326,8 @@ assert(count("cellChanged") == 1)
 newCharacter()
 world.createFails = false
 fire("loaded", { newGame = true })
-assert(count("cellChanged") == 0 and #created == 1)
+assert(count("cellChanged") == 1 and #created == 1)
+assert(tes3.player.data.mwsuite_rnrJournalPlaced == nil)
 print("ok")
 """, mods)
 
@@ -254,10 +356,13 @@ def test_item_missing_from_the_load_order_stands_down_without_a_message(mods):
 assert(patch.init() == true)
 load("Ruines'n'relics/main.lua")
 fire("loaded", { newGame = true })
-fire("loaded", { newGame = true })
 assert(modRan == nil and #boxes == 0 and #created == 0 and #added == 0)
 assert(tes3.player.data.mwsuite_rnrJournalPlaced == nil)
 assert(logged("rnr_old_journal is not in the load order"))
+assert(event.isRegistered("loaded", modLoadedHandler) == false)
+assert(ourListeners() == 0)
+fire("loaded", { newGame = true })
+assert(#created == 0 and modRan == nil)
 print("ok")
 """, mods, item=False)
 

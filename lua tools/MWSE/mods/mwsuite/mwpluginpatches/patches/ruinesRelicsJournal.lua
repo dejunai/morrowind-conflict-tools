@@ -13,19 +13,26 @@
 -- it is a strip along its south edge, left of the Animated Morrowind shipping log and clear of the papers, the paper
 -- and ink set and the chest, so the book lies there, long edge along x, at 0.8 scale (the octavo mesh is 32 x 39).
 --
---   new game or chargen still pending   the journal is created in that cell straight away (tes3.createReference with
---                                       the cell, so it is there before the player walks in). If the game will not
---                                       create it in a cell that is not loaded yet, a cellChanged handler waits until
---                                       the player is in the office and creates it there, then removes itself.
---   a character already past chargen    nobody goes back to that desk, so the journal is added to the inventory, with
---                                       no message and no sound (the same thing the mod did, minus the pop-up).
---   already done                        tes3.player.data.mwsuite_rnrJournalPlaced is set once the journal is placed or
---                                       given. Nothing more happens on later loads. The mod's own old flag
---                                       (data.journalid.doOnce), or a journal already in the inventory, also counts.
+--   new game or chargen still pending   the journal is created in that cell (tes3.createReference with the cell, so
+--                                       it is there before the player walks in). If the game will not create it in a
+--                                       cell that is not loaded yet, a cellChanged handler waits until the player is
+--                                       in the office and creates it there, then removes itself. An activate handler
+--                                       filtered to that reference (and a has-item check on cellChanged / loaded)
+--                                       watches until the book is picked up.
+--   a character already past chargen    if the book is not already in the world, it is added to the inventory, with
+--                                       no message and no sound. If it was already left on the table, it stays there
+--                                       to be picked up (no second copy).
+--   already done                        tes3.player.data.mwsuite_rnrJournalPlaced is set once the journal is in the
+--                                       inventory (picked up, or added silently), or when a load finds it already
+--                                       held, or the mod's own old flag (data.journalid.doOnce). Then every listener
+--                                       of ours comes off.
 --
--- Cost afterwards: our swapped-in handler stays registered (it has to, so the mod's can never come back; a new game
--- later in the same session needs it too). Each load it reads one flag and returns. The cellChanged handler exists
--- only while the journal is still waiting for the office. Stands down when the toggle is off, the mod is missing, or
+-- Once the journal is in the inventory, or that done flag is already set on load, this intercept unloads completely:
+-- the loaded wrapper, the cellChanged waiter and the activate pickup detector are all unregistered (afterDispatch,
+-- the one-shot pattern used by Ahead of the Classes and Jiub). The mod's original loaded handler is never put back;
+-- it is unregistered (or already replaced by our wrapper, which then comes off too). Nothing of ours stays resident.
+-- A later new game, or another save that still needs the journal, in the same session will not place it and will not
+-- show the pop-up either; restarting the game re-arms. Stands down when the toggle is off, the mod is missing, or
 -- rnr_old_journal is not in the load order (then nothing is added and no message shows).
 
 local config = require("mwpluginpatches.config")
@@ -34,7 +41,10 @@ local intercept = require("mwpluginpatches.intercept")
 local this = {}
 local active = false
 local waiting = false
+local watchingPickup = false
+local finished = false
 local reportedMissing = false
+local placedRef = nil
 
 local SOURCE = "/mods/ruines'n'relics/main.lua"
 local ITEM = "rnr_old_journal"
@@ -56,6 +66,11 @@ local function get(t, k)
     return nil
 end
 
+local function markDone()
+    local data = get(tes3.player, "data")
+    if type(data) == "table" then data[FLAG] = true end
+end
+
 -- CharGenState is not -1 while character creation is in progress (the same test Ahead of the Classes uses)
 local function charGenPending()
     local g = tes3.findGlobal and tes3.findGlobal("CharGenState")
@@ -68,6 +83,13 @@ local function hasJournal()
     return ok and (tonumber(n) or 0) > 0
 end
 
+local function alreadyDone()
+    local data = get(tes3.player, "data")
+    if get(data, FLAG) == true then return true end
+    if hasJournal() then return true end
+    return get(get(data, "journalid"), "doOnce") == true
+end
+
 local function createIn(cell)
     local ok, ref = pcall(tes3.createReference, {
         object = ITEM, cell = cell, scale = SCALE,
@@ -78,60 +100,176 @@ local function createIn(cell)
     return nil
 end
 
-local function stopWaiting()
-    if not waiting then return end
-    waiting = false
-    local function drop()
-        if not waiting then event.unregister(tes3.event.cellChanged, this.onCellChanged) end
+local function officeCell()
+    if tes3.getCell then
+        local ok, cell = pcall(tes3.getCell, { id = CELL })
+        if ok and cell then return cell end
     end
-    intercept.afterDispatch(drop)
+    if tes3.getPlayerCell then
+        local cell = tes3.getPlayerCell()
+        local id = get(cell, "id")
+        if type(id) == "string" and id:lower() == CELL:lower() then return cell end
+    end
+    return nil
+end
+
+local function nextRef(cell)
+    local iter = get(cell, "iterateReferences")
+    if type(iter) ~= "function" then return function() return nil end end
+    local kind = tes3.objectType and tes3.objectType.book
+    local ok, a, b, c = pcall(iter, cell, kind)
+    if not ok or type(a) ~= "function" then
+        ok, a, b, c = pcall(iter, cell)
+    end
+    if not ok or type(a) ~= "function" then return function() return nil end end
+    return function()
+        local step, ref = pcall(a, b, c)
+        if not step then return nil end
+        c = ref
+        return ref
+    end
+end
+
+local function findWorldJournal()
+    local cell = officeCell()
+    if not cell then return nil end
+    local step = nextRef(cell)
+    while true do
+        local ref = step()
+        if ref == nil then return nil end
+        local obj = get(ref, "object") or get(ref, "baseObject")
+        local id = get(obj, "id") or get(ref, "id")
+        if type(id) == "string" and id:lower() == ITEM:lower() then
+            if not get(ref, "deleted") and not get(ref, "disabled") and not get(ref, "isDeleted") then
+                return ref
+            end
+        end
+    end
+end
+
+local function drop(eventId, fn, options)
+    if type(fn) ~= "function" or type(event) ~= "table" or type(event.unregister) ~= "function" then return end
+    pcall(event.unregister, eventId, fn, options)
+end
+
+-- every listener of ours comes off; the mod's original loaded handler is never put back
+local function unloadListeners()
+    waiting = false
+    watchingPickup = false
+    local ref = placedRef
+    placedRef = nil
+    intercept.afterDispatch(function()
+        drop(tes3.event.cellChanged, this.onCellChanged)
+        drop(tes3.event.activate, this.onActivate)
+        if ref then drop(tes3.event.activate, this.onActivate, { filter = ref }) end
+        drop(tes3.event.loaded, this.ourLoaded)
+        drop(tes3.event.loaded, this.originalLoaded)
+    end)
+end
+
+function this.finish()
+    if finished then return end
+    finished = true
+    markDone()
+    unloadListeners()
+end
+
+function this.onActivate(e)
+    if finished then return end
+    intercept.afterDispatch(function()
+        if hasJournal() then
+            log("Ruins'n'Relics: the Old Journal was picked up; this intercept has unloaded.")
+            this.finish()
+        end
+    end)
+end
+
+local function watch(ref)
+    if finished or ref == nil then return end
+    if watchingPickup and placedRef == ref then return end
+    if watchingPickup and placedRef and placedRef ~= ref then
+        drop(tes3.event.activate, this.onActivate, { filter = placedRef })
+        drop(tes3.event.activate, this.onActivate)
+        watchingPickup = false
+    end
+    placedRef = ref
+    local ok = pcall(event.register, tes3.event.activate, this.onActivate, { filter = ref })
+    if not ok then
+        ok = pcall(event.register, tes3.event.activate, this.onActivate)
+    end
+    watchingPickup = ok and true or false
+end
+
+
+local function stopWaiting()
+    waiting = false
+end
+
+local function placedOnTable(ref)
+    stopWaiting()
+    event.register(tes3.event.cellChanged, this.onCellChanged)
+    watch(ref)
+    log("Ruins'n'Relics: the Old Journal is on the table in the Census and Excise Office.")
 end
 
 function this.onCellChanged()
-    if not waiting then return end
-    local data = get(tes3.player, "data")
-    if type(data) ~= "table" then return end
-    local cell = tes3.getPlayerCell and tes3.getPlayerCell()
-    local id = get(cell, "id")
-    if type(id) ~= "string" or id:lower() ~= CELL:lower() then return end
-    if createIn(cell) then
-        data[FLAG] = true
-        log("Ruins'n'Relics: the Old Journal is on the table in the Census and Excise Office.")
-        stopWaiting()
+    if finished then return end
+    if hasJournal() then
+        this.finish()
+        return
     end
+    if waiting then
+        local cell = tes3.getPlayerCell and tes3.getPlayerCell()
+        local id = get(cell, "id")
+        if type(id) == "string" and id:lower() == CELL:lower() then
+            local ref = createIn(cell)
+            if ref then placedOnTable(ref) end
+        end
+        return
+    end
+    if watchingPickup then return end
+    local ref = findWorldJournal()
+    if ref then watch(ref) end
 end
 
 -- what the mod's loaded handler did, without the pop-up
 function this.onLoaded(e)
+    if finished then return end
     local data = get(tes3.player, "data")
     if type(data) ~= "table" then return end
     stopWaiting()
-    if data[FLAG] then return end
+    if alreadyDone() then
+        log("Ruins'n'Relics: the Old Journal is already settled; this intercept has unloaded.")
+        this.finish()
+        return
+    end
     if tes3.getObject(ITEM) == nil then
         if not reportedMissing then
             reportedMissing = true
             log("Ruins'n'Relics: %s is not in the load order; the journal is not handed out.", ITEM)
         end
+        unloadListeners()
         return
     end
-    local old = get(data, "journalid")
-    if hasJournal() or get(old, "doOnce") == true then
-        data[FLAG] = true
+    local existing = findWorldJournal()
+    if existing then
+        event.register(tes3.event.cellChanged, this.onCellChanged)
+        watch(existing)
         return
     end
     if not (get(e, "newGame") == true or charGenPending()) then
         local ok, err = pcall(tes3.addItem, { reference = tes3.player, item = ITEM, count = 1, playSound = false })
         if ok then
-            data[FLAG] = true
-            log("Ruins'n'Relics: the Old Journal was added to the inventory without a message.")
+            log("Ruins'n'Relics: the Old Journal was added to the inventory without a message; this intercept has unloaded.")
+            this.finish()
         else
             log("Ruins'n'Relics: could not add the Old Journal: %s", tostring(err))
         end
         return
     end
-    if createIn(CELL) then
-        data[FLAG] = true
-        log("Ruins'n'Relics: the Old Journal is on the table in the Census and Excise Office.")
+    local ref = createIn(CELL)
+    if ref then
+        placedOnTable(ref)
         return
     end
     waiting = true
@@ -149,12 +287,14 @@ function this.init()
         source = SOURCE,
         event = "loaded",
         what = "journal placement (no pop-up)",
-        wrap = function()
-            return function(e)
+        wrap = function(original)
+            this.originalLoaded = original
+            this.ourLoaded = function(e)
                 local ok, err = pcall(this.onLoaded, e)
                 if not ok then log("Ruins'n'Relics: the journal placement raised an error: %s", tostring(err)) end
                 return nil
             end
+            return this.ourLoaded
         end,
     }) == true
     if active then
