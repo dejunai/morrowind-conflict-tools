@@ -11,7 +11,7 @@ import subprocess
 import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LUAJIT = os.path.join(ROOT, "tools", "luajit", "luajit.exe")
+LUAJIT = os.environ.get("MWMANAGER_LUAJIT", os.path.join(ROOT, "tools", "luajit", "luajit.exe"))
 MOD = os.path.join(ROOT, "lua tools", "MWSE", "mods", "mwsuite", "mwperformers", "main.lua")
 pytestmark = pytest.mark.skipif(not os.path.isfile(LUAJIT), reason="LuaJIT not available")
 
