@@ -1479,6 +1479,7 @@ def check(world, m):
     # now, not only when the program ends
     cache.prune(("tex2:", "tex2b:", "texh:", "nif:", "snd:", "refs:", "names:", "bsa2:"))
     cache.flush()
+    print(f"Asset health: done, {len(fixes)} file(s) to fix", file=sys.stderr)   # [seconds]: the whole pass
 
 
 def apply(fixes, data_dir, game_dir, m, log, dry=False):

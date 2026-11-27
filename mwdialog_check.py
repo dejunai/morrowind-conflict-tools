@@ -7207,6 +7207,7 @@ def fix_cell_winners(args, plugins, report=None):
 
     # pathgrids walking people into what a mod their plugin doesn't know built. Runs after all that moves objects.
     ext_pathgrids = {g: (pi, off) for nm, g, pi, off in all_pgrd if nm not in interiors}
+    pg_t0 = time.time()
     if ext_pathgrids and not tag_of:
         print("  Pathgrids: reading what every plugin's objects are...", flush=True)
         tag_of, model_of, _scripted = object_info(order)
@@ -7222,6 +7223,9 @@ def fix_cell_winners(args, plugins, report=None):
         progress=pg_progress if ext_pathgrids else None, cache=pg_cache)
     if pg_reused:
         print(f"  Pathgrids: {pg_reused} cell(s) unchanged since an earlier check: taken from {PATHGRID_CACHE_FILE}")
+    # the stage's time, as the asset check prints its own: [seconds] what
+    print(f"[{int(time.time() - pg_t0)}s] Pathgrids: {len(ext_pathgrids)} outdoor pathgrid(s), {pg_reused} taken from "
+          f"{PATHGRID_CACHE_FILE}", file=sys.stderr, flush=True)
     if not args.dry_run:
         try:
             save_pathgrid_cache(pg_cache_path, pg_cache)

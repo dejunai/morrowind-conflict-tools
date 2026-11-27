@@ -7,11 +7,13 @@ Only objects another mod placed or changed, unseen by the pathgrid's plugin, are
 left alone. Nothing is ever taken out of a pathgrid.
 """
 import hashlib
+import inspect
 import itertools
 import json
 import math
 import os
 import struct
+import sys
 from collections import defaultdict
 
 from mwdialog_footing import SUPPORT_TAGS, Surfaces, _state
@@ -166,20 +168,123 @@ def _near(entry, shapes, p, q):
 
 
 PATHGRID_CACHE_FILE = "mwdialog_pathgrid_cache.json"
-_CODE = ("mwdialog_pathgrid.py", "mwdialog_footing.py", "mwdialog_records.py", "mwdialog_tes3.py")
+# raise when the cache's layout or what a key covers changes: every cell is worked out again once
+CACHE_FORMAT = "pathgrid-cache 2"
+# mwdialog_footing classes repair_pathgrids is handed instances of (the cells it reads, the model shapes)
+_CODE_ROOTS = ("Placements", "ModelShapes")
+_CODE_VERSION = None
+
+
+_ASSIGNED = {}
+
+
+def _assignments(mod):
+    """name -> the source of its top-level assignment in module mod (what a constant is written as, whatever a
+    run has set it to since)."""
+    if mod.__name__ not in _ASSIGNED:
+        import ast
+        out = {}
+        try:
+            text = inspect.getsource(mod).replace("\r\n", "\n")
+            for node in ast.parse(text).body:
+                targets = node.targets if isinstance(node, ast.Assign) else \
+                    [node.target] if isinstance(node, ast.AnnAssign) else []
+                seg = ast.get_source_segment(text, node) or ""
+                for t in targets:
+                    for n in ast.walk(t):
+                        if isinstance(n, ast.Name):
+                            out[n.id] = out.get(n.id, "") + seg
+        except (OSError, TypeError, SyntaxError):
+            pass
+        _ASSIGNED[mod.__name__] = out
+    return _ASSIGNED[mod.__name__]
+
+
+def _ours(obj):
+    """A function or class of these tools (a mwdialog_* module)."""
+    obj = inspect.unwrap(obj) if callable(obj) else obj
+    return (inspect.isfunction(obj) or inspect.isclass(obj)) \
+        and str(getattr(obj, "__module__", "")).startswith("mwdialog_")
+
+
+def _code_objects(obj):
+    """The code of a function, or of every method of a class, with the functions nested in them."""
+    obj = inspect.unwrap(obj)
+    funcs = []
+    if inspect.isclass(obj):
+        for v in vars(obj).values():
+            if isinstance(v, (staticmethod, classmethod)):
+                v = v.__func__
+            if isinstance(v, property):
+                funcs += [f for f in (v.fget, v.fset, v.fdel) if f is not None]
+            elif inspect.isfunction(v):
+                funcs.append(v)
+    elif inspect.isfunction(obj):
+        funcs.append(obj)
+    stack, out = [f.__code__ for f in funcs], []
+    while stack:
+        c = stack.pop()
+        out.append(c)
+        stack += [k for k in c.co_consts if inspect.iscode(k)]
+    return out
+
+
+def _source(obj):
+    try:
+        return inspect.getsource(obj).replace("\r\n", "\n")
+    except (OSError, TypeError):
+        return getattr(obj, "__qualname__", "?")
 
 
 def _code_version():
-    """What the results were worked out with: a change to any of these files starts the cache afresh."""
+    """What the results were worked out with: this module's source, and the source of every function, class and
+    module constant of these tools it uses, followed through what those use in turn (mwdialog_footing,
+    _records, _tes3...), line endings ignored. So an edit to code the pathgrid check never runs (the Multipatch's
+    bone grafting in mwdialog_footing, the --play hash hook in mwdialog_tes3) keeps the cache, and the copy
+    deployed with CRLF line endings has the same version as the checkout."""
+    global _CODE_VERSION
+    if _CODE_VERSION is not None:
+        return _CODE_VERSION
+    import mwdialog_footing
+    here = sys.modules[__name__]
+    parts = {"format:" + CACHE_FORMAT, "module:" + __name__ + ":" + _source(here)}
+    todo = [v for v in vars(here).values() if _ours(v) and inspect.unwrap(v).__module__ == __name__]
+    todo += [getattr(mwdialog_footing, n) for n in _CODE_ROOTS]
+    seen = set()
+    while todo:
+        obj = inspect.unwrap(todo.pop())
+        key = (obj.__module__, obj.__qualname__)
+        if key in seen:
+            continue
+        seen.add(key)
+        if obj.__module__ != __name__:
+            parts.add("code:%s.%s:%s" % (obj.__module__, obj.__qualname__, _source(obj)))
+        g = vars(sys.modules[obj.__module__]) if obj.__module__ in sys.modules else {}
+        names = set()
+        for c in _code_objects(obj):
+            names.update(c.co_names)
+        mods = [g[n] for n in names if n in g and inspect.ismodule(g[n])
+                and g[n].__name__.startswith("mwdialog_")]
+        home = sys.modules.get(obj.__module__)
+        ours = [md for k, md in sorted(sys.modules.items()) if k.startswith("mwdialog_") and md is not None]
+        for n in names:
+            for md in ([home] if home is not None else []) + mods:
+                if n not in vars(md):
+                    continue
+                v = vars(md)[n]
+                if _ours(v):
+                    todo.append(v)
+                elif not inspect.ismodule(v):
+                    # a constant: where it is written (imported names are followed to their own module)
+                    for src_md in [md] + ours:
+                        if n in _assignments(src_md) and (src_md is md or vars(src_md).get(n) is v):
+                            parts.add("const:%s.%s=%s" % (src_md.__name__, n, _assignments(src_md)[n]))
+                            break
     h = hashlib.sha1()
-    here = os.path.dirname(os.path.abspath(__file__))
-    for name in _CODE:
-        try:
-            with open(os.path.join(here, name), "rb") as f:
-                h.update(f.read())
-        except OSError:
-            h.update(name.encode())
-    return h.hexdigest()
+    for part in sorted(parts):
+        h.update(part.encode("utf-8", "replace") + b"\0")
+    _CODE_VERSION = h.hexdigest()
+    return _CODE_VERSION
 
 
 def load_pathgrid_cache(path):
