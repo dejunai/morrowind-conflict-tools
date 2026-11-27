@@ -19,6 +19,9 @@
     Sheathing showed it on the back, as it is a shield). The performing animation (the lute) stops at the same
     moment, for any performer, and comes back when the dialogue ends; Animated Dialogue is not patched, it
     just finds the plain animation where it would have found the lute.
+    MWSE throws "Animation file failed to load" for a plain animation (it has no override layer) AFTER it has
+    swapped the model, so that throw counts as loaded and the restore (tes3.loadAnimation{reference}) always
+    runs; menuExit / cellChanged are a backstop for any performer left plain.
 ]]
 
 local CONFIG_NAME = "mwperformers"
@@ -134,6 +137,7 @@ end
 -- builds these afresh; what the last pass held and this one doesn't is let go at the end of it.
 local function weak() return setmetatable({}, { __mode = "k" }) end
 local held, animStopped = weak(), weak()  -- animStopped: reference -> the scene node its animation was changed on
+local touched = weak()                    -- reference -> its safe handle: a performer whose animation a dialogue swapped, until it is given back
 local heldScripts = {}                    -- script -> true, while a scriptExecute filter is registered
 local prevAnim, prevScripts = weak(), {}  -- the last pass's, while a pass runs
 
@@ -170,7 +174,10 @@ local function stopPerforming(ref)
         local node = ref.sceneNode
         if node and prevAnim[ref] == node then
             animStopped[ref] = node           -- still standing plainly from the last pass
-        elseif node and pcall(tes3.loadAnimation, { reference = ref, file = plainAnim(base) }) then
+        elseif node then
+            -- MWSE swaps the model first and only then looks for an override layer; a plain animation has none, so it
+            -- throws "Animation file failed to load" with the plain animation loaded all the same. Count it as loaded.
+            pcall(tes3.loadAnimation, { reference = ref, file = plainAnim(base) })
             animStopped[ref] = ref.sceneNode
         end
     end
@@ -336,6 +343,8 @@ local function cancelBackstop()
     end
 end
 
+local loggedPlainThrow = false
+
 local function stopAnimation(ref)
     if animStopped[ref] or held[ref] then return nil end     -- already standing plainly: nothing to stop or give back
     local data = ref.animationData
@@ -347,7 +356,15 @@ local function stopAnimation(ref)
     if not plain and not performing then return nil end      -- a script performer between songs: nothing playing
     local state = { handle = tes3.makeSafeObjectHandle(ref), groups = groups }
     if plain then
-        if not pcall(tes3.loadAnimation, { reference = ref, file = plainAnim(base) }) then return nil end
+        -- The plain animation is a base animation, with no override layer, so MWSE's loadAnimation swaps the model and
+        -- then throws "Animation file failed to load" (its check for an override layer fails). The performer has the
+        -- plain animation on him all the same: count it as loaded, or restoreAnimation never gives his own back.
+        touched[ref] = state.handle
+        local ok, err = pcall(tes3.loadAnimation, { reference = ref, file = plainAnim(base) })
+        if not ok and not loggedPlainThrow then
+            loggedPlainThrow = true
+            log("%s: MWSE says '%s' for the plain animation; it is on him all the same", describe(ref), tostring(err))
+        end
         state.plain = true
     end
     pcall(tes3.playAnimation, { reference = ref, group = idleGroup() })
@@ -362,10 +379,14 @@ local function restoreAnimation()
     cancelBackstop()
     if not state or not state.handle:valid() then return end
     local ref = state.handle:getObject()
-    if not ref or ref.disabled or ref.deleted or not ref.sceneNode then return end   -- gone: its animation goes with it
+    if not ref or ref.disabled or ref.deleted or not ref.sceneNode then             -- gone: its animation goes with it
+        if ref then touched[ref] = nil end
+        return
+    end
     local mobile = ref.mobile
-    if ref.isDead == true or (mobile and mobile.isDead) then return end
+    if ref.isDead == true or (mobile and mobile.isDead) then touched[ref] = nil return end
     if state.plain then pcall(tes3.loadAnimation, { reference = ref }) end           -- its own performing animation again
+    touched[ref] = nil
     local g = state.groups or {}
     local lower, upper, shield = active(g[1]), active(g[2]), active(g[3])
     local p = { reference = ref, shield = shield }
@@ -384,6 +405,26 @@ end
 
 local function sameRef(state, ref)
     return state and state.handle:valid() and state.handle:getObject() == ref
+end
+
+-- Backstop: a performer whose animation a dialogue swapped, who is not being held plain on purpose and whose
+-- dialogue no longer has him, goes back to his own animation (whatever stopped restoreAnimation from reaching him).
+local function healTouched()
+    for ref in pairs(touched) do
+        local live = pendingAnim and sameRef(pendingAnim, ref)
+        if not live and not held[ref] and not animStopped[ref] then
+            local handle = touched[ref]
+            touched[ref] = nil
+            local ok, here = pcall(function()
+                return handle and handle:valid() and ref.sceneNode ~= nil and not ref.disabled and not ref.deleted
+                    and ref.isDead ~= true and not (ref.mobile and ref.mobile.isDead)
+            end)
+            if ok and here then
+                pcall(tes3.loadAnimation, { reference = ref })
+                log("%s: his own animation given back (backstop)", describe(ref))
+            end
+        end
+    end
 end
 
 local function beginAnimation(ref)
@@ -412,8 +453,8 @@ end
 event.register(AD_STARTED, function() if pendingAnim then pendingAnim.ad = true end end, { priority = AD_LAST })
 event.register(AD_ENDED, restoreAnimation, { priority = AD_LAST })
 event.register(AD_INTERRUPTED, restoreAnimation, { priority = AD_LAST })
-event.register(tes3.event.cellChanged, restoreAnimation)
-event.register(tes3.event.loaded, function() pendingAnim = nil cancelBackstop() end)    -- the old references are gone
+event.register(tes3.event.cellChanged, function() restoreAnimation() healTouched() end)
+event.register(tes3.event.loaded, function() pendingAnim = nil touched = weak() cancelBackstop() end)    -- the old references are gone
 
 local function onMenuDialogActivated(e)
     local target = tes3ui.getServiceActor()
@@ -433,7 +474,7 @@ local function onMenuDialogActivated(e)
     beginAnimation(ref)                  -- before Animated Dialogue (priority), so it starts from the plain animation
 end
 event.register(tes3.event.uiActivated, onMenuDialogActivated, { filter = "MenuDialog", priority = 100 })
-event.register(tes3.event.menuExit, function() endQuiet() onMenuExitAnimation() end)
+event.register(tes3.event.menuExit, function() endQuiet() onMenuExitAnimation() healTouched() end)
 event.register(tes3.event.loaded, endQuiet)
 
 -- Mod Config menu ---------------------------------------------------------------------------------

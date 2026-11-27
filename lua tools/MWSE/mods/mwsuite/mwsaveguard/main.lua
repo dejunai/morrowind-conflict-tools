@@ -11,6 +11,7 @@ local defaults = {
 	validateOnLoad = true,
 	copyNoticesToMWSELog = false,   -- every save's notices go to MWSE\logs\mwsaveguard.log; this copies them too
 	cleanClones = true,
+	retrySwallowedSaves = true,   -- a save another mod holds back is asked for again every second, for a while
 }
 local config = mwse.loadConfig(CONFIG_NAME, defaults)
 -- an older build wrote "logToMWSE"; nothing reads it (copyNoticesToMWSELog is the switch), so it only looked
@@ -353,7 +354,7 @@ local function onSave(e)
 	local cell = tes3.player and tes3.player.cell
 
 	logMsg(
-		"[mwsaveguard] Save requested: file='%s', name='%s', cell='%s', menu=%s, background=%s, volatile=%s, cellElapsed=%.1fs, deferred=%s",
+		"[mwsaveguard] Save requested (name as asked, before any renamer): file='%s', name='%s', cell='%s', menu=%s, background=%s, volatile=%s, cellElapsed=%.1fs, deferred=%s",
 		tostring(e.filename),
 		tostring(e.name),
 		tostring(cell and (cell.displayName or cell.id) or "<none>"),
@@ -409,28 +410,51 @@ event.register("save", onSave, { priority = 10000 })
 -- the event), so the engine never writes it and nothing says why. This handler runs last of all; when a save we
 -- let through never reaches it, the next frame names the save handlers that were registered.
 local SAVE_LAST_PRIORITY = -9999        -- the lowest priority mwguard calls ordinary (|p| < 10000)
-local awaitingSave = nil                -- { filename, name } of the last save onSave let through
+local awaitingSave = nil                -- { filename, name, menu } of the last save onSave let through
+local renamedTo = nil                   -- { filename, name } as the default-priority handlers (the renamers) left it
+local retrying = nil                    -- a swallowed save being asked for again: { filename, name, menu, since, tries, timer }
+local RETRY_EVERY, RETRY_MAX = 1.0, 20.0       -- s
+
+-- A named upvalue of a function (nil when it has none, or it is a C function).
+local function upvalue(fn, want)
+	if type(fn) ~= "function" then return nil end
+	for i = 1, 200 do
+		local n, v = debug.getupvalue(fn, i)
+		if n == nil then return nil end
+		if n == want then return v end
+	end
+end
+
+-- MWSE's own event.register: the one that holds getEventTable and eventPriorities. Other mods wrap event.register
+-- and keep the one they wrapped under a name of their own (mwguard: origRegister, mwhangwatch: realRegister,
+-- mwpluginpatches: nativeRegister), so this follows every function upvalue, breadth first, whatever it is called,
+-- until it finds the one with both. (A wrapper's unregister / isRegistered upvalues have getEventTable but not
+-- eventPriorities, so they are passed over.)
+local function coreRegister(start)
+	local queue, seen, head = { start }, {}, 1
+	while head <= #queue and head <= 64 do
+		local fn = queue[head]
+		head = head + 1
+		if type(fn) == "function" and not seen[fn] then
+			seen[fn] = true
+			if upvalue(fn, "getEventTable") and upvalue(fn, "eventPriorities") then return fn end
+			for i = 1, 200 do
+				local n, v = debug.getupvalue(fn, i)
+				if n == nil then break end
+				if type(v) == "function" and not seen[v] then queue[#queue + 1] = v end
+			end
+		end
+	end
+	return nil
+end
 
 -- { {fn, priority} } of an event's callbacks, highest priority first, read from MWSE's event table (empty when it
 -- can't be read)
 local function eventHandlers(name)
 	local out = {}
 	pcall(function()
-		local function upvalue(fn, want)
-			if type(fn) ~= "function" then return nil end
-			for i = 1, 200 do
-				local n, v = debug.getupvalue(fn, i)
-				if n == nil then return nil end
-				if n == want then return v end
-			end
-		end
-		local register = event.register
-		for _ = 1, 8 do                     -- mwguard / mwhangwatch may wrap event.register: follow it back
-			if upvalue(register, "getEventTable") then break end
-			local inner = upvalue(register, "origRegister") or upvalue(register, "realRegister")
-			if type(inner) ~= "function" then break end
-			register = inner
-		end
+		local register = coreRegister(event.register)
+		if not register then return end
 		local general = upvalue(upvalue(register, "getEventTable"), "generalEvents")
 		local priorities = upvalue(register, "eventPriorities") or {}
 		for _, cb in ipairs(general and general[name] or {}) do
@@ -462,27 +486,118 @@ do
 	end
 end
 
+-- Sophisticated Save System (and any other renamer) works at the default priority 0 and rewrites the file name
+-- of a quicksave / autosave; this is just below it, so what it sees is the name after them.
+local function onSaveRenamed(e)
+	if awaitingSave then renamedTo = { filename = e.filename, name = e.name } end
+end
+event.register("save", onSaveRenamed, { priority = -1 })
+
 local function onSaveLast(e)
 	if e.block then return end          -- blocked without stopping the chain: still a swallowed save
+	local asked = awaitingSave
 	awaitingSave = nil
+	if asked then
+		logMsg("[mwsaveguard] Save goes ahead as: file='%s', name='%s' (requested as '%s')",
+			tostring(e.filename), tostring(e.name), tostring(asked.filename))
+	end
 end
 event.register("save", onSaveLast, { priority = SAVE_LAST_PRIORITY })
+
+-- A swallowed save is asked for again every second, up to RETRY_MAX seconds (the usual holder is WBSR, for as long
+-- as a voice line plays). One at a time: a newer request takes the place of an older one.
+local function stopRetry()
+	local r = retrying
+	retrying = nil
+	if r and r.timer then pcall(function() r.timer:cancel() end) end
+end
+
+local retryTick
+local function armRetry(r)
+	local ok, t = pcall(timer.start, { duration = RETRY_EVERY, type = timer.real, callback = retryTick })
+	r.timer = ok and t or nil
+	if not ok then retrying = nil end
+end
+
+retryTick = function()
+	local r = retrying
+	if not r then return end
+	r.timer = nil
+	if not tes3.player or tes3.onMainMenu() then
+		retrying = nil
+		return
+	end
+	if os.clock() - r.since > RETRY_MAX then
+		retrying = nil
+		logMsg("[mwsaveguard] Gave up on save '%s' after %.0f s: another mod kept holding it back.", tostring(r.filename), RETRY_MAX)
+		pcall(tes3.messageBox, "mwsaveguard: the save did not go through; another mod kept holding it back. Details: MWSE\\logs\\mwsaveguard.log.")
+		return
+	end
+	local dh = tes3.dataHandler
+	local ndd = dh and dh.nonDynamicData
+	-- not while the world is settling or a load is going on; menus only for a save that was asked for in one
+	if (tes3ui.menuMode() and not r.menu) or (dh and dh.backgroundThreadRunning) or (ndd and ndd.isSavingOrLoading)
+		or os.clock() - lastCellChangeTime < (tonumber(config.settleWindow) or 5.0) then
+		armRetry(r)
+		return
+	end
+	r.tries = r.tries + 1
+	local params = {}
+	if r.filename and r.filename ~= "" then params.file = r.filename end
+	if r.name and r.name ~= "" then params.name = r.name end
+	logMsg("[mwsaveguard] Asking again for save '%s' (try %d).", tostring(r.filename), r.tries)
+	isExecutingDeferredSave = true
+	local ok, err = pcall(tes3.saveGame, params)
+	isExecutingDeferredSave = false
+	if not ok then
+		mwse.log("[mwsaveguard] Error asking again for a swallowed save: %s", tostring(err))
+		retrying = nil
+		return
+	end
+	-- "saved" ends it; a save held back again leaves it here, and the next tick tries once more
+	if retrying == r then armRetry(r) end
+end
+
+local function startRetry(missed)
+	if config.retrySwallowedSaves == false or not tes3.player then return end
+	local r = retrying
+	if r and r.tries > 0 and r.filename == missed.filename then return end      -- our own try, held back again: it goes on
+	if r and missed.filename == "autosave" then return end                       -- an autosave never replaces a save you asked for
+	if r then stopRetry() end
+	r = { filename = missed.filename, name = missed.name, menu = missed.menu, since = os.clock(), tries = 0 }
+	retrying = r
+	armRetry(r)
+	if retrying == r and missed.filename ~= "autosave" then
+		pcall(tes3.messageBox, "mwsaveguard: another mod is holding saves back (usually a voice line playing). Trying again.")
+	end
+end
 
 local function checkSaveReached()
 	local missed = awaitingSave
 	awaitingSave = nil
+	local renamed = renamedTo
+	renamedTo = nil
 	if not missed then return end
 	local handlers = saveHandlers()
+	local asked = tostring(missed.filename or missed.name or "save")
+	local renamers
+	if renamed then
+		renamers = string.format("yes, it was renamed to '%s', then a lower handler stopped it", tostring(renamed.filename))
+	else
+		renamers = "no, a handler above priority 0 stopped it first, so nothing renamed it"
+	end
 	mwse.log("[mwsaveguard] Save '%s' was swallowed by another mod: a save handler blocked it before the engine "
-		.. "wrote it, and saving gave no message. Save handlers, highest priority first: %s",
-		tostring(missed.filename or missed.name or "save"),
+		.. "wrote it, and saving gave no message. Renamers reached: %s. Save handlers, highest priority first: %s",
+		asked, renamers,
 		#handlers > 0 and table.concat(handlers, "; ") or "(MWSE's event table could not be read)")
-	logMsg("[mwsaveguard] Save swallowed by another mod: file='%s' (handlers: %s)", tostring(missed.filename),
-		#handlers > 0 and table.concat(handlers, "; ") or "?")
+	logMsg("[mwsaveguard] Save swallowed by another mod: file='%s' (requested name; renamers reached: %s) (handlers: %s)",
+		asked, renamers, #handlers > 0 and table.concat(handlers, "; ") or "?")
+	startRetry(missed)
 end
 
 expectSave = function(e)
-	awaitingSave = { filename = e.filename, name = e.name }
+	awaitingSave = { filename = e.filename, name = e.name, menu = tes3ui.menuMode() }
+	renamedTo = nil
 	-- a real-time timer: a save from the options menu happens in menu mode, where simulate timers stand still
 	local ok = pcall(timer.delayOneFrame, checkSaveReached, timer.real)
 	if not ok then awaitingSave = nil end
@@ -494,8 +609,17 @@ local function onSaved(e)
 		tostring(e.filename),
 		tostring(e.name)
 	)
+	local r = retrying
+	if r then
+		stopRetry()
+		if isExecutingDeferredSave and r.tries > 0 then
+			logMsg("[mwsaveguard] The save went through on try %d.", r.tries)
+			pcall(tes3.messageBox, "mwsaveguard: saved.")
+		end
+	end
 end
 event.register("saved", onSaved)
+event.register("loaded", function() stopRetry() end)       -- the old timers are gone with the old game
 
 -- While a save is waiting, the options menu (Esc) stays shut: quitting or loading from it would lose that save.
 local function onOptionsMenu()
@@ -562,6 +686,14 @@ event.register(tes3.event.modConfigReady, function()
 			.. "Data Files\\MWSE\\logs\\mwsaveguard.log. This copies them to MWSE.log too. Problems (a damaged "
 			.. "save stopped, a failed save, a copy of your character removed) always go to MWSE.log.",
 		variable = mwse.mcm.createTableVariable({ id = "copyNoticesToMWSELog", table = config }),
+	})
+
+	page:createOnOffButton({
+		label = "Ask again for a save another mod held back",
+		description = "Another mod can stop a save without a word (abot's WBSR does while a voice line plays). On: "
+			.. "the save is asked for again every second for up to 20 seconds and you get a short note; the "
+			.. "attempts are in Data Files\\MWSE\\logs\\mwsaveguard.log. Off: a held-back save is only logged.",
+		variable = mwse.mcm.createTableVariable({ id = "retrySwallowedSaves", table = config }),
 	})
 
 	if wbsrBard then
