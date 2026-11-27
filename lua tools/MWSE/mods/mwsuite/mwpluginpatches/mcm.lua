@@ -43,7 +43,8 @@ Active Plugin Status:
   • Magican't: %s
   • Ahead of the Classes: %s
   • Attend Me (MWSE): %s
-  • MWSE Containers Extended: %s]],
+  • MWSE Containers Extended: %s
+  • Ruins'n'Relics: %s]],
     config.isMcaActive() and "Active" or "Not Active",
     config.isEbonheartUnderworksActive() and "Active" or "Not Active",
     config.isPAndSActive() and "Active" or "Not Active",
@@ -62,7 +63,8 @@ Active Plugin Status:
     config.isMagicantInstalled() and "Active" or "Not Active",
     config.isAheadOfTheClassesInstalled() and "Active" or "Not Active",
     config.isAttendMeInstalled() and "Active" or "Not Active",
-    config.isG7ContainersInstalled() and "Active" or "Not Active"),
+    config.isG7ContainersInstalled() and "Active" or "Not Active",
+    config.isRuinesRelicsInstalled() and "Active" or "Not Active"),
 })
 
 -- SECTION 1: FRIENDS & FRENS (JIUB COMPANION DELAY)
@@ -492,6 +494,20 @@ g7Category:createYesNoButton({
         .. "if it is gone or was deleted (and after loading a save). Stands down by itself if its main.lua still has "
         .. "the old luafix KP4 edit. Its files are not edited. Off unless the mod is installed. Needs a restart.",
     variable = mwse.mcm.createTableVariable({ id = "g7ContainersLinkCacheEnabled", table = config }),
+})
+
+local ruinesCategory = page:createCategory(string.format("Ruins'n'Relics: Old Journal%s",
+    getStatusText(config.isRuinesRelicsInstalled())))
+
+ruinesCategory:createYesNoButton({
+    label = "Old Journal on a Table, No Pop-up",
+    description = "Ruins'n'Relics gives you an Old Journal as soon as a game loads and shows a message about it, "
+        .. "which on a new game lands in the middle of character creation. With this on, there is no message and the "
+        .. "journal isn't added to your inventory: a new character finds it lying on the table in Seyda Neen's Census "
+        .. "and Excise Office, in front of the release papers. A character already past character creation gets it "
+        .. "in the inventory with no message. It is placed once per character. Its files are not edited. Off unless "
+        .. "Ruins'n'Relics is installed. Needs a restart.",
+    variable = mwse.mcm.createTableVariable({ id = "ruinesRelicsJournalEnabled", table = config }),
 })
 
 local voicesCategory = page:createCategory(string.format("Voices of Vvardenfell: Console%s",

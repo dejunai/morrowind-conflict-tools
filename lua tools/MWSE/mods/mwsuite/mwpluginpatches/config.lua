@@ -140,6 +140,11 @@ function config.isG7ContainersInstalled()
     return (lfs and lfs.fileexists and lfs.fileexists("Data Files/MWSE/mods/Spammer/G7 Containers/main.lua")) or false
 end
 
+-- Ruins'n'Relics (patches/ruinesRelicsJournal): its Old Journal goes on a table instead of arriving with a pop-up
+function config.isRuinesRelicsInstalled()
+    return (lfs and lfs.fileexists and lfs.fileexists("Data Files/MWSE/mods/Ruines'n'relics/main.lua")) or false
+end
+
 -- true when a mod's Lua file (path under Data Files/MWSE/mods) contains text; used to see an old luafix edit
 -- ("-- local fix (KPn)") so an intercept doing the same job stands down. Read only, once per intercept at start.
 function config.modFileHas(relativePath, text)
@@ -268,6 +273,9 @@ local function getDynamicDefaults()
         attendMeRaysEnabled = config.isAttendMeInstalled(),
         attendMeRecruitLabelEnabled = config.isAttendMeInstalled(),
         g7ContainersLinkCacheEnabled = config.isG7ContainersInstalled(),
+
+        -- Ruins'n'Relics: no "old journal" pop-up at new game; the book lies on the table in the Census and Excise Office
+        ruinesRelicsJournalEnabled = config.isRuinesRelicsInstalled(),
     }
 end
 
