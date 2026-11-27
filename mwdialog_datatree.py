@@ -536,7 +536,8 @@ class ModelAssets:
 
 class VortexRepo:
     """Files in the Vortex mod staging folder (every mod's own folder, including Extras/ and optional
-    folders that were never deployed), to find assets that exist there but not in Data Files."""
+    folders that were never deployed), to find assets that exist there but not in Data Files. Not what these
+    tools quarantined: a broken\\ folder under a mod's Off\\ or Extras\\ (see quarantined)."""
     EXTS = {".nif", ".dds", ".tga", ".bmp", ".wav", ".mp3", ".fnt", ".bik", ".kf"}
 
     def __init__(self, root):
@@ -551,11 +552,22 @@ class VortexRepo:
             mods = []
         print(f"Searching {len(mods)} Vortex mod folders for missing files...", file=sys.stderr)
         for mod in mods:
-            for dirpath, _dirs, fns in os.walk(mod):
+            for dirpath, dirs, fns in os.walk(mod):
+                if self.quarantined(os.path.relpath(dirpath, mod)):
+                    dirs[:] = []                   # and everything under it
+                    continue
                 for fn in fns:
                     stem, ext = os.path.splitext(fn.lower())
                     if ext in self.EXTS:
                         self._by_name[stem].append(os.path.join(dirpath, fn))
+
+    @staticmethod
+    def quarantined(rel_in_mod):
+        """True for a folder of a mod (path relative to the mod folder) under Off\\ or Extras\\ that has a
+        broken\\ folder on the way (Off\\<plugin>\\broken\\..., the older Off\\broken\\<plugin>\\...): files
+        these tools took out because the game crashes on them, never offered back as the missing file."""
+        parts = [x.lower() for x in rel_in_mod.replace("/", "\\").split("\\") if x and x != "."]
+        return bool(parts) and parts[0] in ("off", "extras") and "broken" in parts[1:]
 
     SAME_KIND = {t: (".dds", ".tga", ".bmp") for t in ("icons", "textures", "bookart", "splash")}
     SAME_KIND.update({"sound": (".wav", ".mp3"), "music": (".mp3", ".wav"), "video": (".bik",)})

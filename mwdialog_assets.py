@@ -16,6 +16,9 @@ Checks, and what --fix does:
   stereo sound under Sound\\ (3D sounds must be mono) ..... WARN   down-mixed to mono (ffmpeg)
   sound at an unusual sample rate (or over 48 kHz) ....... WARN   resampled to 44.1 kHz (ffmpeg)
   x*.kf animation without its x*.nif ..................... WARN   report only
+  creature/NPC model whose Bounding Box is under 2 units . ERROR  moved to its mod's Off\\<plugin>\\broken\\ (the
+    wide or 1.25 high (a hit's blood splash divides by       next copy, or a BSA's, is used); in a BSA: WARN only
+    zero: actor_box_check, the deployed copy only)
   texture or sound nothing refers to ..................... INFO   moved to the mod's Off\\<plugin>\\unused assets\\ (not deployed)
 Originals of changed files go to <mod>\\Off\\<plugin>\\<reason>\\<path> (backup_asset_original). Unused files are moved
 (not copied) and listed in mwdialog_unused_assets.txt, which --restore-unused uses to put them back.
@@ -864,6 +867,206 @@ def mip_pairs(A, tree, data_dir, m, cache, generated=(), ini_path=None, game_dir
     return loose_out, bsa_out, stats
 
 
+# ---------------------------------------------------------------- actor models whose Bounding Box crashes hits
+# When a hit draws blood, SplashController::spawnBloodParticle (Morrowind.exe 0x54B8B0) picks a spot on the
+# struck actor with rand() % (int)(width / 2) and rand() % (int)(height * 0.8) (integer divides at 0x54B8FF and
+# 0x54B954). width and height are the actor's mobile widthRescaled / heightRescaled: 16-bit, 1/32 units, set from
+# the model's "Bounding Box" node (0x55A4B0: (int)(value * 32) stored in 16 bits): width = center.y + extent.y,
+# height = 2 * extent.z (checked against 15 creatures in a crash dump; unscaled, the reference's scale is not
+# applied). A box under 2 units wide or 1.25 units high makes a divisor 0: EXCEPTION_INT_DIVIDE_BY_ZERO the
+# first time a hit on that actor spawns blood (Cliff Racer Remastered 1.3: center.y -81.339, extent.y 81.601,
+# width 0.262). A negative width wraps in the 16 bits to a large value (no crash; only a width of 2048 units or
+# more could wrap back under 64). No "Bounding Box" node: the engine uses the model's own bounds; not judged.
+# NPCs: the engine scales the box by the race's height and weight first (0x54CC10), so their check is a guide.
+ACTOR_BOX_TAGS = ("CREA", "NPC_")
+BOX_NODE_RE = re.compile(rb"([\x02-\x40])\x00\x00\x00(Ni[A-Za-z]{1,62})\x0c\x00\x00\x00bounding box", re.I)
+_F32_0_8 = struct.unpack("<f", struct.pack("<f", 0.8))[0]           # the engine's float constant 0.8
+
+
+def nif_bounding_box(data):
+    """((center x, y, z), (extent x, y, z)) of a model's "Bounding Box" node's box (its bounding volume of
+    type 1, a box), or None: not a Morrowind model, no such node, or the node has no box."""
+    if not data.startswith(NIF_HEAD):
+        return None
+    for found in BOX_NODE_RE.finditer(data):
+        if found.group(1)[0] != len(found.group(2)):
+            continue                                  # not a block's type name followed by the node's name
+        p = found.end()
+        try:
+            p += 8 + 2 + 12 + 36 + 4 + 12             # extra data, controller, flags, translation, rotation,
+            n = struct.unpack_from("<I", data, p)[0]  # scale, velocity; then the properties
+            if n > 64:
+                continue
+            p += 4 + 4 * n
+            has, kind = struct.unpack_from("<II", data, p)
+            if has != 1 or kind != 1:
+                continue
+            center = struct.unpack_from("<3f", data, p + 8)
+            extent = struct.unpack_from("<3f", data, p + 8 + 12 + 36)
+        except struct.error:
+            continue
+        return center, extent
+    return None
+
+
+def _ftol(x):
+    """The x87 float-to-int the game uses: truncated toward zero; NaN or out of range gives 0x80000000."""
+    if x != x or x >= 2147483648.0 or x < -2147483648.0:
+        return -2147483648
+    return int(x)
+
+
+def actor_box_divisors(box):
+    """What spawnBloodParticle divides by for a model with this Bounding Box: {"width", "height" (units),
+    "raw_w", "raw_h" (the 16-bit values the game keeps), "div_w", "div_h"}. A divisor of 0 crashes."""
+    (_cx, cy, _cz), (_ex, ey, ez) = box
+    f32 = (lambda v: struct.unpack("<f", struct.pack("<f", v))[0] if abs(v) < 3.4e38 else v)
+    width, height = f32(cy + ey), f32(2.0 * ez)
+    raw_w, raw_h = _ftol(width * 32.0) & 0xFFFF, _ftol(height * 32.0) & 0xFFFF
+    return {"width": width, "height": height, "raw_w": raw_w, "raw_h": raw_h,
+            "div_w": _ftol(raw_w * 0.03125 * 0.5), "div_h": _ftol(raw_h * 0.03125 * _F32_0_8)}
+
+
+def actor_box_problem(box):
+    """None when hits on an actor with this Bounding Box are safe, else what is wrong (a short text)."""
+    if box is None:
+        return None
+    d = actor_box_divisors(box)
+    bad = []
+    if d["div_w"] == 0:
+        bad.append(f"{d['width']:.3g} units wide (the game needs at least 2)")
+    if d["div_h"] == 0:
+        bad.append(f"{d['height']:.3g} units high (the game needs at least 1.25)")
+    return " and ".join(bad) or None
+
+
+def actor_models(world, A):
+    """{model under Meshes (lowercase): [who uses it]} for the winning CREA and NPC_ records with a model (an
+    NPC's MODL is its skeleton, when set). Each model's x-prefixed twin (the one the game animates) is checked
+    with it."""
+    out = {}
+    for (tag, _rid), vers in getattr(world, "models", {}).items():
+        if tag not in ACTOR_BOX_TAGS or not vers:
+            continue
+        win = vers[-1]
+        if win[3]:
+            continue                                  # deleted
+        v = (win[2] or {}).get(("MODL", "mesh"))
+        if not v or not v.strip():
+            continue
+        rel = A.norm(v)
+        if rel.endswith(".nif"):
+            out.setdefault(rel, []).append(f"{tag} '{win[4]}' ({win[1]})")
+    return out
+
+
+def _x_twin(rel):
+    """meshes rel (backslashes) of the x-prefixed twin the game animates an actor with, or None."""
+    d, _, f = rel.rpartition("\\")
+    if f.startswith("x"):
+        return None
+    return (d + "\\" if d else "") + "x" + f
+
+
+def actor_box_check(world, A, data_dir, cache=None, ini_path=None, stat=os.stat, generated=()):
+    """The deployed (winning) model of every creature and NPC, loose or in a BSA, by the game's override rules
+    (WinningFiles), and its x-prefixed twin: a Bounding Box that makes spawnBloodParticle divide by zero (see
+    above). Returns (findings [(severity, rel, message)], fixes [("actorbox", full, rel under Data Files,
+    why)]): a loose model in Data Files is moved out by --fix (apply: its Vortex mod's Off\\<plugin>\\broken\\,
+    found by the hard link), so the next mod's copy (after Deploy) or the BSA's is used; one in a BSA can only
+    be reported."""
+    users = actor_models(world, A)
+    if not users:
+        return [], []
+    meshes = WinningFiles("meshes", dict(getattr(A, "mesh_loose", {})), list(getattr(A, "bsa_paths", ())),
+                          read_try_archive_first(ini_path), stat)
+    names = meshes.names()
+    data_abs = os.path.normcase(os.path.abspath(data_dir)) + os.sep
+    found, fixes, seen = [], [], set()
+    for base in sorted(users):
+        who = users[base][0] + (f" (+{len(users[base]) - 1} more)" if len(users[base]) > 1 else "")
+        for rel in (base, _x_twin(base)):
+            if not rel or rel in seen or rel not in names:
+                continue
+            seen.add(rel)
+            win = meshes.winner(rel)
+            if win is None:
+                continue
+            box = None
+            if win[0] == "loose":
+                full = win[1]
+                try:
+                    st = stat(full)
+                    key, stamp = "abox:" + norm_rel(full), stamp_of(st)
+                    got = cache.get(key, stamp) if cache is not None and key not in generated else None
+                    if got is None:
+                        with open(full, "rb") as f:
+                            b = nif_bounding_box(f.read())
+                        got = [list(b[0]), list(b[1])] if b else []
+                        if cache is not None:
+                            cache.put(key, stamp, got)
+                except OSError:
+                    continue
+                box = (tuple(got[0]), tuple(got[1])) if got else None
+            else:
+                bsa, off, size = win[1]
+                try:
+                    st = os.stat(bsa)
+                    key = "aboxb:" + os.path.basename(bsa).lower() + "|" + rel
+                    stamp = stamp_of(st)
+                    got = cache.get(key, stamp) if cache is not None else None
+                    if got is None:
+                        with open(bsa, "rb") as f:
+                            f.seek(off)
+                            b = nif_bounding_box(f.read(size))
+                        got = [list(b[0]), list(b[1])] if b else []
+                        if cache is not None:
+                            cache.put(key, stamp, got)
+                except OSError:
+                    continue
+                box = (tuple(got[0]), tuple(got[1])) if got else None
+            if box is None:
+                continue
+            what = actor_box_problem(box)
+            d = actor_box_divisors(box)
+            if what is None:
+                if d["width"] < 0:
+                    found.append(("INFO", "Meshes\\" + rel, f"actor model ({who}): its Bounding Box reaches only "
+                                  f"behind the model (width {d['width']:.3g}); the game wraps it to "
+                                  f"{d['raw_w']} / 32, so no crash"))
+                continue
+            why = f"Bounding Box {what}"
+            if win[0] == "loose" and os.path.normcase(os.path.abspath(win[1])).startswith(data_abs):
+                drel = os.path.relpath(win[1], data_dir)
+                found.append(("ERROR", drel, f"actor model ({who}): {why}; the game divides by zero (crash) the "
+                              f"first time a hit on it spawns blood. --fix moves it to its mod's "
+                              f"Off\\<plugin>\\broken\\ (found by Vortex's hard link); then Deploy in Vortex, so "
+                              f"the next mod's copy is used (until then, or with none, a BSA's copy)"))
+                fixes.append(("actorbox", win[1], drel, why))
+                BROKEN_MODELS.append((drel, "--fix moves it to its mod's Off\\<plugin>\\broken\\; then Deploy in "
+                                            "Vortex so the next mod's copy (or a BSA's) is used"))
+            elif win[0] == "loose":
+                found.append(("WARN", "Meshes\\" + rel, f"actor model ({who}) in {win[1]}: {why}; the game "
+                              f"divides by zero (crash) when a hit on it spawns blood. Not in Data Files: left "
+                              f"as it is"))
+            else:
+                found.append(("WARN", "Meshes\\" + rel, f"actor model ({who}) in {os.path.basename(win[1][0])}: "
+                              f"{why}; the game divides by zero (crash) when a hit on it spawns blood. A BSA "
+                              f"can't be changed: install a loose copy with a proper box"))
+    return found, fixes
+
+
+def _free_dest(dest):
+    """dest, or a dated name beside it when a different file is there already."""
+    if not os.path.exists(dest):
+        return dest
+    stem, ext = os.path.splitext(dest)
+    new, n = f"{stem}.{time.strftime('%Y%m%d-%H%M%S')}{ext}", 2
+    while os.path.exists(new):
+        new, n = f"{stem}.{time.strftime('%Y%m%d-%H%M%S')}-{n}{ext}", n + 1
+    return new
+
+
 def _pow2(n):
     p = 1
     while p * 2 <= n:
@@ -1309,6 +1512,16 @@ def check(world, m):
         if hasattr(A, "bsa_facts"):
             used.update(A.bsa_facts(bsa).get("stems", ()))
     cache.flush()
+    # --- creature and NPC models whose Bounding Box makes a hit crash the game (spawnBloodParticle)
+    try:
+        box_found, box_fixes = actor_box_check(world, A, data_dir, cache, getattr(world, "ini_path", None),
+                                               tree.stat if tree is not None else os.stat, generated)
+    except Exception as e:                       # never stop the pass for this check
+        print(f"Asset health: actor model check skipped ({e})", file=sys.stderr)
+        box_found, box_fixes = [], []
+    for sev, rel, msg in box_found:
+        r.add(sev, "Data Files", "", "", f"{rel}: {msg}")
+    fixes += box_fixes
     # --- mipmaps, per pair: each winning world model and the winning texture it draws (loose or BSA)
     print("Asset health: mipmaps of the textures world models use...", file=sys.stderr)
     try:
@@ -1486,7 +1699,7 @@ def check(world, m):
     world.asset_health = fixes
     # the pass saw every file: entries for files that are gone (or renamed) go, and what was learnt is written
     # now, not only when the program ends
-    cache.prune(("tex2:", "tex2b:", "texh:", "nif:", "snd:", "refs:", "names:", "bsa2:"))
+    cache.prune(("tex2:", "tex2b:", "texh:", "nif:", "snd:", "refs:", "names:", "bsa2:", "abox:", "aboxb:"))
     cache.flush()
     print(f"Asset health: done, {len(fixes)} file(s) to fix", file=sys.stderr)   # [seconds]: the whole pass
     MC.end_count("mwdialog_check - asset health")
@@ -1497,7 +1710,7 @@ def apply(fixes, data_dir, game_dir, m, log, dry=False):
     """--fix: repair what check() found. Returns a summary string."""
     texconv = MP.find_texconv(game_dir)
     ff = find_ffmpeg()
-    done = {"tex": 0, "abs": 0, "snd": 0, "unused": 0, "broken": 0, "orphan": 0}
+    done = {"tex": 0, "abs": 0, "snd": 0, "unused": 0, "broken": 0, "orphan": 0, "actorbox": 0}
     skipped = []
     moves = []
     tmp = os.path.join(game_dir, "mwdialog_tmp_assets")
@@ -1566,6 +1779,27 @@ def apply(fixes, data_dir, game_dir, m, log, dry=False):
                 done["unused"] += 1
                 log.append(("Data Files", f"'{rel}' ({job})", f"moved to {dest}"))
                 continue
+            elif kind == "actorbox":                   # out of Data Files, no stand-in: the next copy is used
+                mod, _pl = m.asset_owner_folder(data_dir, rel)
+                if mod:                                # Vortex deployed it: its mod's Off\<plugin>\broken\
+                    dest = _free_dest(broken_dest(mod, rel, "broken", _pl))
+                    os.makedirs(os.path.dirname(dest), exist_ok=True)
+                    stage = os.path.join(mod, rel)
+                    if os.path.exists(stage):
+                        os.replace(stage, dest)        # the staging copy (the hard link's other name)
+                    elif os.path.exists(full):
+                        shutil.copy2(full, dest)
+                    if os.path.exists(full):
+                        os.remove(full)                # the Data Files hard link
+                else:
+                    dest = _free_dest(os.path.join(MB.backup_root(game_dir), "asset_originals", "broken", rel))
+                    os.makedirs(os.path.dirname(dest), exist_ok=True)
+                    os.replace(full, dest)
+                moves.append((rel, dest, job))
+                done["actorbox"] += 1
+                log.append(("Data Files", f"'{rel}' ({job})", f"moved to {dest}: the next mod's copy (after Deploy "
+                                                              f"in Vortex) or a BSA's is used"))
+                continue
             elif kind == "broken":                     # keep the broken file in Off, a stand-in in its place
                 mod, _pl = m.asset_owner_folder(data_dir, rel)
                 dest = broken_dest(mod, rel, "broken", _pl) if mod else \
@@ -1610,6 +1844,7 @@ def apply(fixes, data_dir, game_dir, m, log, dry=False):
                 f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')}\t{rel}\t{dest}\t{why}\n")
     shutil.rmtree(tmp, ignore_errors=True)
     msg = (f"{done.get('broken', 0)} broken file(s) replaced by stand-ins (kept in Off\\...\\broken\\), "
+           f"{done['actorbox']} actor model(s) with a crashing Bounding Box moved to Off\\...\\broken\\, "
            f"{done['tex']} texture(s) converted, {done['abs']} model(s) with absolute texture paths fixed, "
            f"{done['snd']} sound(s) converted, {done['unused']} unused/empty file(s) moved to Off")
     if skipped:
