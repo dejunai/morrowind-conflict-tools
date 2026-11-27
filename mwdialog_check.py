@@ -437,6 +437,15 @@ class Report:
             self.fixes.append((plugin, off, op, desc, issue_label(topic, info, msg), topic, info))
 
 
+
+def header_size_rewritten(verdict, header_size):
+    """True when a plugin's header no longer holds the master size it was saved with: the original is known
+    (fix log, size record or download archive) and differs from what the header says now, so an earlier sync
+    rewrote it. Such a header is no evidence of a mismatch any more (the original is kept where it was found)."""
+    orig = (verdict or {}).get("original_size")
+    return (orig is not None and header_size is not None and orig != header_size
+            and (verdict or {}).get("size_source") not in (None, "header"))
+
 class World:
     def __init__(self, report):
         self.r = report
@@ -2093,6 +2102,16 @@ class World:
             msg = f"master '{master}' has changed size since this plugin was saved; the game warns at startup"
             if not plugin.lower().endswith(FIXABLE_EXT):
                 r.add("INFO", plugin, "", "", msg + " (a master; not changed)", master=master)
+            elif getattr(self, "master_verdicts", {}).get((plugin.lower(), master.lower()), {}).get("kind") == "different mod" \
+                    and header_size_rewritten(self.master_verdicts[(plugin.lower(), master.lower())], expected):
+                # the header holds a size an earlier sync wrote, not the one the plugin was saved with (that one is
+                # kept in the fix log / size record): it is no evidence any more, so keep it in step with the master
+                v = self.master_verdicts[(plugin.lower(), master.lower())]
+                r.add("ERROR", plugin, "", "", msg + f" (it looks made for a different '{master}', but its header "
+                                                    f"was synced before: saved against {v['original_size']} bytes)",
+                      fix=(0, ("sync_master", master, actual),
+                           f"synced the size recorded for '{master}' ({expected} -> {actual}); the header held an "
+                           f"earlier sync, not the size the plugin was saved with"), master=master)
             elif getattr(self, "master_verdicts", {}).get((plugin.lower(), master.lower()), {}).get("kind") == "different mod":
                 v = self.master_verdicts[(plugin.lower(), master.lower())]
                 r.add("WARN", plugin, "", "", msg + f"; not synced: it looks made for a different '{master}' "
@@ -7943,8 +7962,9 @@ def fix_cell_layouts(args, plugins):
       - an XSCL (scale) after its reference's DATA/DELE: moved before it
       - the plugin's own reference placed identically in two exterior cells, one of them not the cell its
         position is in: the misplaced copy goes
-    An .esp is repaired in place (.bak first, date kept). An .esm is never edited: its misplaced copy is deleted in
-    the ESM patch (unless another plugin changes that copy), its late scales are only reported. Each finding goes
+    An .esp is repaired in place (.bak first, date kept). An .esm is never edited: its misplaced copies and late
+    scales are only reported (a patch can't delete one copy of a doubled reference number: the game warns that
+    the reference is missing in the master). Each finding goes
     in the plugin's bug report. Each plugin's result is cached by its size and date (TR_Mainland takes seconds)."""
     data_dir = os.path.abspath(args.data_dir)
     game_dir = os.path.dirname(data_dir)
@@ -8019,11 +8039,15 @@ def fix_cell_layouts(args, plugins):
             else:
                 keep.append(f)
         if keep:
-            args._cell_deletes[name] = keep
-            lines.append(f"  {name}: {len(keep)} misplaced duplicate placement(s) deleted in {PATCH_NAME}")
+            # Not deleted in the ESM patch: the game keeps one reference per number, so a patch's DELE for the
+            # other copy finds nothing there and the game warns "Object reference ... missing in master file"
+            # (TR_Mainland.esm 26.11.19: ex_cave_entrance_wg_01 in (27,-24) and (27,-26)).
+            lines.append(f"  {name}: {len(keep)} misplaced duplicate placement(s); a master is never edited and a "
+                         f"patch can't reach that copy, so only reported")
             note_own(name, "; ".join(f"'{f['name']}' (FRMR {f['frmr']:#x}) placed again in cell {f['cell']}, which "
                                      f"its position is not in" for f in keep[:5])
-                     + f": that copy deleted in {PATCH_NAME}")
+                     + "; not changed (a master is never edited, and the game keeps one reference per number, so a "
+                       "patch can't delete the other copy)", repaired=False)
     cache.flush()
     if lines:
         print("\n" + "=" * 70 + "\nCELL REFERENCES MGE XE'S DISTANT LAND REJECTS\n" + "=" * 70)

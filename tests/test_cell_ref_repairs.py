@@ -1,8 +1,10 @@
 """--fix repairs CELL references MGE XE's distant land generator rejects: an XSCL after the reference's DATA
 (Tamriel Rebuilt - Yet Another Border Fix.esp), and one reference placed identically in two exterior cells, one of
 them not the cell its position is in (TR_Mainland.esm: ex_cave_entrance_wg_01, FRMR 0x03B13D, in (27,-24) as well as
-(27,-26)). An .esp is repaired in place; an .esm is never edited: its misplaced copy is deleted in the ESM patch.
-Each finding goes in the plugin's bug report."""
+(27,-26)). An .esp is repaired in place; an .esm is never edited and its misplaced copy is only reported: the game keeps one
+reference per number, so an ESM-patch DELE for the other copy made the game warn 'Object reference
+"ex_cave_entrance_wg_01" missing in master file' (Orethan Fields Region). Each finding goes in the plugin's bug
+report."""
 import os
 import struct
 import types
@@ -55,18 +57,15 @@ def test_an_esp_is_repaired_in_place_and_its_bug_report_says_so(tmp_path):
     assert not args._cell_deletes
 
 
-def test_an_esm_is_not_edited_its_misplaced_copy_is_deleted_in_the_esm_patch(tmp_path):
+def test_an_esm_is_not_edited_and_its_misplaced_copy_is_only_reported(tmp_path):
     _data_dir, path, args = setup(tmp_path, "TR_Mainland.esm")
     before = path.read_bytes()
     m.fix_cell_layouts(args, [(path.name, str(path))])
     assert path.read_bytes() == before
-    [found] = args._cell_deletes["TR_Mainland.esm"]
-    assert (found["cell"], found["frmr"], found["name"]) == ((27, -24), 0x03B13D, "ex_cave_entrance_wg_01")
+    assert not args._cell_deletes                                       # nothing for the ESM patch to delete
     assert [r for r, t in m.OWN_FIXES["TR_Mainland.esm"] if "XSCL" in t] == [False]     # reported, not changed
-    cell = m.deleted_refs_cell(found["head"], [((1 << 24) | found["frmr"], found["name"])])
-    body = cell[16:]
-    assert [n for n, _d in m.iter_subs(body)] == ["NAME", "DATA", "FRMR", "NAME", "DELE"]
-    assert dict(m.iter_subs(body))["FRMR"] == struct.pack("<I", 0x0103B13D)
+    [dup] = [(r, t) for r, t in m.OWN_FIXES["TR_Mainland.esm"] if "ex_cave_entrance_wg_01" in t]
+    assert dup[0] is False and "(27, -24)" in dup[1] and "not changed" in dup[1]
 
 
 def test_a_copy_another_plugin_changes_is_left_alone(tmp_path):
@@ -86,7 +85,7 @@ def test_copies_that_differ_are_left_for_review(tmp_path):
     assert m.misplaced_duplicates(path.read_bytes()) == ([], 1)
 
 
-def test_a_fix_run_writes_the_deletion_into_the_esm_patch(tmp_path):
+def test_a_fix_run_puts_no_deletion_of_a_master_reference_in_the_esm_patch(tmp_path):
     g = tmp_path / "Morrowind"
     df = g / "Data Files"
     df.mkdir(parents=True)
@@ -97,13 +96,14 @@ def test_a_fix_run_writes_the_deletion_into_the_esm_patch(tmp_path):
     m.main([str(df), "--plugins", master.name, "--no-vortex", "--no-archive-lookup", "--fix", "--yes",
             "--fix-log", str(g / "mwdialog_fixes.log")])
     deleted = []
-    for off, tag, _f, body in m.iter_records((df / m.PATCH_NAME).read_bytes()):
+    patch = df / m.PATCH_NAME
+    for off, tag, _f, body in (m.iter_records(patch.read_bytes()) if patch.exists() else []):
         if tag == "CELL":
             subs = list(m.iter_subs(body, off))
             cell = struct.unpack_from("<ii", next(d for n, d in subs if n == "DATA"), 4)
             deleted += [(cell, struct.unpack("<I", d)[0]) for n, d in subs if n == "FRMR"] if any(
                 n == "DELE" for n, _d in subs) else []
-    assert deleted == [((27, -24), 0x0103B13D)]
+    assert deleted == []
     assert master.read_bytes().count(b"ex_cave_entrance_wg_01") == 2          # the master itself unchanged
     reports = [r.read_text(encoding="utf-8") for r in tmp_path.rglob("TR_Mainland*.bugreport.txt")]
-    assert any("ex_cave_entrance_wg_01" in r and "deleted in" in r for r in reports), reports   # for the author
+    assert any("ex_cave_entrance_wg_01" in r and "not changed" in r for r in reports), reports   # for the author

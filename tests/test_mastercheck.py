@@ -68,6 +68,36 @@ def test_different_mod_is_not_synced_or_stripped_and_can_be_disabled(game, capsy
     assert "taken out of the load order" in (g / "mwdialog_fixes.log").read_text()
 
 
+def test_different_mod_whose_header_was_synced_before_is_kept_in_step(game, capsys):
+    """Telvanni Teleport Network_TR.ESP / Sky_Main_greeting.esp: synced on an earlier run, then the master was
+    reinstalled at another size. The header holds our earlier sync, not the size the plugin was saved with (that
+    is in the fix log), so it is no evidence: it is synced again and the game does not warn."""
+    g, df = game
+    mor = os.path.getsize(df / "Morrowind.esm")
+    plugin(df / "Fooland Patch.esp", [("Morrowind.esm", mor), ("Fooland.esp", 123456)],
+           [cont("pt_box", ["zz_x", "zz_y", "zz_q", "zz_w"], script="zz_boxscript")])
+    (g / "mwdialog_fixes.log").write_text(
+        "Fooland Patch.esp: master 'Fooland.esp' has changed size since this plugin was saved; the game warns at "
+        "startup -> synced the size recorded for 'Fooland.esp' (111111 -> 123456); its references all line up "
+        "with the current master\n", encoding="utf-8")
+    run(df, "--fix", "--yes")
+    out = " ".join(capsys.readouterr().out.split())
+    v = verdicts(g)["fooland patch.esp|fooland.esp"]
+    assert v["kind"] == "different mod" and v["original_size"] == 111111 and v["size_source"] == "fix log"
+    assert "made for a different 'Fooland.esp'" in out
+    assert dict(header(df / "Fooland Patch.esp"))["Fooland.esp"] == os.path.getsize(df / "Fooland.esp")   # synced
+    assert "the header held an earlier sync" in (g / "mwdialog_fixes.log").read_text(encoding="utf-8")
+
+
+def test_header_size_rewritten_needs_a_known_original_that_differs():
+    f = m.header_size_rewritten
+    assert f({"original_size": 1, "size_source": "fix log"}, 2)
+    assert f({"original_size": 1, "size_source": mc.SIZES_RECORD}, 2)
+    assert not f({"original_size": 2, "size_source": "fix log"}, 2)          # the header is the original
+    assert not f({"original_size": 1, "size_source": "header"}, 2)
+    assert not f({"original_size": None, "size_source": None}, 2) and not f(None, 2)
+
+
 def test_other_version_is_reported_and_synced_as_before(game, capsys):
     g, df = game
     mor = os.path.getsize(df / "Morrowind.esm")
