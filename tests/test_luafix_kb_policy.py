@@ -29,7 +29,7 @@ def test_retired_and_removed_ids_are_not_reused():
 
 
 def test_the_policy_check_catches_a_missing_reason(monkeypatch):
-    monkeypatch.setattr(lf, "KNOWN_BUGS", lf.KNOWN_BUGS + [("KB52", "X", "x/main.lua", "a", "b", "a bug")])
+    monkeypatch.setattr(lf, "KNOWN_BUGS", lf.KNOWN_BUGS + [("KB99", "X", "x/main.lua", "a", "b", "a bug")])
     try:
         test_every_new_known_bug_says_why_no_rule_can_express_it()
     except AssertionError:

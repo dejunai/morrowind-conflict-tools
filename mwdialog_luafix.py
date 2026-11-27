@@ -3651,6 +3651,40 @@ KNOWN_BUGS += [
 ]
 
 
+KB52 = ("Tamriel Data's Detect Invisibility opacity pass (detectInvisibilityOpacity, every simulate) walks the "
+        "file-local tables invisibleReferences / invisibleOpacityModifiedReferences, which nothing empties on a "
+        "load. A reference the engine freed in the game being left stays in the table, `actor.mobile` on it raises "
+        "'sol: received nil for self argument', and the error ends the pass before the entry can go, so it repeats "
+        "every frame (MWSE.log 2026-11-26: 1,876 errors at magic.lua:2127, about 20 a second, from one second "
+        "after a load). The tables are emptied on load, and a reference whose mobile can't be read is dropped "
+        "(no rule can express this: both tables are local upvalues of magic.lua that only code inside the module can "
+        "empty or prune, and no general rule can know a local table keyed by references must be cleared on load; "
+        "mwpluginpatches intercepts act on events and engine calls and cannot reach them)")
+KNOWN_BUGS += [
+    ("KB52", "Tamriel Data", "tamrieldata/magic.lua",
+     "local invisibleReferences = {}\nlocal invisibleOpacityModifiedReferences = {}\n",
+     "local invisibleReferences, invisibleOpacityModifiedReferences = {}, {}\n"
+     "\n"
+     "-- local fix (KB52): both tables hold references of the game being left; a stale one makes the opacity pass fail every frame\n"
+     "local function readMobile(ref) return ref.mobile end\n"
+     "event.register(tes3.event.load, function()\n"
+     "\tfor ref in pairs(invisibleReferences) do invisibleReferences[ref] = nil end\n"
+     "\tfor ref in pairs(invisibleOpacityModifiedReferences) do invisibleOpacityModifiedReferences[ref] = nil end\n"
+     "end)\n", KB52),
+    ("KB52", "Tamriel Data", "tamrieldata/magic.lua",
+     "\t\tfor actor in pairs(invisibleReferences) do\n\t\t\t---@cast actor tes3reference\n",
+     "\t\tfor actor in pairs(invisibleReferences) do\t-- local fix (KB52): drop a reference whose mobile can't be read, or it errors every frame\n"
+     "\t\t\tif not pcall(readMobile, actor) then\n"
+     "\t\t\t\tinvisibleReferences[actor] = nil\n"
+     "\t\t\t\tinvisibleOpacityModifiedReferences[actor] = nil\n"
+     "\t\t\tend\n"
+     "\t\tend\n"
+     "\n"
+     "\t\tfor actor in pairs(invisibleReferences) do\t-- (KB52: the stale ones are gone)\n\t\t\t---@cast actor tes3reference\n", KB52),
+]
+KNOWN_BUGS_WHOLE |= {"KB52"}
+
+
 # ---- Timer safe handles (KR), asked for site by site (2026-11-25). skipKnown (mwguard.json "luafix") turns one off.
 # (KP1-KP4, the frame-drain patches, were removed on 2026-11-26: not bugs; mwpluginpatches has intercepts for KP1, KP2 and KP4.)
 KR1 = ("the fade timers keep the sound's reference and call tes3.getSoundPlaying / tes3.removeSound on it for the "
