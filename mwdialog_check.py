@@ -7216,72 +7216,75 @@ def fix_cell_winners(args, plugins, report=None):
                 print(f"      ... and {len(float_left) - 10} more")
 
     # pathgrids walking people into what a mod their plugin doesn't know built. Runs after all that moves objects.
+    # --full defers this to the last --fix (after --clean and the last --sort); a standalone --fix still runs it.
     ext_pathgrids = {g: (pi, off) for nm, g, pi, off in all_pgrd if nm not in interiors}
-    pg_t0 = time.time()
-    if ext_pathgrids and not tag_of:
-        print("  Pathgrids: reading what every plugin's objects are...", flush=True)
-        tag_of, model_of, _scripted = object_info(order)
+    new_pgrds, paths_fixed, paths_left, pg_reused = {}, [], [], 0
+    if not DEFER_PATHGRIDS:
+        pg_t0 = time.time()
+        if ext_pathgrids and not tag_of:
+            print("  Pathgrids: reading what every plugin's objects are...", flush=True)
+            tag_of, model_of, _scripted = object_info(order)
 
-    def pg_progress(done, total):
-        count_title("mwdialog_check - pathgrids", done, total)
-        print(f"  Pathgrids: checking {done}/{total} outdoor cells for paths into objects...",
-              end="\n" if done == total else "\r", flush=True)
-    pg_cache_path = MP.state_path(game_dir, PATHGRID_CACHE_FILE)
-    pg_cache = load_pathgrid_cache(pg_cache_path)
-    if ext_pathgrids:
-        begin_count()
-    try:
-        new_pgrds, paths_fixed, paths_left, pg_reused = repair_pathgrids(
-            world, ext_pathgrids, out, tag_of, model_of, shapes,
-            progress=pg_progress if ext_pathgrids else None, cache=pg_cache)
-    finally:
+        def pg_progress(done, total):
+            count_title("mwdialog_check - pathgrids", done, total)
+            print(f"  Pathgrids: checking {done}/{total} outdoor cells for paths into objects...",
+                  end="\n" if done == total else "\r", flush=True)
+        pg_cache_path = MP.state_path(game_dir, PATHGRID_CACHE_FILE)
+        pg_cache = load_pathgrid_cache(pg_cache_path)
         if ext_pathgrids:
-            end_count("mwdialog_check - Cell Fixes")
-    if pg_reused:
-        print(f"  Pathgrids: {pg_reused} cell(s) unchanged since an earlier check: taken from {PATHGRID_CACHE_FILE}")
-    # the stage's time, as the asset check prints its own: [seconds] what
-    print(f"[{int(time.time() - pg_t0)}s] Pathgrids: {len(ext_pathgrids)} outdoor pathgrid(s), {pg_reused} taken from "
-          f"{PATHGRID_CACHE_FILE}", file=sys.stderr, flush=True)
-    if not args.dry_run:
+            begin_count()
         try:
-            save_pathgrid_cache(pg_cache_path, pg_cache)
-        except OSError as e:
-            print(f"  (could not write {PATHGRID_CACHE_FILE}: {e})", file=sys.stderr)
-    for g in new_pgrds:
-        out_heads.setdefault(("e",) + g, heads.get(("e",) + g))
-    if paths_fixed:
-        print(f"  Pathgrids: {len(new_pgrds)} cell(s) whose paths ran into objects another mod put there, "
-              f"{len(paths_fixed)} put right:")
-        for line in paths_fixed[:20]:
-            print(f"      {line}")
-        if len(paths_fixed) > 20:
-            print(f"      ... and {len(paths_fixed) - 20} more")
-    if paths_left:
-        print(f"  Pathgrids: {len(paths_left)} left to check (all listed in {PATHGRID_FIXES_FILE}):")
-        for line in paths_left[:10]:
-            print(f"      {line}")
-        if len(paths_left) > 10:
-            print(f"      ... and {len(paths_left) - 10} more")
-    if report is not None:
-        real = {n.lower(): n for n, _p in plugins}
-        for sev, lines, why in (("WARN", paths_fixed, f"--fix reroutes it in {CELL_WINNER_PATCH}"),
-                                ("INFO", paths_left, "left as it is")):
-            for line in lines:
-                m = PATHGRID_LINE_RE.match(line)
-                if m:
-                    report.add(sev, real.get(m["author"], m["author"]), f"pathgrid #{m['cell']}", "",
-                               f"{m['msg']} (an object another plugin placed; {why})")
-                else:
-                    report.add(sev, CELL_WINNER_PATCH, "pathgrid", "", line)
-    pg_file = MP.state_path(game_dir, PATHGRID_FIXES_FILE)
-    if not args.dry_run and (paths_fixed or paths_left):
-        with open(pg_file, "w", encoding="utf-8") as f:
-            f.write(f"; pathgrids, {time.strftime('%Y-%m-%d %H:%M:%S')}: FIXED in {CELL_WINNER_PATCH}; REPORTED "
-                    f"with why it was left as it is\n")
-            f.writelines(f"FIXED     {x}\n" for x in paths_fixed)
-            f.writelines(f"REPORTED  {x}\n" for x in paths_left)
-    elif not args.dry_run and os.path.exists(pg_file):
-        os.remove(pg_file)
+            new_pgrds, paths_fixed, paths_left, pg_reused = repair_pathgrids(
+                world, ext_pathgrids, out, tag_of, model_of, shapes,
+                progress=pg_progress if ext_pathgrids else None, cache=pg_cache)
+        finally:
+            if ext_pathgrids:
+                end_count("mwdialog_check - Cell Fixes")
+        if pg_reused:
+            print(f"  Pathgrids: {pg_reused} cell(s) unchanged since an earlier check: taken from {PATHGRID_CACHE_FILE}")
+        # the stage's time, as the asset check prints its own: [seconds] what
+        print(f"[{int(time.time() - pg_t0)}s] Pathgrids: {len(ext_pathgrids)} outdoor pathgrid(s), {pg_reused} taken from "
+              f"{PATHGRID_CACHE_FILE}", file=sys.stderr, flush=True)
+        if not args.dry_run:
+            try:
+                save_pathgrid_cache(pg_cache_path, pg_cache)
+            except OSError as e:
+                print(f"  (could not write {PATHGRID_CACHE_FILE}: {e})", file=sys.stderr)
+        for g in new_pgrds:
+            out_heads.setdefault(("e",) + g, heads.get(("e",) + g))
+        if paths_fixed:
+            print(f"  Pathgrids: {len(new_pgrds)} cell(s) whose paths ran into objects another mod put there, "
+                  f"{len(paths_fixed)} put right:")
+            for line in paths_fixed[:20]:
+                print(f"      {line}")
+            if len(paths_fixed) > 20:
+                print(f"      ... and {len(paths_fixed) - 20} more")
+        if paths_left:
+            print(f"  Pathgrids: {len(paths_left)} left to check (all listed in {PATHGRID_FIXES_FILE}):")
+            for line in paths_left[:10]:
+                print(f"      {line}")
+            if len(paths_left) > 10:
+                print(f"      ... and {len(paths_left) - 10} more")
+        if report is not None:
+            real = {n.lower(): n for n, _p in plugins}
+            for sev, lines, why in (("WARN", paths_fixed, f"--fix reroutes it in {CELL_WINNER_PATCH}"),
+                                    ("INFO", paths_left, "left as it is")):
+                for line in lines:
+                    m = PATHGRID_LINE_RE.match(line)
+                    if m:
+                        report.add(sev, real.get(m["author"], m["author"]), f"pathgrid #{m['cell']}", "",
+                                   f"{m['msg']} (an object another plugin placed; {why})")
+                    else:
+                        report.add(sev, CELL_WINNER_PATCH, "pathgrid", "", line)
+        pg_file = MP.state_path(game_dir, PATHGRID_FIXES_FILE)
+        if not args.dry_run and (paths_fixed or paths_left):
+            with open(pg_file, "w", encoding="utf-8") as f:
+                f.write(f"; pathgrids, {time.strftime('%Y-%m-%d %H:%M:%S')}: FIXED in {CELL_WINNER_PATCH}; REPORTED "
+                        f"with why it was left as it is\n")
+                f.writelines(f"FIXED     {x}\n" for x in paths_fixed)
+                f.writelines(f"REPORTED  {x}\n" for x in paths_left)
+        elif not args.dry_run and os.path.exists(pg_file):
+            os.remove(pg_file)
 
     # door owners copied with a cloned door (door_owner_verdicts): only the two clear rules are applied
     set_title("mwdialog_check - Cell Fixes: door owners")
@@ -9602,6 +9605,7 @@ def full_check(args, game_dir, stage):
 
 
 IN_FULL = False
+DEFER_PATHGRIDS = False          # --full: skip pathgrids in early --fix / --all; the last --fix runs them
 
 
 def back_in_load_order(args, name):
@@ -9675,7 +9679,8 @@ def run_full(args):
         choices, in mwdialog_redundant.txt, are kept), report cell conflicts (asking the
         new ones), sort, set the old Multipatch aside, clean and fix with
         the asset check, sort again;
-        stop and open the report if any error is left; otherwise auto-merge, sort, --all, sort again;
+        stop and open the report if any error is left; otherwise auto-merge, sort, --all, sort again
+        (no follow-up), then --fix --multipatch so pathgrids run once, after --clean and the last sort;
         stop and open the report if any error is left; otherwise offer the interactive --cell-conflicts.
     It doesn't start at all while a plugin's master is missing from Data Files."""
     data_dir = os.path.abspath(args.data_dir)
@@ -9738,17 +9743,22 @@ def run_full(args):
         ("auto-merge", ["--auto-merge", "--no-follow-up"]),
         ("sort (merged)", ["--sort", "--no-follow-up"]),
         ("--all (merged)", ["--all"]),
-        ("sort again (after --all's changes)", ["--sort"]),
+        ("sort again (after --all's changes)", ["--sort", "--no-follow-up"]),
+        # pathgrids once, after --all's --clean and this sort: earlier --fix / --all skip them
+        ("fix and Multipatch (pathgrids, after sort)", ["--fix", "--multipatch"]),
     ]
     if args.dry_run:
         print("--full --dry-run: each step only shows its plan, so later steps see the load order as it is now.")
-    global IN_FULL
+    global IN_FULL, DEFER_PATHGRIDS
     IN_FULL = True
     done, stopped = [], None
     total = len(first) + len(second)
     try:
         for phase, steps in ((1, first), (2, second)):
             for what, extra in steps:
+                # early --fix / --all skip pathgrids; the last --fix --multipatch runs them
+                DEFER_PATHGRIDS = bool(extra and isinstance(extra, list) and (
+                    "--all" in extra or ("--fix" in extra and "--multipatch" not in extra)))
                 n = len(done) + 1
                 set_title(f"mwdialog_check --full - step {n}/{total}: {what}")
                 print("\n" + "#" * 70 + f"\n# --full step {n}/{total}: {what}"
@@ -9782,6 +9792,7 @@ def run_full(args):
                     break
     finally:
         IN_FULL = False
+        DEFER_PATHGRIDS = False
     set_title("mwdialog_check --full - " + (f"stopped: {stopped}" if stopped else "finished"))
     print("\n" + "=" * 70 + "\n--full summary\n" + "=" * 70)
     for what, rc, secs in done:
@@ -9985,7 +9996,8 @@ def check_parser():
                          "rules and asset stand-ins), turn off redundant plugins (asking in a console; "
                          "--no-redundant skips it), --cell-conflicts (report), --sort, set the old Multipatch aside, "
                          "clean and fix with the asset check (no Multipatch yet), sort again; if any ERROR is left, "
-                         "stop and open mwdialog_report.txt; else --auto-merge, --sort, --all, sort again; if any "
+                         "stop and open mwdialog_report.txt; else --auto-merge, --sort, --all, sort again, then "
+                         "--fix --multipatch (pathgrids run once, after --clean and that sort); if any "
                          "ERROR is left, stop and open the report; else offer the interactive --cell-conflicts. "
                          "--yes: no questions; --add-all-esp: add every plugin first; --play: start the game at the end")
     tc.add_argument("--header", nargs="+", metavar="FILE",
