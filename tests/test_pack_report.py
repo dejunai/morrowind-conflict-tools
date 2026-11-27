@@ -4,6 +4,7 @@ Temp folders only, no Steam. The user, the game, staging and downloads are all m
 pointed at a fake profile), so nothing real is read or written.
 """
 import hashlib
+import importlib.util
 import os
 import re
 import sys
@@ -295,8 +296,12 @@ def test_not_in_a_game_folder_is_an_error(world, monkeypatch, capsys, tmp_path):
 def test_reports_are_never_deployed_synced_or_committed():
     root = Path(__file__).resolve().parents[1]
     assert "reports/" in (root / ".gitignore").read_text(encoding="utf-8").splitlines()
-    sys.path.insert(0, str(root))
-    deploy = pytest.importorskip("deploy", reason="deploy.py is not vendored here (MWManager)")
+    deploy_py = root / "deploy.py"
+    if not deploy_py.is_file():
+        pytest.skip("deploy.py is not vendored here (MWManager)")
+    spec = importlib.util.spec_from_file_location("deploy_under_test", deploy_py)
+    deploy = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(deploy)
     assert deploy.never("reports/conflict-tools-report-20260101-000000.zip")
     assert deploy.never("conflict-tools/reports/x.zip")
 
