@@ -12,6 +12,8 @@ The suite is engineered for massive, complex mod lists (hundreds of plugins, ten
 
 ## Install (beta)
 
+New to all this? The **[Quick Start guide](docs/QUICK_START.md)** walks through it in plain words.
+
 1. Install [Python](https://www.python.org/downloads/windows/) 3.9 or newer (tick "Add python.exe to PATH").
 2. Download `conflict-tools-<version>.zip` from the GitHub Releases page (not "Code > Download ZIP", which holds the developer files too).
 3. Unzip it into your Morrowind folder, so you get `Morrowind\conflict-tools\` beside `Morrowind.exe`.
