@@ -4248,9 +4248,10 @@ def apply_main(args):
     text, parts, moves, lres, ares = fresh_plan(args)
     added, removed = PF.compare(reviewed, text, parts)
     if added or removed:
-        PF.refuse_mismatch(PLAN, text, added, removed, "vortex_tidy.py" + (" --lua-only" if args.lua_only else ""))
+        print("\n".join(summary_lines(args, moves, lres, ares)))     # what the new plan holds
         if any(CHECK_LABEL in str(a) for a in list(added) + list(removed)):
-            print(f"{CHECK_REFUSED}: review the new plan before --apply.")
+            print(f"\n{CHECK_REFUSED}.")
+        PF.refuse_mismatch(PLAN, text, added, removed, "vortex_tidy.py" + (" --lua-only" if args.lua_only else ""))
         return 2
     print("\nThe plan matches the one you reviewed.")
     audit = os.path.join(AUDIT_ROOT, time.strftime("%Y%m%d-%H%M%S"))

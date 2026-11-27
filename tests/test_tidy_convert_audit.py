@@ -181,7 +181,7 @@ def test_a_sidecar_edit_between_plan_and_apply_is_refused(env, capsys):
     capsys.readouterr()
     assert run(env, "--apply", "--yes") == 2
     out = fold(capsys.readouterr().out)
-    assert "REFUSED" in out and vt.CHECK_REFUSED in out
+    assert "The plan has changed since you reviewed it" in out and vt.CHECK_REFUSED in out
     assert [c for c in env.calls() if "--dry-run" not in c] == []          # the converter never really ran
     assert (mod / "Foo.omwscripts").exists() and vt.read_intent() is None
 

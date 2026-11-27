@@ -231,12 +231,14 @@ def refuse_mismatch(path, fresh_text, added, removed, tool, log=print):
             mwdialog_backup.retire_dated(prev, os.path.basename(prev))
         shutil.copyfile(path, prev)
     write_atomic(path, fresh_text)
-    log(f"\nREFUSED: the plan {tool} --apply works out now is not the one in the plan file you reviewed. "
-        f"Nothing was changed.")
-    for ln in diff_summary(added, removed):
+    # not an error: something changed since the review (a mod added, a file edited), so the new plan needs a look
+    log(f"\nThe plan has changed since you reviewed it, so nothing was changed yet "
+        f"({len(added)} action(s) added, {len(removed)} removed).")
+    for ln in diff_summary(added, removed)[1:]:
         log(ln)
-    log(f"The plan you reviewed was saved as {prev}; the new plan is in {path}.")
-    log(f"Review {path}, then run {tool} --apply again.")
+    log(f"  New plan:          {path}")
+    log(f"  The one you read:  {prev}")
+    log(f"\nNext: review the new plan, then run {tool} --apply again.")
 
 
 def no_plan_message(path, tool):

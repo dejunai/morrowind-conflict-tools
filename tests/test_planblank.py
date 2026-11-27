@@ -307,10 +307,10 @@ def test_tidy_mismatch_refuses_changes_nothing_and_rewrites_the_plan_with_prev(t
     assert tidy("--apply", "--yes") == 2
     out = capsys.readouterr().out
     flat = fold(out)
-    assert "REFUSED" in flat and "1 action(s) added, 1 removed" in flat
+    assert "The plan has changed since you reviewed it" in flat and "vortex_tidy summary (plan):" in flat and "--apply again" in flat and "1 action(s) added, 1 removed" in flat
     assert "changelog.txt" in flat and "notes.txt" in flat
     prev = os.path.splitext(vt.PLAN)[0] + ".prev.txt"
-    assert f"saved as {prev}" in flat
+    assert f"The one you read: {prev}" in flat
     assert open(prev).read() == reviewed                                     # the reviewed one, kept
     assert "changelog.txt  ->" in open(vt.PLAN).read()                       # the new one, to review
     assert (tidy.mod / "readme.txt").exists() and (tidy.mod / "changelog.txt").exists() and not _runs(vt.JOURNAL)
@@ -338,7 +338,7 @@ def test_tidy_lua_only_mismatch_refuses(tidy_lua, capsys):
     tidy_lua.lua.write_text(PUDDLE.replace("0.35", "x").replace("bigger", "much bigger"))   # patch text changes
     capsys.readouterr()
     assert tidy_lua("--lua-only", "--apply", "--yes") == 2
-    assert "REFUSED" in capsys.readouterr().out and "localpatch_gate(" not in tidy_lua.lua.read_text()
+    assert "The plan has changed since you reviewed it" in capsys.readouterr().out and "localpatch_gate(" not in tidy_lua.lua.read_text()
     assert os.path.exists(os.path.splitext(vt.PLAN)[0] + ".prev.txt")
 
 
@@ -385,7 +385,7 @@ def test_luafix_mismatch_refuses_and_keeps_prev(luafix, capsys):
     capsys.readouterr()
     assert luafix("--apply", "--yes") == 2
     out = capsys.readouterr().out
-    assert "REFUSED" in out and "0 action(s) added" in out
+    assert "The plan has changed since you reviewed it" in out and "0 action(s) added" in out
     assert "localpatch_gate(" not in luafix.files[0].read_text()
     prev = os.path.splitext(lf.PLAN_FILE)[0] + ".prev.txt"
     assert "b/main.lua" in open(prev).read() and "b/main.lua" not in open(lf.PLAN_FILE).read()
