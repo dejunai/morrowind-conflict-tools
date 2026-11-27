@@ -36,7 +36,7 @@ def pgrd(points, edges):
                + sub("PGRP", pgrp) + sub("PGRC", pgrc))
 
 
-def run(tmp_path, points, edges, stall_at, stall_in_master=False, dry_run=False, report=None, mesh=True):
+def run(tmp_path, points, edges, stall_at, stall_in_master=False, dry_run=False, report=None, mesh=True, fix=False):
     data = tmp_path / "Data Files"
     (data / "Meshes").mkdir(parents=True, exist_ok=True)
     if mesh:
@@ -51,7 +51,7 @@ def run(tmp_path, points, edges, stall_at, stall_in_master=False, dry_run=False,
     (tmp_path / "Morrowind.ini").write_text("[Game Files]\n" + "".join(f"GameFile{i}={n}\n" for i, n in enumerate(order)))
     m.write_load_order(str(tmp_path), order, "test")
     args = types.SimpleNamespace(data_dir=str(data), dry_run=dry_run, ini=str(tmp_path / "Morrowind.ini"),
-                                 fix_log="fix.log", fix=False)
+                                 fix_log="fix.log", fix=fix)
     m.fix_cell_winners(args, [(n, str(data / n)) for n in order], report)
     patch = data / m.CELL_WINNER_PATCH
     if not patch.exists():

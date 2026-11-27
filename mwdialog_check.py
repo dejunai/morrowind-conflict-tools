@@ -7216,10 +7216,10 @@ def fix_cell_winners(args, plugins, report=None):
                 print(f"      ... and {len(float_left) - 10} more")
 
     # pathgrids walking people into what a mod their plugin doesn't know built. Runs after all that moves objects.
-    # --full defers this to the last --fix (after --clean and the last --sort); a standalone --fix still runs it.
+    # --full runs this only on the last --fix (FULL_FINAL_PASS), after --clean and the last --sort.
     ext_pathgrids = {g: (pi, off) for nm, g, pi, off in all_pgrd if nm not in interiors}
     new_pgrds, paths_fixed, paths_left, pg_reused = {}, [], [], 0
-    if not DEFER_PATHGRIDS:
+    if not (IN_FULL and not FULL_FINAL_PASS and getattr(args, "fix", False)):
         pg_t0 = time.time()
         if ext_pathgrids and not tag_of:
             print("  Pathgrids: reading what every plugin's objects are...", flush=True)
@@ -9605,7 +9605,7 @@ def full_check(args, game_dir, stage):
 
 
 IN_FULL = False
-DEFER_PATHGRIDS = False          # --full: skip pathgrids in early --fix / --all; the last --fix runs them
+FULL_FINAL_PASS = False         # --full's last --fix --multipatch; later can also gate soundfix/run_fix/Multipatch
 
 
 def back_in_load_order(args, name):
@@ -9749,16 +9749,17 @@ def run_full(args):
     ]
     if args.dry_run:
         print("--full --dry-run: each step only shows its plan, so later steps see the load order as it is now.")
-    global IN_FULL, DEFER_PATHGRIDS
+    global IN_FULL, FULL_FINAL_PASS
     IN_FULL = True
     done, stopped = [], None
     total = len(first) + len(second)
     try:
         for phase, steps in ((1, first), (2, second)):
             for what, extra in steps:
-                # early --fix / --all skip pathgrids; the last --fix --multipatch runs them
-                DEFER_PATHGRIDS = bool(extra and isinstance(extra, list) and (
-                    "--all" in extra or ("--fix" in extra and "--multipatch" not in extra)))
+                # the last --fix --multipatch is the final generated-fix pass (pathgrids today;
+                # later this can also gate soundfix, run_fix and Multipatch in earlier passes)
+                FULL_FINAL_PASS = bool(extra and isinstance(extra, list)
+                                       and "--fix" in extra and "--multipatch" in extra)
                 n = len(done) + 1
                 set_title(f"mwdialog_check --full - step {n}/{total}: {what}")
                 print("\n" + "#" * 70 + f"\n# --full step {n}/{total}: {what}"
@@ -9792,7 +9793,7 @@ def run_full(args):
                     break
     finally:
         IN_FULL = False
-        DEFER_PATHGRIDS = False
+        FULL_FINAL_PASS = False
     set_title("mwdialog_check --full - " + (f"stopped: {stopped}" if stopped else "finished"))
     print("\n" + "=" * 70 + "\n--full summary\n" + "=" * 70)
     for what, rc, secs in done:
