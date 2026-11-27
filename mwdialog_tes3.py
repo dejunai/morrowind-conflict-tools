@@ -9,6 +9,8 @@ import contextlib
 import os
 import struct
 
+import mwdialog_staged as MS
+
 ENC = "cp1252"          # --encoding: mwdialog_check sets this (and its own copy) at start-up
 
 DIAL_TYPES = {0: "Topic", 1: "Voice", 2: "Greeting", 3: "Persuasion", 4: "Journal"}
@@ -154,6 +156,7 @@ def validate_plugin_bytes(data):
 def atomic_open(path, encoding="utf-8", errors="strict", newline=None):
     """Like open(path, "w"), but a crash or error mid-write never leaves a half-written file: the text goes to
     path.tmp, is flushed to disk, then replaces path in one step."""
+    MS.check_write(path)
     tmp = os.fspath(path) + ".tmp"
     try:
         with open(tmp, "w", encoding=encoding, errors=errors, newline=newline) as f:
@@ -173,8 +176,11 @@ def safe_write_bytes(path, data, validate=None, keep_times=None):
       2. then they are copied over the existing file in place (same file, so its hard links stay) and
          flushed; a brand-new file is simply moved into place.
     If step 2 fails, the checked copy is left as <path>.mwdtmp and the error is raised.
-    keep_times: an os.stat_result whose dates are put back afterwards (date-based load order)."""
+    keep_times: an os.stat_result whose dates are put back afterwards (date-based load order).
+    In a staged run (mwdialog_staged: tidy / luafix before deploy) a write into Data Files is refused, and a staged
+    file is replaced by a new file instead (step 2 would write through a hard link into Data Files)."""
     data = bytes(data)
+    MS.check_write(path)
     tmp = path + ".mwdtmp"
     with open(tmp, "wb") as f:
         f.write(data)
@@ -194,7 +200,7 @@ def safe_write_bytes(path, data, validate=None, keep_times=None):
             pass
         raise
     forget_cached(path)
-    if not os.path.exists(path):
+    if not os.path.exists(path) or MS.must_replace(path):
         os.replace(tmp, path)
     else:
         with open(path, "r+b") as f:             # in place: no truncation until the new bytes are written

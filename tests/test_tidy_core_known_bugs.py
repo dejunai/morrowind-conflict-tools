@@ -1,5 +1,6 @@
-"""vortex_tidy checks MWSE's own core files that a Known Bugs rule names (KB3, KB4) where MWSE's updater puts
-them, Data Files, and offers the patch in place; a staged mod that ships MWSE is checked there instead."""
+"""vortex_tidy checks MWSE's own core files that a Known Bugs rule names (KB3, KB4) only in a staged mod that ships
+MWSE. The copy MWSE's updater puts in Data Files is neither read nor patched before deploy (mwdialog_staged): the
+deploy step does that (mwdialog_luafix.py --core-only), and tidy says so."""
 import os
 import shutil
 import types
@@ -28,13 +29,11 @@ def run(tmp_path, monkeypatch, ship_in_staging=False):
     return T.lua_check(args), data
 
 
-def test_data_files_core_file_is_checked_and_patched_in_place(tmp_path, monkeypatch):
+def test_data_files_core_file_is_left_to_the_deploy_step(tmp_path, monkeypatch, capsys):
     res, data = run(tmp_path, monkeypatch)
-    core = dict(res["reps"])[T.CORE_KEY]
-    (path, entry), = core.files.items()
-    assert os.path.normcase(path) == os.path.normcase(str(data / REL))
-    assert entry["patch"] and entry["patch"]["rules"] == ["KB3", "KB4"]
-    assert T.CORE_KEY in res["body"]
+    assert T.CORE_KEY not in dict(res["reps"]) and T.CORE_KEY not in res["body"]
+    assert not any(os.path.normcase(p).startswith(os.path.normcase(str(data))) for _d, r in res["reps"] for p in r.files)
+    assert "not checked or patched before deploy" in capsys.readouterr().out
 
 
 def test_staged_mwse_is_not_checked_twice(tmp_path, monkeypatch):

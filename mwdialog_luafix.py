@@ -124,6 +124,7 @@ import mwdialog_lua as L                                   # noqa: E402
 import mwdialog_planfile as PF                             # noqa: E402
 import mwdialog_text as MT                                 # noqa: E402
 import mwdialog_paths as MP                                # noqa: E402
+import mwdialog_staged as MS                               # noqa: E402
 print = MT.printer()                                       # noqa: A001
 
 sys.setrecursionlimit(max(sys.getrecursionlimit(), 20000))
@@ -156,9 +157,12 @@ OWN_FIX_RULES = frozenset({"A1", "A2", "A3", "A4", "A5", "F1"})
 
 
 def own_mods_path(data_dir):
-    """The ownMods file under data_dir (a Data Files folder), or None."""
+    """The ownMods file under data_dir (a Data Files folder), or None. For staged files (a StagedData: before
+    deploy) the first staged mod or lua tools folder that ships it; None when none does."""
     if not data_dir:
         return None
+    if isinstance(data_dir, MS.StagedData):
+        return data_dir.find(os.path.join("MWSE", *OWN_MODS_REL.split("/")))
     return os.path.join(data_dir, "MWSE", *OWN_MODS_REL.split("/"))
 
 
@@ -404,7 +408,10 @@ def load_config(game_dir=HERE, data_dir=None):
     cfg = dict(DEFAULTS)
     cfg["log"] = dict(DEFAULTS["log"])
     data_dir = data_dir or os.path.join(game_dir, "Data Files")
-    guard = os.path.join(data_dir, "MWSE", "config", "mwguard.json")
+    # MWSE\\config\\mwguard.json is the user's in-game settings (written by the game, never staged): one of the
+    # documented read-only exceptions of the pre-deploy rule (mwdialog_staged), also for staged files
+    guard = os.path.join(MS.data_path_of(data_dir) or os.path.join(game_dir, "Data Files"), "MWSE", "config",
+                         "mwguard.json")
     src = []
     for path, section in ((guard, None), (guard, "luafix"), (MP.state_path(game_dir, "mwdialog_luafix.json"), "")):
         try:
@@ -444,9 +451,15 @@ def cfg_hash(cfg):
 
 def mwguard_log_cover(data_dir, cfg, mod_key):
     """(covered, why): is mwguard's runtime log-spam guard clearly going to catch this mod's lines?"""
-    main = os.path.join(data_dir or "", "MWSE", "mods", "mwsuite", "mwguard", "main.lua")
-    if not os.path.isfile(main):
-        main = os.path.join(data_dir or "", "MWSE", "mods", "mwguard", "main.lua")
+    if isinstance(data_dir, MS.StagedData):          # before deploy: the mwguard that will be deployed
+        main = (data_dir.find(os.path.join("MWSE", "mods", "mwsuite", "mwguard", "main.lua"))
+                or data_dir.find(os.path.join("MWSE", "mods", "mwguard", "main.lua")))
+        if not main:
+            return False, "mwguard is not staged (nor in lua tools)"
+    else:
+        main = os.path.join(data_dir or "", "MWSE", "mods", "mwsuite", "mwguard", "main.lua")
+        if not os.path.isfile(main):
+            main = os.path.join(data_dir or "", "MWSE", "mods", "mwguard", "main.lua")
     if not data_dir or not os.path.isfile(main):
         return False, "mwguard is not installed in Data Files"
     try:
@@ -2665,11 +2678,13 @@ def bsa_names(data_dir):
     [Archives], read from the folder above Data Files); empty when there is none. Read once per run."""
     if not data_dir:
         return frozenset()
-    key = os.path.normcase(os.path.abspath(data_dir))
+    staged = data_dir if isinstance(data_dir, MS.StagedData) else None
+    key = ("staged",) + tuple(os.path.normcase(r) for r in staged.roots) if staged \
+        else os.path.normcase(os.path.abspath(data_dir))
     if key in _BSA_NAMES:
         return _BSA_NAMES[key]
     names = ["Morrowind.bsa"]
-    ini = os.path.join(os.path.dirname(os.path.abspath(data_dir)), "Morrowind.ini")
+    ini = os.path.join(staged.game_dir if staged else os.path.dirname(os.path.abspath(data_dir)), "Morrowind.ini")
     try:
         with open(ini, encoding="latin-1") as f:
             sec = ""
@@ -2682,17 +2697,25 @@ def bsa_names(data_dir):
     except OSError:
         pass
     out = set()
-    try:
-        here = {n.lower(): n for n in os.listdir(data_dir)}
-    except OSError:
+    if staged:                                        # a staged mod's BSA, else the base game's (read-only exception)
         here = {}
+        for nm in names:
+            p = staged.find(nm) or next((c for c in staged.core_bsas() if os.path.basename(c).lower() == nm.lower()),
+                                        None)
+            if p:
+                here[nm.lower()] = p
+    else:
+        try:
+            here = {n.lower(): os.path.join(data_dir, n) for n in os.listdir(data_dir)}
+        except OSError:
+            here = {}
     import mwdialog_bsa as B
     for nm in names:
         real = here.get(nm.lower())
         if not real:
             continue
         try:
-            out |= {x.replace("/", "\\") for x in B.bsa_file_names(os.path.join(data_dir, real))}
+            out |= {x.replace("/", "\\") for x in B.bsa_file_names(real)}
         except Exception:                          # a damaged archive: its names are just not known
             pass
     _BSA_NAMES[key] = frozenset(out)
@@ -4283,8 +4306,14 @@ def sha(b):
 
 
 def write_in_place(path, data):
-    """Rewrite the file through the same handle (r+b, then truncate): the file keeps its identity, so Vortex's
-    hard link between staging and Data Files keeps sharing it."""
+    """Rewrite the file through the same handle (r+b, then truncate): the file keeps its identity (deploy-time use,
+    --core-only). Before deploy (a staged run, mwdialog_staged) a staged file is replaced by a new one instead, so
+    a Vortex hard link into Data Files is broken, never written through, and a write into Data Files is refused."""
+    if MS.active():
+        MS.check_write(path)
+        if MS.must_replace(path):
+            MS.replace_bytes(path, data)               # writes, reads back, then replaces
+            return
     with open(path, "r+b") as f:
         f.seek(0)
         f.write(data)
@@ -4471,7 +4500,7 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
                                fixable=bool(f["edits"])) for f in ent["findings"]]})
     _mark_dead(rep, by_mod, paths, data_dir)
     for (mroot, key), files in sorted(by_mod.items()):
-        roots = [r for r in (data_dir, os.path.dirname(os.path.dirname(mroot)) if mroot else None) if r]
+        roots = [r for r in MS.roots_of(data_dir) + [os.path.dirname(os.path.dirname(mroot)) if mroot else None] if r]
         if (mroot, key) in kb_only:
             for p, rel in files:
                 ent = rep.files[p]
@@ -4643,14 +4672,15 @@ _EXTERNAL_REFS = {}
 def _external_refs(data_dir):
     """Module names any Lua file under Data Files\\MWSE (mods and lib) quotes (cached per process): what other
     mods may load, when a check covers one staged mod at a time."""
-    root = os.path.join(data_dir, "MWSE") if data_dir else None
-    if not root or not os.path.isdir(root):
+    tops = [os.path.join(r, "MWSE") for r in MS.roots_of(data_dir)]      # staged: every staged mod and lua tools
+    tops = [t for t in tops if os.path.isdir(t)]
+    if not tops:
         return None
-    stamp = tuple(os.stat(d).st_mtime_ns for d in (root, os.path.join(root, "mods")) if os.path.isdir(d))
-    key = (os.path.normcase(os.path.abspath(root)), stamp)    # a mod folder added or removed: read again
+    stamp = tuple(os.stat(d).st_mtime_ns for t in tops for d in (t, os.path.join(t, "mods")) if os.path.isdir(d))
+    key = (tuple(os.path.normcase(os.path.abspath(t)) for t in tops), stamp)   # a mod folder added or removed: read again
     if key not in _EXTERNAL_REFS:
         got = set()
-        for base, dirs, files in os.walk(root):
+        for base, dirs, files in (w for t in tops for w in os.walk(t)):
             dirs[:] = [d for d in dirs if not skipped_dir(base, d)]
             for fn in files:
                 if fn.lower().endswith(".lua"):
@@ -5355,7 +5385,9 @@ def _core_only_main(args, ap):
 def main(argv=None):
     MT.install()
     ap = MT.parser(description="Check MWSE Lua mods for bad habits and patch the safe ones.")
-    ap.add_argument("paths", nargs="*", help="folders or files (default: Data Files\\MWSE\\mods of the Morrowind folder)")
+    ap.add_argument("paths", nargs="*", help="staged mod folders or files (default: every staged mod with an MWSE "
+                                             "folder; Data Files is never checked or patched before deploy)")
+    ap.add_argument("--staging", help="the staging folder (Vortex's or MWManager's; default: from Vortex's settings)")
     ap.add_argument("--apply", action="store_true", help="patch (without it, only the plan is shown)")
     ap.add_argument("--yes", action="store_true", help="with --apply: don't ask first")
     ap.add_argument("--undo", action="store_true", help="put back the files the last --apply patched")
@@ -5385,18 +5417,56 @@ def main(argv=None):
     if args.dry_run and not args.core_only:
         ap.error("--dry-run goes with --core-only (plan mode is already a dry run)")
     if args.core_only:
-        return _core_only_main(args, ap)
+        return _core_only_main(args, ap)            # the deploy step's MWSE core repair (writes Data Files)
+    staged = staged_targets(args, ap)
+    if staged is None:
+        return 2
     if not MP.acquire_run_lock() or not MP.acquire_game_lock(HERE):
         print(MP.RUN_LOCKED_MESSAGE, file=sys.stderr)
         return 1
+    with MS.staged_run(staged[1] or staged[0], HERE):
+        return _main_staged(args, staged)
+
+
+def staged_targets(args, ap=None):
+    """(paths to check, staging folder or None, StagedData) for a plan or --apply before deploy: the given
+    folders/files, else every staged mod with an MWSE folder. A path inside Data Files is refused (the pre-deploy
+    rule: mwdialog_staged; --core-only is the deploy step's way to patch MWSE core there). None when refused."""
+    data_files = os.path.join(HERE, "Data Files")
+    bad = [(p, MS.write_root_problem(p, HERE, data_files, mode="luafix")) for p in args.paths]
+    bad = [(p, why) for p, why in bad if why]
+    if getattr(args, "staging", None):
+        why = MS.write_root_problem(args.staging, HERE, data_files, mode="luafix")
+        if why:
+            bad.insert(0, (args.staging, why))
+    if bad:
+        print(f"Not checking {bad[0][0]}: it is in Data Files ({bad[0][1]}). mwdialog_luafix works on staged mod "
+              f"folders before deploy (pass a staged mod folder, or --core-only for MWSE core at deploy).",
+              file=sys.stderr)
+        return None
+    staging = getattr(args, "staging", None)
+    try:
+        staging = MP.resolve_staging(staging, required=not args.paths and not args.undo)
+    except MP.VortexPathError as e:
+        print(f"{e}\n(mwdialog_luafix checks staged mods before deploy; pass --staging or folders.)", file=sys.stderr)
+        return None
+    if args.paths:
+        roots = [os.path.abspath(p) if os.path.isdir(p) else os.path.dirname(os.path.abspath(p)) for p in args.paths]
+        data = MS.StagedData(staging, HERE, extra=(MP.LUA_TOOLS_DIR,), mods=None if staging else roots)
+        return list(args.paths), staging, data
+    mods = MS.StagedData(staging, HERE).roots if staging else []
+    paths = [r for r in mods if any(e.lower() == "mwse" for e in os.listdir(r))]
+    return paths, staging, MS.StagedData(staging, HERE, extra=(MP.LUA_TOOLS_DIR,))
+
+
+def _main_staged(args, staged):
+    paths, _staging, data_dir = staged
     if args.undo:
         return undo(force=args.force)             # works from the journal; the plan file plays no part
     reviewed = PF.read(PLAN_FILE) if args.apply else None
     if args.apply and (PF.state(PLAN_FILE) != "pending" or not PF.has_any_actions(reviewed)):
         print(PF.no_plan_message(PLAN_FILE, "mwdialog_luafix.py"))
         return 2
-    data_dir = os.path.join(HERE, "Data Files")
-    paths = args.paths or [os.path.join(data_dir, "MWSE", "mods")] + known_core_files(os.path.join(data_dir, "MWSE"))
     cfg = load_config(HERE, data_dir)
     checker = None if args.no_syntax_check else find_checker(args.luajit, HERE)
     print(f"mwdialog_luafix {VERSION}: syntax check {checker.name if checker else 'NONE'}; priority limit "

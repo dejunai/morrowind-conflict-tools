@@ -26,6 +26,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mwdialog_backup as MB  # noqa: E402
 import mwdialog_offlayout as OL  # noqa: E402
 import mwdialog_paths as MP  # noqa: E402
+import mwdialog_staged as MS  # noqa: E402
 import mwdialog_text as MT  # noqa: E402
 print = MT.printer()  # noqa: A001
 
@@ -1742,14 +1743,20 @@ FILE_EXT_RE = re.compile(rb"\.(?:nif|kf|dds|tga|bmp|wav|mp3)\b")
 
 
 def _other_plugins_naming(name_b, root, data_dir):
-    """Active-folder plugins (Data Files) other than this mod's own that hold name_b (lower bytes)."""
-    if not data_dir or not os.path.isdir(data_dir):
+    """Active-folder plugins (Data Files) other than this mod's own that hold name_b (lower bytes). Before deploy
+    (data_dir a mwdialog_staged.StagedData) the other staged mods' plugins instead; Data Files is not read."""
+    if isinstance(data_dir, MS.StagedData):
+        listing = [(fn, p) for fn, p in data_dir.plugins()
+                   if os.path.normcase(os.path.dirname(p)) != os.path.normcase(os.path.abspath(root))]
+    elif not data_dir or not os.path.isdir(data_dir):
         return []
+    else:
+        listing = [(fn, os.path.join(data_dir, fn)) for fn in os.listdir(data_dir)]
     if not _PLUGIN_TEXT:
-        for fn in os.listdir(data_dir):
+        for fn, full in listing:
             if fn.lower().endswith((".esp", ".esm")):
                 try:                           # only what is near a non-ASCII byte and names a file
-                    data = open(os.path.join(data_dir, fn), "rb").read()
+                    data = open(full, "rb").read()
                     bits, last = [], -1
                     for mm in HIGH_BYTE_RE.finditer(data):
                         k = mm.start()
@@ -1807,7 +1814,7 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None, stats=None):
     "mips_skipped": textures without mipmaps that were left alone."""
     issues, fixes = [], []
     world_tex = set()                  # stems under Textures the mod's own world models draw
-    game_dir = os.path.dirname(data_dir) if data_dir else (MP.find_game_dir() or MP.TOOL_DIR)
+    game_dir = MS.game_dir_of(data_dir) if data_dir else (MP.find_game_dir() or MP.TOOL_DIR)
     rules = mip_rules(game_dir)
 
     def note_model(rel, tn):
@@ -1838,7 +1845,7 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None, stats=None):
     tops = ASSET_DIRS
     # files already found clean (here or by an earlier tidy / check run) aren't read again: keyed by the
     # Data Files path + size + date, which a Vortex hard link shares with the deployed copy
-    cache = shared_cache(os.path.dirname(data_dir) if data_dir else (MP.find_game_dir() or MP.TOOL_DIR))
+    cache = shared_cache(MS.game_dir_of(data_dir) if data_dir else (MP.find_game_dir() or MP.TOOL_DIR))
     mod_key = TIDY_KEY + os.path.basename(os.path.normpath(root)).lower() + "|"
     pending = None
 
@@ -1994,7 +2001,8 @@ def check_folder(root, m, data_dir=None, bsa_meshes=None, stats=None):
                     and not os.path.exists(full[:-3] + ".nif"):
                 twin = kf_model_name(rel)
                 twin_low = twin.lower().replace("/", "\\").split("\\", 1)[-1]
-                elsewhere = (data_dir and os.path.exists(os.path.join(data_dir, twin))) or \
+                elsewhere = (data_dir and (data_dir.exists(twin) if isinstance(data_dir, MS.StagedData)
+                                           else os.path.exists(os.path.join(data_dir, twin)))) or \
                     (bsa_meshes is not None and twin_low in bsa_meshes)
                 named = os.path.splitext(os.path.basename(low))[0].encode("latin1", "replace") in own_text
                 if not elsewhere and not named:

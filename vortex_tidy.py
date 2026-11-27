@@ -152,6 +152,7 @@ import shutil
 import struct
 import subprocess
 import sys
+import tempfile
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -159,6 +160,7 @@ import mwdialog_backup as MB                     # noqa: E402
 import mwdialog_planfile as PF                   # noqa: E402
 import mwdialog_offlayout as OL                  # noqa: E402
 import mwdialog_paths as MP                      # noqa: E402
+import mwdialog_staged as MS                     # noqa: E402
 import mwdialog_text as MT                       # noqa: E402
 print = MT.printer()                             # noqa: A001
 
@@ -324,8 +326,9 @@ def _tex_key(rel):
 
 
 def texture_index(staging):
-    """Every diffuse-capable texture there is: in each mod in the staging folder (not Off\\), loose in Data Files
-    and in its BSAs (the game folder's Data Files). Built once per staging folder."""
+    """Every diffuse-capable texture there is: in each mod in the staging folder (not Off\\) and in its BSAs, and
+    in the base game's BSAs (Morrowind/Tribunal/Bloodmoon.bsa: the one read-only look at Data Files before deploy,
+    mwdialog_staged). Built once per staging folder."""
     key = os.path.abspath(staging)
     if key in _TEX_INDEX:
         return _TEX_INDEX[key]
@@ -336,9 +339,6 @@ def texture_index(staging):
                  and d.lower() != "off"]
     except OSError:
         pass
-    data_dir = os.path.join(HERE, "Data Files")
-    if os.path.isdir(data_dir):
-        roots.append(data_dir)
     for root in roots:
         try:
             tex = next((e for e in os.listdir(root) if e.lower() == "textures"), None)
@@ -349,10 +349,7 @@ def texture_index(staging):
         for p in files_under(os.path.join(root, tex)):
             if os.path.splitext(p)[1].lower() in (".dds", ".tga", ".bmp"):
                 paths.add(_tex_key(os.path.relpath(p, os.path.join(root, tex))))
-    try:
-        bsas = [os.path.join(data_dir, f) for f in os.listdir(data_dir) if f.lower().endswith(".bsa")]
-    except OSError:
-        bsas = []
+    bsas = MS.StagedData(staging, HERE, mods=roots).bsas()
     if bsas:
         m, _ah = _tool_modules()
         for b in bsas:
@@ -847,11 +844,76 @@ def vortex_info(mod_dir):
     return _VORTEX_INFO[key]
 
 
-def run_converter(mod_dir, mode, dry_run=False):
-    """Run omw2mwse --convert-omwscripts=<mode> <mod_dir> --json (hardcode: --accept-hardcode-conversions, as
-    tidy runs it without a prompt; --apply already asked), with --title/--author when Vortex has them.
-    (exit code, parsed JSON or None, error text)."""
-    argv = list(CONVERTER["cmd"]) + [f"--convert-omwscripts={mode}", mod_dir, "--json"]
+CONVERTER_INTERFACE = 1    # omw2mwse's tidy handoff (openmw-mwse docs/TIDY_INTERFACE.md, omw2mwse 0.3.1+)
+
+
+def converter_target_problem(mod_dir):
+    """Why omw2mwse must not be pointed at mod_dir ("" when it may): the pre-deploy rule (mwdialog_staged) - the
+    converter only ever gets a staged mod folder, never Data Files or a game install, nor a folder inside one."""
+    why = MS.write_root_problem(mod_dir, HERE, os.path.join(HERE, "Data Files"), mode="converter")
+    if why:
+        return why + " (the converter works on staged mod folders only)"
+    d = os.path.realpath(mod_dir)
+    while True:                                       # a loose master marks an install too
+        if os.path.isfile(os.path.join(d, "Morrowind.esm")):
+            return f"it is inside a game install or a Data Files folder ({d})"
+        up = os.path.dirname(d)
+        if up == d:
+            return ""
+        d = up
+
+
+# ---- after the MWSE updater ----------------------------------------------------------------------------------------
+# Our code never starts MWSE-Update.exe (MWManager does: mwmanager_mwse_core). A caller that ran it calls
+# tidy_after_mwse_update() (or vortex_tidy.py --after-mwse-update EXIT_CODE --mwse-version-before TEXT) when it is
+# done; tidy then runs only after a successful update. The rule (mwse_update_outcome):
+#   * the updater did not start (exit code None) or exited non-zero  -> "failed": tidy is skipped;
+#   * exit 0 but <game>\mwse-version.txt is missing or empty afterwards -> "failed" (nothing proves the update);
+#   * exit 0 and mwse-version.txt is the same as before the updater ran -> "no-update": tidy is skipped;
+#   * exit 0 and mwse-version.txt changed                                  -> "updated": tidy runs.
+MWSE_VERSION_FILE = "mwse-version.txt"
+
+
+def read_mwse_version(game_dir):
+    """The build marker MWSE-Update.exe writes (<game>\\mwse-version.txt), stripped; "" when missing."""
+    try:
+        with open(os.path.join(game_dir, MWSE_VERSION_FILE), encoding="utf-8", errors="replace") as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
+def mwse_update_outcome(returncode, version_before, version_after):
+    """("updated" | "failed" | "no-update", reason) for one run of MWSE-Update.exe (see the rule above)."""
+    if returncode is None:
+        return "failed", "the MWSE updater did not run"
+    if returncode != 0:
+        return "failed", f"the MWSE updater exited with code {returncode}"
+    after, before = (version_after or "").strip(), (version_before or "").strip()
+    if not after:
+        return "failed", f"the MWSE updater exited 0 but {MWSE_VERSION_FILE} is missing or empty"
+    if after == before:
+        return "no-update", f"MWSE was already current ({after[:12]}): the updater changed nothing"
+    return "updated", f"MWSE updated ({before[:12] or 'none'} -> {after[:12]})"
+
+
+def tidy_after_mwse_update(returncode, version_before, game_dir=None, run=None, log=print):
+    """Run tidy after the MWSE updater, only when it updated (mwse_update_outcome). run() does the tidy (default:
+    this module's main() with the caller's own command line); returns (outcome, reason, run()'s exit code or
+    None when skipped)."""
+    outcome, reason = mwse_update_outcome(returncode, version_before, read_mwse_version(game_dir or HERE))
+    if outcome != "updated":
+        log(f"Tidy after the MWSE updater: skipped, {reason}.")
+        return outcome, reason, None
+    log(f"Tidy after the MWSE updater: {reason}; running tidy.")
+    return outcome, reason, (run or main)()
+
+
+def converter_argv(mod_dir, mode, result_json, dry_run=False):
+    """The omw2mwse call (TIDY_INTERFACE.md): --staged-root <staged mod> --result-json <temp file> [--dry-run],
+    --mode, --accept-hardcode-conversions (tidy never prompts; --apply already asked) and --title/--author when
+    Vortex has them. Never a Data Files path, never --no-runtime: the runtime is staged too."""
+    argv = list(CONVERTER["cmd"]) + ["--staged-root", mod_dir, "--result-json", result_json, "--mode", mode]
     if mode == "hardcode":
         argv.append("--accept-hardcode-conversions")
     info = vortex_info(mod_dir)
@@ -860,26 +922,124 @@ def run_converter(mod_dir, mode, dry_run=False):
             argv += ["--" + opt, info[opt]]
     if dry_run:
         argv.append("--dry-run")
+    return argv
+
+
+def converter_result(code, doc, mod_dir):
+    """omw2mwse's result file (interface 1) in the shape the rest of tidy reads (its older --json output): (exit code,
+    data). Exit 1 (blocked: nothing written) reads as a finished run whose mods are blocked, so tidy moves them to
+    Off\\<plugin>\\OpenMW\\ itself; 2 is a conflict (4), hard-code conversions not accepted (3) or another failure (2);
+    3 (refused target), 64 (usage) and 70 (internal) are errors. The interface's own lists ride along in each
+    mod entry (written_files, removed_files, moved_files) for the --undo journal."""
+    if not isinstance(doc, dict):
+        return code, None
+    errors = [e for e in doc.get("errors") or [] if isinstance(e, dict)]
+    alerts = [{"level": "error", "code": e.get("code"), "message": e.get("message")} for e in errors]
+    lists = {k: sorted(str(x) for x in doc.get(k) or []) for k in ("written_files", "removed_files", "moved_files")}
+    mods = [m for m in doc.get("mods") or [] if isinstance(m, dict)]
+    verdict = doc.get("verdict")
+    if not mods and verdict in ("ready", "blocked"):
+        mods = [{"name": package_name(mod_dir), "verdict": verdict, "blockers": doc.get("blockers") or [],
+                 "excluded_by_author": doc.get("excluded_by_author")}]
+    out_mods = []
+    for m in mods:
+        v = m.get("verdict") or verdict
+        e = dict(m)
+        e["verdict"] = v
+        e["status"] = "ok" if v in ("ready", "blocked") else "error"
+        bl = [str(x) for x in m.get("blockers") or (doc.get("blockers") if len(mods) == 1 else []) or []]
+        e["alerts"] = [a for a in m.get("alerts") or [] if isinstance(a, dict)]      # any the converter adds
+        seen = {a.get("message") for a in e["alerts"] if a.get("code") == "blocker"}
+        e["alerts"] += [{"level": "error", "code": "blocker", "message": x} for x in bl if x not in seen]
+        if m.get("excluded_by_author") or (len(mods) == 1 and doc.get("excluded_by_author")):
+            e["reason"] = {"code": "author-opt-out"}      # never a file or a line (OPT_OUT_TEXT)
+            e["alerts"] = []
+        for k in ("written_files", "removed_files", "moved_files"):
+            own = m.get(k)
+            e[k] = sorted(str(x) for x in own) if isinstance(own, list) and len(mods) > 1 else lists[k]
+        e["changed"] = bool(e["written_files"] or e["moved_files"] or e["removed_files"])
+        e["relocated"] = list(e["moved_files"])
+        if e["moved_files"] and "relocatedFrom" not in e:     # where the originals were: their common folder
+            dirs = [p.split("/")[:-1] for p in e["moved_files"]]
+            common = []
+            for parts in zip(*dirs):
+                if len(set(x.lower() for x in parts)) != 1:
+                    break
+                common.append(parts[0])
+            e["relocatedFrom"] = "/".join(common)
+        if not isinstance(e.get("plugins"), list):      # interface 1 lists no placements: read them off the plan
+            e["planned_plugins"] = _planned_plugins(m.get("planned_files") or doc.get("planned_files") or [])
+        out_mods.append(e)
+    pending = doc.get("pendingRecovery") if isinstance(doc.get("pendingRecovery"), list) else []
+    if code == 70 and not pending and recovery_journals(mod_dir):    # stopped part-way: its own journal says so
+        pending = [{"mod": package_name(mod_dir), "stage": "internal error (exit 70)"}]
+    data = {"tool": doc.get("tool"), "version": doc.get("version"), "interface": doc.get("interface"),
+            "requiresPython": doc.get("requiresPython"), "dryRun": bool(doc.get("dry_run")),
+            "changed": bool(lists["written_files"] or lists["moved_files"] or lists["removed_files"]),
+            "verdict": verdict, "guards": doc.get("guards") or [], "runtime_version": doc.get("runtime_version"),
+            "alerts": alerts, "mods": out_mods, "interfaceExit": code, "pendingRecovery": pending}
+    data.update(lists)
+    codes = {e.get("code") for e in errors}
+    if code in (0, 1):
+        return 0, data
+    if code == 2:
+        return (4 if "conflict" in codes else 3 if "hardcode-not-accepted" in codes else 2), data
+    if code == 3 and not alerts:
+        data["alerts"] = [{"level": "error", "code": "target-refused", "message": "omw2mwse refused the target"}]
+    return (code if code not in (3, 4) else 2), data
+
+
+def _planned_plugins(files):
+    """[{name, placement, path, status, reason}] of the plugins (.esp/.esm) in a result's planned file list, outside
+    Off/: at the staged root they are placement root, under Extras/ extras (interface 1 does not list placements)."""
+    out = []
+    for rel in sorted(str(x) for x in files or []):
+        low = rel.lower()
+        if not low.endswith((".esp", ".esm")) or low.startswith("off/"):
+            continue
+        place = "root" if "/" not in rel else ("extras" if low.startswith("extras/") else "subfolder")
+        out.append({"name": rel.rsplit("/", 1)[-1], "placement": place, "path": rel, "status": "planned",
+                    "reason": "from omw2mwse's planned files"})
+    return out
+
+
+def run_converter(mod_dir, mode, dry_run=False):
+    """Run omw2mwse on one staged mod folder through its tidy interface (converter_argv) and read its result file
+    (a temp file outside staging, Data Files and the game). (exit code, data in tidy's shape: converter_result,
+    error text). Before a real run, every hard link in the mod folder is broken (mwdialog_staged.detach_tree), so
+    nothing the converter writes there can reach Data Files."""
+    why = converter_target_problem(mod_dir)
+    if why:
+        return None, None, f"not handed to omw2mwse: {why}"
+    fd, result = tempfile.mkstemp(prefix="omw2mwse-result-", suffix=".json")
+    os.close(fd)
+    os.remove(result)                                 # omw2mwse writes it (atomically) itself
     try:
-        r = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=CONVERTER["env"],
-                           timeout=CONVERTER_TIMEOUT)
-    except (OSError, subprocess.SubprocessError) as e:
-        return None, None, f"could not run omw2mwse ({e})"
-    out = r.stdout.decode("utf-8", "replace")
-    data = None
-    try:
-        data = json.loads(out)
-    except ValueError:
-        i = out.find("{")
-        if i >= 0:
-            try:
-                data = json.loads(out[i:])
-            except ValueError:
-                data = None
-    err = r.stderr.decode("utf-8", "replace").strip()
-    if not isinstance(data, dict):
-        data = None
-    return r.returncode, data, (err.splitlines()[-1] if err else "")
+        if converter_target_problem(os.path.dirname(result)) or MS.in_staging(result) \
+                or MP._is_under(result, os.path.abspath(mod_dir)):
+            return None, None, f"no safe place for omw2mwse's result file ({result})"
+        if not dry_run:
+            MS.detach_tree(mod_dir)
+        try:
+            r = subprocess.run(converter_argv(mod_dir, mode, result, dry_run), stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE, env=CONVERTER["env"], timeout=CONVERTER_TIMEOUT)
+        except (OSError, subprocess.SubprocessError) as e:
+            return None, None, f"could not run omw2mwse ({e})"
+        err = r.stderr.decode("utf-8", "replace").strip()
+        doc = None
+        try:
+            with open(result, encoding="utf-8") as f:
+                doc = json.load(f)
+        except (OSError, ValueError):
+            if "staged-root" in err or "unrecognized arguments" in err:
+                err = "this omw2mwse is older than 0.3.1 (no --staged-root/--result-json): update the converter"
+        code, data = converter_result(r.returncode, doc, mod_dir)
+        return code, data, (err.splitlines()[-1] if err else "")
+    finally:
+        try:
+            os.remove(result)
+        except OSError:
+            pass
 
 
 def _converter_problem(data, err):
@@ -1093,7 +1253,7 @@ def preview_lines(data, mod_dir):
                 where = f"{str(r.get('file') or '?').replace(os.sep, '/')}:{r.get('line', '?')}"
                 out.append(f"    omw2mwse makes a setting of {mname}'s hard-coded value: {where} "
                            f"{r.get('name') or r.get('key') or '?'} = {r.get('literal', r.get('default', '?'))}")
-        for pl in converter_plugins(m) or []:
+        for pl in converter_plugins(m) or m.get("planned_plugins") or []:
             place = str(pl.get("placement") or ("off" if pl.get("optional") is True else "root"))
             path = str(pl.get("path") or pl["name"]).replace("\\", "/")
             out.append(f"    omw2mwse places {mname}'s plugin {pl['name']}: {place} ({pl.get('status') or 'unknown'}) "
@@ -1505,9 +1665,18 @@ def conversion_op(mod_dir, entry, mode):
     for g in omw_converted(mod_dir):
         if os.path.basename(g) == name:
             tree = g.replace("\\", "/")
-    files = _manifest_files(os.path.join(mod_dir, *(tree.split("/") + [MP.OMW_MANIFEST])))
-    return {"omw_convert": mod_dir, "name": name, "mode": mode, "from": frm, "off": off, "tree": tree,
-            "relocated": sorted(entry.get("relocated") or []), "files": files or {}}
+    files = _manifest_files(os.path.join(mod_dir, *(tree.split("/") + [MP.OMW_MANIFEST]))) or {}
+    written = [str(x) for x in entry.get("written_files") or []]
+    for rel in written:                              # the interface's own list (omw2mwse 0.3.1+): what it wrote
+        p = _inside(mod_dir, rel)
+        if p and rel not in files and os.path.isfile(p):
+            files[rel] = _sha256(p)
+    op = {"omw_convert": mod_dir, "name": name, "mode": mode, "from": frm, "off": off, "tree": tree,
+          "relocated": sorted(entry.get("relocated") or []), "files": files}
+    if "written_files" in entry:
+        op.update(written=sorted(written), removed=sorted(str(x) for x in entry.get("removed_files") or []),
+                  moved=sorted(str(x) for x in entry.get("moved_files") or []))
+    return op
 
 
 def journal_conversions(staging, ops, head_extra):
@@ -2281,9 +2450,10 @@ def undo_conversion(op, staging, cstate):
     return True
 
 
-def converted_elsewhere(staging, names, data_files):
+def converted_elsewhere(staging, names, data_files=None):
     """True when a converted mod (its MWSE\\mods folder holds omw2mwse output) is left in any mod folder of
-    staging, or in Data Files, other than a deployed copy of one of `names` (the mods just undone)."""
+    staging. Data Files is not looked at before deploy (mwdialog_staged): data_files is only scanned when given
+    (a deploy-time caller), for converted mods other than a deployed copy of one of `names`."""
     def scan(mods_dir, skip_names):
         for base, dirs, _fs in os.walk(mods_dir):
             keep = []
@@ -2302,16 +2472,18 @@ def converted_elsewhere(staging, names, data_files):
                 mods = os.path.join(md, existing(md, "MWSE"), "mods")
                 if os.path.isdir(mods) and scan(mods, ()):
                     return True
+    if not data_files:
+        return False
     dm = os.path.join(data_files, "MWSE", "mods")
     return os.path.isdir(dm) and scan(dm, names)
 
 
 def finish_conversions(cstate):
     """--undo, after every conversion of the run: the shared runtime (MWSE\\lib\\omwcompat*) goes from the mods
-    it was deferred in, unless a converted mod is left in staging or Data Files."""
+    it was deferred in, unless a converted mod is left in staging (Data Files is not read before deploy)."""
     if not cstate["defer"]:
         return
-    if converted_elsewhere(cstate["staging"], cstate["names"], os.path.join(HERE, "Data Files")):
+    if converted_elsewhere(cstate["staging"], cstate["names"]):
         return
     for p, h, mod_dir in cstate["defer"]:
         try:
@@ -2639,8 +2811,10 @@ def _put_back(path, bak, before, mtime_ns):
         data = f.read()
     if hashlib.sha256(data).hexdigest() != before:
         raise OSError(f"its kept original ({bak}) has a different hash than the file had")
-    if os.path.isfile(_xp(path)):
-        with open(_xp(path), "r+b") as f:             # in place: a Vortex hard link stays one
+    if os.path.isfile(_xp(path)) and MS.must_replace(path):    # before deploy: a new file, never through a link
+        MS.replace_bytes(_xp(path), data)
+    elif os.path.isfile(_xp(path)):
+        with open(_xp(path), "r+b") as f:             # in place (outside a staged run)
             f.seek(0)
             f.write(data)
             f.truncate()
@@ -2738,7 +2912,9 @@ def lua_check(args):
     if lf is None:
         return None
     game_dir = HERE
-    data_dir = os.path.join(game_dir, "Data Files")
+    # staged files only before deploy (mwdialog_staged): luafix looks things up in the staged mods and in the
+    # suite's lua tools (what --play deploys), never in Data Files (except the documented read-only exceptions)
+    data_dir = MS.StagedData(args.staging, game_dir, extra=(MP.LUA_TOOLS_DIR,))
     mods = sorted(d for d in os.listdir(args.staging) if os.path.isdir(os.path.join(args.staging, d))
                   and d.lower() != "off")
     if args.only:
@@ -2769,26 +2945,13 @@ def lua_check(args):
             out.append(f"\n{d}")
             out += lines
         reps.append((d, rep))
-    # MWSE's own core files a Known Bugs rule names (KB3, KB4: the MCM's ExclusionsPage). MWSE's updater puts
-    # them straight into Data Files, so they are checked there and patched in place, unless a staged mod ships
-    # MWSE itself (then that mod's copy was checked above and Data Files holds a link to it).
-    staged_core = {os.path.relpath(p, os.path.join(args.staging, d, "MWSE")).replace("\\", "/").lower()
-                   for d in mods for p in lf.known_core_files(os.path.join(args.staging, d, "MWSE"))}
-    core = [p for p in lf.known_core_files(os.path.join(data_dir, "MWSE"))
-            if os.path.relpath(p, os.path.join(data_dir, "MWSE")).replace("\\", "/").lower() not in staged_core]
-    if core:
-        try:
-            rep = lf.check_paths(core, cfg, False, checker, getattr(args, "lua_level", "high"), data_dir,
-                                 True, False, game_dir, log_scope=getattr(args, "lua_log", None))
-            lines, counts = lf.format_report(rep, indent="    ")
-            for k, v in counts.items():
-                total[k] = total.get(k, 0) + v
-            if lines:
-                out.append("\n" + CORE_KEY)
-                out += lines
-            reps.append((CORE_KEY, rep))
-        except Exception as e:
-            print(f"  MWSE core: Lua check failed ({e})")
+    # MWSE's own core files a Known Bugs rule names (KB3, KB4: the MCM's ExclusionsPage) are checked and patched
+    # here only when a staged mod ships MWSE itself (that mod's copy was checked above). MWSE's updater puts them
+    # straight into Data Files, and nothing in Data Files is touched before deploy (mwdialog_staged): that copy
+    # is left to the deploy step (mwdialog_luafix.py --core-only), and the plan says so.
+    if os.path.isdir(os.path.join(data_dir.data_dir or "", "MWSE")):
+        print("  MWSE core in Data Files: not checked or patched before deploy (KB3/KB4 core repairs are done at "
+              "deploy: mwdialog_luafix.py --core-only)")
     n_ok = sum(1 for _d, r in reps for e in r.files.values() if e.get("patch") and e["patch"]["ok"])
     print("\n".join(out[:300]))
     if len(out) > 300:
@@ -3171,18 +3334,15 @@ def _ini_plugins(game_dir):
 
 
 def _reference_files(staging):
-    """The files whose text says what the game uses: Morrowind.ini, the active plugins in Data Files (every
-    plugin there without an ini) and every staged mod's plugins (which may be active once deployed)."""
+    """The files whose text says what the game uses: Morrowind.ini, the base game's masters it loads (Morrowind,
+    Tribunal, Bloodmoon .esm: a read-only exception, mwdialog_staged) and every staged mod's plugins (which may be
+    active once deployed). No other plugin in Data Files is read before deploy."""
     data = _data_dir()
     out = [os.path.join(HERE, "Morrowind.ini")]
     names = _ini_plugins(HERE)
-    try:
-        listing = os.listdir(data)
-    except OSError:
-        listing = []
     if names is None:
-        names = [e for e in listing if os.path.splitext(e)[1].lower() in (".esm", ".esp")]
-    out += [os.path.join(data, n) for n in names]
+        names = ["Morrowind.esm", "Tribunal.esm", "Bloodmoon.esm"]
+    out += [os.path.join(data, n) for n in names if n.lower() in MS.CORE_MASTERS]
     for d in (os.listdir(staging) if staging and os.path.isdir(staging) else ()):
         md = os.path.join(staging, d)
         if os.path.isdir(md):
@@ -3383,7 +3543,7 @@ def tidy_dummies(root):
 
 def _copy_elsewhere(rel, root, data_dir, bsa_meshes):
     """True when another copy of the model at rel is there to win once this mod's is out of the way: in
-    another staged mod, loose in Data Files (not this mod's own deployed link) or in a BSA there."""
+    another staged mod or in a BSA (staged, or the base game's). Data Files' loose files are not looked at."""
     k = _rk(rel)
     if k.startswith("meshes\\") and bsa_meshes and k[7:] in {x.lower() for x in bsa_meshes}:
         return True
@@ -3391,7 +3551,6 @@ def _copy_elsewhere(rel, root, data_dir, bsa_meshes):
     staging = os.path.dirname(os.path.abspath(root))
     places = [os.path.join(staging, d) for d in (os.listdir(staging) if os.path.isdir(staging) else ())
               if os.path.normcase(d) != os.path.normcase(os.path.basename(os.path.abspath(root)))]
-    places += [data_dir] if data_dir else []
     for base in places:
         p = os.path.join(base, rel)
         if os.path.isfile(p):
@@ -3508,7 +3667,8 @@ def assets_check_mod(root, m, ah, data_dir, bsa_meshes, game_dir, stats):
     issues, fixes = apply_dummy_rule(root, m, ah, data_dir, bsa_meshes, issues, fixes, stats)
     lp_plan = []
     try:                                              # paths too long once deployed (Windows' 259 characters)
-        lp_issues, lp_plan = m.longpaths_module().check_mod(root, data_dir, m, game_dir)
+        lp_issues, lp_plan = m.longpaths_module().check_mod(root, MS.data_path_of(data_dir)
+                                                            or os.path.join(game_dir, "Data Files"), m, game_dir)
         issues = lp_issues + issues
     except Exception as e:
         print(f"  {os.path.basename(root)}: long-path check failed ({e})")
@@ -3516,19 +3676,23 @@ def assets_check_mod(root, m, ah, data_dir, bsa_meshes, game_dir, stats):
 
 
 def _bsa_meshes(m, data_dir):
+    """Paths under meshes\\ in the BSAs: a StagedData's (staged BSAs, then the base game's), else every BSA in a
+    plain Data Files folder (a deploy-time caller)."""
     out = set()
-    try:
-        names = os.listdir(data_dir)
-    except OSError:
-        names = []
-    for fn in names:
-        if fn.lower().endswith(".bsa"):
-            try:
-                for pth in m.bsa_file_names(os.path.join(data_dir, fn)):
-                    if pth.startswith("meshes/"):
-                        out.add(pth[7:].replace("/", "\\"))
-            except (OSError, ValueError, struct.error, getattr(m, "FormatError", ValueError)) as e:
-                print(f"  (couldn't read {fn}: {e})")
+    if isinstance(data_dir, MS.StagedData):
+        paths = data_dir.bsas()
+    else:
+        try:
+            paths = [os.path.join(data_dir, fn) for fn in os.listdir(data_dir) if fn.lower().endswith(".bsa")]
+        except OSError:
+            paths = []
+    for path in paths:
+        try:
+            for pth in m.bsa_file_names(path):
+                if pth.startswith("meshes/"):
+                    out.add(pth[7:].replace("/", "\\"))
+        except (OSError, ValueError, struct.error, getattr(m, "FormatError", ValueError)) as e:
+            print(f"  (couldn't read {os.path.basename(path)}: {e})")
     return out
 
 
@@ -3550,9 +3714,9 @@ def assets_check(args):
     if args.only:
         mods = [d for d in mods if any(fnmatch.fnmatch(d.lower(), pat.lower()) for pat in args.only)]
     pats = blacklist(create=bool(args.apply)) + (args.skip or [])
-    data_dir = os.path.join(game_dir, "Data Files")
-    if not os.path.isdir(data_dir):
-        print(f"\n(note: no Data Files folder next to vortex_tidy.py ({data_dir}): an animation's model in "
+    data_dir = MS.StagedData(args.staging, game_dir)          # staged files only before deploy (mwdialog_staged)
+    if not os.path.isdir(data_dir.data_dir):
+        print(f"\n(note: no Data Files folder next to vortex_tidy.py ({data_dir.data_dir}): an animation's model in "
               f"another mod or a BSA can't be found, so more files may be reported)")
     bsa_meshes = _bsa_meshes(m, data_dir)
     print("\n" + "=" * 70 + "\nASSET CHECK (each mod's own files)\n" + "=" * 70)
@@ -3819,6 +3983,14 @@ def _repair(ares, d, root, fixes, lp_plan, plug):
 
 
 def main():
+    """vortex_tidy, as a staged run (mwdialog_staged): Data Files is guarded from the start (a write there is
+    refused), and every write over a file in the staging folder replaces it, so a Vortex hard link into Data Files
+    is broken, never written through. Data Files changes only at the final deploy."""
+    with MS.staged_run([], HERE):
+        return _main()
+
+
+def _main():
     MT.install()
     ap = MT.parser(description="Tidy the mods in Vortex's Morrowind staging folder.")
     ap.add_argument("--staging", default=None, metavar="DIR",
@@ -3859,7 +4031,20 @@ def main():
                          "not converted gets its whole package moved to Off\\<plugin name>\\OpenMW\\")
     ap.add_argument("--no-convert-omwscripts", dest="convert_omwscripts", action="store_const", const=None,
                     help="don't convert: OpenMW-only mods get their whole package moved to Off\\<plugin name>\\OpenMW\\")
+    ap.add_argument("--after-mwse-update", type=int, metavar="EXIT_CODE",
+                    help="for a caller that just ran MWSE-Update.exe (MWManager): its exit code. Tidy runs only when "
+                         "the update succeeded: exit 0 and mwse-version.txt changed from --mwse-version-before; "
+                         "otherwise nothing is done (exit 0)")
+    ap.add_argument("--mwse-version-before", default="", metavar="TEXT",
+                    help="with --after-mwse-update: mwse-version.txt as it was before the updater ran")
     args = ap.parse_args()
+    if args.after_mwse_update is not None:
+        outcome, _why, _rc = tidy_after_mwse_update(args.after_mwse_update, args.mwse_version_before,
+                                                    run=lambda: None)
+        if outcome != "updated":
+            return 0
+    elif args.mwse_version_before:
+        ap.error("--mwse-version-before goes with --after-mwse-update")
     setup_converter(convert_mode(args.convert_omwscripts))
     global NO_COINS
     NO_COINS = args.no_coins
@@ -3873,6 +4058,10 @@ def main():
         return 1
     if args.undo:                                     # works from the journal; the plan file plays no part
         before = {st: bugreport_folders(st) for st in (_journal_stagings() if os.path.exists(JOURNAL) else [])}
+        for st in before:
+            if refuse_write_root(st):
+                return 2
+        MS.begin(list(before))
         try:
             return undo(args.force)
         finally:
@@ -3882,6 +4071,9 @@ def main():
     except MP.VortexPathError as e:
         print(str(e), file=sys.stderr)
         return 2
+    if refuse_write_root(args.staging):
+        return 2
+    MS.begin(args.staging)
     src = "--staging" if any(a == "--staging" or a.startswith("--staging=") for a in sys.argv[1:]) else "Vortex settings"
     print(f"Vortex staging: {args.staging}  (from {src})")
     CORE_MISSING.clear()
@@ -4074,6 +4266,18 @@ def remove_empty_bugreports(before):
                     os.rmdir(p)
                 except OSError:
                     pass
+
+
+def refuse_write_root(staging):
+    """True (and one message on stderr) when `staging` is Data Files, the game folder or inside either, real
+    paths compared (mwdialog_staged.write_root_problem): tidy then stops before writing anything. Only MWManager's
+    tidy --init may act on Data Files; this CLI has no such mode."""
+    why = MS.write_root_problem(staging, HERE, os.path.join(HERE, "Data Files"), mode="tidy")
+    if why:
+        print(f"Not tidying {staging}: {why}. Tidy works on Vortex's or MWManager's staging folder before deploy; "
+              f"Data Files and the game folder change only at the deploy step (or with tidy --init).", file=sys.stderr)
+        return True
+    return False
 
 
 def _journal_stagings():

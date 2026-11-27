@@ -12,6 +12,7 @@ import os
 import sys
 
 from conftest import fold, vt
+from omw_interface_stub import new_interface_stub
 from test_tidy_undo_convert import STUB, env, full_mod, put, root_mod, snap  # noqa: F401  (env is a fixture)
 
 ARGV = ["vortex_tidy.py", "--no-lua", "--no-assets"]
@@ -119,7 +120,7 @@ CRASH = "import os, sys\nif '--dry-run' in sys.argv:\n    exec(compile(%r, 'stub
 
 
 def test_a_converter_that_dies_part_way_leaves_nothing_and_the_package_goes_to_off(env, capsys):
-    (env.tmp / "tools-home" / "tools" / "omw2mwse.py").write_text(CRASH % (STUB, STUB))
+    (env.tmp / "tools-home" / "tools" / "omw2mwse.py").write_text(new_interface_stub(CRASH % (STUB, STUB)))
     mod = full_mod(env.staging)
     before = snap(mod)
     env.apply()
@@ -350,7 +351,7 @@ print(json.dumps(data))
 
 
 def test_a_pending_recovery_is_rolled_back_by_omw2mwse_then_tidy_puts_the_folder_back(env, capsys):
-    (env.tmp / "tools-home" / "tools" / "omw2mwse.py").write_text(PENDING % STUB)
+    (env.tmp / "tools-home" / "tools" / "omw2mwse.py").write_text(new_interface_stub(PENDING % STUB))
     mod = full_mod(env.staging)
     before = snap(mod)
     env.apply()
