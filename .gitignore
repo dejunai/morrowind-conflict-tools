@@ -94,6 +94,9 @@ mwdialog_patch_inputs.json
 # The tools' own records, caches and logs (conflict-tools\generated\)
 generated/
 
+# Bug-report archives made by vortex_tidy.py --pack-report (conflict-tools\reports\)
+reports/
+
 # Personal notes and plans kept beside the tools (conflict-tools\_backup\)
 _backup/
 

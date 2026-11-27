@@ -16,7 +16,8 @@ A run that works on staging calls begin(staging, game_dir) (a context manager: s
 Read-only exceptions (READ_EXCEPTIONS): the base game's own files, which ship in Data Files and are never staged:
 Morrowind.bsa, Tribunal.bsa, Bloodmoon.bsa (dummy sources and the BSA indexes), Morrowind.esm / Tribunal.esm /
 Bloodmoon.esm, the game's own loose Video and Fonts files (only ones that are not hard links, i.e. not deployed by
-Vortex), and MWSE\\config\\mwguard.json (the user's in-game luafix settings; written by the game, never staged).
+Vortex), and MWSE\\config\\mwguard.json (the user's in-game luafix settings; written by the game, never staged), and everything under MWSE\\logs\\ (vortex_tidy.py
+--pack-report COPIES it into a scrubbed bug-report archive: a read only, nothing is changed, moved or deleted there).
 Anything else under Data Files is looked up in the staged mod folders (and the suite's lua tools, which --play
 deploys) instead.
 
@@ -28,6 +29,7 @@ CORE_BSAS = ("morrowind.bsa", "tribunal.bsa", "bloodmoon.bsa")
 CORE_MASTERS = ("morrowind.esm", "tribunal.esm", "bloodmoon.esm")
 CORE_LOOSE_DIRS = ("video", "fonts")
 CONFIG_EXCEPTIONS = ("mwse\\config\\mwguard.json",)
+PACK_REPORT_READS = ("mwse\\logs\\",)          # vortex_tidy.py --pack-report copies these (reads only; mwdialog_report)
 READ_EXCEPTIONS = CORE_BSAS + CORE_MASTERS + tuple(d + "\\*" for d in CORE_LOOSE_DIRS) + CONFIG_EXCEPTIONS
 
 
@@ -182,6 +184,8 @@ def is_read_exception(path, data_dir):
         return False
     rel = os.path.relpath(os.path.abspath(path), os.path.abspath(data_dir)).replace("/", "\\").lower()
     if rel in CORE_BSAS or rel in CORE_MASTERS or rel in CONFIG_EXCEPTIONS:
+        return True
+    if any((rel + "\\").startswith(p) for p in PACK_REPORT_READS):
         return True
     top = rel.split("\\", 1)[0]
     if top in CORE_LOOSE_DIRS:

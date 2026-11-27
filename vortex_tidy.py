@@ -160,6 +160,7 @@ import mwdialog_backup as MB                     # noqa: E402
 import mwdialog_planfile as PF                   # noqa: E402
 import mwdialog_offlayout as OL                  # noqa: E402
 import mwdialog_paths as MP                      # noqa: E402
+import mwdialog_report as MR                     # noqa: E402
 import mwdialog_staged as MS                     # noqa: E402
 import mwdialog_text as MT                       # noqa: E402
 print = MT.printer()                             # noqa: A001
@@ -4031,6 +4032,12 @@ def _main():
                          "not converted gets its whole package moved to Off\\<plugin name>\\OpenMW\\")
     ap.add_argument("--no-convert-omwscripts", dest="convert_omwscripts", action="store_const", const=None,
                     help="don't convert: OpenMW-only mods get their whole package moved to Off\\<plugin name>\\OpenMW\\")
+    ap.add_argument("--pack-report", action="store_true",
+                    help="for a bug report: copy MWSE.log, Data Files\\MWSE\\logs\\ and conflict-tools\\generated\\ "
+                         "(only those; read-only on the game), replace your folders and Windows user name with "
+                         "<MORROWIND>, <STAGING>, <DOWNLOADS>, <USERPROFILE> and <USERNAME> in the copies, and "
+                         "pack them with a scrub summary into conflict-tools\\reports\\conflict-tools-report-"
+                         "<date>-<time>.zip. Prints that path (one line). Binary files are left out and listed")
     ap.add_argument("--after-mwse-update", type=int, metavar="EXIT_CODE",
                     help="for a caller that just ran MWSE-Update.exe (MWManager): its exit code. Tidy runs only when "
                          "the update succeeded: exit 0 and mwse-version.txt changed from --mwse-version-before; "
@@ -4038,6 +4045,10 @@ def _main():
     ap.add_argument("--mwse-version-before", default="", metavar="TEXT",
                     help="with --after-mwse-update: mwse-version.txt as it was before the updater ran")
     args = ap.parse_args()
+    if args.pack_report:
+        if args.apply or args.undo or args.lua_only or args.after_mwse_update is not None:
+            ap.error("--pack-report stands alone (it only copies logs; it changes nothing)")
+        return pack_report_main(args)
     if args.after_mwse_update is not None:
         outcome, _why, _rc = tidy_after_mwse_update(args.after_mwse_update, args.mwse_version_before,
                                                     run=lambda: None)
@@ -4266,6 +4277,30 @@ def remove_empty_bugreports(before):
                     os.rmdir(p)
                 except OSError:
                     pass
+
+
+def pack_report_main(args, out_dir=None):
+    """--pack-report (mwdialog_report): one scrubbed archive of the logs for a bug report; prints its path. A read
+    of Data Files\\MWSE\\logs only (mwdialog_staged.PACK_REPORT_READS); nothing is written to Data Files.
+    out_dir: a test or smoke run's own folder (no command-line option)."""
+    if not MP.is_game_dir(HERE):
+        print(f"No Morrowind folder found (looked at {HERE}); run this from the game folder.", file=sys.stderr)
+        return 2
+    found = [args.staging] if args.staging else []
+    try:
+        found.append(MP.resolve_staging(required=False))
+    except (OSError, MP.VortexPathError):
+        pass
+    found += _journal_stagings() if os.path.exists(JOURNAL) else []
+    stagings = []
+    for st in found:
+        if st and os.path.normcase(os.path.abspath(st)) not in [os.path.normcase(s) for s in stagings]:
+            stagings.append(os.path.abspath(st))
+    try:
+        downloads = [MP.resolve_downloads(required=False)]
+    except (OSError, MP.VortexPathError):
+        downloads = []
+    return MR.main(HERE, stagings, [d for d in downloads if d], out_dir=out_dir)
 
 
 def refuse_write_root(staging):
