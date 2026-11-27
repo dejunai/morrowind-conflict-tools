@@ -88,7 +88,7 @@ yesNo(locks, "lockedCrosshair", "Tint the crosshair on locked things",
 yesNo(locks, "eveningLocks", "Owned homes lock in the evening",
     "Homes lock outside opening hours (set below) and whenever their owner is away. Public places never lock, guild halls stay open to members, a dead owner's home is unlocked, and empty unowned rooms stay open. Replaces abot Door Locks.")
 yesNo(locks, "knocking", "Knock on locked doors",
-    "Using a locked door without sneaking knocks on it; if someone inside is willing, they open up and meet you at the door. Replaces abot Door Locks knocking.")
+    "Using a locked door without sneaking knocks on it and waits a few seconds. If someone inside is willing, they open up and meet you at the door; if not, a brief message says there is no response. Replaces abot Door Locks knocking.")
 for _, s in ipairs({
     { "openHour", "Doors open at", 5, 10, "The hour homes unlock in the morning (with 'Owned homes lock in the evening')." },
     { "closeHour", "Doors lock at", 16, 23, "The hour homes lock for the night (with 'Owned homes lock in the evening')." },

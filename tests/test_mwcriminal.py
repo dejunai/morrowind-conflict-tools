@@ -11,7 +11,7 @@ MODS = os.path.join(ROOT, "lua tools", "MWSE", "mods", "mwsuite")
 pytestmark = pytest.mark.skipif(not os.path.isfile(LUAJIT), reason="LuaJIT not available")
 
 HARNESS = r'''
-handlers, sounds, notices, boxes, added, crimes, timers, logs = {}, {}, {}, {}, {}, {}, {}, {}
+handlers, sounds, soundAt, notices, boxes, added, crimes, timers, logs = {}, {}, {}, {}, {}, {}, {}, {}, {}
 legacyConfigs, installed = {}, {}
 local shift = false
 local saved
@@ -65,7 +65,7 @@ tes3 = {
   getOwner = function(p) return p.reference.owner end,
   hasOwnershipAccess = function(p) return not p.target.owner or p.target.access == true end,
   getReference = function(id) return tes3.refs[id] end,
-  playSound = function(p) sounds[#sounds + 1] = p.sound end,
+  playSound = function(p) sounds[#sounds + 1] = p.sound; soundAt[#soundAt + 1] = p.reference end,
   addItem = function(p) added[#added + 1] = p end,
   setItemIsStolen = function() end,
   triggerCrime = function(p) crimes[#crimes + 1] = p end,
@@ -74,7 +74,14 @@ tes3 = {
   getFileExists = function() return false end,
   messageBox = function(fmt, ...) boxes[#boxes + 1] = string.format(fmt, ...) end,
 }
-timer = { simulate = "simulate", start = function(value) timers[#timers + 1] = value end }
+timer = {
+  simulate = "simulate",
+  start = function(value)
+    value.cancel = function(self) self.cancelled = true end
+    timers[#timers + 1] = value
+    return value
+  end,
+}
 tes3ui = {
   showNotifyMenu = function(s) notices[#notices + 1] = s end,
   getPalette = function() return "red" end,
@@ -134,7 +141,17 @@ function hour(h) tes3.worldController.hour.value = h end
 function sneak(on) tes3.mobilePlayer.isSneaking = on end
 function setShift(on) shift = on end
 function check(ok, message) if not ok then error(message, 2) end end
-function reset() sounds, notices, boxes, added, crimes = {}, {}, {}, {}, {} end
+function reset() sounds, soundAt, notices, boxes, added, crimes = {}, {}, {}, {}, {}, {} end
+function fireKnock()
+  for i = #timers, 1, -1 do
+    local t = timers[i]
+    if t.duration == 3 and t.type == timer.simulate and not t.cancelled and t.callback then
+      t.cancelled = true
+      t.callback()
+      return t
+    end
+  end
+end
 '''
 
 
@@ -212,6 +229,7 @@ def test_exits_keys_and_sneak_to_pick():
 local home = cell("Balmora, Home", true)
 local exit = door(town, { from = home, locked = true })
 check(activate(exit) == nil and not exit.locked, "locked exit to the exterior is unlocked and passes")
+config.knocking = false
 local locked = door(cell("Balmora, Tomb", true), { locked = true })
 check(activate(locked) == false and sounds[1] == "LockedDoor", "standing at a locked door plays the locked sound")
 check(#notices == 0, "no notice unless switched on")
@@ -260,6 +278,8 @@ hour(12)
 check(activate(home) == nil and not home.locked, "home is open by day with its owner inside")
 hour(23)
 check(activate(home) == false and home.locked and home.level == 38, "home locks in the evening (too late for a knock)")
+fireKnock()
+check(home.locked and boxes[1] == "There is no response.", "a night knock gets no answer after the wait")
 check(home.data.mwcriminalLocked, "mwcriminal remembers its own lock")
 hour(9)
 check(activate(home) == nil and not home.locked and not home.data.mwcriminalLocked, "its own lock is removed by day")
@@ -268,6 +288,7 @@ local away = npc("traveller")
 local empty = door(cell("Balmora, Traveller House", true), { owner = away.object })
 hour(12)
 check(activate(empty) == false and empty.locked, "empty home of a living owner who is elsewhere is locked by day")
+fireKnock()
 
 local corpse = npc("victim", { dead = true })
 local deadHome = door(cell("Balmora, Victim House", true), { owner = corpse.object, locked = true })
@@ -276,7 +297,9 @@ check(activate(deadHome) == nil and not deadHome.locked, "a dead owner's home is
 
 local guild = { objectType = tes3.objectType.faction }
 local hall = door(cell("Balmora, Guild of Fighters", true, { npc("smith") }), { owner = guild, access = true, locked = true })
-check(activate(hall) == nil and not hall.locked, "faction houses open to members")
+activate(hall)
+fireKnock()
+check(not hall.locked, "faction houses open to members")
 
 local pub = door(cell("Balmora, Eight Plates", true, { npc("pub", { class = "Publican" }) }))
 hour(23)
@@ -310,18 +333,40 @@ local host = npc("host", { name = "Host" })
 local house = door(cell("Balmora, Host House", true, { host }))
 host.object.disposition = 50
 hour(20)
-check(activate(house) == nil and not house.locked, "a willing resident opens the door")
+check(activate(house) == false and house.locked, "the knock waits before anyone opens")
+check(sounds[1] == "LockedDoor" and soundAt[1] == house, "LockedDoor plays at the door at once")
+check(#notices == 0 and #boxes == 0, "no answer yet")
+check(timers[#timers].duration == 3 and timers[#timers].type == timer.simulate, "the wait is 3 s of game time")
+fireKnock()
+check(not house.locked, "a willing resident opens the door")
 check(notices[1] == "Host opens the door.", "the opener is named")
 check(host.position.y == 72 and math.abs(host.facing) > 3, "the opener waits at the door, facing the player")
 handlers.cellChanged({ previousCell = house.destination.cell })
 check(host.position.x == 100 and host.position.y == 0, "the opener goes back when the player leaves")
 house.locked = true; reset()
 hour(23)
-check(activate(house) == false and sounds[1] == "LockedDoor", "nobody answers late at night")
+check(activate(house) == false and sounds[1] == "LockedDoor", "the knock still plays late at night")
+check(house.locked and #boxes == 0, "no response yet")
+local waiting = #timers
+activate(house)
+check(#timers == waiting and #sounds == 1, "a second knock is ignored while one is waiting")
+fireKnock()
+check(house.locked and boxes[1] == "There is no response.", "after 3 s, nobody answers late at night")
 local rude = npc("rude", { disposition = 10 })
 local cold = door(cell("Balmora, Rude House", true, { rude }), { locked = true })
 hour(20); reset()
-check(activate(cold) == false and #notices == 0, "an unfriendly resident doesn't open")
+check(activate(cold) == false and #notices == 0, "an unfriendly resident does not open at once")
+fireKnock()
+check(cold.locked and #notices == 0 and boxes[1] == "There is no response.", "an unfriendly resident does not open")
+house.locked = true; reset()
+hour(20)
+activate(house)
+handlers.loaded()
+check(house.locked and #notices == 0 and #boxes == 0, "a load cancels a waiting knock")
+house.locked = true; reset()
+activate(house)
+handlers.cellChanged({ previousCell = house.cell })
+check(house.locked and #notices == 0 and #boxes == 0, "leaving the cell cancels a waiting knock")
 ''')
 
 
@@ -663,6 +708,7 @@ local host = npc("host", { disposition = 80 })
 local home = cell("Balmora, Host's House", true, { host })
 local theirs = door(home, { owner = host.object })
 hour(20); sneak(false); activate(theirs)                               -- locked for the evening, knocked open
+fireKnock()
 check(not theirs.locked, "knocked open")
 sneak(true); activate(theirs)
 check(theirs.locked, "what mwcriminal opened itself may lock again")

@@ -22,6 +22,7 @@ package.loaded["mwcompanionsneak.inspectorUI"] = inspectorUI
 local ownedBookOpen = false   -- the book being opened is someone else's and the player is standing
 local opener                  -- { ref, position, facing, cell } of the NPC who answered the last knock
 local knockSound
+local pendingKnock            -- simulate timer while a knock is waiting for an answer
 
 local function lockedFeedback(ref)
     local isDoor = ref.object.objectType == tes3.objectType.door
@@ -40,12 +41,22 @@ local function restoreOpener()
     end
 end
 
--- the NPC inside opens: they are moved in front of the arrival marker, facing the player
-local function knock(door)
+local function cancelPendingKnock()
+    if not pendingKnock then return end
+    pendingKnock:cancel()
+    pendingKnock = nil
+end
+
+-- after the wait: the NPC inside opens, or a brief message says nobody did
+local function answerKnock(door)
+    if not tes3.getLocked({ reference = door }) then return end
     local who = core.opener(door, tes3.worldController.hour.value)
-    if not who then return false end
+    if not who then
+        tes3.messageBox("There is no response.")
+        return
+    end
     restoreOpener()
-    local marker = door.destination.marker
+    local marker = door.destination and door.destination.marker
     if marker then
         opener = { ref = tes3.makeSafeObjectHandle(who), position = who.position:copy(), facing = who.facing,
             cell = door.destination.cell }
@@ -53,10 +64,24 @@ local function knock(door)
         local facing = marker.facing + math.pi
         who.facing = facing > math.pi and facing - 2 * math.pi or facing
     end
-    if knockSound then tes3.playSound({ sound = knockSound }) end
     core.unlock(door)
     tes3ui.showNotifyMenu(who.object.name .. " opens the door.")
-    return true
+end
+
+-- play a knock at the door and wait 3 s of game time for someone willing to open
+local function knock(door)
+    if pendingKnock then return end
+    tes3.playSound({ sound = knockSound or "LockedDoor", reference = door })
+    local handle = tes3.makeSafeObjectHandle(door)
+    pendingKnock = timer.start({
+        type = timer.simulate,
+        duration = 3,
+        callback = function()
+            pendingKnock = nil
+            local ref = handle:valid() and handle:getObject()
+            if ref then answerKnock(ref) end
+        end,
+    })
 end
 
 local function onDoor(door)
@@ -71,7 +96,10 @@ local function onDoor(door)
         if verdict then core.applyVerdict(door, verdict) end
     end
     if not tes3.getLocked({ reference = door }) or core.hasKey(door) or core.isSneaking() then return end
-    if config.knocking and door.destination and not door.object.script and knock(door) then return end
+    if config.knocking and door.destination and not door.object.script then
+        knock(door)
+        return false
+    end
     if config.sneakToPick then
         lockedFeedback(door)
         return false
@@ -233,6 +261,7 @@ local function onFactionTarget(e)
 end
 
 local function onCellChanged(e)
+    cancelPendingKnock()
     if opener and e.previousCell == opener.cell then restoreOpener() end
 end
 
@@ -295,6 +324,7 @@ end)
 event.register("keyDown", onInspectorKeyDown)
 event.register(tes3.event.loaded, function()
     opener = nil
+    cancelPendingKnock()
     timer.start({
         type = timer.simulate,
         duration = 0.35,
