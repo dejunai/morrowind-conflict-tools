@@ -572,6 +572,7 @@ def run_soundfix(args, plugins, bsas, standalone=True):
         return 2 if standalone else 1
     mode = getattr(args, "soundfix_loop_mode", None) or "flag"
     dry = bool(args.dry_run or getattr(args, "soundfix_report", False))
+    sf_t0 = time.time()
     try:
         records, masters, patched, skipped = build(args, plugins, bsas, exe)
     except (OSError, RuntimeError, subprocess.TimeoutExpired) as e:
@@ -581,6 +582,7 @@ def run_soundfix(args, plugins, bsas, standalone=True):
     print(f"  {len(patched)} script(s) rewritten, {len(skipped)} left as they are (report: {os.path.basename(report)})")
     if dry:
         print("  Dry run: nothing installed.")
+        print(f"[{int(time.time() - sf_t0)}s] Sound-script patch: report only")
         return 0
     path = os.path.join(data_dir, SOUNDFIX_NAME)
     data_path = os.path.join(data_dir, "MWSE", "config", DATA_JSON)
@@ -614,6 +616,8 @@ def run_soundfix(args, plugins, bsas, standalone=True):
     moved = _load_order_with(args, True)
     print(f"  {SOUNDFIX_NAME}: written ({len(records) - 1} script(s))" + ("; added to the load order" if moved else ""))
     print(f"  {DATA_JSON}: written for the mwsoundfix MWSE helper")
+    print(f"[{int(time.time() - sf_t0)}s] Sound-script patch: {len(patched)} script(s) rewritten, "
+          f"{len(skipped)} left as they are")
     return 0
 
 

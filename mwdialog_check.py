@@ -4093,13 +4093,19 @@ def run_fix(args, plugins, bsas, data_dirs, report, world, only, hidden=frozense
             place_log.append((PLACE_PATCH_NAME, f"scripts act on '{v['id']}' but no copy is placed ({v['why']})",
                               f"placed one in the hidden cell '{PLACEHOLDER_CELL}'"))
 
+    defer_patches = defer_generated_fixes(args)
     conflict_records_for_patch, _conflict_winners = major_master_patch_records(
         {name.lower(): path for name, path in plugins})
-    if esm_plans or early or early_placed or item_esm or os.path.exists(patch_path) or conflict_records_for_patch \
-            or getattr(args, "_cell_deletes", None):
-        build_patch()                      # also clears out what older versions put in it
-    if placeholders or placements or os.path.exists(place_path):
-        build_place()
+    if defer_patches:
+        if esm_plans or early or early_placed or item_esm or placeholders or placements \
+                or getattr(args, "_cell_deletes", None) or conflict_records_for_patch:
+            print("  ESM / placeholder patches: deferred to --full's last --fix (after --clean and the last sort).")
+    else:
+        if esm_plans or early or early_placed or item_esm or os.path.exists(patch_path) or conflict_records_for_patch \
+                or getattr(args, "_cell_deletes", None):
+            build_patch()                      # also clears out what older versions put in it
+        if placeholders or placements or os.path.exists(place_path):
+            build_place()
 
     def rescan_list():
         """The load order as the game will see it: ESM patch where it loads, placeholder patch last."""
@@ -4161,7 +4167,7 @@ def run_fix(args, plugins, bsas, data_dirs, report, world, only, hidden=frozense
                 print(f"  {plugin}: {k} change(s) written")
             except (OSError, FormatError) as e:
                 print(f"  {plugin}: NOT changed ({e})")
-        if follow_esm:
+        if follow_esm and not defer_patches:
             for plugin, plan in follow_esm.items():
                 dest = esm_plans.setdefault(plugin, defaultdict(list))
                 for off, items in plan.items():
@@ -4169,6 +4175,11 @@ def run_fix(args, plugins, bsas, data_dirs, report, world, only, hidden=frozense
                         if item not in dest[off]:
                             dest[off].append(item)
             build_patch()
+        elif follow_esm and defer_patches:
+            print("  ESM follow-on fixes: deferred to --full's last --fix (after --clean and the last sort).")
+            if not follow:
+                fresh = report2
+                break
     log.extend(patch_log)
     log.extend(place_log)
     patch_path = patch_path if patch_built[0] else None
@@ -6478,6 +6489,9 @@ def fix_cell_winners(args, plugins, report=None):
       - the cell's lighting/water/flags and its pathgrid are the ones they'd be without the loser
       - every door into the place (any plugin's, anywhere) that the loser set up is pointed at an arrival
         spot of the winner's layout: the one used from the same place if there is one, else the main one"""
+    if defer_generated_fixes(args):
+        print("  Cell Fixes: deferred to --full's last --fix (after --clean and the last sort).")
+        return
     data_dir = os.path.abspath(args.data_dir)
     game_dir = os.path.dirname(data_dir)
     print("\n" + "=" * 70 + "\nCELL FIXES: rebuilt interiors, door arrivals, objects on reshaped land\n" + "=" * 70)
@@ -9604,9 +9618,118 @@ def full_missing_masters(args, game_dir):
     return missing
 
 
-def full_check(args, game_dir, stage):
+def sync_master_sizes_now(args, plugins, world=None):
+    """Set each plugin's MAST DATA sizes to the files as they are on disk now. This is the last step after
+    plugin writes (clean, AutoMerge, generated patches, in-place --fix) so the game does not warn that a
+    master has changed. Each plugin's file date is kept (load order). A pair is left alone when mastercheck
+    says the installed master is a different mod, or when the last scan said its references do not line up
+    with that master."""
+    if not plugins or getattr(args, "dry_run", False):
+        return 0
+    set_title("mwdialog_check - syncing master sizes")
+    print("\n  Syncing master sizes in plugin headers (after all writes)...")
+    sizes = {}
+    for name, path in plugins:
+        try:
+            sizes[name.lower()] = os.path.getsize(path)
+        except OSError:
+            continue
+    verdicts = getattr(world, "master_verdicts", None) or {}
+    ref_err = getattr(world, "ref_error_masters", None) or set()
+    n = 0
+    for name, path in plugins:
+        low = name.lower()
+        if not (low.endswith(FIXABLE_EXT) or is_our_patch(name) or low == AUTO_MERGE_NAME.lower()):
+            continue
+        if _sync_one_plugin_master_sizes(path, name, sizes, verdicts, ref_err):
+            n += 1
+            print(f"  {name}: master size(s) synced")
+    if n:
+        print(f"  Master sizes: {n} plugin(s) updated to the files as they are now (dates kept).")
+    else:
+        print("  Master sizes: already in sync.")
+    return n
+
+
+def _sync_one_plugin_master_sizes(path, plugin, sizes, verdicts, ref_err):
+    """Rewrite the TES3 header's MAST DATA sizes when they are stale. Returns True if the file changed."""
+    try:
+        data = read_plugin_bytes(path)
+    except OSError:
+        return False
+    try:
+        recs = list(iter_records(data))
+    except FormatError:
+        return False
+    if not recs or recs[0][1] != "TES3":
+        return False
+    off, tag, flags, body = recs[0]
+    hsubs = [[n, d] for n, d in iter_subs(body, off)]
+    cur_m = None
+    changed = False
+    for item in hsubs:
+        if item[0] == "MAST":
+            cur_m = cstr(item[1])
+        elif item[0] == "DATA" and cur_m is not None:
+            actual = sizes.get(cur_m.lower())
+            expected = struct.unpack_from("<Q", item[1])[0] if len(item[1]) >= 8 else None
+            skip = False
+            if actual is None or expected is None or expected == actual:
+                skip = True
+            elif (plugin.lower(), cur_m.lower()) in ref_err:
+                skip = True
+            elif verdicts.get((plugin.lower(), cur_m.lower()), {}).get("kind") == "different mod" \
+                    and not header_size_rewritten(verdicts.get((plugin.lower(), cur_m.lower())), expected):
+                # leave the header alone when it still holds the original size (evidence). If an earlier
+                # sync already rewrote it, keep it in step with the master (CT-50).
+                skip = True
+            if not skip:
+                item[1] = struct.pack("<Q", actual)
+                changed = True
+            cur_m = None
+    if not changed:
+        return False
+    nb = b"".join(pack_sub(n, d) for n, d in hsubs)
+    header_rest = data[off + 8:off + 16]
+    new_tes3 = tag.encode("ascii") + struct.pack("<I", len(nb)) + header_rest + nb
+    rest = data[off + 16 + len(body):]
+    st = os.stat(path)
+    write_plugin_bytes(path, new_tes3 + rest, keep_times=st)
+    return True
+
+
+def _count_unfixable_errors(args):
+    """ERROR findings a later --fix would not auto-repair (used by --full's mid-check when patches are deferred)."""
+    report = Report()
+    plugins, bsas, data_dirs = resolve(args, report)
+    if not plugins:
+        return sum(1 for i in report.issues if i[0] == "ERROR")
+    world = scan(args, plugins, bsas, data_dirs, report)
+    esp_plans, esm_plans, _skipped, _manual = plan_fixes(report, world, plugins, None, True)
+    planned = {(p.lower(), x[2]) for plans in (esp_plans, esm_plans)
+               for p, pp in plans.items() for items in pp.values() for x in items}
+    item_plugins = {fx["plugin"].lower() for fx in getattr(world, "item_fixes", [])
+                    if fx["plugin"].lower() not in world.unfixable}
+    covered = set()
+    for pn in (PATCH_NAME, PLACE_PATCH_NAME):
+        covered |= patch_contents(os.path.join(args.data_dir, pn))
+    n = 0
+    for sev, plugin, topic, info, msg in report.issues:
+        if sev != "ERROR" or is_our_patch(plugin):
+            continue
+        label = issue_label(topic, info, msg)
+        if (plugin.lower(), label) in planned or plugin.lower() in item_plugins:
+            continue
+        if covered_by_patches((sev, plugin, topic, info, msg), covered):
+            continue
+        n += 1
+    return n
+
+
+def full_check(args, game_dir, stage, allow_fixable=False):
     """The plain scan, like double-clicking the batch file: report to mwdialog_report.txt. If it has any
-    ERROR, open it and say so. Returns the number of errors."""
+    ERROR, open it and say so. Returns the number of errors. With allow_fixable, errors the last --fix
+    will repair do not stop --full (patches are built only on that last pass)."""
     report_path = MP.state_path(game_dir, "mwdialog_report.txt")
     print(f"\n--full: checking for errors after {stage} (report: mwdialog_report.txt)...")
     import contextlib
@@ -9617,8 +9740,20 @@ def full_check(args, game_dir, stage):
         for line in f:
             if line.lstrip().startswith("ERROR"):
                 errors += 1
-    if errors:
+    if errors and allow_fixable:
+        try:
+            unfix = _count_unfixable_errors(args)
+        except (OSError, FormatError, ValueError) as e:
+            print(f"--full: could not classify fixable errors after {stage} ({e}); treating them as unfixable.")
+            unfix = errors
+        if unfix == 0:
+            print(f"--full: {errors} error(s) after {stage} that the last --fix will repair; continuing.")
+            return 0
+        errors = unfix
+        print(f"--full: {errors} unfixable error(s) left after {stage}; stopping here so nothing builds on them.")
+    elif errors:
         print(f"--full: {errors} error(s) left after {stage}; stopping here so nothing builds on them.")
+    if errors:
         try:
             subprocess.Popen(["notepad", report_path])
         except OSError:
@@ -9629,7 +9764,14 @@ def full_check(args, game_dir, stage):
 
 
 IN_FULL = False
-FULL_FINAL_PASS = False         # --full's last --fix --multipatch; later can also gate soundfix/run_fix/Multipatch
+FULL_FINAL_PASS = False         # --full's last --fix --multipatch: all generated patches are built on this pass
+
+
+def defer_generated_fixes(args=None):
+    """True during --full before the last --fix --multipatch: skip Cell Fixes, ESM/place patches,
+    soundfix, Multipatch, and the MWSE aux/sound cache. A standalone --fix / --all still builds them.
+    In-place ESP dialogue/item fixes still run in phase 1 so AutoMerge sees the same records."""
+    return bool(IN_FULL and not FULL_FINAL_PASS and (args is None or getattr(args, "fix", False)))
 
 
 def back_in_load_order(args, name):
@@ -9703,8 +9845,10 @@ def run_full(args):
         choices, in mwdialog_redundant.txt, are kept), report cell conflicts (asking the
         new ones), sort, set the old Multipatch aside, clean and fix with
         the asset check, sort again;
-        stop and open the report if any error is left; otherwise auto-merge, sort, --all, sort again
-        (no follow-up), then --fix --multipatch so pathgrids run once, after --clean and the last sort;
+        stop and open the report if any error is left; otherwise auto-merge, sort, --clean, sort again
+        (no follow-up), then --fix --multipatch so every generated patch (Cell Fixes, pathgrids, ESM
+        and placeholder patches, soundfix, Multipatch, MWSE aux and the sound cache) is built once,
+        after the final --clean and the last sort;
         stop and open the report if any error is left; otherwise offer the interactive --cell-conflicts.
     It doesn't start at all while a plugin's master is missing from Data Files."""
     data_dir = os.path.abspath(args.data_dir)
@@ -9766,10 +9910,10 @@ def run_full(args):
     second = [
         ("auto-merge", ["--auto-merge", "--no-follow-up"]),
         ("sort (merged)", ["--sort", "--no-follow-up"]),
-        ("--all (merged)", ["--all"]),
-        ("sort again (after --all's changes)", ["--sort", "--no-follow-up"]),
-        # pathgrids once, after --all's --clean and this sort: earlier --fix / --all skip them
-        ("fix and Multipatch (pathgrids, after sort)", ["--fix", "--multipatch"]),
+        ("clean (merged)", ["--clean"]),
+        ("sort again (after --clean's changes)", ["--sort", "--no-follow-up"]),
+        # generated patches once, after this --clean and sort: earlier --fix skips them
+        ("fix and Multipatch (generated patches, after sort)", ["--fix", "--multipatch"]),
     ]
     if args.dry_run:
         print("--full --dry-run: each step only shows its plan, so later steps see the load order as it is now.")
@@ -9780,8 +9924,7 @@ def run_full(args):
     try:
         for phase, steps in ((1, first), (2, second)):
             for what, extra in steps:
-                # the last --fix --multipatch is the final generated-fix pass (pathgrids today;
-                # later this can also gate soundfix, run_fix and Multipatch in earlier passes)
+                # the last --fix --multipatch is the only pass that builds generated patches
                 FULL_FINAL_PASS = bool(extra and isinstance(extra, list)
                                        and "--fix" in extra and "--multipatch" in extra)
                 n = len(done) + 1
@@ -9811,7 +9954,8 @@ def run_full(args):
                 break
             if not args.dry_run:
                 set_title(f"mwdialog_check --full - checking for errors ({'before' if phase == 1 else 'after'} the auto-merge)")
-                errs = full_check(args, game_dir, "the unmerged load order" if phase == 1 else "the auto-merge")
+                errs = full_check(args, game_dir, "the unmerged load order" if phase == 1 else "the auto-merge",
+                                  allow_fixable=(phase == 1))
                 if errs:
                     stopped = f"{errs} error(s) after {'the unmerged load order' if phase == 1 else 'the auto-merge'}"
                     break
@@ -10605,42 +10749,55 @@ def _main(argv=None):
     fixed = False
     if args.fix or args.patch_esm:
         fixed = run_fix(args, plugins, bsas, data_dirs, report, world, only, hidden)
-    if args.fix and only is None and not args.openmw_cfg and not args.no_soundfix and preserve_saves(args):
-        print("\n  Sound-script patch: not rebuilt (--preserve-saves: it adds script variables a saved game holds "
-              "values for)")
-    elif args.fix and only is None and not args.openmw_cfg and not args.no_soundfix:
-        set_title("mwdialog_check - sound-script patch")
-        import mwdialog_soundfix                     # after the fixes and the auto-merge, before the Multipatch
-        sf_plugins, sf_bsas, _dirs = resolve(args, Report())
-        if mwdialog_soundfix.run_soundfix(args, sf_plugins, sf_bsas, standalone=False) == 2:
-            print("  (the sound-script patch was not rebuilt; the rest of --fix is unaffected)")
-    if args.multipatch:
-        run_multipatch(args, plugins, world)
-    if args.fix and only is None and not args.dry_run and not args.openmw_cfg:
-        # the MWSE suite's data last, from the load order the game will load - resolve() reads
-        # generated\mwdialog_load_order.txt, the list --play gives the game, never a [Game Files] section that
-        # Windows may have cut short - with Cell Fixes (rebuilt above), the
-        # auto-merge, the sound patch and the Multipatch included - Cell Fixes is the last word on what is where
-        # and what is gone. (The --cell-conflicts step of --full runs before any of them are rebuilt.)
-        print("\n  Refreshing the MWSE suite's data (mwfloatfix / mwcollide / mwstranded) from the final load order...")
-        set_title("mwdialog_check - refreshing suite data")
-        try:
-            final_plugins, _b, _d = resolve(args, Report())
-            run_cell_conflicts(args, final_plugins, aux_only=True)
-        except (OSError, FormatError, ValueError) as e:
-            print(f"  (the suite's data was not refreshed: {e})", file=sys.stderr)
+    defer_patches = defer_generated_fixes(args)
+    if defer_patches:
+        print("  Sound-script patch, Multipatch, and MWSE aux/sound cache: deferred to --full's last --fix "
+              "(after --clean and the last sort).")
+    else:
+        if args.fix and only is None and not args.openmw_cfg and not args.no_soundfix and preserve_saves(args):
+            print("\n  Sound-script patch: not rebuilt (--preserve-saves: it adds script variables a saved game holds "
+                  "values for)")
+        elif args.fix and only is None and not args.openmw_cfg and not args.no_soundfix:
+            set_title("mwdialog_check - sound-script patch")
+            import mwdialog_soundfix                     # after the fixes and the auto-merge, before the Multipatch
+            sf_plugins, sf_bsas, _dirs = resolve(args, Report())
+            if mwdialog_soundfix.run_soundfix(args, sf_plugins, sf_bsas, standalone=False) == 2:
+                print("  (the sound-script patch was not rebuilt; the rest of --fix is unaffected)")
+        if args.multipatch:
+            run_multipatch(args, plugins, world)
+        if args.fix and only is None and not args.dry_run and not args.openmw_cfg:
+            # the MWSE suite's data last, from the load order the game will load - resolve() reads
+            # generated\mwdialog_load_order.txt, the list --play gives the game, never a [Game Files] section that
+            # Windows may have cut short - with Cell Fixes (rebuilt above), the
+            # auto-merge, the sound patch and the Multipatch included - Cell Fixes is the last word on what is where
+            # and what is gone. (The --cell-conflicts step of --full runs before any of them are rebuilt.)
+            print("\n  Refreshing the MWSE suite's data (mwfloatfix / mwcollide / mwstranded) from the final load order...")
+            set_title("mwdialog_check - refreshing suite data")
+            try:
+                final_plugins, _b, _d = resolve(args, Report())
+                run_cell_conflicts(args, final_plugins, aux_only=True)
+            except (OSError, FormatError, ValueError) as e:
+                print(f"  (the suite's data was not refreshed: {e})", file=sys.stderr)
 
-    if args.fix and fixed and not args.dry_run and only is None and not args.openmw_cfg:
-        from mwdialog_soundcache import write_sound_cache
+        if args.fix and fixed and not args.dry_run and only is None and not args.openmw_cfg:
+            from mwdialog_soundcache import write_sound_cache
+            try:
+                final_report = Report()
+                final_plugins, _bsas, _dirs = resolve(args, final_report)
+                if any(issue[0] == "ERROR" for issue in final_report.issues):
+                    raise ValueError("the final load order contains missing plugins")
+                write_sound_cache(args.data_dir, final_plugins)
+            except (OSError, FormatError, ValueError) as e:
+                print(f"  sound cache: NOT written ({e})", file=sys.stderr)
+                return 2
+
+    # after every plugin write in this run (clean, in-place fixes, generated patches): MAST DATA sizes last
+    if not args.dry_run and (args.fix or args.clean or args.multipatch or args.patch_esm):
         try:
-            final_report = Report()
-            final_plugins, _bsas, _dirs = resolve(args, final_report)
-            if any(issue[0] == "ERROR" for issue in final_report.issues):
-                raise ValueError("the final load order contains missing plugins")
-            write_sound_cache(args.data_dir, final_plugins)
-        except (OSError, FormatError, ValueError) as e:
-            print(f"  sound cache: NOT written ({e})", file=sys.stderr)
-            return 2
+            final_plugins, _bsas, _dirs = resolve(args, Report())
+        except (OSError, FormatError, ValueError):
+            final_plugins = plugins
+        sync_master_sizes_now(args, final_plugins, world)
 
     return 1 if counts["ERROR"] else 0
 

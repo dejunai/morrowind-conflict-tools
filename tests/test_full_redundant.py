@@ -50,7 +50,7 @@ def test_stage_order_redundant_runs_before_everything_that_reads_plugins(staged,
     m.run_full(full_args(tmp_path))
     s = steps(staged)
     assert s.index("--unmerge") < s.index("--redundant-auto")
-    for later in ("--cell-conflicts", "--sort", "--clean", "--auto-merge", "--all"):
+    for later in ("--cell-conflicts", "--sort", "--clean", "--auto-merge", "--fix"):
         assert s.index("--redundant-auto") < s.index(later), later
     assert s.count("--redundant") + s.count("--redundant-auto") == 1
 

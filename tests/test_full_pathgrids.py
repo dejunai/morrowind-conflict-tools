@@ -35,19 +35,21 @@ def test_run_full_calls_pathgrids_once_and_last_after_clean_and_sort(tmp_path, m
     (tmp_path / "Data Files").mkdir()
     m.run_full(full_args(tmp_path, no_redundant=True, no_interactive=True, fresh_answers=True))
 
-    # a --fix or --all that can run pathgrids
+    # a --fix that can run pathgrids (early --full --fix is not the final pass)
     pathgrid_steps = [(i, argv, final) for i, (argv, final) in enumerate(steps)
-                      if "--fix" in argv or "--all" in argv]
+                      if "--fix" in argv]
     assert pathgrid_steps, steps
     # only the last of those is the final pass (pathgrids run)
     assert pathgrid_steps[-1][2] is True
     assert all(final is False for _i, _a, final in pathgrid_steps[:-1])
     last_i, last_argv, _d = pathgrid_steps[-1]
     assert "--fix" in last_argv and "--multipatch" in last_argv
-    # it is after --all (which includes --clean) and after a --sort
+    # it is after --auto-merge, a later --clean (not bundled with --fix), and a --sort
     before = [argv for argv, _d in steps[:last_i]]
-    assert any("--all" in a for a in before)
+    merge_i = next(i for i, a in enumerate(before) if "--auto-merge" in a)
+    assert any("--clean" in a and "--fix" not in a for a in before[merge_i + 1:])
     assert any("--sort" in a for a in before)
+    assert not any("--all" in a for a in (argv for argv, _d in steps))
     # the sort immediately before the last --fix does not itself follow up with --fix
     prev_sort = [a for a in before if "--sort" in a][-1]
     assert "--no-follow-up" in prev_sort
