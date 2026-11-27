@@ -10,6 +10,8 @@
 -- Slots come from the object itself, no id lists: armor by its armor slot, clothing by its clothing slot (two rings
 -- fit, one per hand), weapons one in the weapon slot, arrows, bolts and thrown weapons one in the ammunition slot.
 -- A two-handed weapon (or bow) and a shield do not go together: whichever came first stays, the other is skipped.
+-- Every skipped call is logged with the item id and name, its slot and the reason (repeat, or which item holds the
+-- slot), and so is any equip the engine itself refused (tes3.equip returned false).
 --
 -- The intercept is not kept loaded after it has done its job. It arms only when CharGenState is pending (the same
 -- global AotC watches, value ~= -1) and removes its timer.start wrap, tes3.equip wrap and simulate handler once the
@@ -82,26 +84,42 @@ local function describe(obj)
     return nil
 end
 
--- what the player wears now, merged with what this pass has already equipped
+-- an item as "id (name)" for the log
+local function label(obj)
+    local id, name = get(obj, "id"), get(obj, "name")
+    if id == nil then return tostring(obj) end
+    if name == nil or name == "" or name == id then return tostring(id) end
+    return string.format("%s (%s)", tostring(id), tostring(name))
+end
+
+-- what the player wears now, merged with what this pass has already equipped; holders names who holds each slot
 local function occupancy()
-    local counts, shield, twoHanded = {}, false, false
+    local counts, shield, twoHanded, holders = {}, false, false, {}
     pcall(function()
         for _, stack in pairs(tes3.player.object.equipment) do
-            local key, _, part = describe(get(stack, "object"))
+            local obj = get(stack, "object")
+            local key, _, part = describe(obj)
             if key then
                 counts[key] = (counts[key] or 0) + 1
-                if part == "shield" then shield = true elseif part == "twoHanded" then twoHanded = true end
+                holders[key] = holders[key] or {}
+                holders[key][#holders[key] + 1] = label(obj)
+                if part == "shield" then shield = shield or label(obj)
+                elseif part == "twoHanded" then twoHanded = twoHanded or label(obj) end
             end
         end
     end)
     if claimed then
         for key, n in pairs(claimed.counts) do
-            if n > (counts[key] or 0) then counts[key] = n end
+            if n > (counts[key] or 0) then
+                counts[key] = n
+                holders[key] = {}
+                for _, who in ipairs(claimed.holders[key] or {}) do holders[key][#holders[key] + 1] = who end
+            end
         end
         shield = shield or claimed.shield
         twoHanded = twoHanded or claimed.twoHanded
     end
-    return counts, shield, twoHanded
+    return counts, shield, twoHanded, holders
 end
 
 local function isPlayer(params)
@@ -119,18 +137,38 @@ local function guardedEquip(params, ...)
     if type(item) == "string" then item = tes3.getObject(item) end
     local key, capacity, part = describe(item)
     if not key then return original(params, ...) end
-    local counts, shield, twoHanded = occupancy()
-    local full = (counts[key] or 0) >= capacity
-        or (part == "shield" and twoHanded) or (part == "twoHanded" and shield)
-    if full then
+    local counts, shield, twoHanded, holders = occupancy()
+    local reason
+    local who = table.concat(holders[key] or {}, ", ")
+    local me = label(item)
+    if (counts[key] or 0) >= capacity then
+        local repeated = false
+        for _, h in ipairs(holders[key] or {}) do if h == me then repeated = true end end
+        if repeated then
+            reason = "repeat, already equipped in this slot"
+        else
+            reason = "slot occupied by " .. who
+        end
+    elseif part == "shield" and twoHanded then
+        reason = "shield, but a two-handed weapon is held: " .. tostring(twoHanded)
+    elseif part == "twoHanded" and shield then
+        reason = "two-handed weapon, but a shield is held: " .. tostring(shield)
+    end
+    if reason then
         skipped = skipped + 1
+        mwse.log("[mwpluginpatches] Ahead of the Classes: skipped %s, slot %s: %s.", me, key, reason)
         return false
     end
     local result = original(params, ...)
-    if result ~= false then
+    if result == false then
+        mwse.log("[mwpluginpatches] Ahead of the Classes: the engine refused %s, slot %s (tes3.equip returned false).", me, key)
+    else
         equipped = equipped + 1
         claimed.counts[key] = (claimed.counts[key] or 0) + 1
-        if part == "shield" then claimed.shield = true elseif part == "twoHanded" then claimed.twoHanded = true end
+        claimed.holders[key] = claimed.holders[key] or {}
+        claimed.holders[key][#claimed.holders[key] + 1] = me
+        if part == "shield" then claimed.shield = claimed.shield or me
+        elseif part == "twoHanded" then claimed.twoHanded = claimed.twoHanded or me end
     end
     return result
 end
@@ -168,7 +206,7 @@ end
 local function beginPass()
     depth = depth + 1
     if depth > 1 then return end
-    claimed = { counts = {}, shield = false, twoHanded = false }
+    claimed = { counts = {}, holders = {}, shield = false, twoHanded = false }
     equipped, skipped = 0, 0
     if type(tes3.equip) == "function" and tes3.equip ~= guardedEquip then
         savedEquip = tes3.equip

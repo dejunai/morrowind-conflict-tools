@@ -242,6 +242,59 @@ print("ok")
 """, mods)
 
 
+def test_skipped_equips_are_logged_with_item_slot_and_reason(mods):
+    run(r"""
+assert(patch.init())
+beginChargen()
+load("Danae/Classes/main.lua")
+ITEMS.helm2.name = "Steel Helm"
+ITEMS.shield1.name = "Round Shield"
+ITEMS.claymore.name = "Claymore"
+wear(ITEMS.shirt1)
+GEAR = { "helm1", "helm2", "shirt2", "shirt1", "claymore", "shield1" }
+chargenDone() fire()
+local function find(...)
+  local parts = { ... }
+  for _, l in ipairs(logs) do
+    local ok = l:find("skipped", 1, true) == nil and false or true
+    for _, part in ipairs(parts) do if not l:find(part, 1, true) then ok = false end end
+    if ok then return l end
+  end
+end
+assert(find("skipped shirt2", "slot clothing2", "slot occupied by shirt1"), table.concat(logs, "\n"))
+assert(find("skipped helm2 (Steel Helm)", "slot armor0") or find("skipped helm1", "slot armor0"), table.concat(logs, "\n"))
+assert(find("skipped", "(Round Shield)", "two-handed weapon is held: claymore (Claymore)")
+  or find("skipped claymore (Claymore)", "shield is held: shield1 (Round Shield)"), table.concat(logs, "\n"))
+local repeats = 0
+for _, l in ipairs(logs) do if l:find("repeat, already equipped in this slot", 1, true) then repeats = repeats + 1 end end
+assert(repeats >= 1, "re-walked items are logged as repeats")
+assert(find("equipped", "skipped", "equip call(s)"), "summary line kept")
+print("ok")
+""", mods)
+
+
+def test_engine_refused_equips_are_logged(mods):
+    run(r"""
+assert(patch.init())
+beginChargen()
+load("Danae/Classes/main.lua")
+GEAR = { "helm1", "arrows" }
+chargenDone()
+local engine = tes3.equip
+tes3.equip = function(p)
+  local item = type(p.item) == "string" and ITEMS[p.item] or p.item
+  if item.id == "arrows" then return false end
+  return engine(p)
+end
+fire()
+local seen
+for _, l in ipairs(logs) do if l:find("engine refused arrows", 1, true) and l:find("slot ammo", 1, true) then seen = l end end
+assert(seen, table.concat(logs, "\n"))
+assert(not worn():find("arrows", 1, true), worn())
+print("ok")
+""", mods)
+
+
 def test_guard_only_runs_inside_the_mods_timer_callback(mods):
     run(r"""
 assert(patch.init())
