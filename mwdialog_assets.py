@@ -24,6 +24,7 @@ Not checked: mesh vertex counts (the 4.0.0.2 format can't exceed 65535) and fold
 import os, re, struct, shutil, subprocess, sys, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mwdialog_backup as MB  # noqa: E402
+import mwdialog_console as MC  # noqa: E402
 import mwdialog_offlayout as OL  # noqa: E402
 import mwdialog_paths as MP  # noqa: E402
 import mwdialog_staged as MS  # noqa: E402
@@ -1130,6 +1131,8 @@ def check(world, m):
     r = world.r
     fixes = []                       # (kind, full, rel, detail)
     print("Asset health: reading textures, models, sounds...", file=sys.stderr)
+    MC.set_title("mwdialog_check - asset health")
+    MC.begin_count()
     tex_files, snd_files, nif_files, kf_files = [], [], [], []
     tree = getattr(world, "tree", None)
     if tree is None or not tree.covers(data_dir):
@@ -1185,6 +1188,8 @@ def check(world, m):
     # --- textures
     print(f"Asset health: textures ({len(tex_files)})...", file=sys.stderr)
     for k, (rel, full, size) in enumerate(tex_files, 1):
+        if k == 1 or k == len(tex_files) or k % 2000 == 0:
+            MC.count_title("mwdialog_check - asset health: textures", k, len(tex_files))
         if k % 2000 == 0:
             print(f"Asset health: textures {k}/{len(tex_files)}...", file=sys.stderr)
         if tidy_clean(rel, full):
@@ -1251,6 +1256,8 @@ def check(world, m):
     world.text_key_fixes = []
     allm = nif_files + kf_files
     for k, (rel, full) in enumerate(allm, 1):
+        if k == 1 or k == len(allm) or k % 2000 == 0:
+            MC.count_title("mwdialog_check - asset health: models", k, len(allm))
         if k % 2000 == 0:
             print(f"Asset health: models {k}/{len(allm)}...", file=sys.stderr)
         if full not in stats:
@@ -1333,6 +1340,8 @@ def check(world, m):
     ff = find_ffmpeg()
     print(f"Asset health: sounds ({len(snd_files)})...", file=sys.stderr)
     for k, (top, rel, full, ls) in enumerate(snd_files, 1):
+        if k == 1 or k == len(snd_files) or k % 5000 == 0:
+            MC.count_title("mwdialog_check - asset health: sounds", k, len(snd_files))
         if k % 5000 == 0:
             print(f"Asset health: sounds {k}/{len(snd_files)}...", file=sys.stderr)
         key = norm_rel(rel)
@@ -1480,6 +1489,8 @@ def check(world, m):
     cache.prune(("tex2:", "tex2b:", "texh:", "nif:", "snd:", "refs:", "names:", "bsa2:"))
     cache.flush()
     print(f"Asset health: done, {len(fixes)} file(s) to fix", file=sys.stderr)   # [seconds]: the whole pass
+    MC.end_count("mwdialog_check - asset health")
+    MC.set_title("mwdialog_check - asset health: done")
 
 
 def apply(fixes, data_dir, game_dir, m, log, dry=False):

@@ -118,7 +118,8 @@ from mwdialog_datatree import (  # noqa: E402,F401
     asset_health_module, asset_owner_folder, collect_sound_files, DataTree, GENERATED_RECORD, generated_rels, hard_link_names,
     IGNORED_MAP_RE, longpaths_module, mastercheck_module, ModelAssets, _real_dir, sound_names_under, VortexRepo)
 from mwdialog_console import (  # noqa: E402,F401
-    ask, cap_fix_log, console_interactive, FIX_LOG_ARCHIVE, FIX_LOG_CAP, fix_log_line, set_title)
+    ask, begin_count, cap_fix_log, console_interactive, count_title, end_count,
+    FIX_LOG_ARCHIVE, FIX_LOG_CAP, fix_log_line, set_title)
 from mwdialog_masters import (  # noqa: E402,F401
     add_master, added_master_in_use, check_masters_for_play, covered_by_patches, FIXABLE_EXT, master_closure, _refs_use_master,
     remove_master, write_inplace)
@@ -3597,9 +3598,15 @@ def scan(args, plugins, bsas, data_dirs, report):
             world.file_sizes[name.lower()] = os.path.getsize(path)
         except OSError:
             pass
-    for i, (name, path) in enumerate(plugins, 1):
-        print(f"[{i}/{len(plugins)}] reading {name}", file=sys.stderr)
-        world.load_plugin(path, name)
+    set_title("mwdialog_check - scanning plugins")
+    begin_count()
+    try:
+        for i, (name, path) in enumerate(plugins, 1):
+            count_title("mwdialog_check - scanning plugins", i, len(plugins))
+            print(f"[{i}/{len(plugins)}] reading {name}", file=sys.stderr)
+            world.load_plugin(path, name)
+    finally:
+        end_count("mwdialog_check - scanning plugins")
     tree = None
     if getattr(args, "asset_check", False):
         print("Indexing meshes, textures, icons, sounds, music, video and fonts...", file=sys.stderr)
@@ -3711,6 +3718,7 @@ def run_fix(args, plugins, bsas, data_dirs, report, world, only, hidden=frozense
     print("\n" + "=" * 70)
     print("FIX PLAN (ERRORs only)")
     print("=" * 70)
+    set_title("mwdialog_check - fix plan")
     for plugin, why in skipped.items():
         print(f"  SKIP {plugin}: {why}")
 
@@ -5062,6 +5070,7 @@ def run_clean(args, plugins, only):
     lookup = {n.lower(): p for n, p in plugins}
     targets = list(clean_targets(plugins, only))
     print(f"\nCLEAN: checking {len(targets)} plugin(s) against their masters...", file=sys.stderr)
+    set_title("mwdialog_check - clean")
     needs, info = defaultdict(lambda: (set(), set())), {}
     for name, path in targets:
         with open(path, "rb") as f:
@@ -6453,6 +6462,7 @@ def fix_cell_winners(args, plugins, report=None):
     data_dir = os.path.abspath(args.data_dir)
     game_dir = os.path.dirname(data_dir)
     print("\n" + "=" * 70 + "\nCELL FIXES: rebuilt interiors, door arrivals, objects on reshaped land\n" + "=" * 70)
+    set_title("mwdialog_check - Cell Fixes")
     entries = read_cell_winners(game_dir)
     out_path = os.path.join(data_dir, CELL_WINNER_PATCH)
     ours = {x.lower() for x in OUR_PATCHES} | {CELL_WINNER_PATCH.lower(), PERFORMER_PATCH.lower()}
@@ -7213,14 +7223,20 @@ def fix_cell_winners(args, plugins, report=None):
         tag_of, model_of, _scripted = object_info(order)
 
     def pg_progress(done, total):
-        set_title(f"mwdialog_check - pathgrids {done}/{total}")
+        count_title("mwdialog_check - pathgrids", done, total)
         print(f"  Pathgrids: checking {done}/{total} outdoor cells for paths into objects...",
               end="\n" if done == total else "\r", flush=True)
     pg_cache_path = MP.state_path(game_dir, PATHGRID_CACHE_FILE)
     pg_cache = load_pathgrid_cache(pg_cache_path)
-    new_pgrds, paths_fixed, paths_left, pg_reused = repair_pathgrids(
-        world, ext_pathgrids, out, tag_of, model_of, shapes,
-        progress=pg_progress if ext_pathgrids else None, cache=pg_cache)
+    if ext_pathgrids:
+        begin_count()
+    try:
+        new_pgrds, paths_fixed, paths_left, pg_reused = repair_pathgrids(
+            world, ext_pathgrids, out, tag_of, model_of, shapes,
+            progress=pg_progress if ext_pathgrids else None, cache=pg_cache)
+    finally:
+        if ext_pathgrids:
+            end_count("mwdialog_check - Cell Fixes")
     if pg_reused:
         print(f"  Pathgrids: {pg_reused} cell(s) unchanged since an earlier check: taken from {PATHGRID_CACHE_FILE}")
     # the stage's time, as the asset check prints its own: [seconds] what
@@ -7268,6 +7284,7 @@ def fix_cell_winners(args, plugins, report=None):
         os.remove(pg_file)
 
     # door owners copied with a cloned door (door_owner_verdicts): only the two clear rules are applied
+    set_title("mwdialog_check - Cell Fixes: door owners")
     doors, finals = [], {}
     for bk, hist in door_hist.items():
         pl, grp, blk, ck = hist[-1]
@@ -7336,6 +7353,7 @@ def fix_cell_winners(args, plugins, report=None):
             f.writelines(f"CHANGED  {x}\n" for x in owners_fixed)
             f.writelines(f"LEFT     {x}\n" for x in owners_left)
 
+    set_title("mwdialog_check - Cell Fixes: writing the patch")
     if not any(out.values()) and not pgrds and not new_pgrds:
         print("  Nothing to change.")
         drop_patch()
@@ -9297,6 +9315,7 @@ def run_update_rules(args):
 def run_sort(args, plugins):
     """--sort: compute the load order and set file dates to match (one day apart from 2000-01-01)."""
     print("\n" + "=" * 70 + "\nLOAD ORDER\n" + "=" * 70)
+    set_title("mwdialog_check - sort")
     game_dir = os.path.dirname(os.path.abspath(args.data_dir))
     rules_path = MP.state_path(game_dir, RULES_FILE)
     if not os.path.exists(rules_path) and not args.dry_run:
@@ -10553,6 +10572,7 @@ def _main(argv=None):
         print("\n  Sound-script patch: not rebuilt (--preserve-saves: it adds script variables a saved game holds "
               "values for)")
     elif args.fix and only is None and not args.openmw_cfg and not args.no_soundfix:
+        set_title("mwdialog_check - sound-script patch")
         import mwdialog_soundfix                     # after the fixes and the auto-merge, before the Multipatch
         sf_plugins, sf_bsas, _dirs = resolve(args, Report())
         if mwdialog_soundfix.run_soundfix(args, sf_plugins, sf_bsas, standalone=False) == 2:
@@ -10566,6 +10586,7 @@ def _main(argv=None):
         # auto-merge, the sound patch and the Multipatch included - Cell Fixes is the last word on what is where
         # and what is gone. (The --cell-conflicts step of --full runs before any of them are rebuilt.)
         print("\n  Refreshing the MWSE suite's data (mwfloatfix / mwcollide / mwstranded) from the final load order...")
+        set_title("mwdialog_check - refreshing suite data")
         try:
             final_plugins, _b, _d = resolve(args, Report())
             run_cell_conflicts(args, final_plugins, aux_only=True)

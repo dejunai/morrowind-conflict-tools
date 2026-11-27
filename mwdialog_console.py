@@ -68,13 +68,48 @@ def fix_log_line(args, game_dir, text):
         pass
 
 
+_current_title = None                    # last title this process set (tests and end_count)
+_title_hook = None                       # tests: called with each title; the Windows call is unchanged
+_saved_titles = []                       # titles to put back when a counted phase ends
+
+
 def set_title(text):
-    """The console window's title bar (Windows), so you can see what a long run is doing."""
+    """The console window's title bar (Windows), so you can see what a long run is doing.
+    Elsewhere this only remembers the title (a no-op on the real window)."""
+    global _current_title
+    _current_title = text
+    hook = _title_hook
+    if hook is not None:
+        hook(text)
+    if os.name != "nt":
+        return
     try:
         import ctypes
         ctypes.windll.kernel32.SetConsoleTitleW(text)
-    except (ImportError, AttributeError, OSError):
+    except (ImportError, AttributeError, OSError, ValueError, TypeError):
         pass
+
+
+def current_title():
+    """The last title set_title was given in this process, or None."""
+    return _current_title
+
+
+def begin_count():
+    """Remember the current title so end_count() can put it back when a counted phase finishes."""
+    _saved_titles.append(_current_title)
+
+
+def count_title(prefix, done, total):
+    """Title for a counted phase: 'prefix done/total' (Windows), a no-op elsewhere."""
+    set_title("%s %s/%s" % (prefix, done, total))
+
+
+def end_count(fallback="mwdialog_check"):
+    """Restore the title from before the counted phase. If none was set, use fallback so a finished
+    count such as 'pathgrids 1233/1233' does not stay in the title bar."""
+    prev = _saved_titles.pop() if _saved_titles else None
+    set_title(prev if prev else fallback)
 
 
 FIX_LOG_CAP = 20 * 1024 * 1024

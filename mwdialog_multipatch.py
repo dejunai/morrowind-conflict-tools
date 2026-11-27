@@ -11,7 +11,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from mwdialog_backup import index_dir  # noqa: E402
 from mwdialog_bsa import bsa_file_names  # noqa: E402
-from mwdialog_console import print  # noqa: E402
+from mwdialog_console import print, set_title  # noqa: E402
 from mwdialog_datatree import GENERATED_RECORD, ModelAssets  # noqa: E402
 from mwdialog_footing import model_reader  # noqa: E402
 from mwdialog_loadorder import default_ini, read_ini_sections, read_load_order, set_game_files  # noqa: E402
@@ -517,6 +517,7 @@ def run_multipatch(args, plugins, world):
     """Build MULTI_PATCH_NAME: reverted cell names, fog-bugged cells, merged leveled lists, merged objects and
     the beast skeleton for beast-race NPCs (beast_skeleton_fixes)."""
     print("\n" + "=" * 70 + "\nMULTIPATCH\n" + "=" * 70)
+    set_title("mwdialog_check - Multipatch")
     if any(n.lower() == "multipatch.esp" for n, _p in plugins):
         print("  WARNING: tes3cmd's multipatch.esp is active. Deactivate it: two merged-list plugins override\n"
               "  each other, and the last one loaded wins completely.")
