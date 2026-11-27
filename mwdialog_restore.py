@@ -570,7 +570,7 @@ def run_clean_up(args):
     return 0
 
 
-def restore_all(data_dir, assume_yes, fix_log):
+def restore_all(data_dir, assume_yes, fix_log, dry_run=False):
     """Put every plugin back to its OLDEST backup (the original). What is replaced is backed up first and no
     backup is removed: the file there may be a newer version of the mod (--restore NAME brings it back)."""
     ours = {x.lower() for x in OUR_PATCHES}
@@ -590,6 +590,9 @@ def restore_all(data_dir, assume_yes, fix_log):
     patch = lookup.get(PATCH_NAME.lower())
     if patch:
         print(f"\n'{PATCH_NAME}' is left as it is; the next --fix rebuilds it from scratch.")
+    if dry_run:
+        print("(dry run: nothing changed)")
+        return 0
     if not assume_yes:
         if not sys.stdin.isatty():
             print("\nNot running interactively; add --yes to restore.")

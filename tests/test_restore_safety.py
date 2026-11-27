@@ -83,3 +83,13 @@ def test_installed_tools_back_up_into_their_folder_one_per_file(tmp_path, monkey
     kept = [f for f in os.listdir(root / "legacy") if f.startswith("Morrowind.ini")]
     assert "Morrowind.ini.mwdialog-original.bak" in kept and len(kept) == 2
     assert not (game / "mwdialog_backup").exists()
+
+
+def test_restore_all_dry_run_lists_and_changes_nothing(tmp_path):
+    game, data = _game(tmp_path)
+    (data / "X.esp").write_bytes(b"edited")
+    home = game / "mwdialog_backup" / "Data Files"
+    home.mkdir(parents=True)
+    (home / "X.esp.bak").write_bytes(b"original")
+    assert R.restore_all(str(data), True, str(tmp_path / "fix.log"), dry_run=True) == 0
+    assert (data / "X.esp").read_bytes() == b"edited" and os.listdir(home) == ["X.esp.bak"]

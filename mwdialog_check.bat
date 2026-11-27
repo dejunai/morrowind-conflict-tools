@@ -21,6 +21,7 @@ rem    mwdialog_check.bat --fix                    (asks before writing)
 rem    mwdialog_check.bat --only MyMod.esp --fix   (one plugin)
 rem    mwdialog_check.bat --restore MyMod.esp      (undo: put the .bak back)
 rem    mwdialog_check.bat --restore-all            (undo everything: all plugins to originals)
+rem    mwdialog_check.bat --undo-all               (--restore-all, then turn back on what was turned off)
 rem    mwdialog_check.bat --fix --no-placeholders  (no stand-in coins for missing script objects)
 rem    mwdialog_check.bat --min-severity INFO      (also show harmless notes)
 rem

@@ -62,7 +62,7 @@ Along the way it may ask you questions in the black window, for example which of
 
 If something is missing (for example a plugin's master file isn't installed), it stops before changing anything and tells you what to install.
 
-**Undo**: `mwdialog_check.bat --restore-all` puts every changed plugin back to its original, and `mwdialog_check.bat --redundant-undo` and `mwdialog_check.bat --reenable` turn back on the plugins it turned off (as redundant, and as doubled).
+**Undo**: `mwdialog_check.bat --undo-all` puts every changed plugin back to its original and turns back on the plugins it turned off. Add `--dry-run` first to see what it would do.
 
 ## 6. Play
 
@@ -85,9 +85,9 @@ It checks that every plugin's masters are there, writes your load order into `Mo
 ## Something went wrong?
 
 - **Undo tidy**: `vortex_tidy.bat --undo`
-- **Undo plugin fixes**: `mwdialog_check.bat --restore-all`, then `--redundant-undo` and `--reenable` for plugins it turned off
+- **Undo plugin fixes**: `mwdialog_check.bat --undo-all`
 - **"Python was not found"**: reinstall Python and tick "Add python.exe to PATH".
-- **Still stuck?** Open an issue on the GitHub page, and attach `generated\mwdialog_report.txt` and a copy of what the black window said.
+- **Still stuck?** Type `vortex_tidy.bat --pack-report`. It packs the report and the logs into one zip in `conflict-tools\reports\`, with your folder names and Windows user name taken out, and changes nothing in your game. Open an issue on the GitHub page and attach that zip, with a copy of what the black window said.
 
 ## Want more?
 

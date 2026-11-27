@@ -8617,6 +8617,27 @@ def _run_redundant(args):
     return 1
 
 
+UNDO_ALL_STEPS = (("--restore-all", "plugins back to their originals"),
+                  ("--redundant-undo", "plugins turned off as redundant back on"),
+                  ("--reenable", "plugins turned off as doubled back on"))
+
+
+def run_undo_all(args):
+    """--undo-all: --restore-all, then --redundant-undo, then --reenable, each as its own run (with --yes,
+    --dry-run and --ini passed on). Every step runs; a step with nothing to do is not a failure. Exit 2 when
+    a step failed, else 0."""
+    common = [args.data_dir] + (["--ini", args.ini] if args.ini else []) \
+        + (["--yes"] if args.yes else []) + (["--dry-run"] if args.dry_run else [])
+    results = []
+    for n, (switch, what) in enumerate(UNDO_ALL_STEPS, 1):
+        print(f"\n--- undo-all {n}/{len(UNDO_ALL_STEPS)}: {switch} ({what})")
+        results.append((switch, main(common + [switch])))
+    failed = [s for s, rc in results if rc and rc >= 2]
+    print(f"\nundo-all{' (dry run)' if args.dry_run else ''}: "
+          + ", ".join(f"{s} {'failed' if rc and rc >= 2 else 'done'}" for s, rc in results))
+    return 2 if failed else 0
+
+
 def run_redundant_undo(args):
     """--redundant-undo [NAME...]: turn back on what --redundant turned off (all of it, and forget the
     keep-both choices, with no name)."""
@@ -10428,6 +10449,9 @@ def check_parser():
                     help="with --fix: don't add stand-in gold coins for objects that scripts name but no mod defines")
     fx.add_argument("--restore-all", action="store_true",
                     help="undo everything: put every plugin back to its oldest .bak (the original), back up what it replaces, and exit")
+    fx.add_argument("--undo-all", action="store_true",
+                    help="undo the plugin fixes in one go: --restore-all, then --redundant-undo, then --reenable "
+                         "(--yes, --dry-run and --ini are passed on)")
     fx.add_argument("--clean-up", action="store_true",
                     help="delete the .bak backups between each installed or parked plugin's oldest and "
                          "newest; delete every backup of a plugin no longer installed or parked; when that "
@@ -10513,7 +10537,7 @@ def _main(argv=None):
     if getattr(args, "repair_sounds", False):
         return run_repair_sounds(args)
     if not REPAIRING_INI and os.path.isdir(args.data_dir) and not (args.add_all_esp and args.sort) \
-            and not (args.header or args.restore or args.restore_all or args.restore_dates):
+            and not (args.header or args.restore or args.restore_all or args.undo_all or args.restore_dates):
         cut = truncated_game_files(args)
         if cut:
             last, full, count = cut
@@ -10545,7 +10569,7 @@ def _main(argv=None):
                     print(f"(The repair's own checks ended with code {rc}; carrying on.)")
                 print("\n" + "=" * 70 + "\nLoad order repaired; now running what was asked.\n" + "=" * 70)
     if not REPAIRING_INI and os.path.isdir(args.data_dir) and not args.sort \
-            and not (args.header or args.restore or args.restore_all or args.restore_dates or args.add_all_esp):
+            and not (args.header or args.restore or args.restore_all or args.undo_all or args.restore_dates or args.add_all_esp):
         split = split_exact_groups(args)
         if split:
             print("=" * 70)
@@ -10580,7 +10604,7 @@ def _main(argv=None):
                 print("\n" + "=" * 70 + "\nLoad order re-sorted; now running what was asked.\n" + "=" * 70)
     if args.play:
         actions = (args.sort, args.add_all_esp, args.clean, args.fix, args.multipatch, args.patch_esm,
-                   args.header, args.trace, args.restore, args.restore_all, args.restore_dates, args.csv,
+                   args.header, args.trace, args.restore, args.restore_all, args.undo_all, args.restore_dates, args.csv,
                    args.clean_up, args.clean_up_undo, args.merge, args.auto_merge, args.merge_plan, args.unmerge is not None, args.cell_conflicts, args.reenable is not None, args.remove_generated,
                    args.redundant, args.redundant_auto, args.redundant_undo is not None, args.restore_textures,
                    args.update_rules)
@@ -10613,6 +10637,8 @@ def _main(argv=None):
         rc = run_clean_up(args)
         if rc or not (args.sort or args.clean or args.fix or args.multipatch):
             return rc
+    if args.undo_all:
+        return run_undo_all(args)
     if args.reenable is not None:
         return run_reenable(args)
     if args.redundant_undo is not None:
@@ -10624,7 +10650,7 @@ def _main(argv=None):
     if args.restore_textures:
         return run_restore_textures(args)
     if args.restore_all:
-        return restore_all(args.data_dir, args.yes, args.fix_log)
+        return restore_all(args.data_dir, args.yes, args.fix_log, dry_run=args.dry_run)
     if args.restore:
         return restore_backups(args.restore, args.data_dir)
 
