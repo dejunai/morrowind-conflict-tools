@@ -49,35 +49,23 @@ def wrap(rule, old):
 
 def test_the_retired_ids_are_gone_from_the_table():
     ids = {r[0] for r in R.RETIRED}
-    assert ids == {"KB5", "KB21", "KB22", "KB24", "KB27", "KB28", "KB51"}
+    assert ids == {"KB5", "KB28", "KB51"}
     assert not ids & {r[0] for r in lf.KNOWN_BUGS} and not ids & set(lf.KNOWN_BUGS_WHOLE)
 
 
 @need_checker
 @pytest.mark.parametrize("entry", R.RETIRED, ids=lambda e: f"{e[0]}:{e[2]}")
-def test_the_rule_repairs_what_the_retired_entry_did(entry, tmp_path):
+def test_the_rule_repairs_what_the_retired_entry_did(entry):
     rule, _mod, rel, old, new, _what, by = entry
     src, kb = wrap(rule, old), wrap(rule, new)
-    if by == "I1":
-        data = tmp_path / "Data Files"
-        for lit in __import__("re").findall(r'"([^"]+\.dds)"', new):   # the files the repaired names name
-            p = data / "textures" / lit.replace("\\\\", "/")
-            p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_bytes(b"DDS " + b"\0" * 124)
-        found = lf.image_findings(src, [str(data)])
-        assert found and all(f["conf"] == "high" for f in found)
-        fixed, rules = lf.build_patch(src, found, "testmod", CFG, "high", False)
-    else:
-        a = lf._analyse(src, "testmod", "testmod/" + rel.split("/")[-1], CFG)
-        found = [f for f in a.findings if f["rule"] == by]
-        assert found and all(f["conf"] == "high" for f in found)
-        fixed, rules = lf.build_patch(a.src, found, "testmod", CFG, "high", False)
-        if fixed is None:                                    # a text repair (Y1's commas) is already in a.src
-            fixed, rules = a.src, [by]
-        assert not compiles(src)
+    a = lf._analyse(src, "testmod", "testmod/" + rel.split("/")[-1], CFG)
+    found = [f for f in a.findings if f["rule"] == by]
+    assert found and all(f["conf"] == "high" for f in found)
+    fixed, rules = lf.build_patch(a.src, found, "testmod", CFG, "high", False)
+    if fixed is None:                                        # a text repair (Y1's commas) is already in a.src
+        fixed, rules = a.src, [by]
+    assert not compiles(src)
     assert rules == [by]
     body = strip_head(fixed)
     assert compiles(body)
     assert changed(src, body) == changed(src, kb)            # the same lines as the old exact repair
-    if by == "I1":
-        assert body == kb                                    # and here the very same text

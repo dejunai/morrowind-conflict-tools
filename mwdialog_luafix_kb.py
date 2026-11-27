@@ -5,13 +5,10 @@ applies whole or not at all (every part of it in a file matches, or nothing in t
 and once applied its text is gone, so a second run finds nothing. Paths are under MWSE\\mods, or
 lib/... under MWSE for libraries. Data only: mwdialog_luafix adds these to KNOWN_BUGS."""
 
-KB_WHOLE = {"KB20", "KB23", "KB25", "KB26", "KB29", "KB30", "KB31", "KB32", "KB33", "KB34", "KB35", "KB36", "KB37", "KB38", "KB39", "KB40", "KB41", "KB42", "KB43", "KB44", "KB45", "KB46", "KB47", "KB48", "KB49", "KB50"}
+KB_WHOLE = {"KB23", "KB29", "KB30", "KB31", "KB32", "KB33", "KB34", "KB35", "KB36", "KB37", "KB38", "KB39", "KB40", "KB41", "KB42", "KB43", "KB44", "KB45", "KB46", "KB47", "KB48", "KB49", "KB50"}
 
 WHAT = {
-    "KB20": ('the default effect icons and particle textures name .tga files that are not shipped (the textures are .dds); the names are corrected to .dds'),
     "KB23": ("the achievements compare tes3.getGlobal() with a number, and getGlobal returns nil when the ABtv_Ach_* globals are not loaded ('attempt to compare nil with number'); missing globals fall back to player data"),
-    "KB25": ('four quest icons name \\Icons\\SSQN\\BA_Vamp.dds; the shipped icon is BA_Vampire.dds'),
-    "KB26": ('icons.MT_S names \\Icons\\SSQN\\MT\\MT24MT_S.dds; the icon ships as \\Icons\\SSQN\\MT24MT_S.dds'),
     "KB29": ("swapping a reference copies item data and cell state without nil checks and raises when the target object, the new reference or the cell is missing; the copies are guarded and the swap is pcall'd"),
     "KB30": ('musicSelectTrack reads tes3.player.cell before a game is loaded (main menu music)'),
     "KB31": ('export/import checks, restocking and the barter/dialogue handlers index the player cell, region, service actor and reference data without nil checks'),
@@ -38,111 +35,6 @@ WHAT = {
 
 # (rule, owner, path, exact text as released, repaired text); the description is WHAT[rule]
 PARTS = [
-    ("KB20", 'Magicka Expanded', 'lib/operatorjack/magickaexpanded/effects/alteration.lua',
-     "        icon = params.icon or \"RFD\\\\RFD_ms_alteration.tga\",\n"
-     "        particleTexture = params.particleTexture or \"vfx_alt_glow.tga\",\n",
-     "        icon = params.icon or \"RFD\\\\RFD_ms_alteration.dds\",\n"
-     "        particleTexture = params.particleTexture or \"vfx_alt_glow.dds\",\n"),
-    ("KB20", 'Magicka Expanded', 'lib/operatorjack/magickaexpanded/effects/conjuration.lua',
-     "        -- Graphics/sounds.\n"
-     "        icon = params.icon or \"RFD\\\\RFD_ms_conjuration.tga\",\n"
-     "        particleTexture = params.particleTexture or \"vfx_conj_flare02.tga\",\n"
-     "        castSound = params.castSound or \"conjuration cast\",\n",
-     "        -- Graphics/sounds.\n"
-     "        icon = params.icon or \"RFD\\\\RFD_ms_conjuration.dds\",\n"
-     "        particleTexture = params.particleTexture or \"vfx_conj_flare02.dds\",\n"
-     "        castSound = params.castSound or \"conjuration cast\",\n"),
-    ("KB20", 'Magicka Expanded', 'lib/operatorjack/magickaexpanded/effects/conjuration.lua',
-     "        nonRecastable = true,\n"
-     "        casterLinked = true,\n"
-     "\n"
-     "        -- Graphics/sounds.\n"
-     "        icon = params.icon or \"RFD\\\\RFD_ms_conjuration.tga\",\n"
-     "        particleTexture = params.particleTexture or \"vfx_conj_flare02.tga\",\n"
-     "        lighting = {0.99, 0.95, 0.67},\n"
-     "\n"
-     "        -- Required callbacks.\n"
-     "        onTick = function(e) e:triggerBoundArmor(params.armorId, params.armorId2) end\n",
-     "        nonRecastable = true,\n"
-     "        casterLinked = true,\n"
-     "\n"
-     "        -- Graphics/sounds.\n"
-     "        icon = params.icon or \"RFD\\\\RFD_ms_conjuration.dds\",\n"
-     "        particleTexture = params.particleTexture or \"vfx_conj_flare02.dds\",\n"
-     "        lighting = {0.99, 0.95, 0.67},\n"
-     "\n"
-     "        -- Required callbacks.\n"
-     "        onTick = function(e) e:triggerBoundArmor(params.armorId, params.armorId2) end\n"),
-    ("KB20", 'Magicka Expanded', 'lib/operatorjack/magickaexpanded/effects/conjuration.lua',
-     "        nonRecastable = true,\n"
-     "        casterLinked = true,\n"
-     "\n"
-     "        -- Graphics/sounds.\n"
-     "        icon = params.icon or \"RFD\\\\RFD_ms_conjuration.tga\",\n"
-     "        particleTexture = params.particleTexture or \"vfx_conj_flare02.tga\",\n"
-     "        lighting = {0.99, 0.95, 0.67},\n"
-     "\n"
-     "        -- Required callbacks.\n"
-     "        onTick = function(e) e:triggerBoundWeapon(params.weaponId) end\n",
-     "        nonRecastable = true,\n"
-     "        casterLinked = true,\n"
-     "\n"
-     "        -- Graphics/sounds.\n"
-     "        icon = params.icon or \"RFD\\\\RFD_ms_conjuration.dds\",\n"
-     "        particleTexture = params.particleTexture or \"vfx_conj_flare02.dds\",\n"
-     "        lighting = {0.99, 0.95, 0.67},\n"
-     "\n"
-     "        -- Required callbacks.\n"
-     "        onTick = function(e) e:triggerBoundWeapon(params.weaponId) end\n"),
-    ("KB20", 'Magicka Expanded', 'lib/operatorjack/magickaexpanded/effects/conjuration.lua',
-     "        hasNoMagnitude = true,\n"
-     "        casterLinked = true,\n"
-     "\n"
-     "        -- Graphics/sounds.\n"
-     "        icon = params.icon or \"RFD\\\\RFD_ms_conjuration.tga\",\n"
-     "        particleTexture = params.particleTexture or \"vfx_conj_flare02.tga\",\n"
-     "        lighting = {0.99, 0.95, 0.67},\n"
-     "\n"
-     "        -- Required callbacks.\n",
-     "        hasNoMagnitude = true,\n"
-     "        casterLinked = true,\n"
-     "\n"
-     "        -- Graphics/sounds.\n"
-     "        icon = params.icon or \"RFD\\\\RFD_ms_conjuration.dds\",\n"
-     "        particleTexture = params.particleTexture or \"vfx_conj_flare02.dds\",\n"
-     "        lighting = {0.99, 0.95, 0.67},\n"
-     "\n"
-     "        -- Required callbacks.\n"),
-    ("KB20", 'Magicka Expanded', 'lib/operatorjack/magickaexpanded/effects/conjuration.lua',
-     "        -- Graphics/sounds.\n"
-     "        icon = params.icon or \"RFD\\\\RFD_ms_conjuration.tga\",\n"
-     "        lighting = {0.99, 0.95, 0.67},\n",
-     "        -- Graphics/sounds.\n"
-     "        icon = params.icon or \"RFD\\\\RFD_ms_conjuration.dds\",\n"
-     "        lighting = {0.99, 0.95, 0.67},\n"),
-    ("KB20", 'Magicka Expanded', 'lib/operatorjack/magickaexpanded/effects/destruction.lua',
-     "        icon = params.icon or \"RFD\\\\RFD_ms_destruction.tga\",\n"
-     "        particleTexture = params.particleTexture or \"vfx_alpha_bolt01.tga\",\n",
-     "        icon = params.icon or \"RFD\\\\RFD_ms_destruction.dds\",\n"
-     "        particleTexture = params.particleTexture or \"vfx_alpha_bolt01.dds\",\n"),
-    ("KB20", 'Magicka Expanded', 'lib/operatorjack/magickaexpanded/effects/illusion.lua',
-     "        icon = params.icon or \"RFD\\\\RFD_ms_illusion.tga\",\n"
-     "        particleTexture = params.particleTexture or \"vfx_grnflare.tga\",\n",
-     "        icon = params.icon or \"RFD\\\\RFD_ms_illusion.dds\",\n"
-     "        particleTexture = params.particleTexture or \"vfx_grnflare.dds\",\n"),
-    ("KB20", 'Magicka Expanded', 'lib/operatorjack/magickaexpanded/effects/mysticism.lua',
-     "        icon = params.icon or \"RFD\\\\RFD_ms_mysticism.tga\",\n"
-     "        particleTexture = params.particleTexture or \"vfx_myst_flare01.tga\",\n",
-     "        icon = params.icon or \"RFD\\\\RFD_ms_mysticism.dds\",\n"
-     "        particleTexture = params.particleTexture or \"vfx_myst_flare01.dds\",\n"),
-    ("KB20", 'Magicka Expanded', 'lib/operatorjack/magickaexpanded/effects/restoration.lua',
-     "        icon = params.icon or \"RFD\\\\RFD_ms_restoration.tga\",\n"
-     "        particleTexture = params.particleTexture or \"vfx_bluecloud.tga\",\n",
-     "        icon = params.icon or \"RFD\\\\RFD_ms_restoration.dds\",\n"
-     "        particleTexture = params.particleTexture or \"vfx_bluecloud.dds\",\n"),
-    ("KB20", 'Magicka Expanded', 'operatorjack/magickaexpanded-lorefriendlypack/effects/banishdaedraeffect.lua',
-     "    particleTexture = \"vfx_myst_flare01.tga\",\n",
-     "    particleTexture = \"vfx_myst_flare01.dds\",\n"),
     ("KB23", 'OAAB Grazelands', 'oaab/grazelands/achievements.lua',
      "-- Track the MWSE summon even when the achievement framework is absent.\n"
      "local function observeVerminoth()\n",
@@ -183,20 +75,6 @@ PARTS = [
     ("KB23", 'OAAB Grazelands', 'oaab/grazelands/achievements.lua',
      "            achievement.condition = function() return tes3.getGlobal(variable) >= threshold end\n",
      "            achievement.condition = function() return getGlobal(variable) >= threshold end\n"),
-    ("KB25", 'SSQN Patches', 'cz/ssqnpatches/main.lua',
-     "\t\tssqn.registerQIcon(\"vaba06_mastrius\",\"\\\\Icons\\\\SSQN\\\\BA_Vamp.dds\")\n",
-     "\t\tssqn.registerQIcon(\"vaba06_mastrius\",\"\\\\Icons\\\\SSQN\\\\BA_Vampire.dds\")\n"),
-    ("KB25", 'SSQN Patches', 'cz/ssqnpatches/main.lua',
-     "\t\tssqn.registerQIcon(\"vabamm02_vampire\",\"\\\\Icons\\\\SSQN\\\\BA_Vamp.dds\")\n",
-     "\t\tssqn.registerQIcon(\"vabamm02_vampire\",\"\\\\Icons\\\\SSQN\\\\BA_Vampire.dds\")\n"),
-    ("KB25", 'SSQN Patches', 'cz/ssqnpatches/main.lua',
-     "\t\tssqn.registerQIcon(\"vabamm04_serano\",\"\\\\Icons\\\\SSQN\\\\BA_Vamp.dds\")\n"
-     "\t\tssqn.registerQIcon(\"vabamm05_dulo\",\"\\\\Icons\\\\SSQN\\\\BA_Vamp.dds\")\n",
-     "\t\tssqn.registerQIcon(\"vabamm04_serano\",\"\\\\Icons\\\\SSQN\\\\BA_Vampire.dds\")\n"
-     "\t\tssqn.registerQIcon(\"vabamm05_dulo\",\"\\\\Icons\\\\SSQN\\\\BA_Vampire.dds\")\n"),
-    ("KB26", 'SSQN LE', 'ssqn/iconlist.lua',
-     "icons.MT_S = \"\\\\Icons\\\\SSQN\\\\MT\\\\MT24MT_S.dds\"\n",
-     "icons.MT_S = \"\\\\Icons\\\\SSQN\\\\MT24MT_S.dds\"\n"),
     ("KB29", 'Dynamic Object Replacer', 'lib/dor/gpobjectreplacer.lua',
      "local function cloneReferenceData(newRef, oldRef)\n"
      "    -- Copy over basic item data.\n",

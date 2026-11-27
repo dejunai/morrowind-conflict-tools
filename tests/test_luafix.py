@@ -1711,19 +1711,6 @@ def test_a_ui_slideshow_timer_skips_while_saving_and_config_waits_for_the_save()
     assert not [f for f in b.run() if f["rule"] in ("I2", "I3")]
 
 
-def test_a_tga_the_lua_names_is_pointed_at_a_real_dds(tmp_path):
-    (tmp_path / "Splash").mkdir()
-    (tmp_path / "Splash" / "a.dds").write_bytes(b"DDS " + b"\0" * 124)
-    (tmp_path / "Splash" / "b.dds").write_bytes(b"not a dds")             # no DDS header: left alone
-    (tmp_path / "Splash" / "c.tga").write_bytes(b"x")                     # the .tga is still there: left alone
-    (tmp_path / "Splash" / "c.dds").write_bytes(b"DDS " + b"\0" * 124)
-    src = r'local p = "Splash\\a.tga" local q = "Splash/b.tga" local r = "Splash\\c.tga"'   # Lua's escaped \
-    found = lf.image_findings(src, [str(tmp_path)])
-    assert [(f["rule"], f["what"].split("'")[1]) for f in found] == [("I1", r"Splash\\a.tga")]
-    s, e, txt = found[0]["edits"][0]
-    assert src[:s] + txt + src[e:] == r'local p = "Splash\\a.dds" local q = "Splash/b.tga" local r = "Splash\\c.tga"'
-
-
 # --- L1 / M1 / V1 (rules added after the 2026-11 hand-edit audit)
 def test_l1_caps_linked_walk_and_countdown():
     src = ("local function f(c)\n  while c do\n    c = c.parent\n  end\nend\n"

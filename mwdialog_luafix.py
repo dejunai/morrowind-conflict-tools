@@ -60,9 +60,6 @@ Rules (thresholds come from MWSE\\config\\mwguard.json when it exists - the same
      (local X = tes3.worldController.x / tes3.player.x / tes3.mobilePlayer.x at the top of main.lua,
      never assigned again: nil-safe at load and read again where used, (X or <chain>), medium)        fix
   H5 require cycles inside a mod                                                                      report
-  I1 a .tga/.bmp it names is gone and a real .dds of that name is there (loose under Data Files or the
-     mod, in textures\\ or icons\\, or in a loaded BSA) -> names the .dds; x.dds.dds whose x.dds is there
-     -> one extension; a path whose file is in exactly one place one folder off (medium) -> that path  fix
   I2 a repeating real-time timer that redraws UI keeps running through a save -> skips while saving fix
   I3 a config written inside a save handler (during the save) -> written the frame after it        fix
   H6 tes3.messageBox inside a loop                                                                    report
@@ -386,7 +383,8 @@ REF_FIELDS = {"reference", "target", "mobile", "attacker", "attackerReference", 
               "targetReference", "targetMobile", "actor", "current", "previous"}
 NON_ACTOR_TYPES = {"activator", "alchemy", "ammunition", "apparatus", "armor", "book", "clothing", "container",
                    "door", "ingredient", "light", "lockpick", "miscItem", "probe", "repairItem", "static", "weapon"}
-RULES_REV = 5                  # bump when a rule changes, so cached findings are worked out again
+RULES_REV = 6                  # bump when a rule changes, so cached findings are worked out again
+                               # (6: the I1 image-path rule is gone: icons and textures stay as the mod ships them)
 # console-only commands; replacement suggestions follow the guide's table where it has one
 CONSOLE_ONLY = {"togglepov": "tes3.togglePOV() (or tes3.force1stPerson() / tes3.force3rdPerson())",
                 "tcl": "console only (no script command)", "tai": "console only (no script command)",
@@ -2658,192 +2656,6 @@ SAVE_HELPER = ('local localpatch_save do localpatch_save = package.loaded["local
                'event.register("loaded", function() localpatch_save.saving = false end) '
                'event.register("menuExit", function() localpatch_save.saving = false end) end end ')
 
-IMAGE_LIT_RE = re.compile(r'(["\'])([^"\'\r\n]{1,260}?)\.(tga|bmp|dds)\1', re.I)
-IMAGE_DIRS = ("", "textures", "icons")            # where a path in a string is looked up (MWSE: icons, textures)
-
-
-def _is_dds(path):
-    try:
-        with open(path, "rb") as f:
-            return f.read(4) == b"DDS "
-    except OSError:
-        return False
-
-
-_BSA_NAMES = {}
-
-
-def bsa_names(data_dir):
-    """{lowercase backslash path} of every file in the BSAs the game loads (Morrowind.bsa and Morrowind.ini's
-    [Archives], read from the folder above Data Files); empty when there is none. Read once per run."""
-    if not data_dir:
-        return frozenset()
-    staged = data_dir if isinstance(data_dir, MS.StagedData) else None
-    key = ("staged",) + tuple(os.path.normcase(r) for r in staged.roots) if staged \
-        else os.path.normcase(os.path.abspath(data_dir))
-    if key in _BSA_NAMES:
-        return _BSA_NAMES[key]
-    names = ["Morrowind.bsa"]
-    ini = os.path.join(staged.game_dir if staged else os.path.dirname(os.path.abspath(data_dir)), "Morrowind.ini")
-    try:
-        with open(ini, encoding="latin-1") as f:
-            sec = ""
-            for ln in f:
-                ln = ln.strip()
-                if ln.startswith("["):
-                    sec = ln.lower()
-                elif sec == "[archives]" and "=" in ln and ln.lower().startswith("archive"):
-                    names.append(ln.split("=", 1)[1].strip())
-    except OSError:
-        pass
-    out = set()
-    if staged:                                        # a staged mod's BSA, else the base game's (read-only exception)
-        here = {}
-        for nm in names:
-            p = staged.find(nm) or next((c for c in staged.core_bsas() if os.path.basename(c).lower() == nm.lower()),
-                                        None)
-            if p:
-                here[nm.lower()] = p
-    else:
-        try:
-            here = {n.lower(): os.path.join(data_dir, n) for n in os.listdir(data_dir)}
-        except OSError:
-            here = {}
-    import mwdialog_bsa as B
-    for nm in names:
-        real = here.get(nm.lower())
-        if not real:
-            continue
-        try:
-            out |= {x.replace("/", "\\") for x in B.bsa_file_names(real)}
-        except Exception:                          # a damaged archive: its names are just not known
-            pass
-    _BSA_NAMES[key] = frozenset(out)
-    return _BSA_NAMES[key]
-
-
-def _image_there(root, rel, bsa, need_dds=False):
-    """Is rel (backslash path, with its extension) a file under root (loose) or in the BSAs, in any IMAGE_DIRS?"""
-    rel_os = rel.replace("\\", os.sep)
-    for d in IMAGE_DIRS:
-        p = os.path.join(root, d, rel_os) if d else os.path.join(root, rel_os)
-        if (_is_dds(p) if need_dds else os.path.isfile(p)):
-            return True
-        if (d + "\\" + rel if d else rel).lower() in bsa:
-            return True
-    return False
-
-
-_IMAGE_NAMES = {}
-
-
-def _image_names(root, bsa):
-    """{lowercase file name: {backslash path under root}} of every image under root's textures and icons, loose
-    and in the BSAs (for I1's unique-name match). Built once per root."""
-    key = (os.path.normcase(os.path.abspath(root)), id(bsa))
-    if key in _IMAGE_NAMES:
-        return _IMAGE_NAMES[key]
-    out = {}
-    for d in ("textures", "icons"):
-        top = os.path.join(root, d)
-        for dp, _dn, fns in os.walk(top):
-            for fn in fns:
-                if fn.lower().endswith((".dds", ".tga", ".bmp")):
-                    rel = os.path.relpath(os.path.join(dp, fn), root).replace("/", "\\")
-                    out.setdefault(fn.lower(), set()).add(rel)
-    for b in bsa:
-        if b.startswith(("textures\\", "icons\\")):
-            out.setdefault(b.rsplit("\\", 1)[-1], set()).add(b)
-    _IMAGE_NAMES[key] = out
-    return out
-
-
-def _one_folder_off(named, found):
-    """named (as written, with or without textures\\ or icons\\ first) and found (a path under Data Files) differ by
-    one folder, one too many or one too few: the same file in a neighbouring folder, not a file of the same name
-    elsewhere. Returns the corrected parts of named (its own spelling, found's for an added folder), else None."""
-    a = [x for x in named.split("\\") if x]
-    b = [x for x in found.split("\\") if x]
-    if a and a[0].lower() not in ("textures", "icons") and b and b[0].lower() in ("textures", "icons"):
-        b = b[1:]
-    if abs(len(a) - len(b)) != 1 or a[-1].lower() != b[-1].lower():
-        return None
-    al, bl = [x.lower() for x in a], [x.lower() for x in b]
-    if len(a) > len(b):
-        for i in range(len(a) - 1):
-            if al[:i] + al[i + 1:] == bl:
-                return a[:i] + a[i + 1:]
-    else:
-        for i in range(len(b) - 1):
-            if bl[:i] + bl[i + 1:] == al:
-                return a[:i] + [b[i]] + a[i:]
-    return None
-
-
-def _concat_next_to(src, mo):
-    """The literal is an operand of '..' (a piece of a path built at run time: not a whole path)."""
-    i, j = mo.start() - 1, mo.end()
-    while i >= 0 and src[i] in " \t":
-        i -= 1
-    while j < len(src) and src[j] in " \t":
-        j += 1
-    return i >= 0 and src[i] == "." or src.startswith("..", j)
-
-
-def image_findings(src, roots, bsa=frozenset()):
-    """I1: a string naming an image the game can't find while the right one is there (loose under `roots` - Data
-    Files, the mod's own package - in their textures\\ or icons\\, or in a loaded BSA). Lua loads images by exact
-    name, with no fallback. High: a .tga/.bmp whose .dds is there (with a real DDS header when loose); a doubled
-    extension (x.dds.dds) whose single one is there. Medium: a path whose file name exists in exactly one place
-    under textures\\ or icons\\ (the folder in the string is wrong)."""
-    out = []
-    for mo in IMAGE_LIT_RE.finditer(src):
-        raw = mo.group(2)
-        lead = len(raw) - len(raw.lstrip("\\/"))
-        name = raw.replace("/", "\\").replace("\\\\", "\\").lstrip("\\")
-        if name.lower().startswith("data files\\"):
-            name = name[len("data files\\"):]
-        ext = mo.group(3)
-        full = f"{name}.{ext}"
-        if any(_image_there(r, full, bsa) for r in roots):
-            continue
-        hit = None
-        if ext.lower() in ("tga", "bmp"):
-            for root in roots:
-                if _image_there(root, name + ".dds", bsa, need_dds=True):
-                    hit = Finding(rule="I1", line=src.count("\n", 0, mo.start()) + 1,
-                                  what=f"names '{raw}.{ext}', which is gone; a .dds of that name is there",
-                                  fix="names the .dds", conf="high", edits=[(mo.start(3), mo.end(3), "dds")],
-                                  needs=set())
-                    break
-        if hit is None and name.lower().endswith((".dds", ".tga")):
-            single = name
-            if any(_image_there(r, single, bsa) for r in roots):
-                hit = Finding(rule="I1", line=src.count("\n", 0, mo.start()) + 1,
-                              what=f"names '{raw}.{ext}' (the extension twice); '{single}' is there",
-                              fix="one extension", conf="high", edits=[(mo.end(2) - 4, mo.end(2), "")], needs=set())
-        if hit is None and ("\\" in name or "/" in name) and not _concat_next_to(src, mo):
-            fname = full.rsplit("\\", 1)[-1].lower()
-            places = set()
-            for root in roots:
-                places |= _image_names(root, bsa).get(fname, set())
-            low = {p.lower() for p in places}
-            parts = _one_folder_off(full, next(iter(low))) if len(low) == 1 else None
-            if parts:
-                found = sorted(places)[0]
-                sep = "\\\\" if "\\\\" in raw else ("/" if "/" in raw else "\\")
-                new = raw[:lead] + sep.join(parts)
-                new = new[:-(len(ext) + 1)] if new.lower().endswith("." + ext.lower()) else new
-                if new != raw:
-                    hit = Finding(rule="I1", line=src.count("\n", 0, mo.start()) + 1,
-                                  what=f"names '{raw}.{ext}', which is not there; the only file of that name is "
-                                       f"'{found}'", fix="names that file", conf="medium",
-                                  edits=[(mo.start(2), mo.end(2), new)], needs=set())
-        if hit:
-            out.append(hit)
-    return out
-
-
 # (rule, owner, path under MWSE\mods or MWSE, exact vulnerable text, replacement, bug description)
 KNOWN_BUGS = [
     ("KB1", "AttendMeMWSE", "attendmemwse/followers.lua",
@@ -3760,7 +3572,7 @@ KNOWN_BUGS += [
 ]
 KNOWN_BUGS_WHOLE |= {"KR1", "KR2"}
 
-# KB20 and up: local hand repairs of third-party Lua (asset names, syntax, nil guards, handlers registered again on
+# KB23 and KB29 up: local hand repairs of third-party Lua (syntax, nil guards, handlers registered again on
 # every load), kept as exact text so the mod can go back to its released files and still get them.
 import mwdialog_luafix_kb as KBH                             # noqa: E402
 KNOWN_BUGS += KBH.RULES
@@ -4534,7 +4346,6 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
                                fixable=bool(f["edits"])) for f in ent["findings"]]})
     _mark_dead(rep, by_mod, paths, data_dir)
     for (mroot, key), files in sorted(by_mod.items()):
-        roots = [r for r in MS.roots_of(data_dir) + [os.path.dirname(os.path.dirname(mroot)) if mroot else None] if r]
         if (mroot, key) in kb_only:
             for p, rel in files:
                 ent = rep.files[p]
@@ -4632,9 +4443,8 @@ def check_paths(paths, cfg, include_own=False, checker=None, level="high", data_
                 a.findings[:] = kept
                 ent["findings"] = _drop_load_like(a.findings, loadlike) + [
                     f for f in ent["findings"] if f["rule"] in ("H5", "H7", "T1")]
-            images = image_findings(a.src, roots, bsa_names(data_dir))
-            ent["findings"] = rules_before_kb([f for f in ent["findings"] if f["rule"] != "I1"] + images)
-            findings = rules_before_kb(a.findings + images)
+            ent["findings"] = rules_before_kb(ent["findings"])
+            findings = rules_before_kb(a.findings)
             if own_rules is not None:
                 findings = [f for f in findings if f["rule"] in own_rules]
             new, rules = build_patch(a.src, findings, key, cfg, level, want_shim)

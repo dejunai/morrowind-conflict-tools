@@ -8,10 +8,11 @@ from conftest import _load
 lf = _load("mwdialog_luafix")
 
 LEGACY = frozenset(
-    ["KB%d" % n for n in (1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 19, 20, 23, 25, 26)]
+    ["KB%d" % n for n in (1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 19, 23)]
     + ["KB%d" % n for n in range(29, 51)] + ["KR1", "KR2", "KR3"])
 WHY = re.compile(r"\(no rule can express this: (?P<why>[^)]*\S[^)]*)\)")
-RETIRED = frozenset({"KB5", "KB21", "KB22", "KB24", "KB27", "KB28", "KB51", "KP1", "KP2", "KP3", "KP4"})
+RETIRED = frozenset({"KB5", "KB20", "KB21", "KB22", "KB24", "KB25", "KB26", "KB27", "KB28", "KB51",
+                     "KP1", "KP2", "KP3", "KP4"})        # KB20/21/22/24/25/26/27: icon and texture paths, removed 2026-11-26
 
 
 def test_every_new_known_bug_says_why_no_rule_can_express_it():

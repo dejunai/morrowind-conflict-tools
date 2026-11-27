@@ -1,8 +1,7 @@
 """luafix general rules added 2026-11-26 (rules run before the Known Bugs table): Y1 (syntax LuaJIT always rejects),
 F3 (true/false concatenated into log text), A3's new lookups, R1/H2/H4 as fixes, A1 at medium for references named
-otherwise, I1 in icons\\ and the BSAs (plus doubled extensions and a file one folder off), and the order rules-then-KB."""
+otherwise, and the order rules-then-KB."""
 import os
-import struct
 
 import pytest
 
@@ -186,62 +185,6 @@ def test_A1_guards_a_reference_known_by_its_fields_at_medium():
     assert "if stables.supportsLuaData then stables.data.resident = resident.baseObject.id end" in new
     plain = "local function f(config)\n  config.data.x = 1\nend\nreturn f\n"
     assert not of(analyse(plain), "A1")                     # nothing says it is a reference
-
-
-# ------------------------------------------------------------------------------------------------ I1
-def bsa(files):
-    c = len(files)
-    names = b"".join(n.encode() + b"\0" for n, _d in files)
-    noffs, o = [], 0
-    for n, _d in files:
-        noffs.append(o)
-        o += len(n) + 1
-    so, doff = b"", 0
-    for _n, d in files:
-        so += struct.pack("<II", len(d), doff)
-        doff += len(d)
-    dir_ = so + struct.pack(f"<{c}I", *noffs) + names
-    return struct.pack("<III", 0x100, len(dir_), c) + dir_ + b"\0" * 8 * c + b"".join(d for _n, d in files)
-
-
-def dds(path):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(b"DDS " + b"\0" * 124)
-
-
-def test_I1_finds_the_dds_in_icons_and_in_a_bsa(tmp_path):
-    data = tmp_path / "Data Files"
-    dds(data / "icons" / "RFD" / "RFD_ms_x.dds")
-    data.mkdir(exist_ok=True)
-    (data / "Morrowind.bsa").write_bytes(bsa([("textures\\vfx_glow.dds", b"DDS " + b"\0" * 124)]))
-    lf._BSA_NAMES.clear()
-    src = 'local e = { icon = "RFD\\\\RFD_ms_x.tga", particleTexture = "vfx_glow.tga", other = "gone.tga" }\n'
-    i1 = lf.image_findings(src, [str(data)], lf.bsa_names(str(data)))
-    assert len(i1) == 2 and all(f["conf"] == "high" for f in i1)
-    new, _r = patch(src, i1)
-    assert '"RFD\\\\RFD_ms_x.dds"' in new and '"vfx_glow.dds"' in new and '"gone.tga"' in new
-
-
-def test_I1_doubled_extension(tmp_path):
-    data = tmp_path / "Data Files"
-    dds(data / "Textures" / "Map" / "temple.dds")
-    src = 'local i = { chapel = "Textures\\\\Map\\\\temple.dds.dds" }\n'
-    i1 = lf.image_findings(src, [str(data)])
-    assert [f["conf"] for f in i1] == ["high"]
-    assert '"Textures\\\\Map\\\\temple.dds"' in patch(src, i1)[0]
-
-
-def test_I1_a_file_one_folder_off_is_medium_and_nothing_further_is_guessed(tmp_path):
-    data = tmp_path / "Data Files"
-    dds(data / "icons" / "SSQN" / "MT24MT_S.dds")
-    dds(data / "textures" / "other" / "deep" / "header.dds")
-    src = ('local a = "\\\\Icons\\\\SSQN\\\\MT\\\\MT24MT_S.dds"\n'
-           'local b = "MWSE/mods/x/mcm/header.dds"\n'
-           'local c = "\\\\Icons\\\\SSQN\\\\" .. "MT\\\\MT24MT_S.dds"\n')
-    i1 = lf.image_findings(src, [str(data)])
-    assert [f["conf"] for f in i1] == ["medium"] and i1[0]["line"] == 1
-    new, _r = patch(src, i1, "medium")
-    assert new.split("\n")[0].endswith('local a = "\\\\Icons\\\\SSQN\\\\MT24MT_S.dds"')
 
 
 # ------------------------------------------------------------------------------------------------ rules before KB

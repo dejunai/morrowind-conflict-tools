@@ -629,18 +629,17 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 * **For the author**: Check `tes3.worldController.weatherController.currentWeather` before calling engine
   functions through FFI.
 
-## 45. Later Known Bugs now applied by luafix (`KB20`-`KB51`)
+## 45. Later Known Bugs now applied by luafix (`KB23`, `KB29`-`KB51`)
 
 Hand repairs of released third-party Lua (and one upstream MUSE 2.02 syntax bug) are now exact Known Bugs
 rules, so a Vortex reinstall or a return to the released files still gets them. The fingerprints live in
-`mwdialog_luafix_kb.py` (`KB20`-`KB50`) and in `mwdialog_luafix.py` (`KB51`, next to `KB5`). There is still no
+`mwdialog_luafix_kb.py` (`KB23`, `KB29`-`KB50`) and in `mwdialog_luafix.py` (`KB51`, next to `KB5`). There is still no
 KB18 (the WBSR save-block conflict stays in `mwsaveguard.wbsr_bard`).
 
-* **Asset paths (`KB20`-`KB27`)**: Magicka Expanded, DRIP, OAAB Grazelands, The Garden of Dreams, SSQN Patches,
-  SSQN LE, and Map Icons name textures or icons that are not shipped (`.tga` where the file is `.dds`,
-  `BA_Vamp` for `BA_Vampire`, a doubled `temple.dds.dds`, a wrong Morrowind Traders path).
-* **Retired 2026-11-26**: `KB21`, `KB22`, `KB24`, `KB27` (now `I1`), `KB28`, `KB51` and `KB5` (now `Y1`) - the
-  general rules make the same repairs; the entries are regression fixtures in `tests/fixtures/luafix_retired_kb.py`.
+* **Removed 2026-11-26**: the asset-path entries `KB20`-`KB27` (Magicka Expanded, DRIP, OAAB Grazelands, The Garden
+  of Dreams, SSQN Patches, SSQN LE, Map Icons) and the general rule `I1` that replaced four of them. Icons and
+  textures stay as the mod ships them; luafix rewrites no image path or extension. `KB28`, `KB51` and `KB5`
+  were retired in favour of `Y1`; they are regression fixtures in `tests/fixtures/luafix_retired_kb.py`.
 * **Syntax (`KB28`, `KB51`)**: Creatures and Critters `danae\cc\main.lua` is missing three commas in the
   `_plume` ids list. MUSE 2.02 (and the official Patch for MUSE 2 v2.02) `music\cell.lua`, `combat.lua`,
   `interior.lua` and `region.lua` put a newline between `MUSE.DebugLog` and `(`, which LuaJIT rejects as
