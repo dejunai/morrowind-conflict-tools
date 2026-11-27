@@ -57,12 +57,14 @@ def _version_of(folder):
 
 
 def _copy_tools(dst, crlf=False):
+    """A copy of the tools with LF line endings (CRLF with crlf=True), whatever the checkout here has: a Windows
+    checkout with core.autocrlf=true is CRLF, so _edit's LF snippets would not be found in a raw copy."""
     dst.mkdir()
     for n in os.listdir(SRC):
         if n.startswith("mwdialog_") and n.endswith(".py"):
-            b = open(os.path.join(SRC, n), "rb").read()
+            b = open(os.path.join(SRC, n), "rb").read().replace(b"\r\n", b"\n")
             if crlf:
-                b = b.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
+                b = b.replace(b"\n", b"\r\n")
             (dst / n).write_bytes(b)
     return dst
 
@@ -75,7 +77,7 @@ def _edit(folder, name, old, new):
 
 
 def test_pathgrid_code_version_ignores_line_endings_and_code_it_never_runs(tmp_path):
-    here = PG._code_version()
+    here = PG._code_version()                                               # this checkout, LF or CRLF
     assert here == PG._code_version()
     assert _version_of(_copy_tools(tmp_path / "lf")) == here
     assert _version_of(_copy_tools(tmp_path / "crlf", crlf=True)) == here      # the deployed copy
