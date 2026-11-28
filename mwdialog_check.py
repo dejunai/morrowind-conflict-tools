@@ -113,7 +113,8 @@ from mwdialog_state import (  # noqa: E402,F401
 from mwdialog_cellmods import (  # noqa: E402,F401
     COLLIDE_ANY_RADIUS, COLLIDE_DATA, COLLIDE_RADIUS, COLLIDE_SKIP_TAGS, COLLIDE_STRUCTURE_RE, INVISIBLE_RE, _OBJECT_INFO,
     object_info, RELOCATE_MIN_NEW, report_rearranged, REWORK_FRACTION, REWORK_MIN_DELETED, STRANDED_DATA, STRANDED_DISTANCE,
-    STRANDED_KEEP_TAGS, STRANDED_MOVE_TAGS, doubled_objects, write_collide_data, write_float_data, write_stranded_data)
+    STRANDED_KEEP_TAGS, STRANDED_MOVE_TAGS, doubled_objects, write_collide_data, write_float_data, write_stranded_data,
+    PERFORMERS_DATA, write_performer_data)
 from mwdialog_datatree import (  # noqa: E402,F401
     asset_health_module, asset_owner_folder, collect_sound_files, DataTree, GENERATED_RECORD, generated_rels, hard_link_names,
     IGNORED_MAP_RE, longpaths_module, mastercheck_module, ModelAssets, _real_dir, sound_names_under, VortexRepo)
@@ -5430,6 +5431,7 @@ def write_suite_data(args, plugins, order, ref_hist, land_v, labels, name_of, de
                                                                         ours_names=[n for n, _p in ours_hist])),
                      ("the distant land overrides", lambda: write_ghost_statics(
                          os.path.dirname(os.path.abspath(args.data_dir)), args.data_dir, plugins)),
+                     (PERFORMERS_DATA, lambda: write_performer_data(args, order, ref_hist, labels)),
                      (STRANDED_DATA, lambda: write_stranded_data(args, order, lost))):
         try:
             fn()
@@ -5867,6 +5869,10 @@ def run_cell_conflicts(args, plugins, collect=False, incompatible_only=False, au
                              ours=ours_l, ours_names=[n for n, _p in ours_hist])
         except (OSError, ValueError) as e:
             print(f"  (could not write mwfloatfix_data.json: {e})", file=sys.stderr)
+        try:
+            write_performer_data(args, order, ref_hist, labels)
+        except (OSError, ValueError) as e:
+            print(f"  (could not write {PERFORMERS_DATA}: {e})", file=sys.stderr)
         print("  Working through distant land (which hidden objects to leave out of it), please be patient...",
               file=sys.stderr, flush=True)
         try:

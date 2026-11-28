@@ -10,8 +10,10 @@
     performing animation stands with the normal one. Nobody is removed, hidden or disabled, and they can
     still be talked to.
 
-    Nothing is decided in advance from a generated list, so it works for any mods in any load order. The
-    Mod Config menu can pick again for the place you're in. Off: everyone performs again.
+    It works only in the interiors MWSE\config\mwperformers_data.json lists (written by mwdialog_check --fix and
+    --cell-conflicts: each interior with performers placed in it, and who); anywhere else it does nothing. A listed
+    performer not found in the place is logged once a session. Without the list it handles no one, and one line in
+    MWSE.log says so. The Mod Config menu can pick again for the place you're in. Off: everyone performs again.
     Performers that an older version hid (disabled) are shown again when their place is next visited.
     Decisions are written to Data Files\MWSE\logs\mwperformers.log.
 
@@ -27,6 +29,24 @@
 
 local CONFIG_NAME = "mwperformers"
 local config = mwse.loadConfig(CONFIG_NAME, { enabled = false, log = true, dialogueAnimation = true, restoreDelay = 3 })
+
+-- MWSE\config\mwperformers_data.json (mwdialog_check): interior id -> the performers placed there
+local known
+do
+    local data = mwse.loadConfig("mwperformers_data")
+    if data and type(data.cells) == "table" then
+        known = {}
+        for cellId, list in pairs(data.cells) do
+            if type(cellId) == "string" and type(list) == "table" then known[cellId:lower()] = list end
+        end
+    else
+        mwse.log("[mwperformers] MWSE\\config\\mwperformers_data.json is missing: no performers are handled "
+            .. "(mwdialog_check --fix, or --cell-conflicts, writes it)")
+    end
+end
+local function isKnown(cell)
+    return known ~= nil and cell ~= nil and cell.isInterior == true and known[cell.id:lower()] ~= nil
+end
 
 local ANIM_PATTERNS = { "bard", "lute", "drum", "perform", "musician" }
 local SCRIPT_PATTERNS = { "bard", "lute", "drum", "perform", "musician", "minstrel" }
@@ -228,6 +248,29 @@ end
 
 -- the decision for one cell -----------------------------------------------------------------------
 local sessionLogged = {}
+local missingLogged = {}                  -- interior id -> true: its missing performers were logged this session
+
+-- the performers the list names for this place that aren't in it (a script or an unlisted mod took them away)
+local function logMissing(cell)
+    local cellId = cell.id:lower()
+    if missingLogged[cellId] then return end
+    missingLogged[cellId] = true
+    local here = {}
+    for ref in cell:iterateReferences(tes3.objectType.npc) do
+        local base = baseOf(ref)
+        if base and not ref.deleted then here[base.id:lower()] = (here[base.id:lower()] or 0) + 1 end
+    end
+    for _, e in ipairs(known[cellId]) do
+        local id = type(e.id) == "string" and e.id:lower()
+        if id then
+            if (here[id] or 0) > 0 then
+                here[id] = here[id] - 1
+            else
+                log("%s: %s is listed (placed by %s) but isn't here", cell.editorName, id, tostring(e.from or "?"))
+            end
+        end
+    end
+end
 
 local function performersIn(cell)
     local list = {}
@@ -241,7 +284,8 @@ local function performersIn(cell)
 end
 
 local function settleCell(cell, again)
-    if not cell or not cell.isInterior then return end
+    if not isKnown(cell) then return end
+    logMissing(cell)
     local list = performersIn(cell)
     if not config.enabled or #list < 2 then return end
     local cellId = cell.id:lower()
@@ -282,7 +326,7 @@ event.register(tes3.event.cellChanged, function()
     timer.delayOneFrame(function() settleActive() end)     -- after the cell's references are all in place
 end)
 event.register(tes3.event.loaded, function()
-    sessionLogged = {}
+    sessionLogged, missingLogged = {}, {}
     held, animStopped, heldScripts, prevAnim = weak(), weak(), heldScripts, weak()   -- the old references are gone
     timer.delayOneFrame(function() settleActive() end)
 end)
@@ -547,7 +591,7 @@ local function onMenuDialogActivated(e)
     endQuiet()
     if pendingAnim and not (ref and sameRef(pendingAnim, ref)) then restoreAnimation() end
     if pendingAnim then cancelTimers() end                -- the same performer again: he stays plain for this one too
-    if not config.enabled or not ref or not isBardRef(ref) then return end
+    if not config.enabled or not ref or not isKnown(ref.cell) or not isBardRef(ref) then return end
     quietBard = tes3.makeSafeObjectHandle(ref)
     skipScriptFrame(ref)                 -- first, or the script starts the next song
     tes3.removeSound({ reference = ref })

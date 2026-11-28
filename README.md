@@ -115,7 +115,7 @@ Vortex is optional: without it the tools scan `Data Files` only. Mod Organizer 2
 5. **Automated Patch Generation**:
    - **AutoMerge (`--auto-merge`)**: Finds active `.esp` plugins with no cell, land, or pathgrid edits that can move together without changing what wins against any other plugin, merges them into `mwdialog_check AutoMerge.esp` (or `--merge-name`), and deactivates the inputs.
    - **Multipatch (`--multipatch`)**: Builds `mwdialog_check Multipatch.esp` like tes3cmd multipatch: merged leveled lists, fog-bugged cells (illegal fog density 0 is set to 0.01), and reverted cell names, plus objects several mods change, merged field by field, unless `--no-merge-objects` is passed. Beast-race NPCs (the winning race record's beast flag) with no model or a humanoid skeleton (`base_anim.nif`, `base_anim_female.nif`) get the beast skeleton `base_animkna.nif`, and those with a mod's pose model that lacks the beast bones (toes, tail) get a copy of the pose with them grafted, unless `--no-beast-skeleton`. Load it last.
-   - **Doubled performers**: no plugin is built for them. The `mwperformers` MWSE module lets one performer per inn perform, in the game, and removes no one. A `mwdialog_check Performers Patch.esp` left by an earlier version is set aside (kept as a backup) and taken out of the load order by `--fix`.
+   - **Doubled performers**: no plugin is built for them. The `mwperformers` MWSE module lets one performer per inn perform, in the game, and removes no one; it works only in the interiors `mwperformers_data.json` lists (each interior with performers placed in it, written with the other suite data). A `mwdialog_check Performers Patch.esp` left by an earlier version is set aside (kept as a backup) and taken out of the load order by `--fix`.
    - **SoundFix**: Recompiles problematic audio scripts using `MWRecompile` into `mwdialog_check - MWSoundFix.esp`, replacing broken `GetSoundPlaying` polling loops with state variables. `--fix` rebuilds this patch unless `--no-soundfix` is passed. `--soundfix` runs that step on its own.
 6. **Load-Order Sorter (`--sort`)**:
    - Built-in mlox-compatible topological sorter (implemented in `mwdialog_check.py`; `mwdialog_loadorder.py` parses rules and stores the order).
@@ -212,7 +212,7 @@ Vortex is optional: without it the tools scan `Data Files` only. Mod Organizer 2
 #### Cell Conflicts, Land Moves, & Footing
 | Switch | Argument | Description |
 | :--- | :--- | :--- |
-| `--cell-conflicts` | *(flag)* | Analyzes exterior and interior cell conflicts, moved land, and prompts for conflict choices. Also writes the MWSE suite data (`mwfloatfix_data.json`, `mwcollide_data.json`, `mwstranded_data.json`). |
+| `--cell-conflicts` | *(flag)* | Analyzes exterior and interior cell conflicts, moved land, and prompts for conflict choices. Also writes the MWSE suite data (`mwfloatfix_data.json`, `mwcollide_data.json`, `mwstranded_data.json`, `mwperformers_data.json`). |
 | `--only-incompatible` | *(flag)* | Limits cell conflict analysis to hard incompatibilities (e.g. moved land). |
 | `--only-new` | *(flag)* | Replay every answer remembered in `mwdialog_conflict_answers.json` and ask only about the conflicts that have none yet. |
 | `--fresh-answers` | *(flag)* | With `--full`: don't replay the remembered answers (by default `--full` replays them and asks only about new conflicts). Incompatible plugins are still asked about. |

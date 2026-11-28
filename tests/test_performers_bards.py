@@ -58,12 +58,16 @@ tes3 = { objectType = { npc = 1, armor = 2 }, armorSlot = { shield = 8 },
          removeSound = function() stopped = stopped + 1 end }
 tes3ui = { getServiceActor = function() return speaker end, findMenu = function() end }
 timer = { delayOneFrame = function() end }
-mwse = { loadConfig = function(_, d) d.enabled = ENABLED; d.log = false; return d end, saveConfig = function() end }
+local INN = { isInterior = true, id = "Balmora, Eight Plates", editorName = "Balmora, Eight Plates" }
+local DATA = { cells = { ["balmora, eight plates"] = { { id = "someone" } } } }
+mwse = { log = function() end, saveConfig = function() end, loadConfig = function(name, d)
+  if name == "mwperformers_data" then return DATA end
+  d.enabled = ENABLED; d.log = false; return d end }
 dofile([[MOD]])
 local function check(ok, what) if not ok then error(what, 2) end end
-local function npc(script, context)
+local function npc(script, context, cell)
   local base = { objectType = 1, id = "someone", mesh = "base_anim.nif", script = script and { id = script } }
-  return { reference = { object = { id = base.id, baseObject = base, objectType = 1 }, context = context } }
+  return { reference = { object = { id = base.id, baseObject = base, objectType = 1 }, context = context, cell = cell or INN } }
 end
 
 fire("initialized")
@@ -106,6 +110,10 @@ stopped = 0
 speaker = npc("guard_script", { state = 0, positiononce = 1 })
 fire("uiActivated")
 check(stopped == 0, "someone who doesn't perform is left alone")
+local elsewhere = { state = 0, positiononce = 1 }
+speaker = npc("DM_Bard_script", elsewhere, { isInterior = true, id = "Some Other Inn", editorName = "Some Other Inn" })
+fire("uiActivated")
+check(stopped == 0 and elsewhere.state == 0, "a bard in an interior the list doesn't name is left alone")
 print("ok")
 """
 
@@ -180,7 +188,10 @@ tes3 = { objectType = { npc = 1, armor = 2 }, armorSlot = { shield = 8 },
 tes3ui = { getServiceActor = function() end, findMenu = function() end }
 include = function() end
 local cfg
-mwse = { loadConfig = function(_, d) d.enabled = true; d.log = false; cfg = d; return d end, saveConfig = function() end }
+local DATA = { cells = { ["balmora, eight plates"] = { { id = "raflod" }, { id = "am_lutist" }, { id = "bob_singer" } } } }
+mwse = { log = function() end, saveConfig = function() end, loadConfig = function(name, d)
+  if name == "mwperformers_data" then return DATA end
+  d.enabled = true; d.log = false; cfg = d; return d end }
 local picks = { 2, 1, 3 }
 math.random = function(m) local p = table.remove(picks, 1) assert(p <= m) return p end
 dofile([[MOD]])
@@ -285,14 +296,16 @@ include = function() end
 MWLOG = {}
 local seen = {}                              -- another mod's handler (Animated Dialogue's), registered before ours
 event.register("uiActivated", function() seen[#seen + 1] = calls[1] end)
-mwse = { loadConfig = function(_, d) d.enabled = true; d.log = false; d.dialogueAnimation = DIALOGUE_ANIMATION; CFG = d; return d end, saveConfig = function() end, log = function(fmt, ...) MWLOG[#MWLOG + 1] = string.format(fmt, ...) end }
+local INN = { isInterior = true, id = "Balmora, Eight Plates", editorName = "Balmora, Eight Plates" }
+local DATA = { cells = { ["balmora, eight plates"] = { { id = "bard" } } } }
+mwse = { loadConfig = function(name, d) if name == "mwperformers_data" then return DATA end d.enabled = true; d.log = false; d.dialogueAnimation = DIALOGUE_ANIMATION; CFG = d; return d end, saveConfig = function() end, log = function(fmt, ...) MWLOG[#MWLOG + 1] = string.format(fmt, ...) end }
 dofile([[MOD]])
 local function check(ok, what) if not ok then error(what .. " / " .. table.concat(calls, ", "), 2) end end
 local function last() return calls[#calls] end
 
 local function performer(mesh, script, groups, override, extra)
   local base = { objectType = 1, id = "bard", mesh = mesh, script = script and { id = script } }
-  local ref = { object = { id = "bard", baseObject = base, objectType = 1 }, context = { state = 0, positiononce = 1 },
+  local ref = { object = { id = "bard", baseObject = base, objectType = 1 }, context = { state = 0, positiononce = 1 }, cell = INN,
                 sceneNode = {}, animationData = { currentAnimGroups = groups, hasOverrideAnimations = override,
                   actorNode = { update = function(_, o) calls[#calls + 1] = "update" .. (o.time and (" t=" .. o.time) or "") end } },
                 mobile = {} }
@@ -504,7 +517,7 @@ def test_performing_animation_stops_in_dialogue_and_comes_back(on):
     script = ANIM_SCRIPT.replace("DIALOGUE_ANIMATION", on).replace("[[MOD]]", "[[" + MOD + "]]")
     if on == "false":
         script = script.split("fire(\"initialized\")")[0] + """fire("initialized")
-speaker = { reference = { object = { id = "bard", baseObject = { objectType = 1, id = "bard", mesh = "am\\\\anim_lute.nif" }, objectType = 1 },
+speaker = { reference = { cell = { isInterior = true, id = "Balmora, Eight Plates" }, object = { id = "bard", baseObject = { objectType = 1, id = "bard", mesh = "am\\\\anim_lute.nif" }, objectType = 1 },
   context = { state = 0, positiononce = 1 }, sceneNode = {}, animationData = { currentAnimGroups = { 0, 0, 255 }, hasOverrideAnimations = true } } }
 speaker.reference.object.baseObject.script = { id = "DM_Bard_script" }
 fire("uiActivated"); fire("menuExit")
@@ -514,3 +527,51 @@ print("ok")
 """
     out = subprocess.run([LUAJIT, "-"], input=script, capture_output=True, text=True, timeout=60)
     assert out.returncode == 0 and out.stdout.strip().endswith("ok"), out.stderr + out.stdout
+
+
+KNOWN_SCRIPT = r"""
+local handlers, logged, lines = {}, {}, {}
+event = { register = function(name, fn) handlers[name] = handlers[name] or {}; table.insert(handlers[name], fn) end,
+          unregister = function() end, isRegistered = function() return false end }
+local function fire(name, e) for _, fn in ipairs(handlers[name] or {}) do fn(e or {}) end end
+local inn = { isInterior = true, id = "Balmora, Eight Plates", editorName = "Balmora, Eight Plates" }
+local refs = { { object = { id = "raflod", name = "Raflod", baseObject = { objectType = 1, id = "raflod", mesh = "base_anim.nif",
+                 script = { id = "DM_Bard_script" } }, objectType = 1 }, cell = inn, position = { x = 0, y = 0, z = 0 } } }
+function inn:iterateReferences() local i = 0 return function() i = i + 1 return refs[i] end end
+tes3 = { objectType = { npc = 1, armor = 2 }, armorSlot = { shield = 8 }, event = setmetatable({}, { __index = function(_, k) return k end }),
+         getActiveCells = function() return { inn } end, iterateObjects = function() return function() end end,
+         player = { data = {} } }
+timer = { delayOneFrame = function(f) f() end }
+include = function() end
+lfs = { mkdir = function() end }
+io.open = function() return { write = function(_, ...) for _, s in ipairs({ ... }) do lines[#lines + 1] = s end end,
+                              flush = function() end } end
+mwse = { log = function(fmt, ...) logged[#logged + 1] = string.format(fmt, ...) end, saveConfig = function() end,
+         loadConfig = function(name, d)
+           if name == "mwperformers_data" then return DATA end
+           d.enabled = true; d.log = true; return d end }
+dofile([[MOD]])
+fire("loaded")
+fire("cellChanged")
+print("logged=" .. table.concat(logged, " | "))
+print("lines=" .. table.concat(lines, ""))
+"""
+
+
+def _known(data):
+    script = KNOWN_SCRIPT.replace("DATA end", data + " end").replace("[[MOD]]", "[[" + MOD + "]]")
+    out = subprocess.run([LUAJIT, "-"], input=script, capture_output=True, text=True, timeout=60)
+    assert out.returncode == 0, out.stderr + out.stdout
+    return out.stdout
+
+
+def test_without_the_list_no_one_is_handled_and_mwse_log_says_so_once():
+    out = _known("nil")
+    assert out.count("mwperformers_data.json is missing: no performers are handled") == 1
+    assert "lines=\n" in out or out.rstrip().endswith("lines=")              # its own log: nothing decided
+
+
+def test_a_listed_performer_who_is_not_there_is_logged_once():
+    out = _known('{ cells = { ["balmora, eight plates"] = { { id = "raflod" }, { id = "ghost_bard", from = "Bards.esp" } } } }')
+    assert out.count("ghost_bard is listed (placed by Bards.esp) but isn't here") == 1
+    assert "raflod is listed" not in out

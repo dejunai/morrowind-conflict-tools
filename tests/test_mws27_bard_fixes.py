@@ -235,8 +235,9 @@ def test_one_performer_per_inn_when_the_plain_load_throws():
     assert old in script
     script = script.replace(old, 'loadAnimation = function(p) anims[p.reference] = p.file or "own"; p.reference.sceneNode = { n = 2 } '
                                  'if p.file then error("Animation file failed to load.") end end,')
-    assert "mwse = { loadConfig" in script and script.rstrip().endswith('print("ok")')
-    script = script.replace("mwse = { loadConfig", "NOTES = {}; mwse = { log = function(f, ...) NOTES[#NOTES + 1] = string.format(f, ...) end, loadConfig")
+    assert "mwse = { log = function() end," in script and script.rstrip().endswith('print("ok")')
+    script = script.replace("mwse = { log = function() end,",
+                            "NOTES = {}; mwse = { log = function(f, ...) NOTES[#NOTES + 1] = string.format(f, ...) end,")
     script = script.rstrip()[:-len('print("ok")')] + '''
 assert(#NOTES >= 1 and NOTES[1]:find("expected and harmless", 1, true) and NOTES[1]:find("lutist", 1, true), tostring(NOTES[1]))
 print("ok")

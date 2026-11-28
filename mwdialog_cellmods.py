@@ -285,6 +285,10 @@ STRANDED_DISTANCE = 400.0     # an added object this far from everything else th
 INVISIBLE_RE = re.compile(r"marker|interiorweather|scriptholder|^_mca_|sound|^plx_es_|^rv_gh_|_trigger|^gvrm_.*_sc$|"
                           r"^g7_container", re.I)        # g7_container: MWSE Containers' storage, kept out of sight
 
+PERFORMERS_DATA = "mwperformers_data.json"    # Data Files\MWSE\config\, read by the mwperformers MWSE mod
+# who performs, the same rule as mwperformers: an NPC whose model or script names a performer
+PERFORMER_MODEL_WORDS = ("bard", "lute", "drum", "perform", "musician")
+PERFORMER_SCRIPT_WORDS = PERFORMER_MODEL_WORDS + ("minstrel",)
 STRANDED_DATA = "mwstranded_data.json"        # Data Files\MWSE\config\, read by the mwstranded MWSE mod
 
 STRANDED_MOVE_TAGS = {"NPC_", "CREA", "LEVC", "CONT"} | ITEM_TAGS | {"MISC", "WEAP", "LEVI"}
@@ -292,13 +296,14 @@ STRANDED_MOVE_TAGS = {"NPC_", "CREA", "LEVC", "CONT"} | ITEM_TAGS | {"MISC", "WE
 STRANDED_KEEP_TAGS = set()                    # nothing is left in the void: doors and scripted things move too
 
 _OBJECT_INFO = {}
+_SCRIPT_OF = {}                                  # object id -> its script id (object_info)
 
 OBJECT_CACHE_FILE = "mwdialog_object_cache.json"   # beside Data Files: each plugin's objects, by its content
 OBJECT_CACHE_DAYS = 60                             # an entry no run has used for this long is dropped
 
 
 def _plugin_objects(data):
-    """[[id, tag, scripted 0/1, model or ""]] of one plugin's object records, in file order (up to any damage)."""
+    """[[id, tag, script id or "", model or ""]] of one plugin's object records, in file order (up to any damage)."""
     out = []
     try:
         for _off, tag, _flags, body in iter_records(data):
@@ -308,7 +313,8 @@ def _plugin_objects(data):
             if nm is None:
                 continue
             md = first_sub(body, b"MODL")
-            out.append([cstr(nm).lower(), tag, 1 if first_sub(body, b"SCRI") else 0,
+            sc = first_sub(body, b"SCRI")
+            out.append([cstr(nm).lower(), tag, cstr(sc).lower() if sc else "",
                         cstr(md).lower().replace("/", "\\") if md else ""])
     except FormatError:
         pass
@@ -350,7 +356,7 @@ def object_info(order):
         except (OSError, ValueError, AttributeError):
             pass
     now, changed = int(time.time()), False
-    model_of, tag_of, scripted = {}, {}, set()
+    model_of, tag_of, scripted, script_of = {}, {}, set(), {}
     for _n, p in order:
         try:
             data = read_plugin_bytes(p)
@@ -368,8 +374,10 @@ def object_info(order):
             tag_of[rid] = tag
             if scr:
                 scripted.add(rid)
+                script_of[rid] = scr if isinstance(scr, str) else ""
             else:
                 scripted.discard(rid)
+                script_of.pop(rid, None)
             if model:
                 model_of[rid] = model
     stale = [d for d, e in cached.items() if not isinstance(e, dict) or e.get("used", 0) < now - OBJECT_CACHE_DAYS * 86400]
@@ -385,7 +393,62 @@ def object_info(order):
             print(f"  (could not write {OBJECT_CACHE_FILE}: {e})", file=sys.stderr)
     _OBJECT_INFO.clear()
     _OBJECT_INFO[key] = (tag_of, model_of, scripted)
+    _SCRIPT_OF.clear()
+    _SCRIPT_OF.update(script_of)
     return _OBJECT_INFO[key]
+
+
+def object_scripts(order):
+    """{object id: its script id} for the objects the plugins define (the last definition wins)."""
+    object_info(order)
+    return dict(_SCRIPT_OF)
+
+
+def is_performer(oid, tag_of, model_of, script_of):
+    """An NPC whose model or script names a performer (the rule mwperformers uses in game)."""
+    if tag_of.get(oid) != "NPC_":
+        return False
+    model, script = (model_of.get(oid) or "").lower(), (script_of.get(oid) or "").lower()
+    return any(w in model for w in PERFORMER_MODEL_WORDS) or any(w in script for w in PERFORMER_SCRIPT_WORDS)
+
+
+def performers_by_interior(order, ref_hist, labels):
+    """{interior id (lower case, as the game names it): [{"id", "pos", "from"}]} of the performers placed
+    there: each reference's last version in the load order, not deleted."""
+    tag_of, model_of, _scripted = object_info(order)
+    script_of = object_scripts(order)
+    out = {}
+    for key, refs in ref_hist.items():
+        if key[0] != "i":
+            continue
+        found = []
+        for versions in refs.values():
+            ix, plugin, oid, at, _scale, deleted = max(versions, key=lambda v: v[0])
+            if not deleted and is_performer(oid.lower(), tag_of, model_of, script_of):
+                found.append({"id": oid.lower(), "pos": [int(round(c)) for c in at] if at else None,
+                              "from": plugin})
+        if found:
+            out[(labels.get(key) or key[1]).lower()] = sorted(found, key=lambda e: (e["id"], e["pos"] or []))
+    return out
+
+
+def write_performer_data(args, order, ref_hist, labels):
+    """For the mwperformers MWSE mod: the interiors with performers and who they are (performers_by_interior),
+    so it only works where there is someone to pick from and can say who it expected and didn't find."""
+    data_dir = os.path.abspath(args.data_dir)
+    cells = performers_by_interior(order, ref_hist, labels)
+    out_dir = os.path.join(data_dir, "MWSE", "config")
+    os.makedirs(out_dir, exist_ok=True)
+    count = sum(len(v) for v in cells.values())
+    payload = {"version": 1, "generated": time.strftime("%Y-%m-%d %H:%M:%S"), "count": count,
+               "cells": dict(sorted(cells.items()))}
+    tmp = os.path.join(out_dir, PERFORMERS_DATA + ".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=1)
+    os.replace(tmp, os.path.join(out_dir, PERFORMERS_DATA))
+    print(f"  mwperformers data: {count} performer(s) in {len(cells)} interior(s) "
+          f"(MWSE\\config\\{PERFORMERS_DATA})")
+    return count
 
 
 def report_rearranged(order, own_pos, deletions, new_objs, labels, pos, name_of, deps, cells_of,
