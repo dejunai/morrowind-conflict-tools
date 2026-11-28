@@ -594,7 +594,7 @@ The first-party MWSE modules live in `lua tools\MWSE\mods\mwsuite\` and are depl
 | Module | What it does (from its header) | Data from `mwdialog_check` |
 | :--- | :--- | :--- |
 | `mwcollide` | Hides doubled objects as cells load (two unrelated plugins placing things in the same spot) | `mwcollide_data.json` (`--cell-conflicts`, `--fix`) |
-| `mwcompanions` | Following, warping and follower combat in one place | |
+| `mwcompanions` | Following, warping and follower combat in one place. Never followers: every creature the plugins on its Excluded Plugins page define (read from the plugin files; abot's water life and birds to begin with) and the actors on its Blacklist; its Whitelist wins over both (three core exclusion pages) | |
 | `mwconsole` | Console commands (More Console Commands compatible), Tab completion, selection details (panel next to the console; Alt+I window, also with the console open, with a Show Effects button) and the effect inspector; off by default | |
 | `mwcriminal` | Sneaking, theft and door locks in one place | |
 | `mwcustomclasspersistence` | Saves custom classes from the Create Class menu for later games | |

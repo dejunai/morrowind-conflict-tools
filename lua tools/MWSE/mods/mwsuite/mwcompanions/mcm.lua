@@ -80,12 +80,40 @@ local function getFollowers()
 end
 
 template:createExclusionsPage({
+    label = "Excluded Plugins",
+    description = "Every creature a plugin on the left defines is never treated as a follower: abot's water life and "
+        .. "birds give theirs follow and escort orders of their own, so they are listed to begin with. The creatures are "
+        .. "read from the plugin files when the game starts and when this menu closes (MWSE.log says how many). A "
+        .. "creature on the Whitelist page is still a follower. Click a name to move it to the other list.",
+    leftListLabel = "Creatures Never Followers",
+    rightListLabel = "Plugins",
+    variable = mwse.mcm.createTableVariable({ id = "excludedPlugins", table = config }),
+    filters = { { label = "Plugins", type = "Plugin" } },
+})
+
+template:createExclusionsPage({
     label = "Blacklist",
-    description = "Actors on the left are never treated as followers by this mod: no warping, no combat protection, no other changes. Click a name to move it to the other list.",
+    description = "Actors on the left are never treated as followers by this mod: no warping, no combat protection, no other changes. A name on the Whitelist page wins. Click a name to move it to the other list.",
     leftListLabel = "Never Followers (Blacklisted)",
     rightListLabel = "Available Actors",
     showAllBlocked = true,
     variable = mwse.mcm.createTableVariable({ id = "blacklist", table = config }),
+    filters = {
+        { label = "Followers", callback = getFollowers },
+        { label = "NPCs", type = "Object", objectType = tes3.objectType.npc },
+        { label = "Creatures", type = "Object", objectType = tes3.objectType.creature },
+    },
+})
+
+template:createExclusionsPage({
+    label = "Whitelist",
+    description = "Actors on the left are always treated as followers when they follow you, even when they are on the "
+        .. "Blacklist or come from an excluded plugin (a tamed creature from abot's water life, say). Click a name to "
+        .. "move it to the other list.",
+    leftListLabel = "Always Followers (Whitelisted)",
+    rightListLabel = "Available Actors",
+    showAllBlocked = true,
+    variable = mwse.mcm.createTableVariable({ id = "whitelist", table = config }),
     filters = {
         { label = "Followers", callback = getFollowers },
         { label = "NPCs", type = "Object", objectType = tes3.objectType.npc },

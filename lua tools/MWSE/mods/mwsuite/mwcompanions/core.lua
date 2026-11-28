@@ -66,15 +66,70 @@ function core.isGuard(ref)
     return false
 end
 
+-- the creatures the excluded plugins define, read from the plugin files themselves: not obj.sourceMod, which names the
+-- last plugin to change a record (a creature-buff patch of abot's water life would hide them all)
+local pluginCreatures = {}            -- lower-case base id -> plugin file name
+
+local function u32(s, i)
+    local a, b, c, d = s:byte(i, i + 3)
+    return a + b * 256 + c * 65536 + d * 16777216
+end
+
+--- every CREA record's id in one plugin file (lower case), or nil when the file can't be read
+function core.creatureIdsOf(path)
+    local f = io.open(path, "rb")
+    if not f then return nil end
+    local data = f:read("*a")
+    f:close()
+    local ids, pos, n = {}, 1, #data
+    while pos + 15 <= n do
+        local tag, size = data:sub(pos, pos + 3), u32(data, pos + 4)
+        local body, stop = pos + 16, pos + 16 + size
+        if tag == "CREA" then
+            local sp = body
+            while sp + 7 < stop do
+                local st, ss = data:sub(sp, sp + 3), u32(data, sp + 4)
+                if st == "NAME" then
+                    ids[#ids + 1] = data:sub(sp + 8, sp + 7 + ss):gsub("%z.*$", ""):lower()
+                    break
+                end
+                sp = sp + 8 + ss
+            end
+        end
+        pos = stop
+    end
+    return ids
+end
+
+--- rebuild the creature list from config.excludedPlugins (at start-up and when the Mod Config menu closes)
+function core.rebuildPluginLists()
+    pluginCreatures = {}
+    local root = (type(tes3.installDirectory) == "string" and tes3.installDirectory ~= "")
+        and (tes3.installDirectory .. "\\Data Files\\") or "Data Files\\"
+    local plugins, count = 0, 0
+    for name, on in pairs(config.excludedPlugins or {}) do
+        if on and tes3.isModActive(name) then
+            local ids = core.creatureIdsOf(root .. name)
+            if ids then
+                plugins = plugins + 1
+                for _, id in ipairs(ids) do
+                    if not pluginCreatures[id] then count = count + 1 end
+                    pluginCreatures[id] = name
+                end
+            end
+        end
+    end
+    mwse.log("[mwcompanions] %d creature(s) from %d excluded plugin(s) are never followers", count, plugins)
+    return count
+end
+
+--- never a follower: on the whitelist -> no; on the blacklist, or a creature an excluded plugin defines -> yes
 function core.isBlacklisted(ref)
     local obj = ref.baseObject
     local id = lower(obj.id)
+    if config.whitelist[id] or config.whitelist[obj.id] then return false end   -- the page keeps the id's own case
     if config.blacklist[id] or config.blacklist[obj.id] then return true end
-    -- abot's water life and birds carry follow/escort packages of their own; the pack guar is a real follower
-    if obj.objectType == tes3.objectType.creature and id ~= "ab01guguarpackmount" then
-        if id:sub(1, 4) == "ab01" or (obj.script and lower(obj.script.id):sub(1, 4) == "ab01") then return true end
-    end
-    return false
+    return pluginCreatures[id] ~= nil
 end
 
 --- the active package if it is follow/escort, and whether it targets the player

@@ -326,6 +326,7 @@ event.register(tes3.event.initialized, function()
     event.register(QL_PICK, onQuickLootPick, { filter = tes3.objectType.creature, priority = 1000 })
     event.register(QL_REACTIVATE, onQuickLootReactivate, { priority = 1000 })
     event.register(tes3.event.cellChanged, onCellChanged)
+    core.rebuildPluginLists()
     if config.enabled then warnOverlaps() end
 end)
 event.register(tes3.event.loaded, function()
@@ -335,5 +336,8 @@ event.register(tes3.event.loaded, function()
     muteUntil = 0
     restartTick()
 end)
-event.register("mwcompanions:changed", restartTick)
+event.register("mwcompanions:changed", function()
+    core.rebuildPluginLists()            -- the excluded plugins may have changed in the Mod Config menu
+    restartTick()
+end)
 event.register(tes3.event.modConfigReady, function() require("mwcompanions.mcm") end)
