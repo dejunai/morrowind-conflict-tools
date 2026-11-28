@@ -98,6 +98,8 @@ For each mod folder in Vortex's Morrowind staging folder (from Vortex's settings
 Mods that install into the game folder instead of Data Files (an .exe, .dll or a "Data Files" folder at
 their root, like MGE XE) are left alone, and so is every mod on the blacklist: the Morrowind Code Patch and
 NIFZER0EDIT built in, plus the folder names in vortex_tidy_blacklist.txt (one per line, wildcards allowed).
+If that file is missing it is created with the built-in patterns and *Breezify*; an existing file is never
+overwritten or added to.
 
   * MWSE Lua mods (MWSE\\mods\\...\\*.lua) are checked by mwdialog_luafix.py for bad habits that pass a syntax
     check (absurd priorities, polling every frame, one-shot handlers that never unregister, unguarded ref.data,
@@ -219,31 +221,46 @@ DOC_EXT = {".txt", ".md", ".pdf", ".rtf", ".doc", ".docx", ".odt", ".html", ".ht
 DOC_DIR_NAMES = {"doc", "docs", "documentation", "readme", "readmes", "manual", "manuals", "info"}
 GAME_ROOT_EXT = {".exe", ".dll", ".asi"}          # the mod installs into the game folder: leave it alone
 # mods never touched: the defaults below plus one pattern per line in vortex_tidy_blacklist.txt
-# (in the game folder; wildcards allowed, matched against the mod's folder name, case doesn't matter)
+# (beside the tools; wildcards allowed, matched against the mod's folder name, case doesn't matter)
 BLACKLIST = ["Morrowind Code Patch*", "MCP beta*", "NIFZER0EDIT*"]
+BLACKLIST_EXTRA = ["*Breezify*"]          # generated into the starter file, not hardcoded
 BLACKLIST_FILE = MP.state_path(HERE, "vortex_tidy_blacklist.txt")
 
 
+def blacklist_starter_text():
+    """The file written when vortex_tidy_blacklist.txt is missing: the built-in patterns and *Breezify*."""
+    lines = [
+        "; vortex_tidy blacklist: mods it never touches. One mod folder name per line; * and ? work.",
+        "; Created when the file is missing; an existing file is never overwritten or added to.",
+    ]
+    return "\n".join(lines + BLACKLIST + BLACKLIST_EXTRA) + "\n"
+
+
 def blacklist(create=True):
-    """The blacklist patterns. create: write the commented starter file when there is none (not in a plan-only
-    run, which changes nothing)."""
+    """The blacklist patterns. If vortex_tidy_blacklist.txt is missing and create is true, it is written with
+    the built-in patterns and *Breezify*; an existing file is never overwritten or added to."""
     pats = list(BLACKLIST)
     if not os.path.exists(BLACKLIST_FILE):
         if not create:
-            return pats
+            return pats + list(BLACKLIST_EXTRA)
         try:
-            with open(BLACKLIST_FILE, "w", encoding="utf-8") as f:
-                f.write("; vortex_tidy blacklist: mods it never touches. One mod folder name per line; * and ? work.\n"
-                        "; Morrowind Code Patch and NIFZER0EDIT are built in. Add tools and other odd layouts here.\n")
-        except OSError:
+            folder = os.path.dirname(os.path.abspath(BLACKLIST_FILE))
+            if folder:
+                os.makedirs(folder, exist_ok=True)
+            with open(BLACKLIST_FILE, "x", encoding="utf-8") as f:
+                f.write(blacklist_starter_text())
+        except FileExistsError:
             pass
-    else:
+        except OSError:
+            return pats + list(BLACKLIST_EXTRA)
+    try:
         for line in open(BLACKLIST_FILE, encoding="utf-8", errors="replace"):
             line = line.strip()
             if line and not line.startswith((";", "#")):
                 pats.append(line)
+    except OSError:
+        pass
     return pats
-
 VORTEX_FILES = {"__folder_managed_by_vortex"}
 
 # Vortex folder names: "Name-12345-1-2-1612345678", "Name-12345-1-2", "Name-12345",
@@ -1981,7 +1998,7 @@ def run_plan(args):
     del BLOCKED_PLAN[:]
     CONVERTER["missed"] = 0
     _TEX_INDEX.clear()
-    pats = blacklist(create=bool(getattr(args, "apply", False))) + (args.skip or [])
+    pats = blacklist() + (args.skip or [])
     for d in mods:
         hit = next((pt for pt in pats if fnmatch.fnmatch(d.lower(), pt.lower())), None)
         if hit:
@@ -2971,7 +2988,7 @@ def lua_check(args):
                   and d.lower() != "off")
     if args.only:
         mods = [d for d in mods if any(fnmatch.fnmatch(d.lower(), pat.lower()) for pat in args.only)]
-    pats = blacklist(create=bool(args.apply)) + (args.skip or [])
+    pats = blacklist() + (args.skip or [])
     cfg = lf.load_config(game_dir, data_dir)
     checker = lf.find_checker(getattr(args, "luajit", None), game_dir)
     print("\n" + "=" * 70 + "\nLUA CHECK (each mod's MWSE Lua files)\n" + "=" * 70)
@@ -3765,7 +3782,7 @@ def assets_check(args):
                   and d.lower() != "off")
     if args.only:
         mods = [d for d in mods if any(fnmatch.fnmatch(d.lower(), pat.lower()) for pat in args.only)]
-    pats = blacklist(create=bool(args.apply)) + (args.skip or [])
+    pats = blacklist() + (args.skip or [])
     data_dir = MS.StagedData(args.staging, game_dir)          # staged files only before deploy (mwdialog_staged)
     if not os.path.isdir(data_dir.data_dir):
         print(f"\n(note: no Data Files folder next to vortex_tidy.py ({data_dir.data_dir}): an animation's model in "
@@ -4050,7 +4067,8 @@ def _main():
     ap.add_argument("--only", nargs="+", metavar="PATTERN", help="only these mod folders (wildcards allowed)")
     ap.add_argument("--skip", nargs="+", metavar="PATTERN",
                     help="leave these mod folders alone this time too (to always skip one, add it to "
-                         "vortex_tidy_blacklist.txt)")
+                         "vortex_tidy_blacklist.txt; that file is created with the built-in patterns "
+                         "and *Breezify* if it is missing, and an existing file is never overwritten)")
     ap.add_argument("--apply", action="store_true", help="make the changes (without it, only the plan is shown)")
     ap.add_argument("--yes", action="store_true", help="with --apply: don't ask first")
     ap.add_argument("--undo", action="store_true",

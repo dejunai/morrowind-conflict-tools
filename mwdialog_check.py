@@ -4777,16 +4777,39 @@ def run_merge(args, plugins, bsas, data_dirs):
 
 AUTO_MERGE_NAME = "mwdialog_check AutoMerge.esp"
 AUTO_MERGE_BLACKLIST = "mwdialog_auto-merge.blacklist.txt"   # user-edited: one plugin per line, never auto-merged
+AUTO_MERGE_BLACKLIST_DEFAULT = ("XE Sky Variations.esp",)     # written when the file is missing
+
+
+def auto_merge_blacklist_starter_text():
+    """The file written when mwdialog_auto-merge.blacklist.txt is missing."""
+    lines = [
+        "; mwdialog_auto-merge.blacklist.txt: plugins --auto-merge never merges. One plugin name per line.",
+        "; Created when the file is missing; an existing file is never overwritten or added to.",
+    ]
+    return "\n".join(lines + list(AUTO_MERGE_BLACKLIST_DEFAULT)) + "\n"
 
 
 def read_auto_merge_blacklist(game_dir):
-    """Lowercased plugin names from the auto-merge blacklist (blank lines and ; or # comments skipped)."""
+    """Lowercased plugin names from the auto-merge blacklist (blank lines and ; or # comments skipped).
+    If the file is missing it is created with AUTO_MERGE_BLACKLIST_DEFAULT; an existing file is never
+    overwritten or added to."""
+    path = MP.state_path(game_dir, AUTO_MERGE_BLACKLIST)
+    if not os.path.exists(path):
+        try:
+            folder = os.path.dirname(os.path.abspath(path))
+            if folder:
+                os.makedirs(folder, exist_ok=True)
+            with open(path, "x", encoding="utf-8") as f:
+                f.write(auto_merge_blacklist_starter_text())
+        except FileExistsError:
+            pass
+        except OSError:
+            return {s.lower() for s in AUTO_MERGE_BLACKLIST_DEFAULT}
     try:
-        with open(MP.state_path(game_dir, AUTO_MERGE_BLACKLIST), "r", encoding="utf-8-sig") as f:
+        with open(path, "r", encoding="utf-8-sig") as f:
             return {s.lower() for s in (ln.strip() for ln in f) if s and not s.startswith((";", "#"))}
     except OSError:
         return set()
-
 
 def run_auto_merge(args, plugins, bsas, data_dirs):
     if preserve_saves(args) == "strict" and not args.dry_run:

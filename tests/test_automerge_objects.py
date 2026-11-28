@@ -186,7 +186,24 @@ def test_automerge_keeps_scripts_and_start_scripts(tmp_path):
 
 
 def test_auto_merge_blacklist_reads_one_plugin_per_line(tmp_path):
-    assert m.read_auto_merge_blacklist(str(tmp_path)) == set()
     (tmp_path / m.AUTO_MERGE_BLACKLIST).write_text("\ufeff; comment\n# also\n\n  Janel Addon.ESP  \nB.esp\n",
                                                    encoding="utf-8")
+    before = (tmp_path / m.AUTO_MERGE_BLACKLIST).read_bytes()
     assert m.read_auto_merge_blacklist(str(tmp_path)) == {"janel addon.esp", "b.esp"}
+    assert (tmp_path / m.AUTO_MERGE_BLACKLIST).read_bytes() == before
+
+
+def test_missing_auto_merge_blacklist_is_created_with_xe_sky_variations(tmp_path):
+    path = tmp_path / m.AUTO_MERGE_BLACKLIST
+    assert not path.exists()
+    got = m.read_auto_merge_blacklist(str(tmp_path))
+    assert path.exists()
+    assert got == {"xe sky variations.esp"}
+    assert got == {s.lower() for s in m.AUTO_MERGE_BLACKLIST_DEFAULT}
+    lines = [ln.strip() for ln in path.read_text(encoding="utf-8").splitlines()
+             if ln.strip() and not ln.strip().startswith((";", "#"))]
+    assert lines == list(m.AUTO_MERGE_BLACKLIST_DEFAULT)
+    path.write_text("; mine\nCustom.esp\n", encoding="utf-8")
+    before = path.read_text(encoding="utf-8")
+    assert m.read_auto_merge_blacklist(str(tmp_path)) == {"custom.esp"}
+    assert path.read_text(encoding="utf-8") == before

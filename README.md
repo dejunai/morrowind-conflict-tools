@@ -65,8 +65,8 @@ Vortex is optional: without it the tools scan `Data Files` only. Mod Organizer 2
 `vortex_tidy.py` inspects and cleans each individual mod folder inside Vortex's Morrowind staging directory (read directly from Vortex's configuration state, or specified via `--staging`). It ensures that mods deployed to `Data Files` are properly structured, free of stray junk files, and statically verified:
 
 1. **Folder & Hierarchy Normalization**:
-   - Leaves alone any mod that installs into the game folder instead of `Data Files` (an `.exe`, `.dll` or `.asi`, or a `Data Files` folder, at its root, like MGE XE), and every mod on the blacklist: `Morrowind Code Patch*`, `MCP beta*` and `NIFZER0EDIT*` are built in; add one folder-name pattern per line (wildcards allowed) to `vortex_tidy_blacklist.txt`.
-   - Keeps game folders (`Meshes`, `Textures`, `Icons`, `Sound`, `Music`, `BookArt`, `Splash`, `Fonts`, `Video`, `DistantLand`), support folders (`MWSE`, `MGE3`, `Shaders`, `Grass`, `MCPatch`), plugins (`.esp`, `.esm`, `.omwaddon`), `.bsa` archives, MWSE `*-metadata.toml` files and `<plugin>.bugreport.txt` where they are. `Extras\` and `bugreports\` are never moved or looked inside. Each mod's `Off\` folder follows one layout, `Off\<plugin>\<reason>\<path>` (see `docs/dev/OFF-LAYOUT.md` in the repository): tidy moves older layouts in it into that one (journaled, `--undo` reverses it) and never moves a file whose path is over MAX_PATH; those are listed in `Off\<plugin>\max_path_too_long.txt`.
+   - Leaves alone any mod that installs into the game folder instead of `Data Files` (an `.exe`, `.dll` or `.asi`, or a `Data Files` folder, at its root, like MGE XE), and every mod on the blacklist: `Morrowind Code Patch*`, `MCP beta*` and `NIFZER0EDIT*` are built in. If `vortex_tidy_blacklist.txt` is missing it is created with those patterns plus `*Breezify*`; an existing file is never overwritten or added to. Add further folder-name patterns one per line (wildcards allowed).
+   - Keeps game folders (`Meshes`, `Textures`, `Icons`, `Sound`, `Music`, `BookArt`, `Splash`, `Fonts`, `Video`, `DistantLand`), support folders (`MWSE`, `MGE3`, `Shaders`, `Grass`, `MCPatch`), plugins (`.esp`, `.esm`, `.omwaddon`), `.bsa` archives, MWSE `*-metadata.toml` files and `<plugin>.bugreport.txt` where they are. `Extras\` and `bugreports\` are never moved or looked inside. Each mod's `Off\` folder follows one layout, `Off\<plugin>\<reason>\<path>` (see `docs/dev/OFF-LAYOUT.md`): tidy moves older layouts in it into that one (journaled, `--undo` reverses it) and never moves a file whose path is over MAX_PATH; those are listed in `Off\<plugin>\max_path_too_long.txt`.
    - Moves documentation files (`.txt`, `.md`, `.pdf`, `.html`, `.htm`, `.doc`, `.docx`, `.odt`, `.rtf`, `.nfo`) at the mod root into `Docs\`, renamed `<mod name> - <file>` so one mod's `readme.txt` cannot overwrite another's when deployed. Documents already in `Docs\` that do not already name the mod get the same prefix.
    - Moves root image previews (`.jpg`, `.png`, `.gif`, `.bmp`, `.webp`) into `Screenshots\`, renamed the same way.
    - A root folder holding a mod's readme (named after the mod or one of its plugins, or holding nothing but documents) becomes part of `Docs\`; anything in it that is not a document goes to `Extras\`. Everything else at the root that is not game data (FOMOD option folders, `meta.ini`, `.bak` files...) goes to `Extras\<mod name>\`, where `<mod name>` is the folder name without Vortex's Nexus id, version and download stamp.
@@ -137,7 +137,7 @@ Vortex is optional: without it the tools scan `Data Files` only. Mod Organizer 2
 | *(default)* | *(none)* | Generates a preview plan in `plans\vortex_tidy_plan.txt` without modifying files. |
 | `--staging` | `<PATH>` | Explicit path to Vortex's Morrowind staging folder. Overrides automatic Vortex detection. |
 | `--only` | `<PATTERN ...>` | Restricts tidying only to specified mod staging folder names (wildcards allowed). |
-| `--skip` | `<PATTERN ...>` | Skips specified mod staging folder names this run. To always skip one, add it to `vortex_tidy_blacklist.txt`. |
+| `--skip` | `<PATTERN ...>` | Skips specified mod staging folder names this run. To always skip one, add it to `vortex_tidy_blacklist.txt` (created with the built-in patterns and `*Breezify*` if missing; an existing file is never overwritten). |
 | `--apply` | *(flag)* | Enacts the reviewed plan in `plans\vortex_tidy_plan.txt`. Refuses if the plan was modified or is out of date. |
 | `--yes` | *(flag)* | With `--apply`: don't ask first. |
 | `--undo` | *(flag)* | Reverts the whole last `--apply` from the journal: original asset files back at their own paths (files the repairs made deleted), Lua patches, then moves. Again: the `--apply` before that. Stops, changing nothing, when an original is missing or altered or a file changed since. It also reverses conversions made by the optional OpenMW converter: the files it wrote are deleted (one you edited since stays, with a warning), the original package goes back to its own paths, and the converter's shared runtime goes only when no converted mod is left. |
@@ -237,7 +237,7 @@ Vortex is optional: without it the tools scan `Data Files` only. Mod Organizer 2
 #### Merging & Patch Creation
 | Switch | Argument | Description |
 | :--- | :--- | :--- |
-| `--auto-merge` | *(flag)* | Generates `mwdialog_check AutoMerge.esp` (or `--merge-name`) from eligible plugins with no cell, land, or pathgrid edits, and deactivates them. Plugins listed in `mwdialog_auto-merge.blacklist.txt` are never merged. Use `--dry-run` first. Kept as it is with `--preserve-saves=strict`. |
+| `--auto-merge` | *(flag)* | Generates `mwdialog_check AutoMerge.esp` (or `--merge-name`) from eligible plugins with no cell, land, or pathgrid edits, and deactivates them. Plugins listed in `mwdialog_auto-merge.blacklist.txt` are never merged. If that file is missing it is created with `XE Sky Variations.esp`; an existing file is never overwritten or added to. Use `--dry-run` first. Kept as it is with `--preserve-saves=strict`. |
 | `--merge` | `<OUT.esp> <INPUT ...>` | Merge the inputs (files or folders) into the named output plugin, written beside the inputs' originals (their Vortex mod folder for deployed files) unless the name includes a path. Inputs whose masters aren't active, or whose dialogue names things no installed mod defines, are left out. Later inputs win. |
 | `--merge-name` | `<NAME.esp>` | With `--auto-merge`: the merged plugin's name. |
 | `--merge-plan` | *(flag)* | Recommend merges `--auto-merge` doesn't make (plugins with cells, land, or pathgrids). Read-only: writes `mwdialog_merge_plan.txt` and `.json`. |
@@ -466,7 +466,7 @@ Morrowind\
      +-- mwdialog_luafix.py       [MWSE Lua AST hardening tool]
      +-- README.md                [This documentation]
      +-- LICENSE
-     +-- docs\                    [MORE_INFO.md (architecture & function guide); `docs\dev\` is repository-only:
+     +-- docs\                    [MORE_INFO.md, QUICK_START.md, mwsuite-README.MD; docs\dev\:
                                    LUA-DEBUGGING.md, OFF-LAYOUT.md, LUA_MOD_BUGS.md]
      +-- plans\                   [Plan-then-apply files (.txt)]
      +-- generated\               [Load order, rules, records, caches, journals, reports (see MORE_INFO)]
@@ -539,7 +539,7 @@ It reads `README.md` and `docs\*.md` (not `docs\dev\`, and not a local `docs\CHA
 
 ### tes3diff.py
 
-A record-level diff of two plugins, for reading what `vortex_tidy` or `mwdialog_check` wrote, and the helper behind the golden tests in `tests\test_tes3conv_golden.py`. It reads both plugins and writes nothing. It uses the optional converter **tes3conv** by Greatness7 (https://github.com/Greatness7/tes3conv, MIT License), which turns a plugin into JSON and back. tes3conv is not bundled, not deployed and not needed by any shipped tool; the tests that use it skip when it is not found.
+A record-level diff of two plugins, for reading what `vortex_tidy` or `mwdialog_check` wrote, and the helper behind the golden tests in `tests\test_tes3conv_golden.py`. It reads both plugins and writes nothing. It uses the optional converter **tes3conv** by Greatness7 (https://github.com/Greatness7/tes3conv, MIT License), which turns a plugin into JSON and back. tes3conv is bundled at `tools\tes3conv\` and deployed with the tools. `tes3diff.py` itself is a developer script and is not deployed; the tests that use tes3conv skip when it is not found.
 
 ```text
 python tes3diff.py OLD NEW [--tes3conv PATH] [--limit N]

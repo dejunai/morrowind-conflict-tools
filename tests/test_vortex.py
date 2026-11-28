@@ -118,13 +118,34 @@ def test_M12_deleted_folder_follows_staging(tmp_path):
     assert vt.deleted_dir(str(st)) == str(tmp_path / "Vortex Mods" / "morrowind - deleted by vortex_tidy")
 
 
-def test_M12_plan_run_creates_no_blacklist_file(tmp_path, monkeypatch):
+def test_missing_blacklist_is_created_with_builtins_and_breezify(tmp_path, monkeypatch):
     bl = tmp_path / "vortex_tidy_blacklist.txt"
     monkeypatch.setattr(vt, "BLACKLIST_FILE", str(bl))
-    vt.blacklist(create=False)
-    assert not bl.exists()
-    vt.blacklist()
+    pats = vt.blacklist()
     assert bl.exists()
+    lines = [ln.strip() for ln in bl.read_text(encoding="utf-8").splitlines()
+             if ln.strip() and not ln.strip().startswith((";", "#"))]
+    assert lines == vt.BLACKLIST + vt.BLACKLIST_EXTRA
+    assert "Morrowind Code Patch*" in pats and "*Breezify*" in pats
+    bl.unlink()
+    pats = vt.blacklist(create=False)
+    assert not bl.exists()
+    assert pats == vt.BLACKLIST + vt.BLACKLIST_EXTRA
+
+
+def test_existing_blacklist_is_never_overwritten_or_added_to(tmp_path, monkeypatch):
+    bl = tmp_path / "vortex_tidy_blacklist.txt"
+    original = "; keep me\nOnlyThis*\n"
+    bl.write_text(original, encoding="utf-8")
+    monkeypatch.setattr(vt, "BLACKLIST_FILE", str(bl))
+    pats = vt.blacklist()
+    assert bl.read_text(encoding="utf-8") == original
+    assert "OnlyThis*" in pats
+    assert "*Breezify*" not in pats
+    bl.write_text("", encoding="utf-8")
+    pats = vt.blacklist()
+    assert bl.read_text(encoding="utf-8") == ""
+    assert pats == vt.BLACKLIST
 
 
 def test_M12_undo_keeps_what_it_could_not_put_back(tmp_path, monkeypatch):

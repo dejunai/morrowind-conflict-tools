@@ -8,7 +8,7 @@
 # Globs: '*' stays inside one folder, '**' crosses folders ("lua tools/**" is everything below "lua tools").
 # deploy.py also refuses on its own, whatever this file says: tests, .git and CI files, deploy.py and its
 # deploy.ini/manifest, doc_scan.py, sync.py, tes3diff.py, the dummy stand-in folder (generated at run time), generated
-# records, audits, backups, docs/dev and personal notes (see NEVER in deploy.py).
+# records, audits, backups and personal notes (see NEVER in deploy.py).
 
 # The tools: the Python modules and launchers at the project root
 include *.py
@@ -27,8 +27,7 @@ exclude lua tools/**/MWSE/core/**       # MWSE's own core files are never ours t
 include tools/**                        # includes tools/tes3conv/**
 
 # Docs keep the paths they have in the repository, so a relative link that works here works in the install.
-include docs/**
-exclude docs/dev/**                     # Lua guide, off-layout spec and the Lua repair log: development only
+include docs/**                         # includes docs/dev (Lua guide, off-layout spec, Lua repair log)
 exclude docs/CHANGES.md                 # local changelog, not part of the package
 include README.md                       # stays at the root, as on GitHub
 include LICENSE
