@@ -403,8 +403,9 @@ local function onSave(e)
 	expectSave(e)
 end
 
--- Priority 10000 ensures this intercepts before any other save handlers (like SSS or native)
-event.register("save", onSave, { priority = 10000 })
+-- first: before any other save handler (like SSS or native); 9999 is the top of the band luafix keeps
+-- every mod's priorities in
+event.register("save", onSave, { priority = 9999 })
 
 -- A save another mod swallows: MWSE stops calling save handlers at the first one that returns false (or claims
 -- the event), so the engine never writes it and nothing says why. This handler runs last of all; when a save we

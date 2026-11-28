@@ -630,34 +630,15 @@ end
 
 
 -- now playing: sounds already running (loops start when a cell loads, before the audio watch can see
--- them). Checks every sound against the player and every object within NOW_RANGE, spread over frames.
-local NOW_RANGE, NOW_PER_FRAME = 4000, 12000
-local nowScan, onNowScanFrame
-local function startNowPlaying(reason)
-    if not tes3.player then return end
-    local sounds = {}
-    for snd in tes3.iterateObjects(tes3.objectType.sound) do sounds[#sounds + 1] = snd end
-    local p, refs = tes3.player.position, {}
-    for _, cell in ipairs(tes3.getActiveCells()) do
-        for r in cell:iterateReferences() do
-            if r ~= tes3.player and not r.disabled and not r.deleted and r.position:distance(p) < NOW_RANGE then
-                refs[#refs + 1] = r
-            end
-        end
-    end
-    table.sort(refs, function(a, b) return a.position:distance(p) < b.position:distance(p) end)
-    table.insert(refs, 1, tes3.player)
-    nowScan = { sounds = sounds, refs = refs, i = 1, found = 0, from = p:copy(), query = {} }
-    log("NOW PLAYING (%s): checking %d sounds on you and %d objects within %d units",
-        reason, #sounds, #refs - 1, NOW_RANGE)
-    event.unregister(tes3.event.enterFrame, onNowScanFrame)
-    event.register(tes3.event.enterFrame, onNowScanFrame)
-end
+-- them). Checks every sound against the player and every object within NOW_RANGE, a slice every 0.35 s
+-- (game time: not in menus) on a timer, not every frame.
+local NOW_RANGE, NOW_PER_STEP, NOW_STEP = 4000, 12000, 0.35
+local nowScan, nowTimer
 
 local function stepNowPlaying()
     local sc = nowScan
     if not sc then return end
-    local budget = NOW_PER_FRAME
+    local budget = NOW_PER_STEP
     local q = sc.query                       -- one params table for every check (no garbage per call)
     while budget > 0 and sc.i <= #sc.refs do
         local r = sc.refs[sc.i]
@@ -684,13 +665,38 @@ local function stepNowPlaying()
     end
 end
 
-onNowScanFrame = function()
+
+local function stopNowTimer()
+    if nowTimer then pcall(function() nowTimer:cancel() end) end
+    nowTimer = nil
+end
+
+local function onNowScanStep()
     if nowScan then
         pcall(stepNowPlaying)
     end
-    if not nowScan then
-        event.unregister(tes3.event.enterFrame, onNowScanFrame)
+    if not nowScan then stopNowTimer() end
+end
+
+local function startNowPlaying(reason)
+    if not tes3.player then return end
+    local sounds = {}
+    for snd in tes3.iterateObjects(tes3.objectType.sound) do sounds[#sounds + 1] = snd end
+    local p, refs = tes3.player.position, {}
+    for _, cell in ipairs(tes3.getActiveCells()) do
+        for r in cell:iterateReferences() do
+            if r ~= tes3.player and not r.disabled and not r.deleted and r.position:distance(p) < NOW_RANGE then
+                refs[#refs + 1] = r
+            end
+        end
     end
+    table.sort(refs, function(a, b) return a.position:distance(p) < b.position:distance(p) end)
+    table.insert(refs, 1, tes3.player)
+    nowScan = { sounds = sounds, refs = refs, i = 1, found = 0, from = p:copy(), query = {} }
+    log("NOW PLAYING (%s): checking %d sounds on you and %d objects within %d units",
+        reason, #sounds, #refs - 1, NOW_RANGE)
+    stopNowTimer()
+    nowTimer = timer.start({ type = timer.simulate, duration = NOW_STEP, iterations = -1, callback = onNowScanStep })
 end
 
 local watchStarted = false
@@ -752,8 +758,8 @@ local function startAudio()
     local onRef, onTemp = onSound("ref"), onSound("temp")
     ours[onRef], ours[onTemp] = true, true
     patchEventFunctions()
-    event.register(tes3.event.addSound, onRef, { priority = 1000000000 })      -- first: see every request
-    event.register(tes3.event.addTempSound, onTemp, { priority = 1000000000 })
+    event.register(tes3.event.addSound, onRef, { priority = 9999 })            -- first: see every request
+    event.register(tes3.event.addTempSound, onTemp, { priority = 9999 })
     audioRegs[#audioRegs + 1] = { tes3.event.addSound, onRef }
     audioRegs[#audioRegs + 1] = { tes3.event.addTempSound, onTemp }
     reg("soundObjectPlay", onSound("buffer"), audioRegs)
@@ -786,9 +792,7 @@ local function stopWatch()
     watchStarted = false
     unregAll(watchRegs)
     nowScan = nil
-    if event.isRegistered(tes3.event.enterFrame, onNowScanFrame) then
-        event.unregister(tes3.event.enterFrame, onNowScanFrame)
-    end
+    stopNowTimer()
 end
 
 -- apply the settings (at startup and whenever they change in the Mod Config menu)

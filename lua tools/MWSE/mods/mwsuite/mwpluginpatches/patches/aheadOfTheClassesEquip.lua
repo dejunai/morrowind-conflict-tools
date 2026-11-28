@@ -179,16 +179,45 @@ local function restoreEquip()
     end
 end
 
-local onSimulate
+local stopWatching, disarm, onLoaded
 
-local function stopWatching()
+local function onSimulate(e)
+    if not armed then
+        intercept.afterDispatch(stopWatching)
+        return
+    end
+    if charGenPending() then
+        sawPending = true
+        afterChargen = nil
+        return
+    end
+    if not sawPending then
+        intercept.afterDispatch(function()
+            if armed then disarm("chargen already finished; equip intercept not kept loaded.") end
+        end)
+        return
+    end
+    afterChargen = (afterChargen or 0) + (type(e) == "table" and tonumber(e.delta) or 0)
+    if afterChargen >= AFTER_CHARGEN then
+        intercept.afterDispatch(function()
+            if armed then disarm("chargen ended and its equip timer did not run; intercept removed.") end
+        end)
+    end
+end
+
+stopWatching = function()
     if not watching then return end
     watching = false
     event.unregister(tes3.event.simulate, onSimulate)
 end
 
 -- take the wraps off if we are still the current function; otherwise stay in the chain as a pass-through
-local function disarm(reason)
+disarm = function(reason)
+    -- everything goes, the loaded hook too: mwexitguard blocks a second New Game in a session, so once chargen
+    -- is over (or a saved game is loaded) nothing in this session needs it again
+    if onLoaded then                             -- not inside the loaded dispatch it may be called from
+        intercept.afterDispatch(function() event.unregister(tes3.event.loaded, onLoaded) end)
+    end
     restoreEquip()
     claimed = nil
     depth = 0
@@ -252,29 +281,6 @@ ourStart = function(params, ...)
     return start(copy, ...)
 end
 
-onSimulate = function(e)
-    if not armed then
-        intercept.afterDispatch(stopWatching)
-        return
-    end
-    if charGenPending() then
-        sawPending = true
-        afterChargen = nil
-        return
-    end
-    if not sawPending then
-        intercept.afterDispatch(function()
-            if armed then disarm("chargen already finished; equip intercept not kept loaded.") end
-        end)
-        return
-    end
-    afterChargen = (afterChargen or 0) + (type(e) == "table" and tonumber(e.delta) or 0)
-    if afterChargen >= AFTER_CHARGEN then
-        intercept.afterDispatch(function()
-            if armed then disarm("chargen ended and its equip timer did not run; intercept removed.") end
-        end)
-    end
-end
 
 local function startWatching()
     if watching then return end
@@ -296,9 +302,14 @@ local function arm()
     return true
 end
 
-local function onLoaded()
+-- a saved game: chargen is over (a game can't be saved during it), so the intercept goes at once
+onLoaded = function(e)
     if not (config.enabled and config.aotcEquipOnceEnabled and config.isAheadOfTheClassesInstalled()) then
         disarm()
+        return
+    end
+    if type(e) == "table" and e.newGame == false then
+        disarm("a saved game: chargen is over; equip intercept not kept loaded.")
         return
     end
     if charGenPending() then

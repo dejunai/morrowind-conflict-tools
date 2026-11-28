@@ -21,7 +21,15 @@ local list = { entries = {
 event = { register = function(name, fn)
   handlers[name] = handlers[name] or {}
   table.insert(handlers[name], fn)
-end }
+end,
+  unregister = function(name, fn)
+    for i = #(handlers[name] or {}), 1, -1 do if handlers[name][i] == fn then table.remove(handlers[name], i) end end
+  end,
+  isRegistered = function(name, fn)
+    for _, h in ipairs(handlers[name] or {}) do if h == fn then return true end end
+    return false
+  end }
+timer = { real = 1, delayOneFrame = function(f) f() end }
 local function fire(name, e) for _, fn in ipairs(handlers[name] or {}) do fn(e) end end
 local cell = { isInterior = true, id = "Seyda Neen, Arrille's Tradehouse", editorName = "Arrille's" }
 local pos = { x = -566.2, y = -434.8, z = 512 }

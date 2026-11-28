@@ -130,8 +130,10 @@ rem      today's date)                          -> runs --sort --yes
 rem    With --dry-run it only reports these.
 rem ------------------------------------------------------------------
 setlocal
-rem the Morrowind folder: this folder's parent when it holds Morrowind.ini (Morrowind\conflict-tools\), else this one
+rem the Morrowind folder: this folder's parent when it holds Morrowind.exe or Morrowind.ini
+rem (Morrowind\conflict-tools\), else this one
 set "GAME=%~dp0"
+if exist "%~dp0..\Morrowind.exe" for %%I in ("%~dp0..") do set "GAME=%%~fI\"
 if exist "%~dp0..\Morrowind.ini" for %%I in ("%~dp0..") do set "GAME=%%~fI\"
 cd /d "%GAME%"
 

@@ -17,21 +17,31 @@ pytestmark = pytest.mark.skipif(not os.path.isfile(LUAJIT), reason="LuaJIT not a
 
 SCRIPT = r"""
 local handlers, stopped, speaker = {}, 0, nil
+local function flt(opts) return opts and opts.filter end
 event = {
-  register = function(name, fn) handlers[name] = handlers[name] or {}; table.insert(handlers[name], fn) end,
-  unregister = function(name, fn)
-    for i = #(handlers[name] or {}), 1, -1 do if handlers[name][i] == fn then table.remove(handlers[name], i) end end
+  register = function(name, fn, opts)
+    handlers[name] = handlers[name] or {}; table.insert(handlers[name], { fn = fn, filter = flt(opts) })
   end,
-  isRegistered = function(name, fn)
-    for _, h in ipairs(handlers[name] or {}) do if h == fn then return true end end
+  unregister = function(name, fn, opts)
+    for i = #(handlers[name] or {}), 1, -1 do
+      local h = handlers[name][i]
+      if h.fn == fn and h.filter == flt(opts) then table.remove(handlers[name], i) end
+    end
+  end,
+  isRegistered = function(name, fn, opts)
+    for _, h in ipairs(handlers[name] or {}) do if h.fn == fn and h.filter == flt(opts) then return true end end
     return false
   end,
 }
-local function fire(name, e)
+local function fire(name, e)          -- a scriptExecute handler sees only its filter's script
+  e = e or {}
   local copy = {}
-  for i, fn in ipairs(handlers[name] or {}) do copy[i] = fn end
-  for _, fn in ipairs(copy) do fn(e or {}) end
+  for i, h in ipairs(handlers[name] or {}) do copy[i] = h end
+  for _, h in ipairs(copy) do
+    if name ~= "scriptExecute" or h.filter == e.script then h.fn(e) end
+  end
 end
+local function count(name) return #(handlers[name] or {}) end
 local armor = { { id = "AM_Lute", mesh = "m\\Misc_de_lute_01.nif", slot = 8 },
                 { id = "detd_am_lute_armor", mesh = "m\\misc_de_lute_01.nif", slot = 8 },
                 { id = "steel_shield", mesh = "a\\resolute_shield.nif", slot = 8 },
@@ -70,30 +80,25 @@ check(not sheathing.blocked.steel_shield and not sheathing.blocked.lute_helm, "o
 
 local bard = { state = 0, positiononce = 1, reposition = 0 }
 speaker = npc("DM_Bard_script", bard)
+local ref, script = speaker.reference, speaker.reference.object.baseObject.script
+local function runs(r) local e = { reference = r, script = script }; fire("scriptExecute", e); return not e.block end
 fire("uiActivated")
 check(bard.state == 1 and stopped == 1, "the song stops and the script skips its frame")
-for _ = 1, 3 do
-  bard.state = 0                              -- what the script does when it skips
-  fire("enterFrame")
-  check(bard.state == 1, "it skips every frame of the dialogue")
-end
+check(count("enterFrame") == 0, "no frame handler")
+for _ = 1, 3 do check(not runs(ref), "his script is skipped through the dialogue") end
+check(runs({}), "the same script on another NPC still runs")
 fire("uiActivated")                           -- back from barter
-check(#handlers.enterFrame == 1, "one frame handler, however often the dialogue shows")
+check(count("scriptExecute") == 1, "one script handler, however often the dialogue shows")
 fire("menuExit")
-bard.state = 0
-fire("enterFrame")
-check(bard.state == 0 and #handlers.enterFrame == 0, "he sings again afterwards, and no frame handler is left")
+check(runs(ref) and count("scriptExecute") == 0, "he sings again afterwards, and no script handler is left")
 
 fire("uiActivated")
-bard.state = 0
 fire("loaded")
-fire("enterFrame")
-check(bard.state == 0, "loading a save ends it")
+check(runs(ref) and count("scriptExecute") == 0, "loading a save ends it")
 
 local quest = { state = 5 }
 speaker = npc("my_bard_quest", quest)
 fire("uiActivated")
-fire("enterFrame")
 check(quest.state == 5, "another script's own 'state' is never written")
 fire("menuExit")
 
@@ -477,6 +482,19 @@ timer.start = function() error("no timer") end
 dialogueEnded()
 check(calls[4] == "load:own", "no timer to wait with: he is not left plain")
 timer.start = realStart
+
+-- 10. one song after the dialogue: his script stays held until his animation is back. The restore (loadAnimation)
+-- rebuilds him and the engine forgets the song he sings (SayDone turns true while it plays on): a script already
+-- running again started a second song over it (2026-11-27, Raflod the Braggart)
+reset()
+local function held() return #(handlers.scriptExecute or {}) end
+speaker = performer("am\anim_lute.nif", "DM_Bard_script", { 0, 0, 255 }, true)
+fire("uiActivated")
+check(held() == 1, "his script is held in the dialogue")
+fire("menuExit")
+check(held() == 1 and live() == 1, "still held while he stands plain: a song now would overlap the restore")
+fireTimers()
+check(calls[#calls - 1] == "load:own" and held() == 0, "released only once his animation is back")
 print("ok")
 """
 
@@ -488,8 +506,10 @@ def test_performing_animation_stops_in_dialogue_and_comes_back(on):
         script = script.split("fire(\"initialized\")")[0] + """fire("initialized")
 speaker = { reference = { object = { id = "bard", baseObject = { objectType = 1, id = "bard", mesh = "am\\\\anim_lute.nif" }, objectType = 1 },
   context = { state = 0, positiononce = 1 }, sceneNode = {}, animationData = { currentAnimGroups = { 0, 0, 255 }, hasOverrideAnimations = true } } }
+speaker.reference.object.baseObject.script = { id = "DM_Bard_script" }
 fire("uiActivated"); fire("menuExit")
 if #calls ~= 0 then error("switched off: no animation touched / " .. table.concat(calls, ", ")) end
+if #(handlers.scriptExecute or {}) ~= 0 then error("no animation to wait for: his script runs again when the menu closes") end
 print("ok")
 """
     out = subprocess.run([LUAJIT, "-"], input=script, capture_output=True, text=True, timeout=60)

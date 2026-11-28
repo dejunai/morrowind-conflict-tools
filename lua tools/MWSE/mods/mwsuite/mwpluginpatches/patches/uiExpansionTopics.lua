@@ -12,7 +12,8 @@ that inside one event is a crash (see RESUME).
 
 local this = {}
 
-local FIRST = 1000000                       -- before any mod can lay the menu out, and before any painter
+local FIRST = 1000000                       -- the element's preUpdate: before any painter
+local FIRST_EVENT = 9999                    -- uiActivated: before any mod can lay the menu out
 
 local function waitForTopics(e)
     if not e.source:findChild("MenuDialog_a_topic") then return false end
@@ -21,7 +22,7 @@ end
 function this.init()
     event.register(tes3.event.uiActivated, function(e)
         if e.newlyCreated then e.element:registerAfter("preUpdate", waitForTopics, FIRST) end
-    end, { filter = "MenuDialog", priority = FIRST })
+    end, { filter = "MenuDialog", priority = FIRST_EVENT })
     mwse.log("[mwpluginpatches] UI Expansion: topic colours wait until the topic list exists.")
 end
 

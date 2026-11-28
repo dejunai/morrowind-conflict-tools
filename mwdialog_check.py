@@ -3153,6 +3153,9 @@ def launch_game(args):
                 print("    " + p, file=sys.stderr)
             print("\n  (--play-anyway starts the game regardless)", file=sys.stderr)
             return 3
+    rc = check_plugins_for_play(args, order)
+    if rc:
+        return rc
     ini = default_ini(args)
     if order and os.path.isfile(ini):
         if [n.lower() for n in ini_game_files(ini)] != [n.lower() for n in order]:
@@ -3217,6 +3220,48 @@ def launch_game(args):
         return 2
     print(f"Started {args.exe} in {game_dir} (SteamAppId {args.steam_appid}, no Launcher).")
     return 0
+
+
+def check_plugins_for_play(args, order):
+    """--play: the active plugins against the ones our patches were last built for (mwdialog_hashes.record_plugins:
+    names and sizes). Mods added, removed or updated since, with no --fix run: the patches and the MWSE suite's data
+    belong to the old set. Refused (exit 5) unless --play-anyway, which starts the game with a warning. 0: go on."""
+    if MH.WROTE:                              # --fix --play, --full --play: the patches were built just now, for these
+        MH.record_plugins(args.data_dir, order or [])
+        return 0
+    added, removed, updated = MH.plugins_changed(args.data_dir, order or [])
+    if not (added or removed or updated):
+        return 0
+    groups = [(added, "added"), (removed, "removed"), (updated, "updated (a different file)")]
+    if getattr(args, "play_anyway", False):
+        counts = ", ".join(f"{len(xs)} {what.split(' ')[0]}" for xs, what in groups if xs)
+        print(f"--play-anyway: your mods changed since the patches were built ({counts}). Starting the game anyway, "
+              f"which is a seriously bad idea: run --fix before you play on.", file=sys.stderr)
+        return 0
+    bar = "=" * 72
+    lines = [bar, "--play: NOT starting the game. Your mods changed since mwdialog_check last built its patches:"]
+    for xs, what in groups:
+        if xs:
+            lines.append(f"  {what} ({len(xs)}): " + ", ".join(xs[:6]) + (f" ... and {len(xs) - 6} more" if len(xs) > 6 else ""))
+    lines += ["The patches (Multipatch, Cell Fixes, the merged plugin...) and the MWSE suite's data were made for",
+              "the mods you had then. Run mwdialog_check --fix (or --full) to rebuild them, then --play again.",
+              "--play-anyway starts the game regardless, but that is a seriously bad idea: what the patches change",
+              "no longer matches your mods (lost or doubled objects, broken quests, crashes), and a save made like",
+              "that can stay broken.", bar]
+    for ln in lines:
+        print(ln, file=sys.stderr)
+    # in a console (Play Morrowind.bat) the choice is a keystroke: nobody should need a command prompt for it.
+    # --yes does not answer it: starting on the wrong patches is never a default
+    if sys.stdin is not None and sys.stdin.isatty():
+        try:
+            answer = input("Start the game anyway (a seriously bad idea)? [y/N] ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            answer = ""
+        if answer in ("y", "yes"):
+            print("--play: starting the game anyway, on patches made for other mods. Run --fix before you play on.",
+                  file=sys.stderr)
+            return 0
+    return MH.REFUSED_PLUGINS
 
 
 SAY_SOUND_RE = re.compile(r'\b(?:say|playsound|playsoundvp|playsound3d|playsound3dvp|playloopsound3d|'
@@ -10524,6 +10569,9 @@ def _main(argv=None):
             return 2
         for line in MH.rebaseline(args.data_dir, dry=args.dry_run):
             print(line)
+        if not args.dry_run:                      # the plugins as they are now are accepted too
+            MH.record_plugins(args.data_dir, read_load_order(args) or [])
+            print("  plugin list recorded: --play checks the active plugins against it")
         if not args.play:
             return 0
     if args.full:
@@ -11030,6 +11078,13 @@ def main(argv=None):
                 print(f"\nThe run stopped early: Morrowind.ini's [Game Files] was NOT updated from "
                       f"{LOAD_ORDER_FILE}.", file=sys.stderr)
             LOAD_ORDER_WRITTEN.clear()
+            # a run that built our patches records the plugins they were built for (--play checks them)
+            if finished and MH.WROTE and TOP_ARGS is not None and not getattr(TOP_ARGS, "dry_run", False):
+                try:
+                    MH.record_plugins(TOP_ARGS.data_dir, read_load_order(TOP_ARGS) or [])
+                except (OSError, UnicodeError, ValueError) as e:
+                    print(f"\nCould not record the plugin list for --play: {e}", file=sys.stderr)
+            MH.WROTE.clear()
             MP.release_game_locks()
             if "mwdialog_assets" in sys.modules:
                 sys.modules["mwdialog_assets"].broken_models_notice()

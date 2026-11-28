@@ -16,8 +16,10 @@ os.clock = function() return clock end
 local types = { miscItem = 1, book = 2, ingredient = 3, alchemy = 4, weapon = 5, ammunition = 6, armor = 7,
                 clothing = 8, apparatus = 9, lockpick = 10, probe = 11, repairItem = 12, light = 13, npc = 14, creature = 15 }
 local world = { isInterior = false, gridX = -2, gridY = -9 }
+INCELL = {}
+function world:iterateReferences() local i = 0 return function() i = i + 1 return INCELL[i] end end
 tes3 = { objectType = types, scanCode = { delete = 211 }, event = setmetatable({}, { __index = function(_, k) return k end }),
-         player = { data = {} }, getActiveCells = function() return {} end,
+         player = { data = {} }, getActiveCells = function() return { world } end,
          makeSafeObjectHandle = function(r) return { valid = function() return not r.gone end, getObject = function() return r end } end,
          positionCell = function(p)
              local r = p.reference
@@ -27,8 +29,11 @@ tes3 = { objectType = types, scanCode = { delete = 211 }, event = setmetatable({
              return true
          end }
 tes3vector3 = { new = function(x, y, z) return { x = x, y = y, z = z } end }
-event = { register = function(name, fn) handlers[name] = fn end }
-mwse = { loadConfig = function(name, defaults)
+event = { register = function(name, fn) handlers[name] = fn end,
+          unregister = function(name, fn) if handlers[name] == fn then handlers[name] = nil end end,
+          isRegistered = function(name, fn) return handlers[name] == fn end }
+timer = { real = 1, delayOneFrame = function(f) f() end }
+mwse = { log = function() end, loadConfig = function(name, defaults)
     if name == "mwfloatfix" then config = defaults; config.enabled, config.log = ENABLED, false; return config end
     if name == "mwfloatfix_rescue" then return { npcs = { { id = "am_fisherman4", cell = "#-2,-9",
         from = { -9384, -72926, 88 }, to = { -9355, -72897, 70 } } } } end
@@ -40,10 +45,12 @@ local function person(id, x, y, z, dead)
              position = { x = x, y = y, z = z }, orientation = { x = 0, y = 0, z = 4.25 }, isDead = dead, moves = 0,
              tempData = {} }            -- no sourceMod and no startingPosition: neither may be relied on
 end
+local function simulate() if handlers.simulate then handlers.simulate() end end
+local function arrive(ref) INCELL = { ref } if handlers.cellChanged then handlers.cellChanged({}) end end
 local function load(ref)
-    handlers.referenceActivated({ reference = ref })
+    arrive(ref)
     clock = clock + 5
-    handlers.simulate()
+    simulate()
     return ref
 end
 local function check(ok, what) if not ok then error(what, 2) end end
@@ -61,11 +68,11 @@ gone.gone = true
 check(load(gone).moves == 0, "a reference unloaded before the cell settled is left alone")
 
 local early = person("AM_Fisherman4", -9390, -72900, -96)
-handlers.referenceActivated({ reference = early })
-handlers.simulate()
+arrive(early)
+simulate()
 check(early.moves == 0, "nothing moves before the cell has settled")
 clock = clock + 5
-handlers.simulate()
+simulate()
 check(early.moves == 1 and early.position.x == -9355 and early.position.z == 70, "put back on the dock")
 check(early.faced == 4.25, "facing as before")
 check(load(person("AM_Fisherman4", -9355, -72897, -96)).moves == 0, "only once per save")

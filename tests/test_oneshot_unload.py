@@ -267,11 +267,13 @@ mwscript = { stopScript = function() end }
 tes3.uiEvent = { destroy = "destroy" }
 tes3.getReference = function() return nil end
 timer.frame = { delayOneFrame = function() end }
+local charGen = { value = 10 }                 -- chargen still running
+tes3.findGlobal = function(id) if id == "CharGenState" then return charGen end end
 local patch = require("mwpluginpatches.patches.personalEffects")
 patch.init()
 assert(#timers == 0, "no timer at initialized")
 tes3.player = { cell = { id = "Balmora" } }
-fire("loaded")
+fire("loaded", { newGame = true })
 assert(not patch.backgroundRunning(), "not in the office: no background timer")
 tes3.player.cell = { id = "Seyda Neen, Census and Excise Office" }
 fire("cellChanged")
@@ -286,6 +288,10 @@ assert(n == 1, "one timer, not one per cell change")
 tes3.player.cell = { id = "Seyda Neen" }
 fire("cellChanged")
 assert(not patch.backgroundRunning() and bg.cancelled, "cancelled once the player has left")
+assert(not patch.unloaded(), "chargen still running: kept")
+charGen.value = -1                              -- the end of chargen: the player leaves the office
+fire("cellChanged")
+assert(patch.unloaded(), "unloaded at the end of chargen")
 print("ok")
 """)
 
@@ -385,3 +391,24 @@ def test_files_are_utf8_without_bom():
             data = f.read()
         assert not data.startswith(b"\xef\xbb\xbf"), rel
         data.decode("utf-8")
+
+def test_personal_effects_unloads_at_once_on_a_saved_game():
+    run(r"""
+cfg.personalEffectsEnabled = true
+cfg.isPersonalEffectsActive = function() return true end
+mwse.overrideScript = function() end
+mwscript = { stopScript = function() end }
+tes3.uiEvent = { destroy = "destroy" }
+tes3.getReference = function() return nil end
+timer.frame = { delayOneFrame = function() end }
+local patch = require("mwpluginpatches.patches.personalEffects")
+patch.init()
+tes3.player = { cell = { id = "Seyda Neen, Census and Excise Office" } }
+fire("loaded", { newGame = false })              -- a game can't be saved during chargen
+assert(patch.unloaded() and not patch.backgroundRunning(), "a saved game: nothing kept loaded")
+fire("loaded", { newGame = true })               -- a New Game later in the session
+assert(not patch.unloaded(), "a New Game gets the handlers back")
+fire("cellChanged")
+assert(patch.backgroundRunning(), "and they work: the office timer runs again")
+print("ok")
+""")

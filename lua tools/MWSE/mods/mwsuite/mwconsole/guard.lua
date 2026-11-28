@@ -72,10 +72,10 @@ local onLoad
 local function updateLoadHandler()
     local any = next(windows) ~= nil
     if any and not loadHandlerOn then
-        event.register("load", onLoad, { priority = 10000 })
+        event.register("load", onLoad, { priority = 9000 })
         loadHandlerOn = true
     elseif not any and loadHandlerOn then
-        event.unregister("load", onLoad, { priority = 10000 })
+        event.unregister("load", onLoad, { priority = 9000 })
         loadHandlerOn = false
     end
 end

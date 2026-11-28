@@ -40,6 +40,8 @@ OUR_AUTHOR = b"mwdialog_check"          # the TES3 header author of every plugin
 CHUNK = 1 << 20
 SHORT = 12                              # hex digits of a hash shown in messages
 REFUSED = 4                             # --play's exit code when the hash check fails
+REFUSED_PLUGINS = 5                     # --play's exit code when the plugins changed since our patches were built
+WROTE = []                              # Data Files folders a patch of ours was recorded for in this run
 RECORD_DIR = None                       # a caller's folder for the record (else MWDIALOG_PLAY_HASHES_DIR, else below)
 RECORD_DIR_ENV = "MWDIALOG_PLAY_HASHES_DIR"
 
@@ -193,10 +195,61 @@ def record_patch(path, data_dir=None, sha=None, size=None):
             del rec["patches"][key]
         rec["patches"][name] = _entry(sha, size)
         write_record(rp, rec)
+        if data_dir not in WROTE:
+            WROTE.append(data_dir)
         return sha
     except OSError as e:
         print(f"  (the hash of {name} was not recorded: {e})", file=sys.stderr)
         return None
+
+
+def plugin_set(data_dir, order, rec):
+    """{lower name: [name, size]} of the plugins in `order` that are in data_dir and aren't ours (our patches have
+    their own hashes in the record). A set, not an order: --full's last --sort may reorder after the patches are built."""
+    ours = {k.lower() for k in rec.get("patches", {})}
+    try:
+        here = {n.lower(): n for n in os.listdir(data_dir)}
+    except OSError:
+        here = {}
+    out = {}
+    for n in order:
+        low = n.lower()
+        if low in ours or low not in here:
+            continue
+        try:
+            out[low] = [here[low], os.path.getsize(os.path.join(data_dir, here[low]))]
+        except OSError:
+            pass
+    return out
+
+
+def record_plugins(data_dir, order):
+    """After a run that built our patches: the active plugins they were built for (names and sizes, not dates:
+    --sort redates plugins), so --play can tell when mods were added, removed or updated since. Never raises."""
+    try:
+        rp = record_path(data_dir)
+        rec, err = read_record(rp)
+        if err:
+            return
+        rec["plugins"] = {"recorded": _now(), "set": sorted(plugin_set(data_dir, order, rec).values())}
+        write_record(rp, rec)
+    except OSError as e:
+        print(f"  (the plugin list our patches were built for was not recorded: {e})", file=sys.stderr)
+
+
+def plugins_changed(data_dir, order):
+    """(added, removed, updated) names since record_plugins; three empty lists when nothing changed, or there is
+    no such record yet (patches built before this check existed: the next --fix records it)."""
+    rec, err = read_record(record_path(data_dir))
+    old = (rec or {}).get("plugins")
+    if err or not isinstance(old, dict) or not isinstance(old.get("set"), list):
+        return [], [], []
+    then = {str(n).lower(): (n, s) for n, s in old["set"]}
+    now = plugin_set(data_dir, order, rec)
+    added = sorted(v[0] for k, v in now.items() if k not in then)
+    removed = sorted(v[0] for k, v in then.items() if k not in now)
+    updated = sorted(v[0] for k, v in now.items() if k in then and then[k][1] != v[1])
+    return added, removed, updated
 
 
 def note_written_plugin(path, data):

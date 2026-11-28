@@ -60,13 +60,29 @@ local CLASS_NAME_TO_INDEX = {
     ["witchhunter"] = 21,
 }
 
+-- the references this fix uses, looked up when the Census and Excise office loads (a load or a cell change):
+-- tes3.getReference scans every cell, so never from the activate handler or the background timer
+local REF_IDS = { captain = "chargen captain", guard = "chargen door guard", baseCont = "R0_pe_basecont" }
+local cached = {}
+local function cacheRefs()
+    cached = {}
+    for key, id in pairs(REF_IDS) do
+        local r = tes3.getReference(id)
+        if r then cached[key] = tes3.makeSafeObjectHandle(r) end
+    end
+end
+local function known(key)
+    local h = cached[key]
+    return h and h:valid() and h:getObject() or nil
+end
+
 local function restoreSellusFacing()
     local pCell = tes3.player and tes3.player.cell
     if not pCell or not pCell.id or not pCell.id:lower():find("census and excise") then
         return
     end
 
-    local captain = tes3.getReference("chargen captain")
+    local captain = known("captain")
     if captain and captain.cell == pCell and captain.sceneNode then
         local targetFacing = -math.pi / 2
         captain.facing = targetFacing
@@ -81,7 +97,7 @@ local function restoreDoorGuardFacing()
         return
     end
 
-    local guard = tes3.getReference("chargen door guard")
+    local guard = known("guard")
     if guard and guard.cell == pCell and guard.sceneNode then
         -- Do not snap facing while actively in dialogue with the door guard
         local menuDialog = tes3ui.findMenu(tes3ui.registerID("MenuDialog"))
@@ -109,7 +125,7 @@ local function handlePersonalEffectsUnlock()
         return
     end
 
-    local baseCont = tes3.getReference("R0_pe_basecont")
+    local baseCont = known("baseCont")
     if not baseCont then
         return
     end
@@ -233,7 +249,7 @@ function personalEffectsFix.init()
     end)
 
     -- Guard against Sellus Gravius and Door Guard rotating when dialogue ends, and trigger unlock
-    event.register(tes3.event.uiActivated, function(e)
+    local function onDialog(e)
         local mobileActor = e.element:getPropertyObject("PartHyperText_actor")
         local ref = mobileActor and mobileActor.reference
         if ref and ref.baseObject then
@@ -255,16 +271,18 @@ function personalEffectsFix.init()
                 end)
             end
         end
-    end, { filter = "MenuDialog" })
+    end
+    event.register(tes3.event.uiActivated, onDialog, { filter = "MenuDialog" })
 
     -- Also ensure chest is unlocked and filled if activated directly
-    event.register("activate", function(e)
+    local function onActivate(e)
         if e.target and e.target.baseObject and e.target.baseObject.id:lower() == "r0_pe_basecont" then
             if tes3.getJournalIndex({ id = "A1_1_FindSpymaster" }) >= 1 then
                 handlePersonalEffectsUnlock()
             end
         end
-    end)
+    end
+    event.register("activate", onActivate)
 
     local function scheduleFacing()
         local cell = tes3.player and tes3.player.cell
@@ -322,15 +340,50 @@ function personalEffectsFix.init()
     end
     personalEffectsFix.backgroundRunning = function() return backgroundTimer ~= nil end   -- for tests
 
-    event.register(tes3.event.loaded, function()
+    -- Everything here belongs to chargen. Its handlers go once it is over: at the end of chargen (CharGenState -1,
+    -- set as the player leaves the office), and at once when a saved game loads (a game can't be saved during
+    -- chargen). The loaded handler stays, so a New Game later in the same session gets them back. The script
+    -- overrides above stay too: they cost nothing unless those scripts run again.
+    local onLoaded, onCellChanged
+    local unloaded = false
+    local function unload(reason)
+        if unloaded then return end
+        unloaded = true
+        event.unregister(tes3.event.uiActivated, onDialog, { filter = "MenuDialog" })
+        event.unregister("activate", onActivate)
+        event.unregister(tes3.event.cellChanged, onCellChanged)
+        stopBackgroundCheck()
+        cached = {}
+        mwse.log("[mwpluginpatches] Personal Effects: %s; handlers removed.", reason)
+    end
+    personalEffectsFix.unloaded = function() return unloaded end   -- for tests
+    local function charGenOver()
+        local g = tes3.findGlobal("CharGenState")
+        return g ~= nil and g.value == -1
+    end
+    local function reload()                         -- a New Game after a saved one: chargen again
+        if not unloaded then return end
+        unloaded = false
+        event.register(tes3.event.uiActivated, onDialog, { filter = "MenuDialog" })
+        event.register("activate", onActivate)
+        event.register(tes3.event.cellChanged, onCellChanged)
+    end
+    onLoaded = function(e)
         backgroundTimer = nil                       -- cancelled by MWSE before loaded
+        if not (e and e.newGame) then return unload("a saved game: chargen is over") end
+        reload()
+        if inCensusOffice() then cacheRefs() else cached = {} end
         scheduleFacing()
         syncBackgroundCheck()
-    end)
-    event.register(tes3.event.cellChanged, function()
+    end
+    onCellChanged = function()
+        if not inCensusOffice() and charGenOver() then return unload("chargen is over") end
+        if inCensusOffice() then cacheRefs() else cached = {} end
         scheduleFacing()
         syncBackgroundCheck()
-    end)
+    end
+    event.register(tes3.event.loaded, onLoaded)
+    event.register(tes3.event.cellChanged, onCellChanged)
 
     mwse.log("[mwpluginpatches] Personal Effects Sellus Gravius & Census Door Guard script overrides and facing fixes active.")
 end

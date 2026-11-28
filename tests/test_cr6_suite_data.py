@@ -138,9 +138,12 @@ os.clock = function() return clock end
 local types = { miscItem = 1, book = 2, ingredient = 3, alchemy = 4, weapon = 5, ammunition = 6, armor = 7,
                 clothing = 8, apparatus = 9, lockpick = 10, probe = 11, repairItem = 12, light = 13, npc = 14, creature = 15 }
 tes3 = { objectType = types, scanCode = { delete = 211 }, event = setmetatable({}, { __index = function(_, k) return k end }),
-         getActiveCells = function() return {} end }
+         getActiveCells = function() return ACTIVE end, player = { data = {} } }
 tes3vector3 = { new = function(x, y, z) return { x = x, y = y, z = z } end }
-event = { register = function(name, fn) handlers[name] = fn end }
+event = { register = function(name, fn) handlers[name] = fn end,
+          unregister = function(name, fn) if handlers[name] == fn then handlers[name] = nil end end,
+          isRegistered = function(name, fn) return handlers[name] == fn end }
+timer = { real = 1, delayOneFrame = function(f) f() end }
 lfs = { attributes = function(p) if p == "Data Files\\Cell Fixes.esp" then return { size = SIZE_NOW, modification = 7 } end end,
         mkdir = function() end }
 mwse = { log = function(fmt, ...) logged[#logged + 1] = string.format(fmt, ...) end,
@@ -151,25 +154,36 @@ mwse = { log = function(fmt, ...) logged[#logged + 1] = string.format(fmt, ...) 
     return defaults
 end }
 dofile([[MOD]])
-local cell = { isInterior = true, id = "Balmora, Inn" }
+INCELL, ACTIVE = {}, {}
+local function cellOf(c)
+  function c:iterateReferences() local i = 0 return function() i = i + 1 return INCELL[i] end end
+  return c
+end
+local function enter(...)
+  for _, r in ipairs({ ... }) do INCELL[#INCELL + 1] = r end
+  ACTIVE = { INCELL[1] and INCELL[1].cell }
+  if handlers.cellChanged then handlers.cellChanged({}) end
+end
+local cell = cellOf({ isInterior = true, id = "Balmora, Inn" })
 local function item(x, y, z)
   local p = { x = x, y = y, z = z }
   return { object = { id = "Misc_Bottle", objectType = 1 }, cell = cell, position = p, startingPosition = p,
            sceneNode = {}, tempData = {}, sourceMod = "Morrowind.esm" }
 end
-local other = item(500, 500, 40)
-handlers.referenceActivated({ reference = other })
+local listed = item(110, 95, 40)
+enter(listed)
 for i = 1, 6 do                          -- no bounding box in this stub: tried again a few times, then given up on
   clock = clock + 10
-  handlers.simulate()
+  if handlers.simulate then handlers.simulate() end
 end
-print((other.tempData.mwfloatfixChecked and "checked" or "skipped") .. " " .. #logged)
+print((listed.tempData.mwfloatfixChecked and "checked" or "skipped") .. " " .. #logged)
 """
 
 
 @pytest.mark.skipif(not os.path.isfile(LUAJIT), reason="LuaJIT not available")
-@pytest.mark.parametrize("size_now, expect", [(100, "skipped 0"), (101, "checked 1")])
-def test_mwfloatfix_checks_every_item_once_a_patch_changed_after_the_list(size_now, expect):
+@pytest.mark.parametrize("size_now, expect", [(100, "checked 0"), (101, "skipped 1")])
+def test_mwfloatfix_checks_nothing_once_a_patch_changed_after_the_list(size_now, expect):
+    """The list matches: its item is checked. A patch rebuilt since: nothing is checked, one line says why."""
     script = SCRIPT.replace("[[MOD]]", "[[" + MOD + "]]").replace("SIZE_NOW", str(size_now))
     out = subprocess.run([LUAJIT, "-"], input=script, capture_output=True, text=True, timeout=60)
     assert out.returncode == 0 and out.stdout.strip().endswith(expect), out.stderr + out.stdout

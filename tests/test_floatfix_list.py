@@ -94,7 +94,7 @@ os.clock = function() return clock end
 local types = { miscItem = 1, book = 2, ingredient = 3, alchemy = 4, weapon = 5, ammunition = 6, armor = 7,
                 clothing = 8, apparatus = 9, lockpick = 10, probe = 11, repairItem = 12, light = 13, npc = 14, creature = 15 }
 tes3 = { objectType = types, scanCode = { delete = 211 }, event = setmetatable({}, { __index = function(_, k) return k end }),
-         getActiveCells = function() return {} end,
+         getActiveCells = function() return ACTIVE end, player = { data = {} },
          rayTest = function() return { distance = 0 } end }    -- resting on something: checked, not moved
 local V = {}
 V.__index = V
@@ -102,36 +102,48 @@ V.__add = function(a, b) return tes3vector3.new(a.x + b.x, a.y + b.y, a.z + b.z)
 V.__mul = function(a, k) return tes3vector3.new(a.x * k, a.y * k, a.z * k) end
 tes3vector3 = { new = function(x, y, z) return setmetatable({ x = x, y = y, z = z }, V) end }
 local ROT = setmetatable({}, { __mul = function(_, v) return v end })
-event = { register = function(name, fn) handlers[name] = fn end }
+event = { register = function(name, fn) handlers[name] = fn end,
+          unregister = function(name, fn) if handlers[name] == fn then handlers[name] = nil end end,
+          isRegistered = function(name, fn) return handlers[name] == fn end }
+timer = { real = 1, delayOneFrame = function(f) f() end }
 mwse = { loadConfig = function(name, defaults)
     if name == "mwfloatfix" then defaults.enabled = true; defaults.log = false; return defaults end
-    if name == "mwfloatfix_data" then return { cells = { ["balmora, inn"] = { { id = "Misc_Bottle", pos = { 110, 95, 40 } } } } } end
+    if name == "mwfloatfix_data" then return { cells = { ["balmora, inn"] = { { id = "Misc_Bottle", pos = { 110, 95, 40 } } },
+                                                         ["balmora, guild"] = { { id = "Misc_Bottle", pos = { 110, 95, 40 } } } } } end
     return defaults
 end }
 dofile([[MOD]])
-local cell = { isInterior = true, id = "Balmora, Inn" }
-local function item(x, y, z, src)
+INCELL, ACTIVE = {}, {}
+local function cellOf(c)
+  function c:iterateReferences() local i = 0 return function() i = i + 1 return INCELL[i] end end
+  return c
+end
+local function enter(...)
+  for _, r in ipairs({ ... }) do INCELL[#INCELL + 1] = r end
+  ACTIVE = { INCELL[1] and INCELL[1].cell }
+  if handlers.cellChanged then handlers.cellChanged({}) end
+end
+local cell = cellOf({ isInterior = true, id = "Balmora, Inn" })
+local guild = cellOf({ isInterior = true, id = "Balmora, Guild" })
+local function item(x, y, z, src, at)
   local p = { x = x, y = y, z = z }
   local node = { createBoundingBox = function() return { min = tes3vector3.new(-2, -2, 0), max = tes3vector3.new(2, 2, 4) } end,
                  worldTransform = { rotation = ROT, scale = 1, translation = tes3vector3.new(x, y, z) } }
-  return { object = { id = "Misc_Bottle", objectType = 1 }, cell = cell, position = p, startingPosition = p,
+  return { object = { id = "Misc_Bottle", objectType = 1 }, cell = at or cell, position = p, startingPosition = p,
            sceneNode = node, tempData = {}, sourceMod = src }
 end
 local listed, other = item(111, 96, 40, "Morrowind.esm"), item(500, 500, 40, "Morrowind.esm")
 local spawned = item(110, 95, 40, nil)              -- placed by a script on the same spot: no source plugin
-handlers.referenceActivated({ reference = listed })
-handlers.referenceActivated({ reference = other })
-handlers.referenceActivated({ reference = spawned })
+enter(listed, other, spawned)
 clock = 10
 handlers.simulate()
 if not listed.tempData.mwfloatfixChecked then error("the listed item is checked") end
 if other.tempData.mwfloatfixChecked then error("an item the list doesn't name is skipped") end
 if spawned.tempData.mwfloatfixChecked then error("an item a script placed is skipped") end
 local batch = {}
-for i = 1, 5 do
-  batch[i] = item(110, 95, 40, "Morrowind.esm")
-  handlers.referenceActivated({ reference = batch[i] })
-end
+INCELL = {}                                       -- the next listed cell
+for i = 1, 5 do batch[i] = item(110, 95, 40, "Morrowind.esm", guild) end
+enter(unpack(batch))
 clock = 20
 handlers.simulate()
 local n = 0

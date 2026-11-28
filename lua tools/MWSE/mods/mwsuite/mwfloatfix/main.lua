@@ -12,9 +12,11 @@
     and anything already checked once (each item is checked the first time its cell loads).
     Moves are written to MWSE\logs\mwfloatfix.log.
 
-    With MWSE\config\mwfloatfix_data.json (written by mwdialog_check --cell-conflicts) only the items it
-    lists are checked: those resting on something a later mod moved, rescaled or deleted, or on land a
-    later mod lowered. Without it, every loose item is checked as above.
+    Only the items MWSE\config\mwfloatfix_data.json lists are checked (written by mwdialog_check --fix and
+    --cell-conflicts): those resting on something a later mod moved, rescaled or deleted, or on land a later mod
+    lowered. Work happens only in a cell a list names, as you enter it; once every listed item found there is
+    handled the cell is marked done in the save and never checked again in that playthrough. Without the list (or
+    with one made before a patch was rebuilt) no item is checked: one line in MWSE.log says so.
 
     With MWSE\config\mwfloatfix_rescue.json (written by mwdialog_check --fix) each person it lists who is
     under water near that spot in this save is put back on their footing, once per save: a save keeps where
@@ -91,14 +93,14 @@ local START_ABOVE = 6                    -- rays start this far above the item's
 local LOG_DIR = "Data Files\\MWSE\\logs"
 local LOG_PATH = LOG_DIR .. "\\mwfloatfix.log"
 local logFile
+local function openLog()
+    if logFile or not config.log then return end
+    pcall(function() lfs.mkdir(LOG_DIR) end)
+    logFile = io.open(LOG_PATH, "w")
+    if logFile then logFile:write(os.date("mwfloatfix log, started %Y-%m-%d %H:%M:%S"), "\n") end
+end
 local function log(fmt, ...)
-    if not config.log then return end
-    if not logFile then
-        pcall(function() lfs.mkdir(LOG_DIR) end)
-        logFile = io.open(LOG_PATH, "w")
-        if not logFile then return end
-        logFile:write(os.date("mwfloatfix log, started %Y-%m-%d %H:%M:%S"), "\n")
-    end
+    if not config.log or not logFile then return end
     local ok, line = pcall(string.format, fmt, ...)
     logFile:write(os.date("[%H:%M:%S] "), ok and line or tostring(fmt), "\n")
     logFile:flush()
@@ -466,11 +468,14 @@ local function refKey(ref)
     return string.format("%s|%s|%d|%d|%d", cellKey(ref.cell), baseId,
                          math.floor(p.x + 0.5), math.floor(p.y + 0.5), math.floor(p.z + 0.5))
 end
+local blackCells = {}                    -- cellKey -> true: a cell with a blacklisted object in it
 local function rebuildKeys()
-    blackKeys, blackIds = {}, {}
+    blackKeys, blackIds, blackCells = {}, {}, {}
     for _, e in ipairs(blacklist.entries) do
         blackKeys[e.key] = true
         if e.id then blackIds[e.id:lower()] = true end
+        local c = type(e.key) == "string" and e.key:match("^(.-)|")
+        if c then blackCells[c] = true end
     end
 end
 rebuildKeys()
@@ -495,8 +500,13 @@ end
 local function pickTarget()
     local console = tes3ui.findMenu("MenuConsole")
     if console and console.visible and consoleRef and consoleRef.cell then return consoleRef end
-    local hit = tes3.rayTest({ position = tes3.getCameraPosition(), direction = tes3.getCameraVector(),
-                               maxDistance = 3000, ignore = { tes3.player } })
+    -- two roots: what can be picked up (items, carryable lanterns) and the statics (ropes, fixed lights)
+    local pos, dir, hit = tes3.getCameraPosition(), tes3.getCameraVector(), nil
+    for _, root in ipairs({ tes3.game.worldPickRoot, tes3.game.worldObjectRoot }) do
+        local h = tes3.rayTest({ position = pos, direction = dir, maxDistance = 3000, root = root,
+                                 ignore = { tes3.player } })
+        if h and h.reference and (not hit or h.distance < hit.distance) then hit = h end
+    end
     if hit and hit.reference and hit.reference ~= tes3.player then return hit.reference end
     if consoleRef and consoleRef.cell then return consoleRef end
     return nil
@@ -589,7 +599,7 @@ end
 
 -- MWSE\config\mwfloatfix_data.json (mwdialog_check --cell-conflicts): the loose items that could float, by
 -- cell. When it is there only those are checked, and every other cell costs one table lookup.
-local floatList                          -- cell key -> object id -> { {x, y, z}, ... }; nil: check everything
+local floatList                          -- cell key -> object id -> { {x, y, z}, ... }; nil: nothing is checked
 do
     local data = mwse.loadConfig("mwfloatfix_data")
     -- the list was worked out against the generated patches (Cell Fixes first: it has the last word on what is
@@ -620,9 +630,12 @@ do
         end
     end
     if stale then
-        mwse.log("[mwfloatfix] mwfloatfix_data.json doesn't match %s, which %s: checking every loose item until "
-            .. "mwdialog_check --fix rewrites it", stale, why)
+        mwse.log("[mwfloatfix] mwfloatfix_data.json doesn't match %s, which %s: no items are checked until "
+            .. "mwdialog_check --fix (or --cell-conflicts) writes it again", stale, why)
         data = nil
+    elseif not data then
+        mwse.log("[mwfloatfix] MWSE\\config\\mwfloatfix_data.json is missing: no items are checked "
+            .. "(mwdialog_check --fix, or --cell-conflicts, writes it)")
     end
     if data and type(data.cells) == "table" then
         floatList = {}
@@ -679,6 +692,15 @@ do
     end
 end
 
+local rescueCells = {}                   -- list key ("#x,y") -> true: where a listed person stands or is put
+for _, list in pairs(rescues) do
+    for _, e in ipairs(list) do
+        for _, at in ipairs({ e.from, e.to }) do
+            rescueCells[string.format("#%d,%d", math.floor(at[1] / 8192), math.floor(at[2] / 8192))] = true
+        end
+    end
+end
+
 local function noteRescue(ref)
     if not config.enabled or next(rescues) == nil then return end
     local obj = ref.object
@@ -725,71 +747,83 @@ local function runRescues()
     end
 end
 
-local function enqueue(ref)
-    if not config.enabled or queued[ref] then return end
-    if floatList then
-        local ok, listed = pcall(isListed, ref)
-        if not ok or not listed then return end
-    end
+-- known cells ------------------------------------------------------------------------------------
+-- Work happens only in a cell a list names, as it becomes active: an item-list cell not yet done in this
+-- playthrough, a blacklisted object's cell, a listed person's cell. Once every listed item found in a cell has
+-- been handled, the cell is marked done in the save and never looked at again in that playthrough.
+local DONE_KEY = "mwfloatfixDone"                   -- tes3.player.data: list key -> true
+local pending = {}                                  -- list key -> { [ref] = true }: its items still queued
+local cellOf = setmetatable({}, { __mode = "k" })   -- queued item -> its list key
+
+local function doneCells()
+    local d = tes3.player and tes3.player.data
+    if not d then return nil end
+    d[DONE_KEY] = d[DONE_KEY] or {}
+    return d[DONE_KEY]
+end
+
+local function enqueue(ref, key)
+    if not config.enabled or queued[ref] or not key then return end
+    local ok, listed = pcall(isListed, ref)
+    if not ok or not listed then return end
     if not isCandidate(ref) then return end
     queued[ref] = true
+    cellOf[ref] = key
+    if pending[key] then pending[key][ref] = true end
     queue[#queue + 1] = ref
     sorted = false
     settleAt = os.clock() + 1.0                     -- wait until the cell around it has loaded
 end
-requeue = enqueue                                   -- a retry of an item whose model wasn't ready
+requeue = function(ref) enqueue(ref, cellOf[ref]) end   -- a retry of an item whose model wasn't ready
 
-event.register(tes3.event.referenceActivated, function(e)
-    if applyBlacklist(e.reference) then return end
-    noteRescue(e.reference)
-    enqueue(e.reference)
-end)
+local function markDone(key)
+    pending[key] = nil
+    local done = doneCells()
+    if done then done[key] = true end
+    log("%s: every listed item handled; not checked again in this game", key)
+end
 
--- a cell change keeps the queue: the cell's items were queued as they were activated, just before this
--- (emptying it here dropped them unchecked); anything that has gone since is skipped as it comes up
-event.register(tes3.event.cellChanged, function()
-    sorted = false
-    settleAt = os.clock() + 1.0
-end)
+-- an item is through (not queued again for a retry): its cell is done once none of its items is left
+local function finished(ref)
+    if queued[ref] then return end
+    local key = cellOf[ref]
+    local set = key and pending[key]
+    if not set then return end
+    set[ref] = nil
+    if next(set) == nil then markDone(key) end
+end
 
-event.register(tes3.event.loaded, function()
-    queue, queued, qHead, drowning = {}, {}, 1, {}
-    checkedThisSession = setmetatable({}, { __mode = "k" })
-    settleAt = os.clock() + 2.0
-    for _, cell in ipairs(tes3.getActiveCells()) do
-        for ref in cell:iterateReferences() do
-            if not applyBlacklist(ref) then
-                noteRescue(ref)
-                enqueue(ref)
-            end
-        end
-    end
-end)
+-- an item gone from the queue unchecked (its cell unloaded): that cell is not done, its next visit starts over
+local function left(ref)
+    local key = cellOf[ref]
+    if key then pending[key] = nil end
+end
 
-event.register(tes3.event.simulate, function()
+local syncSimulate
+local keep = {}                                     -- reused while the queue is sorted (no new tables per frame)
+local function zOf(ref) local p = ref.position return (p and p.z) or 0 end
+local function lowerFirst(a, b) return zOf(a) < zOf(b) end
+local function clear(t) for i = #t, 1, -1 do t[i] = nil end end
+local function onSimulate()
     if drowning[1] and tes3.player and os.clock() >= settleAt then runRescues() end
     if qHead > #queue or os.clock() < settleAt then return end
     -- lowest items first, so a book resting on a fallen book lands on it, not through it
     if not sorted then
-        local rest = {}
+        local n = 0
         for i = qHead, #queue do
             local ref = queue[i]
-            if isRefValid(ref) and isCandidate(ref) then
-                local p = ref.position
-                local z = (p and p.z) or 0
-                rest[#rest + 1] = { ref = ref, z = z }
+            if ref and isRefValid(ref) and isCandidate(ref) then
+                n = n + 1
+                keep[n] = ref
             elseif ref then
                 queued[ref] = nil               -- gone (its cell unloaded): queued again when it comes back
+                left(ref)
             end
         end
-        table.sort(rest, function(a, b)
-            return a.z < b.z
-        end)
-        local sortedRefs = {}
-        for i = 1, #rest do
-            sortedRefs[i] = rest[i].ref
-        end
-        queue, qHead, sorted = sortedRefs, 1, true
+        clear(queue)
+        for i = 1, n do queue[i], keep[i] = keep[i], nil end
+        table.sort(queue, lowerFirst)
+        qHead, sorted = 1, true
     end
     local started = os.clock()
     for _ = 1, MAX_PER_FRAME do
@@ -801,10 +835,68 @@ event.register(tes3.event.simulate, function()
         if isRefValid(ref) then
             local ok, err = pcall(settle, ref)
             if not ok then log("error checking %s%s: %s", tostring(ref.object and ref.object.id), atPos(ref), tostring(err)) end
+            finished(ref)
+        else
+            left(ref)
         end
     end
-    if qHead > #queue then queue, qHead, sorted = {}, 1, false end
-end)
+    if qHead > #queue then
+        clear(queue)
+        qHead, sorted = 1, false
+        if not drowning[1] then timer.delayOneFrame(function() syncSimulate() end) end   -- not during the dispatch
+    end
+end
+
+-- simulate is registered only while there is something to do (an item queued, a person to rescue)
+syncSimulate = function()
+    local want = qHead <= #queue or drowning[1] ~= nil
+    local has = event.isRegistered(tes3.event.simulate, onSimulate)
+    if want and not has then
+        event.register(tes3.event.simulate, onSimulate)
+    elseif not want and has then
+        event.unregister(tes3.event.simulate, onSimulate)
+    end
+end
+
+local function scanActiveCells()
+    if not tes3.player then return end
+    local done = doneCells() or {}
+    for _, cell in ipairs(tes3.getActiveCells()) do
+        local key = listKey(cell)
+        if blackCells[cellKey(cell)] then
+            for ref in cell:iterateReferences() do applyBlacklist(ref) end
+        end
+        if config.enabled and rescueCells[key] then
+            for ref in cell:iterateReferences(tes3.objectType.npc) do noteRescue(ref) end
+        end
+        if config.enabled and floatList and floatList[key] and not done[key] and not pending[key] then
+            pending[key] = {}
+            for ref in cell:iterateReferences(ITEM_TYPE_LIST) do
+                if not ref.disabled then enqueue(ref, key) end
+            end
+            if next(pending[key]) == nil then markDone(key) end
+        end
+    end
+    syncSimulate()
+end
+
+-- without any list there is nothing to do in any cell: no handler stays loaded for it
+local anyList = floatList ~= nil or next(rescues) ~= nil or next(blacklist.entries) ~= nil
+if anyList then
+    -- a cell change keeps the queue: anything that has gone since is skipped as it comes up
+    event.register(tes3.event.cellChanged, function()
+        sorted = false
+        settleAt = os.clock() + 1.0
+        scanActiveCells()
+    end)
+    event.register(tes3.event.loaded, function()
+        queue, queued, qHead, drowning, pending = {}, {}, 1, {}, {}
+        checkedThisSession = setmetatable({}, { __mode = "k" })
+        settleAt = os.clock() + 2.0
+        openLog()
+        scanActiveCells()
+    end)
+end
 
 local function restoreBlacklistedInActiveCells()
     for _, cell in ipairs(tes3.getActiveCells()) do
@@ -825,16 +917,10 @@ local function restoreBlacklistedInActiveCells()
 end
 
 local function recheckActiveCells()
+    openLog()                                       -- the log may have been switched on
     restoreBlacklistedInActiveCells()
     checkedThisSession = setmetatable({}, { __mode = "k" })
-    for _, cell in ipairs(tes3.getActiveCells()) do
-        for ref in cell:iterateReferences() do
-            if not applyBlacklist(ref) then
-                noteRescue(ref)
-                enqueue(ref)
-            end
-        end
-    end
+    scanActiveCells()                               -- cells done in this game stay done
 end
 
 local function getMovedItems()
@@ -882,8 +968,9 @@ event.register(tes3.event.modConfigReady, function()
             .. "below it, once, the first time you visit the place. Items hanging on a wall or hook, items under "
             .. "water, and items with nothing below them are left alone. Each move is written to "
             .. "MWSE\\logs\\mwfloatfix.log."
-            .. (floatList and "\n\nOnly the items listed in MWSE\\config\\mwfloatfix_data.json are checked (that "
-                .. "list is made by mwdialog_check --cell-conflicts)." or "")
+            .. "\n\nOnly the items listed in MWSE\\config\\mwfloatfix_data.json are checked (that list is made by "
+            .. "mwdialog_check --fix or --cell-conflicts), and only in their cells: once a place's items are done it "
+            .. "is not checked again in this game. Without the list nothing is checked."
             .. "\n\nPeople listed in MWSE\\config\\mwfloatfix_rescue.json (made by mwdialog_check --fix) who are "
             .. "stuck under water in this save are put back on their dock or ledge, once per save.",
     })

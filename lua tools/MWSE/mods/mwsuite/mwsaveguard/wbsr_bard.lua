@@ -29,9 +29,10 @@ local SCRIPT_PATTERNS = { "bard", "lute", "drum", "perform", "musician", "minstr
 local BARD_PATH = "vo[\\/]+bard[\\/]"
 
 -- bookends do not depend on finding WBSR's addTempSound by source (a wrapper can hide it).
--- onBefore is above stock WBSR (200000) and luafix G1 (9130); onAfter is below both.
--- pending enterFrame is just after WBSR's enterFrameLS (9147), same frame as the delayed register.
-local BEFORE_PRI = 200001
+-- onBefore is just above WBSR's 200000 as luafix G1 compresses it (9130); onAfter is below it. Stock WBSR
+-- (not patched by luafix) runs first at 200000. Pending enterFrame is just after WBSR's enterFrameLS (9147),
+-- same frame as the delayed register.
+local BEFORE_PRI = 9131
 local AFTER_PRI  = 9000
 local PENDING_PRI = 9146
 

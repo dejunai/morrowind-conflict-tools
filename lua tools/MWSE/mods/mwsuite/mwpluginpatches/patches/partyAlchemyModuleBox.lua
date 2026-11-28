@@ -10,7 +10,7 @@ local intercept = require("mwpluginpatches.intercept")
 local this = {}
 local active = false
 local rule
-local LAST = -1000000      -- after every other initialized handler (Party Alchemy's runs at the default, 0)
+local LAST = -9999         -- after every other initialized handler (Party Alchemy's runs at the default, 0)
 
 function this.unload()
     if rule then intercept.removeMessageBoxDrop(rule) end

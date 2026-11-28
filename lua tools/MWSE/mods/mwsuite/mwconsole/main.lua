@@ -226,7 +226,7 @@ end
 
 -- always registered (cheap): game state for the window rules, the sandbox, the MCM
 event.register("loaded", function() guard.setLoaded(true) end)
-event.register("load", function() guard.setLoaded(false) end, { priority = 10000 })
+event.register("load", function() guard.setLoaded(false) end, { priority = 9000 })
 event.register("UIEXP:sandboxConsole", onSandbox)
 event.register("initialized", onInitialized, { priority = -999 })
 event.register("modConfigReady", function()

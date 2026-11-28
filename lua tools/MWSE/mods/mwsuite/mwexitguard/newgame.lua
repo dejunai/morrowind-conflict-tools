@@ -116,7 +116,7 @@ end
 function this.init()
     if registered or config.blockNewGameInSession == false then return false end
     registered = true
-    event.register("load", this.onLoad, { priority = 100000 })
+    event.register("load", this.onLoad, { priority = 9100 })
     event.register("loaded", this.onLoaded)
     event.register("uiActivated", this.onUiActivated, { filter = MENU })
     event.register("menuEnter", this.onMenuEnter)

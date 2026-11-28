@@ -69,9 +69,9 @@ package.path = [[''' + MOD + r'''\?.lua;]] .. package.path
 require("main")
 
 local function press9()
-  handlers.keyDown[10000]({ keyCode = 9 })
+  handlers.keyDown[9999]({ keyCode = 9 })
   if not equipped(lantern) then tes3.mobilePlayer:equip({ item = lantern }) end
-  handlers.keyDown[-10000]({ keyCode = 9 })
+  handlers.keyDown[-9999]({ keyCode = 9 })
   flush()
 end
 

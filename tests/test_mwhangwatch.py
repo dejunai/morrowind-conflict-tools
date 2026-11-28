@@ -17,7 +17,7 @@ def test_memory_level_is_the_same_in_the_header_default_and_fallback():
 
 
 def test_now_playing_scan_reuses_one_params_table():
-    step = SRC[SRC.index("local function stepNowPlaying()"):SRC.index("onNowScanFrame = function()")]
+    step = SRC[SRC.index("local function stepNowPlaying()"):SRC.index("local function stopNowTimer()")]
     assert "getSoundPlaying, {" not in step and "pcall(tes3.getSoundPlaying, q)" in step
 
 

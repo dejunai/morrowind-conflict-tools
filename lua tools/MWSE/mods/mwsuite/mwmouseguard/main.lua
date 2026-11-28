@@ -133,7 +133,7 @@ local function checkCursorLock()
     end
 end
 
--- Check cursor containment every 0.15s rather than polling Win32 FFI every frame
+-- Check cursor containment every 0.35 s (luafix's minimum interval) rather than polling Win32 FFI every frame
 local function startCursorCheck()
     if checkTimer then
         checkTimer:cancel()
@@ -141,7 +141,7 @@ local function startCursorCheck()
     end
     checkTimer = timer.start({
         type = timer.real,
-        duration = 0.15,
+        duration = 0.35,
         iterations = -1,
         callback = function()
             pcall(checkCursorLock)

@@ -10,7 +10,7 @@ local intercept = require("mwpluginpatches.intercept")
 local this = {}
 local active = false
 local rule
-local LAST = -1000000      -- after every other initialized handler (Watch the Skies' runs at -150)
+local LAST = -9999         -- after every other initialized handler (Watch the Skies' runs at -150)
 
 function this.unload()
     if rule then intercept.removeErrorToLog(rule) end

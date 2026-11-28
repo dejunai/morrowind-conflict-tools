@@ -307,20 +307,27 @@ end)
 -- "if ( state ) / set state to 0 / return": state is set again each frame of the dialogue, so each is skipped.
 -- positionOnce tells that script family from another script's own "state".
 local quietBard                          -- safe handle, only while the dialogue is open
+local quietScript                        -- its script, while a scriptExecute filter skips it
 
 local function skipScriptFrame(ref)
     local context = ref.context
     if context and context.state ~= nil and context.positiononce ~= nil then context.state = 1 end
 end
 
-local function keepQuiet()
-    if quietBard and quietBard:valid() then skipScriptFrame(quietBard:getObject()) end
+-- the bard's own script is skipped while the dialogue is open (its filter: only that script reaches this)
+local function keepQuiet(e)
+    if quietBard and quietBard:valid() and e.reference == quietBard:getObject() then
+        e.block = true
+        return false
+    end
 end
 
 local function endQuiet()
-    if not quietBard then return end
+    if quietScript then
+        event.unregister(tes3.event.scriptExecute, keepQuiet, { filter = quietScript })
+        quietScript = nil
+    end
     quietBard = nil
-    event.unregister(tes3.event.enterFrame, keepQuiet)
 end
 
 -- The performing animation. The lute is not the script's doing: it is the NPC's own animation (an animation mesh such
@@ -487,16 +494,17 @@ local function scheduleRestore()
     if not state then return end
     if settle then return end                                    -- already counting: never stacked
     local delay = restoreDelay()
-    if delay <= 0 then return restoreAnimation() end
+    if delay <= 0 then restoreAnimation() return endQuiet() end
     cancelBackstop()
     local ok = pcall(function()
         settle = timer.start({ type = timer.simulate, duration = delay, callback = function()
             settle = nil
             restoreAnimation()
+            endQuiet()                                           -- his script runs again only now
             healTouched()                                        -- and whoever the restore missed
         end })
     end)
-    if not ok or not settle then settle = nil return restoreAnimation() end
+    if not ok or not settle then settle = nil restoreAnimation() return endQuiet() end
 end
 
 -- the dialogue is over: now, or once Animated Dialogue has taken its last picture of the pose (it eases out of it)
@@ -516,7 +524,7 @@ end
 event.register(AD_STARTED, function() if pendingAnim then pendingAnim.ad = true end end, { priority = AD_LAST })
 event.register(AD_ENDED, scheduleRestore, { priority = AD_LAST })
 event.register(AD_INTERRUPTED, scheduleRestore, { priority = AD_LAST })
-event.register(tes3.event.cellChanged, function() restoreAnimation() healTouched() end)
+event.register(tes3.event.cellChanged, function() restoreAnimation() endQuiet() healTouched() end)
 event.register(tes3.event.loaded, function() pendingAnim = nil touched = weak() cancelTimers() end)    -- the old references are gone
 -- he died while waiting: nothing to give back (a dead performer's animation is left as it is)
 event.register(tes3.event.death, function(e)
@@ -525,6 +533,7 @@ event.register(tes3.event.death, function(e)
         pendingAnim = nil
         cancelTimers()
         touched[ref] = nil
+        endQuiet()
     end
 end)
 
@@ -542,14 +551,25 @@ local function onMenuDialogActivated(e)
     quietBard = tes3.makeSafeObjectHandle(ref)
     skipScriptFrame(ref)                 -- first, or the script starts the next song
     tes3.removeSound({ reference = ref })
-    if not event.isRegistered(tes3.event.enterFrame, keepQuiet) then        -- MWSE logs a duplicate as an error
-        event.register(tes3.event.enterFrame, keepQuiet)
+    local script = baseOf(ref).script
+    if script and tes3.event.scriptExecute then
+        quietScript = script
+        if not event.isRegistered(tes3.event.scriptExecute, keepQuiet, { filter = script }) then
+            event.register(tes3.event.scriptExecute, keepQuiet, { filter = script })
+        end
     end
     log("%s: singing paused for the dialogue", describe(ref))
     beginAnimation(ref)                  -- before Animated Dialogue (priority), so it starts from the plain animation
 end
 event.register(tes3.event.uiActivated, onMenuDialogActivated, { filter = "MenuDialog", priority = 100 })
-event.register(tes3.event.menuExit, function() endQuiet() onMenuExitAnimation() healTouched() end)
+-- The bard's script stays held until his animation is back: the restore (tes3.loadAnimation) rebuilds him, the engine
+-- forgets the song he was singing (SayDone turns true while it plays on), and a script already running again would
+-- start a second song over it. Held until then, the first song after the dialogue starts once, after the restore.
+event.register(tes3.event.menuExit, function()
+    if not pendingAnim then endQuiet() end
+    onMenuExitAnimation()
+    healTouched()
+end)
 event.register(tes3.event.loaded, endQuiet)
 
 -- Mod Config menu ---------------------------------------------------------------------------------

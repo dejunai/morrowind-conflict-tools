@@ -147,7 +147,7 @@ def test_the_block_runs_first_and_claims_the_event():
 ng.init()
 fire("loaded", {})
 local seen = 0
-event.register("load", function() seen = seen + 1 end, { priority = 10000 })      -- e.g. mwconsole's own
+event.register("load", function() seen = seen + 1 end, { priority = 9000 })       -- e.g. mwconsole's own
 fire("load", { newGame = true })
 assert(seen == 0, "another mod must not see a new game begin that was refused")
 fire("load", { newGame = false })

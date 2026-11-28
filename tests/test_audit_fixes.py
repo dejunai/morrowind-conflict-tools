@@ -511,6 +511,8 @@ tes3.transferInventory = function(p)
   got[stack.object.id] = (got[stack.object.id] or 0) + stack.count
   movedData = stack.variables[1]
 end
+tes3.makeSafeObjectHandle = function(r) return { valid = function() return true end, getObject = function() return r end } end
+fire("cellChanged")                           -- the office loads: its references are looked up once
 for _ = 1, 3 do fire("activate", { target = chest }); chest.object.inventory = {} end
 assert((got.sword or 0) == 1 - RECEIPT, "swords: " .. tostring(got.sword))
 assert(got.ring == 1, "rings: " .. tostring(got.ring))

@@ -6,7 +6,7 @@ import types
 
 import pytest
 
-from conftest import _load, m
+from conftest import _load, m, plugin
 
 MH = _load("mwdialog_hashes")
 T = _load("mwdialog_tes3")
@@ -95,7 +95,7 @@ def test_a_recorded_patch_gone_from_data_files_is_missing_only_while_listed(game
     assert rec["patches"] == {}
 
 
-def play(monkeypatch, root, data, force=False, listed=()):
+def play(monkeypatch, root, data, force=False, listed=(), anyway=False):
     started = []
     monkeypatch.setattr(m, "read_load_order", lambda args: list(listed))
     monkeypatch.setattr(m, "default_ini", lambda args: str(root / "no such Morrowind.ini"))
@@ -103,7 +103,7 @@ def play(monkeypatch, root, data, force=False, listed=()):
     monkeypatch.setattr(m.MP, "lua_prune_report", lambda dep: [])
     monkeypatch.setattr(m.subprocess, "run", lambda *a, **k: types.SimpleNamespace(stdout="steam.exe"))
     monkeypatch.setattr(m.subprocess, "Popen", lambda cmd, **kw: started.append(cmd))
-    args = types.SimpleNamespace(data_dir=str(data), exe="Morrowind.exe", play_anyway=False, play_force=force,
+    args = types.SimpleNamespace(data_dir=str(data), exe="Morrowind.exe", play_anyway=anyway, play_force=force,
                                  steam_appid="22320")
     return m.launch_game(args), started
 
@@ -229,3 +229,57 @@ def test_a_caller_can_choose_the_folder(game, tmp_path, monkeypatch):
     monkeypatch.setattr(MH, "RECORD_DIR", None)
     monkeypatch.setenv(MH.RECORD_DIR_ENV, str(tmp_path / "env"))
     assert MH.record_path(str(data)) == str(tmp_path / "env" / MH.RECORD)
+
+
+def _mods(data, *names):
+    for n in names:
+        plugin(str(data / n), [], [])
+    return list(names)
+
+
+def test_play_refuses_when_mods_changed_since_the_patches_were_built(game, monkeypatch, capsys):
+    root, data = game
+    monkeypatch.setattr(m.MH, "WROTE", [])
+    order = _mods(data, "A.esp", "B.esp")
+    m.MH.record_plugins(str(data), order)                 # what --fix leaves: the plugins the patches were built for
+    _mods(data, "C.esp")
+    with open(data / "B.esp", "ab") as f:
+        f.write(b"x")                                     # an updated mod
+    rc, started = play(monkeypatch, root, data, listed=["A.esp", "B.esp", "C.esp"])
+    err = capsys.readouterr().err
+    assert rc == m.MH.REFUSED_PLUGINS == 5 and started == []
+    assert "NOT starting the game. Your mods changed" in err and "added (1): C.esp" in err
+    assert "updated (a different file) (1): B.esp" in err and "--fix" in err and "seriously bad idea" in err
+    rc, started = play(monkeypatch, root, data, listed=["A.esp", "B.esp", "C.esp"], anyway=True)
+    err = capsys.readouterr().err
+    assert rc == 0 and len(started) == 1 and "--play-anyway: your mods changed" in err and "seriously bad idea" in err
+
+
+def test_play_goes_ahead_with_no_record_the_same_mods_in_another_order_or_patches_built_this_run(
+        game, monkeypatch, capsys):
+    root, data = game
+    monkeypatch.setattr(m.MH, "WROTE", [])
+    order = _mods(data, "A.esp", "B.esp")
+    rc, started = play(monkeypatch, root, data, listed=order)
+    assert rc == 0 and len(started) == 1                  # patches built before this check existed: no record
+    m.MH.record_plugins(str(data), order)
+    rc, started = play(monkeypatch, root, data, listed=["B.esp", "A.esp"])
+    assert rc == 0 and len(started) == 1                  # a re-sort: the same mods
+    _mods(data, "C.esp")
+    monkeypatch.setattr(m.MH, "WROTE", [str(data)])       # --fix --play: the patches were built in this run
+    rc, started = play(monkeypatch, root, data, listed=["A.esp", "B.esp", "C.esp"])
+    assert rc == 0 and len(started) == 1
+    assert m.MH.plugins_changed(str(data), ["A.esp", "B.esp", "C.esp"]) == ([], [], [])   # recorded for them
+
+
+def test_in_a_console_the_refusal_offers_a_keystroke_to_start_anyway(game, monkeypatch, capsys):
+    root, data = game
+    monkeypatch.setattr(m.MH, "WROTE", [])
+    m.MH.record_plugins(str(data), _mods(data, "A.esp"))
+    _mods(data, "C.esp")
+    monkeypatch.setattr(m.sys.stdin, "isatty", lambda: True, raising=False)
+    for key, rc_want, n in (("", 5, 0), ("n", 5, 0), ("y", 0, 1)):     # Enter (the default) and n refuse
+        monkeypatch.setattr("builtins.input", lambda prompt, k=key: k)
+        rc, started = play(monkeypatch, root, data, listed=["A.esp", "C.esp"])
+        assert rc == rc_want and len(started) == n, key
+    assert "starting the game anyway, on patches made for other mods" in capsys.readouterr().err

@@ -65,7 +65,33 @@ local function delayReached()
     return data ~= nil and (data.secondsSinceCensus or 0) >= requiredSeconds()
 end
 
-local onSimulate, onInfoFilter, onMobileActivated, onLoaded
+local onInfoFilter, onMobileActivated, onLoaded, unload
+
+local function onSimulate(e)
+    if not config.jiubDelayEnabled then return end
+
+    -- Check if character generation is complete (journal enabled, Census Office exited)
+    local cg = charGenState()
+    if not cg or cg.value ~= -1 then
+        return
+    end
+
+    local data = getPlayerData()
+    if not data then return end
+
+    data.secondsSinceCensus = (data.secondsSinceCensus or 0) + e.delta
+
+    if data.secondsSinceCensus >= requiredSeconds() then
+        if not data.unlockedLogged then
+            data.unlockedLogged = true
+            mwse.log("[mwpluginpatches] Post-census delay of %s minutes reached. Jiub companion rumor is now eligible to appear.",
+                config.jiubDelayMinutes)
+        end
+        intercept.afterDispatch(function()
+            if armed then unload("delay reached; handlers removed.") end
+        end)
+    end
+end
 
 local function startCounting()
     if counting then return end
@@ -79,7 +105,7 @@ local function stopCounting()
     event.unregister(tes3.event.simulate, onSimulate)
 end
 
-local function unload(reason)
+unload = function(reason)
     stopCounting()
     if infoRegistered then
         event.unregister(tes3.event.infoFilter, onInfoFilter)
@@ -111,31 +137,6 @@ local function arm()
     startCounting()
 end
 
-onSimulate = function(e)
-    if not config.jiubDelayEnabled then return end
-
-    -- Check if character generation is complete (journal enabled, Census Office exited)
-    local cg = charGenState()
-    if not cg or cg.value ~= -1 then
-        return
-    end
-
-    local data = getPlayerData()
-    if not data then return end
-
-    data.secondsSinceCensus = (data.secondsSinceCensus or 0) + e.delta
-
-    if data.secondsSinceCensus >= requiredSeconds() then
-        if not data.unlockedLogged then
-            data.unlockedLogged = true
-            mwse.log("[mwpluginpatches] Post-census delay of %s minutes reached. Jiub companion rumor is now eligible to appear.",
-                config.jiubDelayMinutes)
-        end
-        intercept.afterDispatch(function()
-            if armed then unload("delay reached; handlers removed.") end
-        end)
-    end
-end
 
 onInfoFilter = function(e)
     if not e.passes or not e.info then return end

@@ -69,7 +69,7 @@ local function installLogTimestamps()
         end
         return date("[%H:%M:%S] ")
     end
-    print = function(...)
+    rawset(_G, "print", function(...)                 -- on purpose: every mod's print gets the stamp
         local n = select("#", ...)
         local body
         if n <= 1 then
@@ -80,7 +80,7 @@ local function installLogTimestamps()
             body = concat(t, "\t")
         end
         return origPrint(stamp() .. body)
-    end
+    end)
     mwse.log = function(fmt, ...)
         local ok, msg = pcall(format, tostring(fmt), ...)
         return origPrint(stamp() .. (ok and msg or tostring(fmt)))
@@ -387,7 +387,7 @@ origRegister(tes3.event.initialized, function()
         for _ in pairs(stats) do n = n + 1 end
         origLog("[mwguard] active as passive profiler (measuring %d handlers; details in MWSE\\logs\\mwguard.log)", n)
     end
-end, { priority = -100000 })
+end, { priority = -9999 })                 -- last: after every mod's own
 
 -- address-space readout (shown whether or not profiling is on) ----------------------------------
 local HUD_MENU_ID = tes3ui.registerID("mwguard:addressSpaceMenu")

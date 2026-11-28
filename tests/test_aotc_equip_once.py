@@ -27,6 +27,7 @@ local function startClass()
     end
 end
 function chargenDone()
+    tes3.player = tes3.player or PLAYER
     timer.start{ type = "simulate", duration = 0.7, callback = startClass }
 end
 """
@@ -64,8 +65,9 @@ tes3 = {
 }
 charGenValue = -1
 tes3.findGlobal = function(id) if id == "CharGenState" then return { value = charGenValue } end return nil end
-tes3.player = { id = "player", object = { equipment = {}, inventory = {} } }
-tes3.mobilePlayer = { reference = tes3.player }
+PLAYER = { id = "player", object = { equipment = {}, inventory = {} } }
+tes3.player = nil                   -- as at initialized: no game yet (beginChargen starts one)
+tes3.mobilePlayer = { reference = PLAYER }
 local npc = { id = "npc", equipment = {} }
 ITEMS = {
   helm1 = { objectType = "armor", slot = 0 }, helm2 = { objectType = "armor", slot = 0 },
@@ -134,7 +136,7 @@ local function wear(...)
   tes3.player.object.equipment = eq
 end
 local function fire() local t = started[#started] started[#started] = nil return t.callback({}) end
-function beginChargen() charGenValue = 10 trigger("loaded") end
+function beginChargen() tes3.player = PLAYER charGenValue = 10 trigger("loaded", { newGame = true }) end
 local function unloaded()
   return timer.start == nativeTimerStart and tes3.equip == engineEquip and #(list("simulate")) == 0
 end
@@ -386,7 +388,7 @@ assert(#list("loaded") == 1, "the loaded hook is registered")
 charGenValue = -1
 trigger("loaded")
 assert(unloaded())
-assert(#list("loaded") == 1, "loaded stays so a later new game can re-arm")
+assert(#list("loaded") == 0, "nothing stays: no second New Game in one session")
 print("ok")
 """, mods)
 
@@ -401,12 +403,12 @@ trigger("simulate", { delta = 0.5 })
 assert(not unloaded(), "still waiting for AotC's 0.7 s timer")
 trigger("simulate", { delta = 0.6 })
 assert(unloaded(), "gone after 1 s with no equip callback")
-assert(#list("loaded") == 1)
+assert(#list("loaded") == 0)
 print("ok")
 """, mods)
 
 
-def test_a_new_game_later_in_the_session_rearms(mods):
+def test_nothing_stays_loaded_after_the_pass(mods):
     run(r"""
 assert(patch.init())
 beginChargen()
@@ -414,16 +416,8 @@ load("Danae/Classes/main.lua")
 GEAR = { "helm1", "helm2" }
 chargenDone() fire()
 assert(unloaded() and worn() == "helm1")
--- a later new game
-tes3.player.object.equipment, tes3.player.object.inventory = {}, {}
-equipCalls = 0
-GEAR = { "shirt1", "shirt2" }
-beginChargen()
-assert(timer.start ~= nativeTimerStart)
-chargenDone() fire()
-assert(worn() == "shirt1", worn())
-assert(equipCalls == 1)
-assert(unloaded())
+-- mwexitguard blocks a second New Game in one session (MGE XE doesn't unload for one): the loaded hook goes too
+assert(#list("loaded") == 0, "the loaded hook is gone")
 print("ok")
 """, mods)
 
@@ -498,3 +492,12 @@ def test_files_are_utf8_lf_without_bom():
             data = f.read()
         assert not data.startswith(b"\xef\xbb\xbf") and b"\r\n" not in data, rel
         data.decode("utf-8")
+
+def test_a_saved_game_disarms_at_once_without_reading_chargen(mods):
+    run(r"""
+assert(patch.init())
+charGenValue = 10                     -- whatever the globals say: a game can't be saved during chargen
+trigger("loaded", { newGame = false })
+assert(unloaded() and #list("loaded") == 0, "a saved game: nothing stays")
+print("ok")
+""", mods)
