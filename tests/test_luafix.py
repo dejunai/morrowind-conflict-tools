@@ -1443,7 +1443,7 @@ def test_patched_priorities_are_below_mwguards_report_limit():
     assert all(abs(lf.compress_priority(p, CFG)) < CFG["priorityLimit"] for p in (10000, -10 ** 9, float("inf")))
 
 
-# ------------------------------------------------------------------------------------------------ nil guards (A1-A5)
+# ------------------------------------------------------------------------------------------------ nil guards (A1-A7)
 def nil_findings(a, rule):
     return [f for f in a.findings if f["rule"] == rule]
 
@@ -1624,6 +1624,225 @@ def test_A5_a_checked_head_and_other_fields_are_left_alone():
            " if e.reference.baseObject.head and e.reference.baseObject.head.id == 'x' then end\n"
            " local r = e.reference.baseObject.race.id\nend\nevent.register('bodyPartAssigned', f)\n")
     assert not nil_findings(analyse(src), "A5")
+
+
+# --- A6: <cell>.region.x (a cell's region is nil in an interior and in a regionless exterior cell)
+HAZE = ("local cellv\nlocal tes3 = { getPlayerCell = function() return cellv end }\n"
+        "local function startHaze()\n"
+        "    local cell = tes3.getPlayerCell()\n"
+        "    if not cell then return end\n"
+        "    local regionID = cell.region.id\n"
+        "    if regionID == 'Ashlands' then return 'heat' end\n"
+        "    return 'no heat'\nend\n"
+        "return function(c) cellv = c return startHaze() end\n")
+
+
+def test_A6_cell_region_is_guarded_through_a_local_a_cell_field_and_an_event_cell():
+    src = ("local function startHaze()\n"
+           "    local cell = tes3.getPlayerCell()\n"
+           "    if not cell then return end\n"
+           "    local regionID = cell.region.id\n"
+           "end\n"
+           "local function inCity()\n"
+           "    if tes3.player.cell.displayName ~= tes3.player.cell.region.name then return 1 end\n"
+           "end\n"
+           "local function changed(e)\n"
+           "    if e.cell.region.weather == 3 then return 2 end\n"
+           "end\n"
+           "event.register('cellChanged', changed)\n"
+           "local function other()\n"
+           "    local c = tes3.getCell({ x = 1, y = 2 })\n"
+           "    c.region:foo()\n"
+           "end\n")
+    a6 = nil_findings(analyse(src), "A6")
+    assert [f["conf"] for f in a6] == ["high"] * 4 and all(f["edits"] for f in a6)
+    new = patch(src)
+    assert "    local regionID = (cell.region and cell.region.id)\n" in new
+    assert "    if tes3.player.cell.displayName ~= (tes3.player.cell.region and tes3.player.cell.region.name) then" in new
+    assert "    if (e.cell.region and e.cell.region.weather) == 3 then return 2 end\n" in new
+    assert "if c.region then c.region:foo() end" in new
+    assert new.count("\n") == src.count("\n")
+    assert patch(new) is None
+    assert not nil_findings(analyse(new), "A6")
+
+
+def test_A6_a_checked_region_and_a_region_that_is_not_a_cells_are_left_alone():
+    """tauer's clipBodyAnimator reads .region on an animation track binder (self.actorTrackBinder.region.body):
+    that is not a cell, so nothing there may be touched."""
+    src = ("local function a()\n"
+           "    local cell = tes3.getPlayerCell()\n"
+           "    if cell.region and cell.region.id == 'x' then end\n"
+           "    local c2 = tes3.getCell({ id = 'x' })\n"
+           "    if not c2.region then return end\n"
+           "    local id = c2.region.id\n"
+           "end\n"
+           "local function b(self, binder)\n"
+           "    local holdingTorch = self:isHoldingTorch()\n"
+           "    local region = holdingTorch and\n"
+           "        self.actorTrackBinder.region.body or\n"
+           "        self.actorTrackBinder.region.all\n"
+           "    local leftArm = self.actorTrackBinder.region.leftArm\n"
+           "    local n = binder.region.name\n"
+           "    local t = {}\n"
+           "    local cellRegion = t.region.id\n"
+           "    local d = tes3.getDataHandler().region.id\n"
+           "end\n")
+    assert not nil_findings(analyse(src), "A6")
+    assert "A6" not in (patch(src) or "")                      # at most A3's own guards
+
+
+def test_A6_a_lookup_used_directly_is_only_a_report():
+    src = "local function f()\n    local id = tes3.getPlayerCell().region.id\nend\n"
+    a6 = nil_findings(analyse(src), "A6")
+    assert [f["conf"] for f in a6] == ["report"] and not a6[0]["edits"]
+    assert patch(src) is None
+
+
+@need_lua
+def test_A6_patched_haze_runs_the_same_with_a_region_and_skips_cleanly_without_one():
+    new = patch(HAZE)
+    assert "local regionID = (cell.region and cell.region.id)" in new
+    rt = _lj.LuaRuntime()
+    f_new, f_old = rt.execute(new), rt.execute(HAZE)
+    mk = rt.eval("function(r) return { region = r } end")
+    ash = mk(rt.eval("{ id = 'Ashlands' }"))
+    assert f_new(ash) == f_old(ash) == "heat"
+    assert f_new(mk(rt.eval("{ id = 'Bitter Coast' }"))) == "no heat"
+    assert f_new(mk(None)) == "no heat"                      # interior / regionless: no region, no error
+    with pytest.raises(LuaError):
+        f_old(mk(None))
+
+
+# --- A7: <event>.<field>.mobile for the whitelisted event fields (NULLABLE_MOBILE_EVENT_FIELDS)
+A7_BASE = ("local this = {}\n"
+           "faderCalls = 0\n"
+           "---@param e spellResistEventData\n"
+           "function this.etherealSpellResist(e)\n"
+           "    if #e.target.mobile:getActiveMagicEffects({ effect = 1 }) > 0 and e.caster ~= e.target then\n"
+           "        e.resistedPercent = 100\n"
+           "        return false\n"
+           "    end\n"
+           "end\n"
+           "\n"
+           "---@param e magicEffectRemovedEventData\n"
+           "function this.blindRemoved(e)\n"
+           "    local blindEffects = e.target.mobile:getActiveMagicEffects({ effect = 2 })\n"
+           "    if #blindEffects > 0 then return end\n"
+           "    faderCalls = faderCalls + 1\n"
+           "end\n")
+A7_SRC = A7_BASE + "return this\n"
+
+
+def test_A7_target_mobile_in_a_whitelisted_event_is_guarded_by_annotation_and_by_registration():
+    src = (A7_BASE +
+           "local function onActivate(e)\n"
+           "    if e.activator == tes3.player then\n"
+           "        if e.target.mobile.isDead == true then return false end\n"
+           "    end\n"
+           "end\n"
+           "event.register('activate', onActivate)\n"
+           "---@param e magicEffectActivatedEventData\n"
+           "local function applied(e)\n"
+           "    e.target.mobile:applyEffect()\n"
+           "end\n")
+    a7 = nil_findings(analyse(src), "A7")
+    assert [f["conf"] for f in a7] == ["high"] * 4 and all(f["edits"] for f in a7)
+    new = patch(src)
+    assert ("    if (e.target.mobile and #e.target.mobile:getActiveMagicEffects({ effect = 1 }) > 0) and "
+            "e.caster ~= e.target then\n") in new
+    assert ("    local blindEffects = (e.target.mobile and e.target.mobile:getActiveMagicEffects({ effect = 2 })) "
+            "or {}\n") in new
+    assert "        if (e.target.mobile and e.target.mobile.isDead) == true then return false end\n" in new
+    assert "    if e.target.mobile then e.target.mobile:applyEffect() end\n" in new
+    assert new.count("\n") == src.count("\n")
+    assert patch(new) is None
+    assert not nil_findings(analyse(new), "A7")
+
+
+def test_A7_checked_other_fields_other_events_and_unknown_handlers_are_left_alone():
+    src = ("local this = {}\n"
+           "---@param e spellResistEventData\n"
+           "function this.guarded(e)\n"
+           "    local fx\n"
+           "    if e.target.mobile then fx = e.target.mobile:getActiveMagicEffects({ effect = 3 }) end\n"
+           "end\n"
+           "---@param e spellResistEventData\n"
+           "function this.casterField(e)\n"
+           "    return e.caster.mobile.health\n"
+           "end\n"
+           "---@param e calcHitChanceEventData\n"
+           "function this.otherEvent(e)\n"
+           "    return e.target.mobile.health\n"
+           "end\n"
+           "function this.noEvent(e)\n"
+           "    return e.target.mobile.health\n"
+           "end\n"
+           "---@param x spellResistEventData\n"
+           "function this.notTheFirstParam(e, x)\n"
+           "    return e.target.mobile.health\n"
+           "end\n"
+           "local function damaged(e)\n"
+           "    return e.target.mobile.health\n"
+           "end\n"
+           "event.register('damage', damaged)\n"
+           "local function shadow(e)\n"
+           "    local f = function(e) return e.target.mobile.health end\n"
+           "    if e.target.mobile then return f(e) end\n"
+           "end\n"
+           "event.register('activate', shadow)\n"
+           "return this\n")
+    assert not nil_findings(analyse(src), "A7")
+    assert patch(src) is None
+
+
+def test_A7_a_local_that_a_nil_would_break_later_is_only_a_report():
+    src = ("local this = {}\n"
+           "---@param e spellResistEventData\n"
+           "function this.f(e)\n"
+           "    local m = e.target.mobile:getSomething()\n"
+           "    return #m + 1\n"
+           "end\n"
+           "---@param e spellResistEventData\n"
+           "function this.g(e)\n"
+           "    local dead = e.target.mobile.isDead\n"
+           "    if dead then return false end\n"
+           "end\n"
+           "---@param e spellResistEventData\n"
+           "function this.h(e)\n"
+           "    local n = 1 + e.target.mobile.level\n"
+           "    return n\n"
+           "end\n"
+           "return this\n")
+    a7 = nil_findings(analyse(src), "A7")
+    assert [f["conf"] for f in a7] == ["report", "high", "report"]
+    assert "local dead = (e.target.mobile and e.target.mobile.isDead)\n" in patch(src)
+
+
+@need_lua
+def test_A7_patched_handlers_behave_the_same_with_a_mobile_and_skip_cleanly_without():
+    new = patch(A7_SRC)
+    rt = _lj.LuaRuntime()
+    rt.execute("tes3 = { effect = {} }")
+    mod_new, mod_old = rt.execute(new), rt.execute(A7_SRC)
+    mobile = rt.eval("function(n) return { getActiveMagicEffects = function(self, t) local r = {} "
+                     "for i = 1, n do r[i] = {} end return r end } end")
+    ev = rt.eval("function(m) return { caster = 1, target = { mobile = m } } end")
+    e_new, e_old = ev(mobile(2)), ev(mobile(2))
+    assert mod_new.etherealSpellResist(e_new) == mod_old.etherealSpellResist(e_old) is False
+    assert e_new["resistedPercent"] == e_old["resistedPercent"] == 100
+    assert mod_new.etherealSpellResist(ev(mobile(0))) is None
+    assert mod_new.etherealSpellResist(ev(None)) is None        # no .mobile: the handler does nothing
+    with pytest.raises(LuaError):
+        mod_old.etherealSpellResist(ev(None))
+    g = rt.globals()
+    mod_new.blindRemoved(ev(mobile(2)))
+    assert g.faderCalls == 0
+    mod_new.blindRemoved(ev(mobile(0)))
+    assert g.faderCalls == 1
+    mod_new.blindRemoved(ev(None))                              # no .mobile = no active effects: same as an empty list
+    assert g.faderCalls == 2
+    with pytest.raises(LuaError):
+        mod_old.blindRemoved(ev(None))
 
 
 def test_A4_checked_field_is_left_alone():

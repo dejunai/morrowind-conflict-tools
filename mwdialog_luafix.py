@@ -31,7 +31,15 @@ Rules (thresholds come from MWSE\\config\\mwguard.json when it exists - the same
      e.previousCell, uiObjectTooltip e.reference...) used without a check -> guarded                  fix
   A5 an NPC's .head / .hair (through .baseObject or .object) used without a check: nil for an NPC whose
      record names no such part, or one no loaded mod defines -> guarded                               fix
-     Nil guards (A1-A5): inside a condition, an and-guard: (x and x.y == z); a standalone call or
+  A6 <cell>.region.<x> where the receiver is provably a cell (tes3.getPlayerCell() / tes3.getCell(...) held in a
+     local, or a .cell field: tes3.player.cell, e.cell, ref.cell) with no check: a cell's region is nil in an
+     interior and in an exterior cell no region covers -> guarded (not a .region on anything else)    fix
+  A7 <event>.<field>.mobile used without a check, only for the event fields in NULLABLE_MOBILE_EVENT_FIELDS
+     (spellResist / magicEffectRemoved / magicEffectActivated / activate .target: a reference with no
+     .mobile); the handler is found by event.register in the file or by its ---@param e <event>EventData
+     annotation. In a condition: an and-guard; a local that holds the result of
+     :getActiveMagicEffects(...): (... and ...) or {}; any other local only when its readers survive nil   fix
+     Nil guards (A1-A7): inside a condition, an and-guard: (x and x.y == z); a standalone call or
      assignment: if x then ... end; a local's value: local v = (x and f(x.y)). Nothing changes while the
      value is there. Where none of these fits with certainty the finding stays a report, with the reason.
   B1 a UI element used after :destroy()                                                               report
@@ -274,6 +282,17 @@ _CAST = {"target"}
 # handler reading baseObject.head.id failed for every such NPC: Tamriel Data's fixVampireHeadAssignment)
 NULLABLE_OBJECT_FIELDS = {"head", "hair"}
 OBJECT_HOLDERS = {"baseObject", "object"}
+# A6: a cell's region is nil in an interior and in an exterior cell no region covers (heat haze's startHaze read
+# cell.region.id on an infinite timer: "attempt to index field 'region' (a nil value)")
+CELL_LOOKUPS = {"tes3.getPlayerCell", "tes3.getCell"}
+# A7: the .target of these events is a reference, and a reference has no .mobile when it is not an actor (or its actor
+# is not loaded): the field here is the event's reference field whose .mobile can be nil. Whitelisted by event, not a
+# blanket ".mobile" rule (e.g. calcHitChance e.target and damage e.mobile are always actors).
+NULLABLE_MOBILE_EVENT_FIELDS = {
+    "spellResist": {"target"}, "magicEffectRemoved": {"target"}, "magicEffectActivated": {"target"},
+    "activate": {"target"}}
+# LuaLS annotation above a handler: ---@param e spellResistEventData  (or tes3...EventData)
+EVENT_PARAM_RE = re.compile(r"@param\s+(\w+)\s+(?:tes3)?([A-Za-z]\w*?)EventData\b")
 
 NULLABLE_EVENT_FIELDS = {
     "damage": _DMG, "damaged": _DMG, "damageHandToHand": _DMG, "damagedHandToHand": _DMG,
@@ -387,7 +406,7 @@ REF_FIELDS = {"reference", "target", "mobile", "attacker", "attackerReference", 
               "targetReference", "targetMobile", "actor", "current", "previous"}
 NON_ACTOR_TYPES = {"activator", "alchemy", "ammunition", "apparatus", "armor", "book", "clothing", "container",
                    "door", "ingredient", "light", "lockpick", "miscItem", "probe", "repairItem", "static", "weapon"}
-RULES_REV = 6                  # bump when a rule changes, so cached findings are worked out again
+RULES_REV = 7                  # bump when a rule changes, so cached findings are worked out again
                                # (6: the I1 image-path rule is gone: icons and textures stay as the mod ships them)
 # console-only commands; replacement suggestions follow the guide's table where it has one
 CONSOLE_ONLY = {"togglepov": "tes3.togglePOV() (or tes3.force1stPerson() / tes3.force3rdPerson())",
@@ -986,7 +1005,7 @@ class FileAnalysis:
     # --- rules
     def run(self):
         for r in (self.r_priority, self.r_per_frame, self.r_timers, self.r_one_shot, self.r_data_guard,
-                  self.r_keycode, self.r_lookups, self.r_event_fields, self.r_object_fields, self.r_destroy, self.r_console, self.r_info_filter, self.r_reregister,
+                  self.r_keycode, self.r_lookups, self.r_event_fields, self.r_object_fields, self.r_cell_region, self.r_event_mobile, self.r_destroy, self.r_console, self.r_info_filter, self.r_reregister,
                   self.r_reload_timers, self.r_globals, self.r_toplevel, self.r_loops, self.r_logger_level,
                   self.r_log_triggers, self.r_loggers, self.r_save_safe, self.r_while_caps, self.r_ui_lists, self.r_menu_exit,
                   self.r_vector_order, self.r_sound_query, self.r_frequent_lookups,
@@ -2094,6 +2113,132 @@ class FileAnalysis:
                 continue
             self._nil_fix("A5", u, g, f"{self.text(u)[:50]} - {g} is nil for an NPC whose record names no "
                                       f"{n.field} (or one no loaded mod defines), and is never checked")
+
+    def _is_cell(self, x, depth=0):
+        """Is x provably a cell: a .cell field, tes3.getPlayerCell() / tes3.getCell(...), or a local that is only
+        ever one of those?"""
+        if x is None or depth > 3:
+            return False
+        if x.kind == "Paren":
+            return self._is_cell(x.expr, depth + 1)
+        if x.kind == "Index":
+            return x.field == "cell"
+        if x.kind == "Call":
+            return L.dotted(x.func) in CELL_LOOKUPS
+        if x.kind == "Name":
+            b = getattr(x, "binding", None)
+            if b is None or b.kind != "local":
+                return False
+            if b.value is not None and not b.assigns:
+                return self._is_cell(b.value, depth + 1)
+            if b.value is None and len(b.assigns) == 1 and b.assigns[0].kind == "Assign" and \
+                    len(b.assigns[0].targets) == 1 and len(b.assigns[0].exprs) == 1:
+                return self._is_cell(b.assigns[0].exprs[0], depth + 1)
+        return False
+
+    def r_cell_region(self):
+        """A6: <cell>.region.x with no check that the cell has a region."""
+        for n in self.nodes:
+            if n.kind != "Index" or n.field != "region" or self._check_pos(n):
+                continue
+            u = self._uses_of(n)
+            if u is None or not self._is_cell(n.obj):
+                continue
+            what = (f"{self.text(u)[:50]} - a cell's region is nil in an interior and in an exterior cell no region "
+                    f"covers, and is never checked")
+            if n.obj.kind == "Call":                         # a lookup result used directly: nothing to name in a guard
+                self.add("A6", u, what, "keep the cell in a local and check cell.region - left as a report: "
+                         "the cell comes straight from a call", "report")
+                continue
+            g = L.dotted(n)
+            if g is None:
+                continue
+            f = L.enclosing_function(n)
+            if self._guard_checked(f.body if f is not None else self.tree.body, g):
+                continue
+            self._nil_fix("A6", u, g, what)
+
+    def _annotated_events(self, fn):
+        """The events named by a ---@param <first parameter> <event>EventData comment right above fn's statement."""
+        if not fn.params:
+            return set()
+        st = fn
+        while st.parent is not None and st.parent.kind != "Block":
+            st = st.parent
+        pos = self.src.rfind("\n", 0, st.s) + 1
+        if self.src[pos:st.s].strip():
+            return set()                                     # not at the start of its line
+        out = set()
+        while pos > 0:
+            prev = self.src.rfind("\n", 0, pos - 1) + 1
+            line = self.src[prev:pos].strip()
+            if not line.startswith("--"):
+                break
+            for m in EVENT_PARAM_RE.finditer(line):
+                if m.group(1) == fn.params[0]:
+                    out.add(m.group(2)[0].lower() + m.group(2)[1:])
+            pos = prev
+        return out
+
+    def r_event_mobile(self):
+        """A7: e.target.mobile (spellResist, magicEffectRemoved, magicEffectActivated, activate) with no check."""
+        done = self.__dict__.setdefault("_mob_done", set())
+        for fn in [x for x in self.nodes if x.kind == "Function"]:
+            if not fn.params:
+                continue
+            by_field = {}
+            for ev in self.events_of_function(fn) | self._annotated_events(fn):
+                for fld in NULLABLE_MOBILE_EVENT_FIELDS.get(ev, ()):
+                    by_field.setdefault(fld, ev)
+            if not by_field:
+                continue
+            p = fn.params[0]
+            for n in L.walk(fn.body):
+                if n.kind != "Index" or n.field != "mobile" or n.obj.kind != "Index" or n.obj.field not in by_field \
+                        or n.obj.obj.kind != "Name" or n.obj.obj.id != p:
+                    continue
+                b = getattr(n.obj.obj, "binding", None)
+                if b is None or b.kind != "param" or b.decl is not fn or id(n) in done:
+                    continue
+                done.add(id(n))
+                g = f"{p}.{n.obj.field}.mobile"
+                u = self._uses_of(n)
+                if u is None or self._check_pos(n) or self._guard_checked(fn.body, g):
+                    continue
+                self._mobile_fix(u, g, f"{self.text(u)[:50]} - {p}.{n.obj.field} of a {by_field[n.obj.field]} event "
+                                       f"can be a reference with no .mobile, and it is never checked")
+
+    def _mobile_fix(self, u, g, what):
+        par = u.parent
+        if par is not None and par.kind == "Local" and len(par.names) == 1 and len(par.exprs) == 1 \
+                and par.exprs[0] is u:
+            return self._mobile_local(par, u, g, what)
+        if stmt_of(u).kind == "Local":
+            return self.add("A7", u, what, f"check {g} first - left as a report: the value feeds a local that "
+                            f"is used later", "report")
+        return self._nil_fix("A7", u, g, what)
+
+    def _mobile_local(self, par, u, g, what):
+        """local v = e.target.mobile:m(...) / .x: a guard that makes v nil must not move the error to v's readers."""
+        name = par.names[0]
+        b = next((m.binding for m in self.nodes if m.kind == "Name" and getattr(m, "binding", None) is not None
+                  and m.binding.decl is par and m.binding.name == name), None)
+        if u.kind == "Method" and u.name == "getActiveMagicEffects" and (b is None or not b.assigns):
+            # a target with no .mobile has no active effects: the empty list is what the readers already handle
+            length = u.e - u.s
+            edits = [(u.s, u.s, f"({g} and ", (1, -length)), (u.e, u.e, ") or {}", (0, length))]
+            body = " ".join(self.src[u.s:u.e].split())
+            return self.add("A7", u, what, f"safe value, an empty list: local {name} = ({g} and "
+                            f"{body if len(body) <= 90 else body[:80] + ' ... '}) or {{}}", "high", edits)
+        if b is not None and (b.assigns or not all(self._check_pos(r) or self._uses_of(r) is not None
+                                                   for r in b.reads)):
+            return self.add("A7", u, what, f"check {g} first - left as a report: {name} is used later in a way "
+                            f"a nil would break", "report")
+        before = len(self.findings)
+        self._nil_fix("A7", u, g, what)
+        if b is not None and len(self.findings) > before and self.findings[-1]["edits"]:
+            self._guard_binding_uses("A7", b, name, lambda x, nm=name: (
+                f"{self.text(x)[:50]} - {nm} is nil when {g} is, and is never checked"))
 
     def r_destroy(self):
         for blk in (n for n in self.nodes if n.kind == "Block"):
