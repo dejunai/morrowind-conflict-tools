@@ -124,6 +124,7 @@ import mwdialog_lua as L                                   # noqa: E402
 import mwdialog_planfile as PF                             # noqa: E402
 import mwdialog_text as MT                                 # noqa: E402
 import mwdialog_paths as MP                                # noqa: E402
+import mwdialog_version                                      # noqa: E402
 import mwdialog_staged as MS                               # noqa: E402
 print = MT.printer()                                       # noqa: A001
 
@@ -5385,6 +5386,7 @@ def _core_only_main(args, ap):
 def main(argv=None):
     MT.install()
     ap = MT.parser(description="Check MWSE Lua mods for bad habits and patch the safe ones.")
+    ap.add_argument("--version", action="version", version=mwdialog_version.version_label("mwdialog_luafix"))
     ap.add_argument("paths", nargs="*", help="staged mod folders or files (default: every staged mod with an MWSE "
                                              "folder; Data Files is never checked or patched before deploy)")
     ap.add_argument("--staging", help="the staging folder (Vortex's or MWManager's; default: from Vortex's settings)")
@@ -5414,6 +5416,9 @@ def main(argv=None):
                          "was refused; 3: partial match, nothing written; 4: no such folder")
     ap.add_argument("--dry-run", action="store_true", help="with --core-only: only check, write nothing")
     args = ap.parse_args(argv)
+    # --json - prints the result on stdout; the run header goes to stderr
+    label = mwdialog_version.version_label("mwdialog_luafix")
+    print(label, file=sys.stderr if args.json == '-' else sys.stdout)
     if args.dry_run and not args.core_only:
         ap.error("--dry-run goes with --core-only (plan mode is already a dry run)")
     if args.core_only:

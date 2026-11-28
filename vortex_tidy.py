@@ -163,6 +163,7 @@ import mwdialog_backup as MB                     # noqa: E402
 import mwdialog_planfile as PF                   # noqa: E402
 import mwdialog_offlayout as OL                  # noqa: E402
 import mwdialog_paths as MP                      # noqa: E402
+import mwdialog_version                            # noqa: E402
 import mwdialog_report as MR                     # noqa: E402
 import mwdialog_staged as MS                     # noqa: E402
 import mwdialog_text as MT                       # noqa: E402
@@ -254,7 +255,7 @@ def blacklist(create=True):
         except OSError:
             return pats + list(BLACKLIST_EXTRA)
     try:
-        for line in open(BLACKLIST_FILE, encoding="utf-8", errors="replace"):
+        for line in open(BLACKLIST_FILE, encoding="utf-8-sig", errors="replace"):
             line = line.strip()
             if line and not line.startswith((";", "#")):
                 pats.append(line)
@@ -4062,6 +4063,7 @@ def main():
 def _main():
     MT.install()
     ap = MT.parser(description="Tidy the mods in Vortex's Morrowind staging folder.")
+    ap.add_argument("--version", action="version", version=mwdialog_version.version_label("vortex_tidy"))
     ap.add_argument("--staging", default=None, metavar="DIR",
                     help="Vortex Morrowind staging folder (default: Vortex's own setting)")
     ap.add_argument("--only", nargs="+", metavar="PATTERN", help="only these mod folders (wildcards allowed)")
@@ -4126,6 +4128,7 @@ def _main():
             ap.error("--after-mwse-update stands alone (it only re-applies MWSE core patches)")
         outcome, _why, rc = tidy_after_mwse_update(args.after_mwse_update, args.mwse_version_before)
         return 0 if rc is None else rc
+    print(mwdialog_version.version_label("vortex_tidy"))
     if args.mwse_version_before:
         ap.error("--mwse-version-before goes with --after-mwse-update")
     setup_converter(convert_mode(args.convert_omwscripts))

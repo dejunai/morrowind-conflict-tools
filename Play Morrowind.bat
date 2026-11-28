@@ -11,8 +11,12 @@ if not exist "%MWCHECK%" set "MWCHECK=%~dp0conflict-tools\mwdialog_check.bat"
 if not exist "%MWCHECK%" (
     echo Play Morrowind.bat: the conflict tools were not found. Keep this file in the conflict-tools folder,
     echo or in the Morrowind folder next to conflict-tools\ ^(beside Morrowind.exe^).
-    pause
+    echo %CMDCMDLINE% | find /i "/c" >nul && pause
     exit /b 2
 )
 call "%MWCHECK%" --play
-if errorlevel 1 pause
+set "RC=%ERRORLEVEL%"
+if not "%RC%"=="0" (
+    echo %CMDCMDLINE% | find /i "/c" >nul && pause
+)
+exit /b %RC%

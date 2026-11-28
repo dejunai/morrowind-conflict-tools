@@ -8,6 +8,8 @@ import os
 import subprocess
 import sys
 
+import mwdialog_version
+
 import deploy
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -20,6 +22,11 @@ def git(*args):
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     version = argv[0] if argv else git("describe", "--tags", "--always")
+    want = mwdialog_version.__version__
+    got = version[1:] if version[:1] in "vV" and len(version) > 1 and version[1:2].isdigit() else version
+    exp = want[1:] if want[:1] in "vV" and len(want) > 1 and want[1:2].isdigit() else want
+    if got != exp:
+        sys.exit(f"release.py: VERSION {version} does not match __version__ ({want})")
     ship = deploy.ship_list(deploy.tracked_files(HERE), deploy.read_manifest())
     renamed = [f"{src} => {dst}" for src, dst in ship if src != dst]
     if renamed:                                   # git archive keeps paths, so a manifest rename can't be honoured

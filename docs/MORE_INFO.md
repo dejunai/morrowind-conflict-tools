@@ -1,6 +1,6 @@
 # Morrowind Conflict Tools: Comprehensive Architecture & Function Reference (MORE_INFO.md)
 
-This document provides a low-level architectural analysis of the **Morrowind Conflict Tools** suite. It covers all 36 Python modules, describes how the major subsystems operate, lists the command-line switches that trigger them, and documents concrete empirical fix examples drawn from the historical fix archive (`fixes.archive.txt`), the active fix log (`mwdialog_fixes.log`), and third-party MWSE Lua repair records (`docs/dev/LUA_MOD_BUGS.md` in the repository). Function names in the tables are the real entry points in the current code. Helper functions and internal scanners are omitted. The tools are by dej (dejunai).
+This document provides a low-level architectural analysis of the **Morrowind Conflict Tools** suite. It covers the Python modules in the package, describes how the major subsystems operate, lists the command-line switches that trigger them, and documents concrete empirical fix examples drawn from the historical fix archive (`fixes.archive.txt`), the active fix log (`mwdialog_fixes.log`), and third-party MWSE Lua repair records (`docs/dev/LUA_MOD_BUGS.md` in the repository). Function names in the tables are the real entry points in the current code. Helper functions and internal scanners are omitted. The tools are by dej (dejunai).
 
 ---
 
@@ -74,9 +74,9 @@ The remaining modules, not drawn above, are:
 - `mwdialog_masters.py` - a plugin's master list: adding and removing a master (the masters `--sort` adds to patches, recorded in `mwdialog_added_masters.json`), whether an added one is still used, which plugins a set of patches covers, and `check_masters_for_play` (the master check `--play` runs first).
 - `mwdialog_console.py` - questions with a default, the window title, and rotation of `mwdialog_fixes.log`.
 
-Outside the 36 modules: `vortex_tidy.bat` and `mwdialog_check.bat` (Windows runners; `mwdialog_check.bat` with no arguments writes `generated\mwdialog_report.txt` and opens it), `Play Morrowind.bat` (runs `mwdialog_check.bat --play`; see section 11), `tests\` (pytest; `MW_SRC` points the tests at another copy of the scripts; run them as `pytest tests`, since a plain `pytest` also collects old copies under `_backup\...\tests` and fails on duplicate test names; e.g. `tests\test_dialogue.py` covers the dialogue checks and the plugin limit, `tests\test_tidy_undo_assets.py` the tidy `--undo` of asset repairs, `tests\test_tidy_dummies.py` tidy's broken-asset dummies, `tests\test_audit_fixes.py` `--clean-up` and `--clean-up-undo`, among others). A local `diag\` folder, if present, holds one-off diagnostic scripts for a single record or merge question; it is not part of the package and not part of any workflow.
+Alongside the Python modules: `vortex_tidy.bat` and `mwdialog_check.bat` (Windows runners; `mwdialog_check.bat` with no arguments writes `generated\mwdialog_report.txt` and opens it), `Play Morrowind.bat` (runs `mwdialog_check.bat --play`; see section 11), `tests\` (pytest; `MW_SRC` points the tests at another copy of the scripts; run them as `pytest tests`, since a plain `pytest` also collects old copies under `_backup\...\tests` and fails on duplicate test names; e.g. `tests\test_dialogue.py` covers the dialogue checks and the plugin limit, `tests\test_tidy_undo_assets.py` the tidy `--undo` of asset repairs, `tests\test_tidy_dummies.py` tidy's broken-asset dummies, `tests\test_audit_fixes.py` `--clean-up` and `--clean-up-undo`, among others). A local `diag\` folder, if present, holds one-off diagnostic scripts for a single record or merge question; it is not part of the package and not part of any workflow.
 
-Python: the tools need Python 3.9 or newer (standard library only) and are developed on 3.15. The whole test suite runs on Python 3.9 and on 3.15 (latest full run: 1272 passed, 5 machine-specific skips); the luafix tests that use `lupa` run on 3.14.
+Python: the tools need Python 3.9 or newer (standard library only). Python 3.9 minimum; tested on 3.9 and the latest 3.x. The luafix tests that use `lupa` run on 3.14.
 
 ---
 
@@ -718,6 +718,8 @@ Inside `--full`, a step that ends with anything but 0 or 1 stops the run; `--pla
 A saved game holds copies of some records and references, and values for script variables. Some fixes change exactly those, which can break a game in progress (an object that comes back beside the copy the save holds, a script variable the save has a value for, a reference moved between groups). `--preserve-saves` holds those fixes back and says what it held back.
 
 **Syntax.** `--preserve-saves` takes an optional value (`choices=("basic", "strict")`): the bare flag means `basic`; `--preserve-saves=strict` (or `--preserve-saves strict`) for the stricter level; not given, it is off. A bare `--preserve-saves` followed by anything other than `basic` or `strict` (including a Data Files path, or nothing) is rewritten to `--preserve-saves=basic` before argparse runs, so the path is parsed as the folder. The same applies when abbreviations are allowed and `--preserve-saves` is typed as a unique shorter prefix of itself. `preserve_saves()` reads this run's arguments, or the outermost run's, so it also holds inside every `--full` step (`run_full` passes it on to each step).
+
+A bare `--full` (not `--dry-run`, no `--preserve-saves`) that finds `.ess` saves in the game's `Saves` folder asks for `[y/N]` confirmation first, because it rewrites plugins and the load order. Mid-playthrough, use `--preserve-saves=strict`. `--yes` skips the question. With no console and no `--yes`, the run refuses with a nonzero exit and changes nothing.
 
 ### `basic` (the bare flag)
 

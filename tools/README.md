@@ -4,6 +4,8 @@ The scripts look for these programs in this folder first, then beside the script
 PATH. Nothing here is hardcoded to a drive letter. Everything in this folder is redistributable and committed, each
 with its license; the only exception is `Translation.txt` (below).
 
+The packaged `conflict-tools-*.zip` is about 24 MB, mostly bundled ffmpeg, 7-Zip and texconv. The source archives for ffmpeg, LAME and 7-Zip are included to meet their LGPL licences.
+
 | Tool | Files | License | Source |
 | --- | --- | --- | --- |
 | texconv (DirectXTex) | `texconv.exe` | MIT (`TEXCONV_LICENSE.txt`) | https://github.com/microsoft/DirectXTex |

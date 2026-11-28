@@ -46,8 +46,9 @@ def test_a_second_process_cannot_take_the_run_lock(tmp_path):
     import subprocess
     import sys
     # a copy, so the lock file is not the one this test process may already hold from other tests
-    shutil.copy(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "mwdialog_paths.py"),
-                tmp_path)
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    shutil.copy(os.path.join(root, "mwdialog_paths.py"), tmp_path)
+    shutil.copy(os.path.join(root, "mwdialog_version.py"), tmp_path)
     tools = str(tmp_path)
     hold = ("import sys, time, mwdialog_paths as MP; print(MP.acquire_run_lock(), flush=True); "
             "sys.stdin.read()")

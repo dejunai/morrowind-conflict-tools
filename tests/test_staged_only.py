@@ -18,6 +18,7 @@ import pytest
 
 from conftest import _load, fold, plugin, vt
 from omw_interface_stub import mode_of, new_interface_stub
+from test_cr18_suite_logging import LUAJIT, need_lua
 
 MS = _load("mwdialog_staged")
 lf = _load("mwdialog_luafix")
@@ -199,16 +200,18 @@ def run_tidy(monkeypatch, staging, *extra):
 
 
 # ------------------------------------------------------------------------------------------------ tidy
+@need_lua
 def test_tidy_plan_apply_and_undo_never_touch_data_files(game, watch, monkeypatch):
     mod = assets_mod(game.staging)
     lua_mod(game.staging)
     deploy_links(game.staging, game.data)
     before = snapshot(game.data)
     g = watch(game.data)
-    assert run_tidy(monkeypatch, game.staging) == 0                        # the plan
-    assert run_tidy(monkeypatch, game.staging, "--apply", "--yes") == 0
+    jit = ["--luajit", LUAJIT]
+    assert run_tidy(monkeypatch, game.staging, *jit) == 0                  # the plan
+    assert run_tidy(monkeypatch, game.staging, "--apply", "--yes", *jit) == 0
     assert not (mod / "readme.txt").exists()                               # staging really changed
-    assert run_tidy(monkeypatch, game.staging, "--undo") == 0
+    assert run_tidy(monkeypatch, game.staging, "--undo", *jit) == 0
     assert g.writes == []
     assert g.reads == []
     assert snapshot(game.data) == before

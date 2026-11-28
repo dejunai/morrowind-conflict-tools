@@ -12,7 +12,7 @@ from conftest import m, plugin, rec, sub, z
 from mwdialog_cellmods import float_items
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LUAJIT = os.path.join(ROOT, "tools", "luajit", "luajit.exe")
+LUAJIT = os.environ.get("MWMANAGER_LUAJIT", os.path.join(ROOT, "tools", "luajit", "luajit.exe"))
 MOD = os.path.join(ROOT, "lua tools", "MWSE", "mods", "mwsuite", "mwfloatfix", "main.lua")
 
 TAGS = {"furn_de_table": "STAT", "misc_com_bottle_01": "MISC"}

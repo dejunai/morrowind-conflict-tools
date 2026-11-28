@@ -36,6 +36,7 @@ import tempfile
 import time
 
 import mwdialog_paths as MP
+import mwdialog_version
 
 ARCHIVE_PREFIX = "conflict-tools-report-"
 ARCHIVE_EXT = ".zip"
@@ -225,7 +226,9 @@ def collect(game, work, scrubber):
 
 
 def summary_text(counts, missing, excluded, stamp):
-    lines = ["conflict-tools report: scrub summary", f"made: {stamp}", "",
+    lines = ["conflict-tools report: scrub summary",
+             f"version: {mwdialog_version.__version__}",
+             f"made: {stamp}", "",
              "Replacements per file (paths and the user name were replaced in copies only):"]
     lines += [f"  {n:6d}  {name}" for name, n in sorted(counts.items())] or ["  (no files)"]
     lines += [f"  {sum(counts.values()):6d}  total", "", "Skipped (not found):"]

@@ -54,6 +54,8 @@ Changed your mind? `vortex_tidy.bat --undo` puts back everything the last `--app
 1. **See what it would do** (nothing is changed): type `mwdialog_check.bat --full --dry-run`.
 2. **Do it**: type `mwdialog_check.bat --full`.
 
+If you have saved games in the `Saves` folder, a bare `--full` (no `--preserve-saves`, not a dry run) asks you to confirm first, because it rewrites plugins and the load order. Mid-playthrough, use `--preserve-saves=strict` instead. `--yes` skips the question; with no console and no `--yes`, the run refuses and changes nothing.
+
 **In the middle of a playthrough?** Add `--preserve-saves`, for example `mwdialog_check.bat --full --preserve-saves`. It holds back the fixes that could upset a saved game and tells you what it held back. For the most careful version, use `--preserve-saves=strict`, which also leaves your active plugins exactly as they are.
 
 `--full` turns off plugins that do nothing your other plugins don't already do, cleans and fixes plugins, sorts the load order, merges what can be merged, and builds a patch for the rest. Each plugin it changes is backed up first, as a `.bak` file beside it.

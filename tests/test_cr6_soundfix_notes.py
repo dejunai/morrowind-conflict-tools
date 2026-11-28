@@ -10,7 +10,7 @@ import pytest
 import mwdialog_soundfix as SF  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LUAJIT = os.path.join(ROOT, "tools", "luajit", "luajit.exe")
+LUAJIT = os.environ.get("MWMANAGER_LUAJIT", os.path.join(ROOT, "tools", "luajit", "luajit.exe"))
 GUARD = os.path.join(ROOT, "lua tools", "MWSE", "mods", "mwsuite", "mwsoundguard", "main.lua")
 
 

@@ -8,14 +8,14 @@ The suite is engineered for massive, complex mod lists (hundreds of plugins, ten
 
 > [!IMPORTANT]
 > **Detailed Function Architecture & Empirical Fix Catalog**:
-> For the architecture of all 36 modules, command-line switches, and empirical fix examples from the historical fix archives, consult **[MORE_INFO.md](docs/MORE_INFO.md)**.
+> For the architecture of the Python modules in the package, command-line switches, and empirical fix examples from the historical fix archives, consult **[MORE_INFO.md](docs/MORE_INFO.md)**.
 
 ## Install (beta)
 
 New to all this? The **[Quick Start guide](docs/QUICK_START.md)** walks through it in plain words.
 
 1. Install [Python](https://www.python.org/downloads/windows/) 3.9 or newer (tick "Add python.exe to PATH").
-2. Download `conflict-tools-<version>.zip` from the GitHub Releases page (not "Code > Download ZIP", which holds the developer files too).
+2. Download the `conflict-tools-<version>.zip` asset from the GitHub Releases page (not "Source code", and not "Code > Download ZIP", which holds the developer files too).
 3. Unzip it into your Morrowind folder, so you get `Morrowind\conflict-tools\` beside `Morrowind.exe`.
 4. Double-click `conflict-tools\mwdialog_check.bat`. It only reads: it writes a report and opens it in Notepad. Nothing in your game changes until you run a fix switch.
 5. To play, double-click `conflict-tools\Play Morrowind.bat` (or copy it into the Morrowind folder).
@@ -134,6 +134,7 @@ Vortex is optional: without it the tools scan `Data Files` only. Mod Organizer 2
 
 | Switch | Argument | Description |
 | :--- | :--- | :--- |
+| `--version` | *(flag)* | Print the package version and exit. |
 | *(default)* | *(none)* | Generates a preview plan in `plans\vortex_tidy_plan.txt` without modifying files. |
 | `--staging` | `<PATH>` | Explicit path to Vortex's Morrowind staging folder. Overrides automatic Vortex detection. |
 | `--only` | `<PATTERN ...>` | Restricts tidying only to specified mod staging folder names (wildcards allowed). |
@@ -164,8 +165,9 @@ Vortex is optional: without it the tools scan `Data Files` only. Mod Organizer 2
 #### Pipeline & High-Level Execution
 | Switch | Argument | Description |
 | :--- | :--- | :--- |
+| `--version` | *(flag)* | Print the package version and exit. |
 | *(default)* | `[DATA_DIR]` | Runs non-destructive validation on active plugins and outputs conflict reports. |
-| `--full` | *(flag)* | Starts from scratch. Aborts (exit 2) if a plugin's master is missing from Data Files. Replays the answers remembered in `mwdialog_conflict_answers.json` unless `--fresh-answers`. Then: undo the auto-merge (when there is one); turn back on what earlier runs turned off (and drop their conflict rules, rebuilt-interior choices and asset stand-ins); `--add-all-esp` if given; turn off redundant plugins (asking in a console; `--no-redundant` skips it); a cell-conflicts report (asking only hard incompatibilities); sort; set the old Multipatch aside; clean and fix with the asset check, no Multipatch yet (footing and SoundFix run as part of `--fix`); sort again; stop and open `mwdialog_report.txt` if any ERROR remains; otherwise AutoMerge, sort, `--all`, sort again; stop again on ERROR; then offer interactive `--cell-conflicts`. `--yes`: no questions; `--add-all-esp`: add every plugin first; `--play`: start the game at the end. With `--preserve-saves=strict` there is no reset, unmerge or redundant step, and the steps it runs hold back what `strict` holds back (the auto-merge is kept as it is); `--preserve-saves` / `basic` is passed on to every step. Prints a per-step summary; exit 2 when a step fails or an ERROR stops it. |
+| `--full` | *(flag)* | Starts from scratch. Aborts (exit 2) if a plugin's master is missing from Data Files. Replays the answers remembered in `mwdialog_conflict_answers.json` unless `--fresh-answers`. Then: undo the auto-merge (when there is one); turn back on what earlier runs turned off (and drop their conflict rules, rebuilt-interior choices and asset stand-ins); `--add-all-esp` if given; turn off redundant plugins (asking in a console; `--no-redundant` skips it); a cell-conflicts report (asking only hard incompatibilities); sort; set the old Multipatch aside; clean and fix with the asset check, no Multipatch yet (footing and SoundFix run as part of `--fix`); sort again; stop and open `mwdialog_report.txt` if any ERROR remains; otherwise AutoMerge, sort, `--all`, sort again; stop again on ERROR; then offer interactive `--cell-conflicts`. `--yes`: no questions; `--add-all-esp`: add every plugin first; `--play`: start the game at the end. With `--preserve-saves=strict` there is no reset, unmerge or redundant step, and the steps it runs hold back what `strict` holds back (the auto-merge is kept as it is); `--preserve-saves` / `basic` is passed on to every step. Prints a per-step summary; exit 2 when a step fails or an ERROR stops it. A bare `--full` (not `--dry-run`, no `--preserve-saves`) that finds `.ess` saves in the game's `Saves` folder asks `[y/N]` first (it rewrites plugins and the load order; mid-playthrough use `--preserve-saves=strict`). `--yes` skips the question; with no console and no `--yes` it refuses and changes nothing. |
 | `--all` | *(flag)* | `--clean`, then `--fix`, then `--multipatch`. |
 | `--fix` | *(flag)* | After the report, show a fix plan and apply it after you confirm. `.esp` files are fixed in place (backed up first); masters (`.esm`) through `mwdialog_check - ESM fixes.esp`. Also rebuilds Cell Fixes (`mwdialog_check Cell Fixes.esp`: doubled objects, footing moves, exterior float drops, pathgrids), SoundFix unless `--no-soundfix`, the MWSE suite data, and `MWSE\config\mwsoundguard_data.json`. `.esm` files are never rewritten. |
 | `--dry-run` | *(flag)* | With `--fix` (or other writing steps): show the plan but change nothing. |
@@ -300,6 +302,7 @@ Vortex is optional: without it the tools scan `Data Files` only. Mod Organizer 2
 
 | Switch | Argument | Description |
 | :--- | :--- | :--- |
+| `--version` | *(flag)* | Print the package version and exit. |
 | *(default)* | `[PATHS ...]` | Analyzes the given staged mod folders or Lua files (default: every staged mod with an `MWSE` folder; a path in Data Files is refused, since nothing there is checked or patched before deploy: use `--core-only` at deploy for the core files) and writes `plans\mwdialog_luafix_plan.txt` and `generated\mwdialog_luafix_known_bugs.txt`. |
 | `--staging` | `<DIR>` | Vortex's Morrowind staging folder (default: Vortex's own setting). |
 | `--apply` | *(flag)* | Enacts reviewed AST patches from `plans\mwdialog_luafix_plan.txt`. |
@@ -433,9 +436,7 @@ Other suite modules include `mwcollide`, `mwstranded`, `mwperformers`, `mwinfolo
 
 ## OpenMW Converter (experimental)
 
-An optional, and very experimental, OpenMW-to-MWSE converter (turning mods written for OpenMW's Lua into MWSE mods) is being developed as a separate project. It is not released and not included, and these tools do not need it.
-
-Tidy is prepared for it if/when it is found (on PATH, or beside these tools): `vortex_tidy --apply` converts each OpenMW-only mod in `normal` mode (`--convert-omwscripts=hardcode` picks the other mode). Until then an OpenMW-only mod is set aside whole in `Off\<plugin name>\OpenMW\`. Nothing is lost: every tidy run looks at set-aside packages again, so the first run after the converter is found offers to convert them. `--undo` reverses either. This is separate from tidy's other OpenMW handling (the `.omwaddon` rename, a hybrid mod's OpenMW files in `Off\OpenMW\<mod name>\`, OpenMW-only normal maps in `Off\normal maps\`). `mwdialog_check --play`, luafix, the scans and tidy recognise a converted mod's files by their markers and leave them alone.
+An optional, very experimental OpenMW-to-MWSE converter is being developed separately. It is not released, not included, and not needed. If it is later found on PATH or beside these tools, tidy can use it; until then, OpenMW-only mods are set aside in `Off\<plugin name>\OpenMW\`. See `--convert-omwscripts` in the tidy switch table above.
 
 ---
 
@@ -483,13 +484,15 @@ When the tools are not installed inside the game folder, their records go straig
 
 ## Requirements & Bundled Binaries
 
-- **Python 3.9 or newer** (standard library only; no pip packages are needed to run the tools). The tools are developed on Python 3.15, and nothing is meant to need more than 3.9.
-  - **Tested on Python 3.9 and 3.15.** The whole test suite runs on both (latest full run: 1272 passed, 5 machine-specific skips). The luafix tests that use `lupa` run on 3.14.
+- **Python 3.9 or newer** (standard library only; no pip packages are needed to run the tools). Python 3.9 minimum; tested on 3.9 and the latest 3.x.
+  - The luafix tests that use `lupa` run on 3.14.
   - `lupa` is optional: luafix uses it as a last-resort syntax checker when no LuaJIT/luac is found. The luafix tests that use `lupa` need a side-by-side Python 3.14 (they are skipped when it isn't installed). Run the tests with `python -m pytest tests` (or `pytest tests`): always name the `tests` folder, because a plain `pytest` also collects old copies under `_backup\...\tests` and fails on duplicate test names.
 - **Windows OS** (Win32 process management, `MAX_PATH` handling, Vortex integration).
 - **Bundled Binaries** (under `tools\`; see [tools/README.md](tools/README.md) for licenses and exact layouts):
   - `tools\texconv.exe`: DirectX texture processing, DDS mipmap generation, compression (MIT).
-  - `tools\ffmpeg.exe` & `tools\ffprobe.exe`: Audio inspection, format conversion, silent stand-in synthesis, and sound durations for `mwsoundguard_data.json` (LGPL static build).
+  The packaged zip is about 24 MB, mostly bundled ffmpeg, 7-Zip and texconv. The source archives for ffmpeg, LAME and 7-Zip are included to meet their LGPL licences.
+
+- `tools\ffmpeg.exe` & `tools\ffprobe.exe`: Audio inspection, format conversion, silent stand-in synthesis, and sound durations for `mwsoundguard_data.json` (LGPL static build).
   - `tools\7z\7z.exe`: Archive inspection for download master verification (LGPL / unRAR). Optional: `--no-archive-lookup` skips it.
   - `tools\luajit\luajit.exe`: Bytecode syntax verification of patched Lua mods (MIT).
   - `tools\MWRecompile\MWRecompile.exe`: Recompiles rewritten sound scripts for `--soundfix`.
@@ -502,7 +505,7 @@ These scripts are for working on the tools. They are in the repository and are n
 
 ### deploy.py
 
-Copies the runtime files and docs (git-tracked, chosen by `deploy_manifest.txt`) from the repository to an install, usually `<Morrowind>\conflict-tools\`.
+Copies the runtime files and docs (git-tracked, chosen by `deploy_manifest.txt`, repository only) from the repository to an install, usually `<Morrowind>\conflict-tools\`.
 
 ```text
 python deploy.py [TARGET] [--backups DIR] [--dry-run]
@@ -567,7 +570,7 @@ The version is pinned to v0.4.1. tes3conv has no way to print its version, so th
 
 ## Detailed Technical Architecture & Function Reference
 
-For the architecture of all 36 modules, the switches that trigger each subsystem, and empirical fix examples from the historical fix archives, please read:
+For the architecture of the Python modules in the package, the switches that trigger each subsystem, and empirical fix examples from the historical fix archives, please read:
 
 **[MORE_INFO.md](docs/MORE_INFO.md)**
 

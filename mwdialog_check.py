@@ -61,6 +61,7 @@ import time
 from collections import Counter, OrderedDict, defaultdict
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import mwdialog_paths as MP  # noqa: E402
+import mwdialog_version  # noqa: E402
 from mwdialog_tes3 import check_unchanged, content_id  # noqa: E402
 from mwdialog_cellorder import WHY as CELL_WHY, cell_filter_rules, lost_cell_filter  # noqa: E402
 import mwdialog_text as MT  # noqa: E402
@@ -2951,7 +2952,7 @@ def resolve(args, report):
         plugin_names, preserve_order = list(args.plugins), True
     elif args.openmw_cfg:
         plugin_names, bsa_names, preserve_order = [], [], True
-        with open(args.openmw_cfg, "r", encoding="utf-8", errors="replace") as f:
+        with open(args.openmw_cfg, "r", encoding="utf-8-sig", errors="replace") as f:
             for line in f:
                 s = line.strip()
                 if "=" not in s or s.startswith("#"):
@@ -10000,6 +10001,55 @@ def full_conflict_step(args, common):
     return ("cell conflicts (your remembered answers)", ["--cell-conflicts", "--use-answers"] + common)
 
 
+def ess_saves(game_dir):
+    """Paths of .ess saved games in the game's Saves folder (not subfolders)."""
+    folder = os.path.join(game_dir, "Saves")
+    if not os.path.isdir(folder):
+        return []
+    out = []
+    try:
+        names = os.listdir(folder)
+    except OSError:
+        return []
+    for name in names:
+        if name.lower().endswith(".ess"):
+            path = os.path.join(folder, name)
+            if os.path.isfile(path):
+                out.append(path)
+    return out
+
+
+def confirm_full_if_saves(args, game_dir):
+    """Bare --full (not --dry-run, no --preserve-saves): if .ess saves exist, ask [y/N].
+    --yes skips the question. No console and no --yes: refuse with exit 2. 0 to continue."""
+    if getattr(args, "dry_run", False) or preserve_saves(args):
+        return 0
+    found = ess_saves(game_dir)
+    if not found:
+        return 0
+    n = len(found)
+    found_txt = (f"{n} saved game (.ess) was found in the Saves folder" if n == 1
+                 else f"{n} saved games (.ess) were found in the Saves folder")
+    explain = ("--full rewrites plugins and the load order. " + found_txt + ". "
+               "If you are in the middle of a playthrough, use --preserve-saves=strict "
+               "(or --full --dry-run first).")
+    if getattr(args, "yes", False):
+        return 0
+    if sys.stdin is None or not sys.stdin.isatty():
+        print(explain + " There is no console to confirm. Re-run with --preserve-saves=strict, "
+              "or with --yes to confirm. Nothing was changed.", file=sys.stderr)
+        return 2
+    try:
+        answer = input(explain + " Continue with --full? [y/N] ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        answer = ""
+    if answer not in ("y", "yes"):
+        print("--full: cancelled. Nothing was changed.")
+        return 2
+    return 0
+
+
 def run_full(args):
     """--full, from scratch:
         turn back on what earlier runs turned off (and drop their conflict rules and asset stand-ins),
@@ -10015,6 +10065,9 @@ def run_full(args):
     It doesn't start at all while a plugin's master is missing from Data Files."""
     data_dir = os.path.abspath(args.data_dir)
     game_dir = os.path.dirname(data_dir)
+    rc = confirm_full_if_saves(args, game_dir)
+    if rc:
+        return rc
     set_title("mwdialog_check --full - checking masters")
     missing = full_missing_masters(args, game_dir)
     if missing:
@@ -10279,6 +10332,7 @@ def parse_check_argv(argv=None, parser=None):
 def check_parser():
     """The mwdialog_check CLI parser (flags only; argv is normalized separately)."""
     ap = MT.parser(description="Scan a Morrowind Data Files folder for dialogue errors.")
+    ap.add_argument("--version", action="version", version=mwdialog_version.version_label("mwdialog_check"))
     ap.add_argument("data_dir", nargs="?", help='path to the "Data Files" folder (default: Data Files of the Morrowind '
                                                  'folder holding Morrowind.ini: the working folder or its parent, or '
                                                  'the parent of this script\'s folder)')
@@ -10340,7 +10394,7 @@ def check_parser():
                          "stop and open mwdialog_report.txt; else --auto-merge, --sort, --all, sort again, then "
                          "--fix --multipatch (pathgrids run once, after --clean and that sort); if any "
                          "ERROR is left, stop and open the report; else offer the interactive --cell-conflicts. "
-                         "--yes: no questions; --add-all-esp: add every plugin first; --play: start the game at the end")
+                         "--yes: no questions; --add-all-esp: add every plugin first; --play: start the game at the end. A bare --full (not --dry-run, no --preserve-saves) that finds .ess saves in Saves asks [y/N] first; --yes skips it; with no console and no --yes it refuses and changes nothing")
     tc.add_argument("--header", nargs="+", metavar="FILE",
                     help="show a plugin's Author and Description, or set them with --set-author/--set-description")
     tc.add_argument("--set-author", metavar="TEXT", help="with --header: new Author ('+text' appends)")
@@ -10541,6 +10595,8 @@ def _main(argv=None):
     global ENC
     ap = check_parser()
     args = parse_check_argv(argv, ap)
+    if MAIN_DEPTH == 1:
+        print(mwdialog_version.version_label("mwdialog_check"))
     if args.no_reduce_textures or args.no_reduce_splash:
         asset_health_module().keep_full_size(sys.modules[__name__], args.no_reduce_textures, args.no_reduce_splash)
     if args.data_dir is None:
@@ -11083,6 +11139,9 @@ def apply_load_order_to_ini(args):
 
 def main(argv=None):
     MT.install()
+    raw = sys.argv[1:] if argv is None else list(argv)
+    if '--version' in raw:
+        parse_check_argv(raw)  # argparse --version prints and exits; no lock needed
     if not MP.acquire_run_lock():
         print(MP.RUN_LOCKED_MESSAGE, file=sys.stderr)
         return 1

@@ -13,7 +13,7 @@ from conftest import m, plugin, rec, sub, z
 from mwdialog_cellmods import float_items, fnv1a_file
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LUAJIT = os.path.join(ROOT, "tools", "luajit", "luajit.exe")
+LUAJIT = os.environ.get("MWMANAGER_LUAJIT", os.path.join(ROOT, "tools", "luajit", "luajit.exe"))
 MOD = os.path.join(ROOT, "lua tools", "MWSE", "mods", "mwsuite", "mwfloatfix", "main.lua")
 FIXES = next(x for x in m.OUR_PATCHES if "cell fixes" in x.lower())
 

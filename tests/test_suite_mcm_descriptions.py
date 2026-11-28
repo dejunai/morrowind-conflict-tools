@@ -2,6 +2,7 @@
 from pathlib import Path
 
 import mwdialog_lua
+from test_cr18_suite_logging import LUAJIT, need_lua
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -60,10 +61,11 @@ def test_every_suite_settings_page_is_registered():
     assert not missing, missing
 
 
+@need_lua
 def test_shared_menu_styles_registered_pages_and_preserves_callbacks():
     import subprocess
 
-    lua = ROOT / "tools" / "luajit" / "luajit.exe"
+    lua = LUAJIT
     script = r'''
 local ready, registered
 event = { register = function(_, callback) ready = callback end }

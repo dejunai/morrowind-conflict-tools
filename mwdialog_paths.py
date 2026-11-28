@@ -16,6 +16,8 @@ import tempfile
 import time
 from pathlib import Path
 
+import mwdialog_version
+
 GAME_ID = "morrowind"
 TAGS = ("staging", "downloads", "game")
 DRIVE_RE = re.compile(r"^[A-Za-z]:[\\/]")
@@ -1867,6 +1869,7 @@ def _main(argv=None):
     ap = argparse.ArgumentParser(prog="mwdialog_paths.py",
                                  description="Put back the files a --play run removed from Data Files because "
                                              "lua tools no longer has them (from <backups>\\lua prune\\).")
+    ap.add_argument("--version", action="version", version=mwdialog_version.version_label("mwdialog_paths"))
     ap.add_argument("--undo-lua-prune", nargs="?", const="", default=None, metavar="RUN",
                     help="the newest prune that still has something to put back, or the one in folder RUN")
     ap.add_argument("--data-dir", help='the game\'s "Data Files" (default: found from the working folder, its '
@@ -1875,6 +1878,7 @@ def _main(argv=None):
     if args.undo_lua_prune is None:
         ap.print_help()
         return 2
+    print(mwdialog_version.version_label("mwdialog_paths"))
     data = args.data_dir or default_data_dir()
     if not data or not os.path.isdir(data):
         print("No Data Files folder found; pass --data-dir.", file=sys.stderr)

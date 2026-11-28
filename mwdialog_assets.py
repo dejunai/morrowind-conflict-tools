@@ -595,7 +595,7 @@ def mip_rules(game_dir=None):
     rules = {k: list(v) for k, v in MIP_EXEMPT_DEFAULTS.items()}
     if game_dir:
         try:
-            with open(MP.state_path(game_dir, MIP_EXEMPT_RECORD), encoding="utf-8", errors="replace") as f:
+            with open(MP.state_path(game_dir, MIP_EXEMPT_RECORD), encoding="utf-8-sig", errors="replace") as f:
                 lines = f.read().splitlines()
         except OSError:
             lines = []

@@ -6,7 +6,7 @@ import subprocess
 import pytest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LUAJIT = os.path.join(ROOT, "tools", "luajit", "luajit.exe")
+LUAJIT = os.environ.get("MWMANAGER_LUAJIT", os.path.join(ROOT, "tools", "luajit", "luajit.exe"))
 EXE = os.path.join(ROOT, "Morrowind.exe")
 MODS = os.path.join(ROOT, "lua tools", "MWSE", "mods", "mwsuite")
 DRIVER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "warnlocate_driver.lua")

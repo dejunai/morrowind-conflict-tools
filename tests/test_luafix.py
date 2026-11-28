@@ -737,7 +737,7 @@ def test_KB7_names_a_friends_and_frens_companions_own_birthsign(eol):
     assert applied == ["KB7"] and repaired.count("\n") == repaired.count(eol)
     assert not [f for f in analyse(repaired, "danae/frens/main.lua").findings if f["rule"] == "KB7"]
     assert lf.verify_patch(source, repaired, applied, None, "danae", "danae/frens/main.lua", CFG, "high")["ok"]
-    luajit = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools", "luajit", "luajit.exe")
+    luajit = os.environ.get("MWMANAGER_LUAJIT", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools", "luajit", "luajit.exe"))
     if not os.path.isfile(luajit):
         pytest.skip("LuaJIT executable not available for behavioral verification")
     script = r"""
@@ -810,7 +810,7 @@ def test_KB8_tamriel_data_waits_for_the_save_to_load_before_reading_spells(eol):
     assert set(applied) == {"KB8"} and repaired.count("\n") == repaired.count(eol)
     assert not [f for f in analyse(repaired, path).findings if f["rule"] == "KB8"]
     assert lf.verify_patch(source, repaired, applied, None, "tamrieldata", path, CFG, "high")["ok"]
-    luajit = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools", "luajit", "luajit.exe")
+    luajit = os.environ.get("MWMANAGER_LUAJIT", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools", "luajit", "luajit.exe"))
     if not os.path.isfile(luajit):
         pytest.skip("LuaJIT executable not available for behavioral verification")
     script = r"""
@@ -884,7 +884,7 @@ def test_KB9_sunrays_skip_the_engine_sun_update_until_there_is_weather(eol):
     assert set(applied) == {"KB9"} and repaired.count("\n") == repaired.count(eol)
     assert not [f for f in analyse(repaired, path).findings if f["rule"] == "KB9"]
     assert lf.verify_patch(source, repaired, applied, None, "directionalsunrays", path, CFG, "high")["ok"]
-    luajit = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools", "luajit", "luajit.exe")
+    luajit = os.environ.get("MWMANAGER_LUAJIT", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools", "luajit", "luajit.exe"))
     if not os.path.isfile(luajit):
         pytest.skip("LuaJIT executable not available for behavioral verification")
     script = r"""
@@ -952,7 +952,7 @@ def test_KB10_robenhood_guards_nil_weather_after_new_game(eol):
     assert set(applied) == {"KB10"} and repaired.count("\n") == repaired.count(eol)
     assert not [f for f in analyse(repaired, path).findings if f["rule"] == "KB10"]
     assert lf.verify_patch(source, repaired, applied, None, "Robe'n'Hood", path, CFG, "high")["ok"]
-    luajit = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools", "luajit", "luajit.exe")
+    luajit = os.environ.get("MWMANAGER_LUAJIT", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools", "luajit", "luajit.exe"))
     if not os.path.isfile(luajit):
         pytest.skip("LuaJIT executable not available for behavioral verification")
     script = r"""
@@ -1030,7 +1030,7 @@ def test_KB11_nocturnal_moths_guards_nil_weather_and_resets_on_load(eol, tmp_pat
         assert not [f for f in analyse(out, f"nocturnal moths/{rel}").findings if f["rule"] == "KB11"]
         repaired[rel] = out.replace("\r", "")
     assert "KB11" in lf.KNOWN_BUGS_WHOLE
-    luajit = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools", "luajit", "luajit.exe")
+    luajit = os.environ.get("MWMANAGER_LUAJIT", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools", "luajit", "luajit.exe"))
     if not os.path.isfile(luajit):
         pytest.skip("LuaJIT executable not available for behavioral verification")
     script = r"""
@@ -1099,7 +1099,7 @@ def test_KB12_tamriel_data_weather_guards_nil_weather(eol):
     assert set(applied) == {"KB12"} and repaired.count("\n") == repaired.count(eol)
     assert not [f for f in analyse(repaired, path).findings if f["rule"] == "KB12"]
     assert lf.verify_patch(source, repaired, applied, None, "Tamriel Data", path, CFG, "high")["ok"]
-    luajit = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools", "luajit", "luajit.exe")
+    luajit = os.environ.get("MWMANAGER_LUAJIT", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools", "luajit", "luajit.exe"))
     if not os.path.isfile(luajit):
         pytest.skip("LuaJIT executable not available for behavioral verification")
     script = r"""
@@ -1183,7 +1183,7 @@ def test_KB13_ui_expansion_clears_searchBlock_and_filter_elements_on_destroy(eol
     assert set(applied) == {"KB13"} and repaired.count("\n") == repaired.count(eol)
     assert not [f for f in analyse(repaired, path).findings if f["rule"] == "KB13"]
     assert lf.verify_patch(source, repaired, applied, None, "UI Expansion", path, CFG, "high")["ok"]
-    luajit = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools", "luajit", "luajit.exe")
+    luajit = os.environ.get("MWMANAGER_LUAJIT", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools", "luajit", "luajit.exe"))
     if not os.path.isfile(luajit):
         pytest.skip("LuaJIT executable not available for behavioral verification")
     script = r"""

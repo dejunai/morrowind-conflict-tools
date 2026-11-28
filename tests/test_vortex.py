@@ -148,6 +148,15 @@ def test_existing_blacklist_is_never_overwritten_or_added_to(tmp_path, monkeypat
     assert pats == vt.BLACKLIST
 
 
+
+def test_blacklist_reader_strips_a_leading_bom(tmp_path, monkeypatch):
+    bl = tmp_path / "vortex_tidy_blacklist.txt"
+    bl.write_bytes(b"\xef\xbb\xbf; comment\r\n*BomPattern*\r\n")
+    monkeypatch.setattr(vt, "BLACKLIST_FILE", str(bl))
+    pats = vt.blacklist()
+    assert "*BomPattern*" in pats
+    assert all(not pat.startswith("\ufeff") for pat in pats)
+
 def test_M12_undo_keeps_what_it_could_not_put_back(tmp_path, monkeypatch):
     j = tmp_path / "journal.jsonl"
     monkeypatch.setattr(vt, "JOURNAL", str(j))

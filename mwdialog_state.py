@@ -27,7 +27,7 @@ def read_generated_record(rec_path):
     out, plugin = {}, ""
     if not os.path.exists(rec_path):
         return out
-    with open(rec_path, encoding="utf-8", errors="replace") as stream:
+    with open(rec_path, encoding="utf-8-sig", errors="replace") as stream:
         for line in stream:
             line = line.rstrip("\r\n")
             if not line.strip() or line.startswith(";"):
@@ -73,7 +73,7 @@ def read_merge_record(game_dir):
     """{merged plugin: [input plugins]} from mwdialog_merged.txt."""
     rec, cur = OrderedDict(), None
     try:
-        with open(MP.state_path(game_dir, MERGE_RECORD), "r", encoding="utf-8") as f:
+        with open(MP.state_path(game_dir, MERGE_RECORD), "r", encoding="utf-8-sig") as f:
             for line in f:
                 s = line.strip()
                 if not s or s.startswith(";"):
@@ -111,7 +111,7 @@ def read_disabled(game_dir):
     """{plugin: reason} for plugins --fix turned off (doubled with another plugin)."""
     out = OrderedDict()
     try:
-        with open(MP.state_path(game_dir, DISABLED_RECORD), "r", encoding="utf-8") as f:
+        with open(MP.state_path(game_dir, DISABLED_RECORD), "r", encoding="utf-8-sig") as f:
             for line in f:
                 s = line.rstrip("\r\n")
                 if not s.strip() or s.lstrip().startswith(";"):
@@ -161,7 +161,7 @@ def read_incompatible_losers(game_dir):
     """[(loser, winner)] in lowercase, from mwdialog_incompatible_losers.txt (none when it isn't there)."""
     out = []
     try:
-        with open(MP.state_path(game_dir, INCOMPATIBLE_LOSERS_FILE), "r", encoding="utf-8", errors="replace") as f:
+        with open(MP.state_path(game_dir, INCOMPATIBLE_LOSERS_FILE), "r", encoding="utf-8-sig", errors="replace") as f:
             for line in f:
                 s = line.strip()
                 if not s or s.startswith(";"):
@@ -181,7 +181,7 @@ def add_incompatible_loser(game_dir, loser, winner):
         return False
     path = MP.state_path(game_dir, INCOMPATIBLE_LOSERS_FILE)
     try:
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
+        with open(path, "r", encoding="utf-8-sig", errors="replace") as f:
             text = f.read()
     except OSError:
         text = INCOMPATIBLE_LOSERS_HEADER
@@ -319,7 +319,7 @@ def read_conflict_answers(game_dir):
     """{"a.esp|b.esp" (sorted, lower): {"do": "order"|"cell"|"off"|"skip", "plugin": winner or the one
     turned off, "when": ...}}: what you answered for each pair in earlier --cell-conflicts sessions."""
     try:
-        with open(MP.state_path(game_dir, CONFLICT_ANSWERS_FILE), encoding="utf-8") as f:
+        with open(MP.state_path(game_dir, CONFLICT_ANSWERS_FILE), encoding="utf-8-sig") as f:
             d = json.load(f)
     except (OSError, ValueError):
         return {}
@@ -348,7 +348,7 @@ def read_cell_winners(game_dir):
     path = MP.state_path(game_dir, CELL_WINNERS_FILE)
     out = {}
     if os.path.exists(path):
-        for line in open(path, encoding="utf-8", errors="replace"):
+        for line in open(path, encoding="utf-8-sig", errors="replace"):
             parts = line.rstrip("\r\n").split("\t")
             if line.startswith(";") or len(parts) < 3:
                 continue
@@ -377,7 +377,7 @@ def read_redundant(game_dir):
     """(OrderedDict {plugin turned off: (kept plugin, why)}, {frozenset(a, b) you chose to keep both of})."""
     off, both = OrderedDict(), set()
     try:
-        with open(MP.state_path(game_dir, REDUNDANT_RECORD), "r", encoding="utf-8") as f:
+        with open(MP.state_path(game_dir, REDUNDANT_RECORD), "r", encoding="utf-8-sig") as f:
             for line in f:
                 s = line.rstrip("\r\n")
                 if not s.strip() or s.lstrip().startswith(";"):
@@ -419,7 +419,7 @@ def read_merge_rebuild(game_dir):
     """{merged plugin: [inputs turned off by --redundant]} for merges that must be rebuilt without them."""
     out = OrderedDict()
     try:
-        with open(MP.state_path(game_dir, MERGE_REBUILD_RECORD), encoding="utf-8") as f:
+        with open(MP.state_path(game_dir, MERGE_REBUILD_RECORD), encoding="utf-8-sig") as f:
             for line in f:
                 s_ = line.rstrip("\r\n")
                 if s_.strip() and not s_.startswith(";"):
@@ -459,7 +459,7 @@ ADDED_MASTERS_RECORD = "mwdialog_added_masters.json"
 def read_added_masters(game_dir):
     """{patch: {mod: when}} for masters --sort added to patches."""
     try:
-        with open(MP.state_path(game_dir, ADDED_MASTERS_RECORD), encoding="utf-8") as f:
+        with open(MP.state_path(game_dir, ADDED_MASTERS_RECORD), encoding="utf-8-sig") as f:
             return json.load(f)
     except (OSError, ValueError):
         return {}
