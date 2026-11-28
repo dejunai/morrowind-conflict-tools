@@ -511,6 +511,63 @@ endif
 
 ---
 
+### Category J: Lists of Every Object Drawn at Once (Unpaged UI)
+
+#### Symptom
+Opening a mod's config menu or one of its windows freezes the game for seconds, or for good on a large load order
+(Tamriel Rebuilt and Tamriel Data add thousands of cells, items and NPCs). `mwhangwatch.log` shows the hitch with the
+menu open; nothing is logged as an error.
+
+#### Underlying Cause
+The mod builds a list of every object of a kind (`tes3.iterateObjects(...)`, `tes3.dataHandler.nonDynamicData.cells`
+/ `.classes` / ...) and then makes one UI element per entry, usually in a scroll pane, often with two or three event
+handlers on each. Every element is made and laid out the moment the page opens. MWSE's own `ExclusionsPage` did the
+same; KB4 pages it (100 per column), so every mod using the core page (directly, or through EasyMCM, now only an
+alias of `mwse.mcm`) is covered. Mods with their own list code are not:
+
+| Mod | Where | What it drew |
+| :--- | :--- | :--- |
+| Map Icons | `Spammer\Map Icons\config.lua` and `main.lua` (`exclusionList` -> `toggleList`) | every interior cell, three lists |
+| Tooltips Complete | `Tooltips Complete\mcm.lua` (`getSortedObjectList` -> `distribute`) | every object of a type, two panes |
+| Companion Leveler | `companionLeveler\menus\classChange.lua` (with its all-classes option) | every class |
+
+#### Detection & Fix (luafix rule U1)
+U1 is a fingerprint, not a list of mods: a `for ... in ipairs/pairs(X) do` loop whose own body makes UI elements
+(`:createLabel`, `:createTextSelect`, `:createBlock`, ...) on an element made outside the loop, where `X` can hold
+every object of a kind:
+
+- `X` reads `nonDynamicData` (or `tes3.iterateObjects`) itself;
+- `X` is a call to a function of the same file that builds its list from them and returns it;
+- `X` is a local set from such a call (or `table.keys` of one);
+- `X` is a parameter, and some call in the file passes such a list to it.
+
+The loop becomes a call to a one-line helper (`localpatch_pages`, added beside luafix's marker, so line numbers stay):
+
+```lua
+-- before
+for _, cell in ipairs(list) do
+    local label = pane:createLabel { id = cell, text = cell }
+end
+-- after
+localpatch_pages(list, {pane}, function(_, cell)
+    local label = pane:createLabel { id = cell, text = cell }
+end, false)
+```
+
+`localpatch_pages` draws the first 100 entries, then puts a `Show the next N (M more)...` entry at the end of each
+list the loop draws into; clicking it draws the next 100 and lays the menu out again. `pairs` lists keep their order
+(`true` as the last argument). A list of 100 or fewer looks exactly as before, so a false match costs nothing. A
+loop nested in another such loop is left to the outer one.
+
+Limits:
+- The loop body becomes a function, so a body with `break`, `return`, `goto` or `...` is only reported (Companion
+  Leveler's second and third class lists): page it by hand.
+- A mod's own search or "toggle all" over the pane's children (Map Icons) only sees what has been drawn; the rest
+  appears as you page on.
+- Only lists built in the same file are recognised; a list handed in from another file is not.
+
+---
+
 ## 3. Vortex Staging & Hardlink Safeguards
 
 > [!WARNING]

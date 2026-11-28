@@ -423,6 +423,7 @@ Every finding has a rule id and a confidence: `high` findings are patched by `--
 | `I2` | A repeating real-time timer that redraws UI keeps running through a save | fix: skips while saving |
 | `I3` | A config written inside a save handler | fix: written the frame after |
 | `L1` | A `while` loop that walks links (`x = x.next`) or counts down by a computed step | fix: capped at 10000 turns |
+| `U1` | A loop that makes a UI element per entry of a list that can hold every object of a kind (built from `tes3.iterateObjects` / `nonDynamicData` in the same file: Map Icons, Tooltips Complete, Companion Leveler) | fix: drawn 100 at a time with a `Show the next` entry (`localpatch_pages`); a body with `break` / `return` / `goto` / `...` stays a report. See docs/dev/LUA-DEBUGGING.md, Category J |
 | `M1` | An `enterFrame` handler (it also fires in menus) with no UI work | fix: returns in menu mode (not added when the handler already returns in menu mode; `M1` and `G2` both read the handler's leading guards, so the second pass never adds the gate twice) |
 | `U1` | A per-frame handler setting `.text` of an element it made with `:createLabel` / `:createBlock` to a plain value (a name, a field, a literal) every frame | fix: `if x.text ~= v then x.text = v end` |
 | `P1` | `ref.data` written on a non-actor reference with no `ref.modified = true` | report |

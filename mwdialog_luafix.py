@@ -73,6 +73,9 @@ Rules (thresholds come from MWSE\\config\\mwguard.json when it exists - the same
      keeps its text and the overlapping rule edit gives way). A new KB entry must say in its description
      why no rule can express it: "(no rule can express this: <why>)" (tests/test_luafix_kb_policy.py).
   L1 a while loop that walks links (x = x.next) or counts down by a computed step -> capped at 10000   fix
+  U1 a loop that makes a UI element per entry of a list that can hold every object of a kind (built
+     from tes3.iterateObjects / nonDynamicData in the same file) -> drawn 100 at a time, with a "show
+     the next" entry; a loop body with break / return / goto / ... stays a report                    fix
   M1 an enterFrame handler (it also fires in menus) with no UI work -> returns in menu mode            fix
   S1 tes3.getSoundPlaying{ reference = <not the player> }: on a non-actor the engine can say "not
      playing" while a loop plays, so a restart on that answer repeats (mwsoundguard caps it)          report
@@ -984,7 +987,7 @@ class FileAnalysis:
         for r in (self.r_priority, self.r_per_frame, self.r_timers, self.r_one_shot, self.r_data_guard,
                   self.r_keycode, self.r_lookups, self.r_event_fields, self.r_object_fields, self.r_destroy, self.r_console, self.r_info_filter, self.r_reregister,
                   self.r_reload_timers, self.r_globals, self.r_toplevel, self.r_loops, self.r_logger_level,
-                  self.r_log_triggers, self.r_loggers, self.r_save_safe, self.r_while_caps, self.r_menu_exit,
+                  self.r_log_triggers, self.r_loggers, self.r_save_safe, self.r_while_caps, self.r_ui_lists, self.r_menu_exit,
                   self.r_vector_order, self.r_sound_query, self.r_frequent_lookups,
                   self.r_timer_refs, self.r_ref_data_modified, self.r_message_repeat, self.r_text_rewrite,
                   self.r_split_calls, self.r_log_concat):
@@ -1265,6 +1268,128 @@ class FileAnalysis:
             self.add("L1", n, f"while loop {why}", "stop it after 10000 turns", "high",
                      [(n.s, n.s, f"local {v} = 0 "), (n.cond.s, n.cond.s, "("),
                       (n.cond.e, n.cond.e, f") and {v} < 10000"), (n.body.s, n.body.s, f" {v} = {v} + 1 ")])
+
+    UI_CREATE = frozenset({"createLabel", "createTextSelect", "createButton", "createBlock", "createImage",
+                           "createParagraph", "createRect", "createNif", "createFillbar", "createThinBorder",
+                           "createDivider", "createHyperlink", "createTextInput"})
+    BIG_SOURCE = re.compile(r"\btes3\.iterateObjects\s*\(|\bnonDynamicData\.\w+")
+
+    def r_ui_lists(self):
+        """U1: a loop over ipairs/pairs(X) that creates UI elements, X a list that can hold every object of a kind:
+        X reads nonDynamicData itself, or is a call to a function of this file that builds its list from
+        tes3.iterateObjects / nonDynamicData and returns it, a local set from such a call, or a parameter some call
+        in this file passes such a list to. Thousands of elements at once (Tamriel Data) -> 100 at a time, with a
+        "show the next" entry at the end of each list it draws into (localpatch_pages). A list of 100 or fewer looks
+        as before. The loop body becomes a function, so one with break, return, goto or ... is only reported."""
+        name_of = {}                                    # id(Function) -> its name
+        funcs = {}                                      # name -> Function
+        for n in self.nodes:
+            pairs = []
+            if n.kind == "LocalFunc":
+                pairs = [(n.name, n.func)]
+            elif n.kind == "FuncStat":
+                pairs = [(n.path[-1], n.func)]
+            elif n.kind in ("Local", "Assign"):
+                tgts = n.names if n.kind == "Local" else [L.dotted(x) for x in n.targets]
+                pairs = [((nm or "").split(".")[-1], ex) for nm, ex in zip(tgts, n.exprs) if ex.kind == "Function"]
+            for nm, fn in pairs:
+                if nm:
+                    funcs[nm] = fn
+                    name_of[id(fn)] = nm
+        big_fns = {nm for nm, fn in funcs.items()
+                   if self.BIG_SOURCE.search(self.text(fn.body))
+                   and any(x.kind == "Return" and x.exprs for x in L.walk_no_funcs(fn.body))}
+        big_names = set()
+
+        def last_name(e):
+            d = L.dotted(e) if e is not None else None
+            return d.split(".")[-1] if d else None
+
+        def is_big(e):
+            if e is None:
+                return False
+            if e.kind in ("Index", "Name") and self.BIG_SOURCE.search(self.text(e)):
+                return True
+            if e.kind == "Name" and e.id in big_names:
+                return True
+            if e.kind == "Call":
+                fname = last_name(e.func)
+                if fname in big_fns:
+                    return True
+                if fname == "keys" and e.args and is_big(e.args[0]):     # table.keys(<a big table>)
+                    return True
+            return False
+        for _round in range(2):                         # a local set from another big local
+            for n in self.nodes:
+                if n.kind == "Local":
+                    for nm, ex in zip(n.names, n.exprs):
+                        if is_big(ex):
+                            big_names.add(nm)
+                elif n.kind == "Assign":
+                    for tg, ex in zip(n.targets, n.exprs):
+                        if tg.kind == "Name" and is_big(ex):
+                            big_names.add(tg.id)
+        big_params = {}                                 # id(Function) -> parameter names a big list is passed to
+        for c in self.calls:
+            fn = funcs.get(last_name(c.func))
+            if fn is None:
+                continue
+            for i, a in enumerate(c.args):
+                if i < len(fn.params) and is_big(a):
+                    big_params.setdefault(id(fn), set()).add(fn.params[i])
+
+        def enclosing(n):
+            p = n.parent
+            while p is not None and p.kind != "Function":
+                p = p.parent
+            return p
+
+        found = []
+        for n in self.nodes:
+            if n.kind != "GenFor" or len(n.exprs) != 1 or n.exprs[0].kind != "Call":
+                continue
+            call = n.exprs[0]
+            it = L.dotted(call.func)
+            if it not in ("ipairs", "pairs") or len(call.args) != 1:
+                continue
+            x = call.args[0]
+            fn = enclosing(n)
+            big = is_big(x) or (x.kind == "Name" and fn is not None and x.id in big_params.get(id(fn), ()))
+            if not big:
+                continue
+            own = set(n.names) | {nm for s in L.walk_no_funcs(n.body) if s.kind == "Local" for nm in s.names}
+            parents = []
+            for m in L.walk_no_funcs(n.body):
+                if m.kind == "Method" and m.name in self.UI_CREATE:
+                    root = m.obj
+                    while root.kind == "Index":
+                        root = root.obj
+                    if root.kind == "Name" and root.id not in own:
+                        txt = self.text(m.obj)
+                        if txt not in parents:
+                            parents.append(txt)
+            if not parents:
+                continue
+            found.append((n, it, x, parents))
+        inside = {id(n) for n, *_r in found}
+        for n, it, x, parents in found:
+            p = n.parent
+            while p is not None and id(p) not in inside:
+                p = p.parent
+            if p is not None:                            # inside another such loop: that one is paged
+                continue
+            what = (f"a loop over {self.text(x)[:40]} makes a UI element per entry, and the list can hold every "
+                    f"object of a kind (thousands with Tamriel Data), all drawn at once")
+            stop = next((s.kind for s in L.walk_no_funcs(n.body) if s.kind in ("Break", "Return", "Goto", "Vararg")),
+                        None)
+            do_at = self.src.find("do", n.exprs[0].e)
+            if stop or do_at < 0 or "\n" in self.src[n.s:do_at] or self.src[n.e - 3:n.e] != "end":
+                self.add("U1", n, what, f"page it by hand ({stop or 'the loop header spans lines'})", "report")
+                continue
+            head = (f"localpatch_pages({self.text(x)}, {{{', '.join(parents)}}}, function({', '.join(n.names)})")
+            tail = f"end, {'true' if it == 'pairs' else 'false'})"
+            self.add("U1", n, what, f"drawn {PAGE_SIZE} at a time with a 'show the next' entry (the mod's own search "
+                     f"only sees what is drawn)", "high", [(n.s, do_at + 2, head), (n.e - 3, n.e, tail)], ["pages"])
 
     def r_menu_exit(self):
         """M1: an enterFrame handler (enterFrame also fires in menus; simulate doesn't) that does world work and
@@ -3613,6 +3738,20 @@ def known_core_context(path):
             return norm[:-(len(rel) + 1)], rel, plugin
     return None
 
+PAGE_SIZE = 100
+PAGE_HELPER = ("local localpatch_pages do localpatch_pages = function(list, parents, fn, keyed) "
+               "local items, shown, size = {}, 0, " + str(PAGE_SIZE) + " "
+               "if keyed then for k, v in pairs(list) do items[#items + 1] = { k, v } end "
+               "else for i, v in ipairs(list) do items[#items + 1] = { i, v } end end "
+               "local more more = function() local last = math.min(#items, shown + size) "
+               "for i = shown + 1, last do fn(items[i][1], items[i][2]) end shown = last "
+               "if shown >= #items then return end local left, buttons = #items - shown, {} "
+               "for _, p in ipairs(parents) do local ok, b = pcall(p.createTextSelect, p, { text = "
+               "string.format('Show the next %d (%d more)...', math.min(size, left), left) }) "
+               "if ok and b then buttons[#buttons + 1] = b b:register('mouseClick', function() "
+               "local top = b:getTopLevelMenu() for _, x in ipairs(buttons) do pcall(x.destroy, x) end more() "
+               "if top then top:updateLayout() end end) end end end more() end end ")
+
 GATE_HELPER = ("local localpatch_gate do local last, clock = {}, os.clock localpatch_gate = function(k, s) "
                "local t = clock() local l = last[k] if l and t >= l and t - l < s then return true end "
                "last[k] = t return false end end ")
@@ -4052,6 +4191,8 @@ def build_patch(src, findings, mod_key, cfg, level="high", want_shim=False):
         head += GATE_HELPER
     if "savestate" in needs and "localpatch_savestate" not in src:
         head += SAVE_HELPER
+    if "pages" in needs and "localpatch_pages = function" not in src:
+        head += PAGE_HELPER
     out = out[:ip] + head + out[m.end() if m else ip:]
     return out, sorted(set(rules))
 
