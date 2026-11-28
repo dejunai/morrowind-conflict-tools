@@ -157,7 +157,7 @@ event.register("modConfigReady", function()
     })
     page:createYesNoButton({
         label = "Restore displaced equipment",
-        description = "When you take something off with its quick key, puts back what it replaced, like the shield a "
+        description = "Requires the toggle above. When you use a quick key to take something off, re-equip what it replaced, such as the shield a "
             .. "lantern or two-handed weapon pushed off. Also swaps a quick-keyed light back to your shield when you "
             .. "ready a weapon.",
         variable = mwse.mcm.createTableVariable({ id = "restoreDisplaced", table = config }),

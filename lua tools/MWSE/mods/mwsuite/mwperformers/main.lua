@@ -631,7 +631,7 @@ event.register(tes3.event.modConfigReady, function()
     })
     page:createOnOffButton({
         label = "One performer per place",
-        description = "Only one performer plays in each building. Off: everyone performs again as you visit each place.",
+        description = "On: one performer plays per building. Off: all performers resume as you revisit each building.",
         variable = mwse.mcm.createTableVariable({ id = "enabled", table = config }),
         callback = function() if tes3.player then settleActive() end end,
     })

@@ -624,7 +624,7 @@ event.register(tes3.event.modConfigReady, function()
             .. VERSION .. ".",
     })
     page:createOnOffButton({ label = "Enabled", configKey = "enabled",
-        description = "Master switch. While it is off, none of the options below do anything." })
+        description = "On: allow the startup check and live dialogue protection selected below. Off: neither runs." })
     page:createOnOffButton({ label = "Check all topics when the load order changes", configKey = "startupCheck",
         description = "Checks every dialogue topic once at the main menu (with a small progress pop-up) whenever your "
             .. "mod list changes. Skipped when nothing has changed." })

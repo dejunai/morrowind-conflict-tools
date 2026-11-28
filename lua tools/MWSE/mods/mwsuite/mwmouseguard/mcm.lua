@@ -15,7 +15,7 @@ With more than one screen (especially in MGE XE's borderless window mode), Windo
 Mouse Guard keeps the pointer inside the Morrowind window while you play, and lets it go as soon as you Alt-Tab or press the Windows key.]],
 })
 
-local category = page:createCategory("Containment Options")
+local category = page:createCategory("When to keep the mouse in the window")
 
 category:createYesNoButton({
     label = "Enable Mouse Containment",
@@ -24,13 +24,13 @@ category:createYesNoButton({
 })
 
 category:createYesNoButton({
-    label = "Contain During Menus & UI",
+    label = "Keep the mouse in the window during menus",
     description = "Also keeps the pointer in the window while menus (inventory, journal, dialogue) are open.",
     variable = mwse.mcm.createTableVariable({ id = "lockInMenus", table = config }),
 })
 
 category:createYesNoButton({
-    label = "Contain During Gameplay",
+    label = "Keep the mouse in the window during gameplay",
     description = "Keeps the pointer in the window while you are playing with no menu open.",
     variable = mwse.mcm.createTableVariable({ id = "lockInGame", table = config }),
 })

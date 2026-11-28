@@ -650,12 +650,12 @@ event.register(tes3.event.modConfigReady, function()
 
 	local page = template:createSideBarPage({
 		label = "Settings",
-		description = "mwsaveguard protects your saves:\n\n1. After you go through a door or finish making your character, an autosave or quicksave waits a few seconds until everything has finished loading. Saving too early is a common cause of save freezes and crashes.\n\n2. Stray copies of your character, which can appear after a new game or a door and make saving freeze at 50%, are removed.\n\n3. A save is checked before it loads, and a damaged one is stopped before it can crash the game.",
+		description = "Save Guard helps prevent freezes while saving or loading.\n\n- Delays quicksaves and autosaves while a new area or character finishes loading.\n- Can remove stray copies of the player that make saves hang at 50%.\n- Can check saves before loading and stop a damaged one from opening.",
 	})
 
 	page:createOnOffButton({
 		label = "Enable Save Guard",
-		description = "Turns save protection on.",
+		description = "On: delays saves during loading and enables the protection options below. Off: saves are handled normally.",
 		variable = mwse.mcm.createTableVariable({ id = "enabled", table = config }),
 	})
 

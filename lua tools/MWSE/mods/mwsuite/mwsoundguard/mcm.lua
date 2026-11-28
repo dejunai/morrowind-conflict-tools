@@ -32,7 +32,7 @@ function this.register(config, applySettings)
     })
 
     page:createSlider({
-        label = "Runaway duplicate count",
+        label = "Dropped repeats before logging a runaway sound",
         description = "After this many dropped repeats, the sound is treated as a runaway: it is kept to one copy and "
             .. "reported in the log.\n\nDefault: 3",
         min = 1, max = 10, step = 1, jump = 2,
@@ -55,7 +55,7 @@ function this.register(config, applySettings)
     })
 
     page:createOnOffButton({
-        label = "Name the Lua caller",
+        label = "Log which Lua mod started the sound",
         description = "Notes which mod started or stopped each sound, so a runaway in "
             .. "Data Files\\MWSE\\logs\\mwsoundguard.log names the mod responsible.\n\n"
             .. "Takes effect when the guard is switched on (or at the next start).\n\nDefault: On",

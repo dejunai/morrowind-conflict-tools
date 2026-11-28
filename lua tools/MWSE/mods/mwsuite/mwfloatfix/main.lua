@@ -1000,7 +1000,7 @@ event.register(tes3.event.modConfigReady, function()
         description = "Keeps a record of every item lowered (and why others were left alone) in the log file. "
             .. "Turn off if you don't need it.",
         variable = mwse.mcm.createTableVariable({ id = "log", table = config }) })
-    page:createKeyBinder({ label = "Hide key (look at an object, or click it in the console, then press)",
+    page:createKeyBinder({ label = "Hide object hotkey",
         description = "Look at an object (or click it with the console open) and press this key. After you confirm, "
             .. "that one object in that spot is hidden in this game and every new game. Meant for lanterns or ropes "
             .. "left hanging in mid-air after another mod removed what held them. Bring it back on the Hidden Objects page.",

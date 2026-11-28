@@ -8,18 +8,14 @@ local page = template:createSideBarPage({
 })
 
 page.sidebar:createInfo({
-    text = [[Exit Guard fixes the long freeze, and often a crash, that many modded games have when you quit.
+    label = "Save before quitting",
+    text = [[Exit Guard skips the slow shutdown that can freeze a heavily modded game.
 
-The problem:
-When you choose Exit, Morrowind unloads everything piece by piece. With MGE XE and a big mod list this can freeze the game for 15-30 seconds and then crash it.
+- Exit Guard closes the game without saving.
+- Restart Morrowind after changing the Exit Guard or New Game switch.
+- The New Game switch works independently. You can still load saves in the same session.
 
-The fix:
-The game is only saved when you save, never when you quit. So once you confirm Exit, Exit Guard simply closes the game instantly. Save first as usual: anything you haven't saved is lost, just as with a normal exit.
-
-New Game:
-MGE XE doesn't reset when a game is started over inside a running session, so once a save has been loaded (or a first New Game started), New Game is turned off until you restart Morrowind. Loading a save still works. This part has its own switch below and works even when Exit Guard itself is off.
-
-The in-game New Game block builds on the idea of Petethegoat's Continue (Nexus Mods, Morrowind mod 45952), which can hide the New Game button while in game.]],
+The New Game block builds on Petethegoat's Continue.]],
 })
 
 page.sidebar:createHyperlink({
@@ -47,7 +43,7 @@ page:createYesNoButton({
 
 page:createYesNoButton({
     label = "Skip Confirmation Dialog",
-    description = "Clicking Exit closes the game right away, without asking 'Are you sure?'. Off by default, so a misclick can't close your game.",
+    description = "On: clicking Exit closes Morrowind immediately. Save first. Off: Exit still asks you to confirm.",
     variable = mwse.mcm.createTableVariable({
         id = "skipConfirmation",
         table = config,

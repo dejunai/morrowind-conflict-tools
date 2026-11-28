@@ -8,16 +8,14 @@ local page = template:createSideBarPage({
 })
 
 page.sidebar:createInfo({
-    text = [[Teleport Guard stops crashes and freezes when a mod moves you somewhere else in the middle of a conversation.
+    text = [[Teleport Guard delays moves triggered by dialogue until the conversation closes.
 
-The problem:
-Some mods send you to another place straight from a dialogue line, while the conversation window is still open. That can freeze the camera, break the dialogue window, leave your companions behind, or crash the game.
-
-The fix:
-Teleport Guard catches these moves. Everything else the line does (journal updates, items) happens right away, the conversation ends normally, and only then are you moved, together with your companions.]],
+- Journal updates and item rewards still happen during the conversation.
+- Leave the conversation to finish the move.
+- Enable the companion option if your followers should travel with you.]],
 })
 
-local category = page:createCategory("Teleport Protection Options")
+local category = page:createCategory("Dialogue teleports")
 
 category:createYesNoButton({
     label = "Enable Safe Dialogue Teleportation",
@@ -32,13 +30,13 @@ category:createYesNoButton({
 })
 
 category:createYesNoButton({
-    label = "Force Goodbye Mode on Dialogue",
+    label = "Offer only Goodbye when a move is waiting",
     description = "Ends the conversation (only Goodbye is left) as soon as a move is waiting, so you can leave cleanly.",
     variable = mwse.mcm.createTableVariable({ id = "forceGoodbye", table = config }),
 })
 
 category:createYesNoButton({
-    label = "Smooth Visual Fade Transition",
+    label = "Fade the screen during a teleport",
     description = "Fades the screen to black and back when you are moved.",
     variable = mwse.mcm.createTableVariable({ id = "fadeTransition", table = config }),
 })

@@ -272,7 +272,7 @@ local function registerMcm()
     pageInfo = page:createInfo({ text = nav().label })
     prevBtn = page:createButton({
         buttonText = "Previous",
-        description = "Show the previous 100 repaired scripts. Disabled on the first page.",
+        description = "Go back one page of repaired scripts (up to 100 per page). Available after page one.",
         callback = function()
             if currentPage > 1 then currentPage = currentPage - 1; apply() end
         end,

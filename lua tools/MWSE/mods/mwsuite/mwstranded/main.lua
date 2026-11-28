@@ -420,7 +420,7 @@ event.register(tes3.event.modConfigReady, function()
     })
     page:createOnOffButton({
         label = "Write what it does to MWSE\\logs\\mwstranded.log",
-        description = "Keeps a record of what was moved, hidden or shown again in the log file. Turn off if you don't "
+        description = "Logs each object that was moved, hidden or restored. Turn off if you don't "
             .. "need it.",
         variable = mwse.mcm.createTableVariable({ id = "log", table = config }),
     })

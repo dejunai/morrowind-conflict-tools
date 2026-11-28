@@ -177,7 +177,7 @@ event.register(tes3.event.modConfigReady, function()
 
     page:createOnOffButton({
         label = "Enabled",
-        description = "Master switch. Off: no warning is hidden and the game is left unpatched.",
+        description = "On: hides only the warning groups selected below. Off: all warnings are shown.",
         variable = mwse.mcm.createTableVariable({ id = "enabled", table = config }),
     })
 

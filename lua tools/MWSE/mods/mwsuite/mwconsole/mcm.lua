@@ -154,8 +154,8 @@ function mcm.build(main)
     eff:createButton({ buttonText = "Inspect my character now", label = "Inspect",
         description = "Opens the effect inspector on your character. Needs a loaded game.",
         callback = function() guard.run("open the effect inspector", window.open, tes3.player) end })
-    eff:createButton({ buttonText = "Purge my active effects now", label = "Purge",
-        description = "Removes every active magic effect from your character. Needs a loaded game.",
+    eff:createButton({ buttonText = "Remove my active magic effects", label = "Purge",
+        description = "Immediately removes active magic effects from your character, including effects you wanted to keep. Requires a loaded game.",
         callback = function() guard.run("purge active effects", window.purge, tes3.player) end })
 
     local tog = page:createCategory("Quick toggle keys")
@@ -189,7 +189,7 @@ function mcm.build(main)
 
     -- Developer page
     local dev = template:createSideBarPage({ label = "Developer" })
-    dev.sidebar:createInfo({ text = user.WARNING .. "\n\nScripts are kept in " .. store.BASE
+    dev.sidebar:createInfo({ label = "User scripts run Lua code", text = user.WARNING .. "\n\nScripts are kept in " .. store.BASE
         .. "\\user_commands.json and " .. store.SCRIPTS .. "\\. Add them in the lua console with alias add <name> <lua>; "
         .. "alias list, alias show, alias rm and alias reload manage them." })
     local devCat = dev:createCategory("User script commands")
@@ -222,7 +222,7 @@ function mcm.build(main)
         description = "Allows alias add <name> --override. Never applies to real Morrowind commands.",
         variable = var(config.userScripts, "allowOverride") })
     devCat:createSlider({ label = "Script step limit (millions)",
-        description = "Stops a script that runs too long.",
+        description = "Stops each user script after this many million Lua instructions. Lower it to stop long-running scripts sooner.",
         min = 1, max = 100, step = 1, jump = 5, variable = var(config.userScripts, "maxInstructions") })
     devCat:createButton({ buttonText = "Reload scripts", label = "Reload",
         description = "Reads user_commands.json and the scripts folder again.",

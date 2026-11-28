@@ -277,7 +277,7 @@ event.register("modConfigReady", function()
     local template = mwse.mcm.createTemplate({ name = "Custom Class Persistence",
         onClose = function() mwse.saveConfig("mwcustomclasspersistence", settings) end })
     local page = template:createSideBarPage({ label = "Settings" })
-    page.sidebar:createInfo({ text = "Classes made in the Create Class menu are saved and offered again at the "
+    page.sidebar:createInfo({ text = "Use Create Class during character creation to make a class. Saved classes appear again at the "
         .. "bottom of the class list in later games. Picking one fills in the Create Class menu for you." })
     page:createYesNoButton({
         label = "Save and offer custom classes",

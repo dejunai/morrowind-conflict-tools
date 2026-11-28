@@ -16,7 +16,7 @@ local function yesNo(parent, id, label, description)
         variable = mwse.mcm.createTableVariable({ id = id, table = config }) })
 end
 
-page:createYesNoButton({ label = "Enable mwcriminal", description = "Master switch. While it is off, none of the options below (or the inspector key) do anything.",
+page:createYesNoButton({ label = "Enable crime and lock changes", description = "Master switch. While it is off, none of the options below (or the inspector key) do anything.",
     variable = mwse.mcm.createTableVariable({ id = "enabled", table = config }) })
 
 local theft = page:createCategory("Theft")
@@ -32,14 +32,14 @@ yesNo(theft, "plainPaperRequireSneak", "Require sneaking for owned plain paper",
     "Blank paper that belongs to someone can only be picked up while sneaking. ('Must sneak to steal' already does this when it is on.)")
 
 local sneak = page:createCategory("Detection")
-yesNo(sneak, "companionDetection", "Companions and creatures don't detect you",
-    "Your followers, NPCs you escort, creatures and anyone on the blacklist never notice you sneaking. Guards and anyone fighting you still can.")
+yesNo(sneak, "companionDetection", "Ignore detections from followers and listed actors",
+    "Prevents followers and actors on the companion detection list from spotting you. Use the switches below to include escorts, creature followers or all creatures.")
 yesNo(sneak, "includeCreatures", "Include creature followers",
     "Counts creature followers (pack guars, pets) as followers for the option above.")
 yesNo(sneak, "includeEscorts", "Include escort quest targets",
     "Counts NPCs you are escorting on a quest as followers for the option above.")
 yesNo(sneak, "blacklistAllCreatures", "Blacklist all creatures",
-    "No creature ever notices you sneaking, follower or not.")
+    "With detection protection on, all creatures count as blacklisted, including creatures that do not follow you.")
 yesNo(sneak, "debugMode", "Log detection suppressions",
     "For troubleshooting: writes a line to MWSE\\logs\\mwcriminal.log each time a follower or blacklisted actor is stopped from noticing you.")
 sneak:createKeyBinder({
@@ -56,13 +56,13 @@ sneak:createButton({
 })
 sneak:createButton({
     label = "Companion blacklist",
-    description = "See and edit the list of actors who never notice you sneaking.",
+    description = "Open the list of actors ignored by detection protection. This list is separate from the object Blacklist tab.",
     buttonText = "Manage blacklist",
     callback = function() inspectorUI.openBlacklist() end,
 })
 sneak:createButton({
     label = "Clear companion blacklist",
-    description = "Empties the list of actors who never notice you sneaking.",
+    description = "Immediately clears the companion detection list. The separate object blacklist is unaffected.",
     buttonText = "Clear blacklist",
     callback = function()
         config.companionBlacklist = {}

@@ -7,7 +7,7 @@ local this = {}
 function this.addMemoryWarning(category)
     category:createOnOffButton({
         label = "Warn when memory runs low",
-        description = "Morrowind can only use 4 GB of memory, however much your PC has. When it is nearly full, a "
+        description = "With the 4 GB patch, Morrowind has up to 4 GB of address space. When it is nearly full, a "
             .. "short message pops up so you can save before a crash, naming the biggest textures in the area "
             .. "(details in the hang log). The message goes away by itself and never opens a menu.\n\n"
             .. "Off until you turn it on here. Works even with the hang log turned off.",
@@ -28,7 +28,7 @@ end
 function this.addHangLog(page)
     local hang = page:createCategory("Hang log")
     hang:createOnOffButton({
-        label = "Enable the watch",
+        label = "Record a hang log",
         description = "Turns the log on: frame rate, memory, objects in nearby areas, area changes, menus, scripts "
             .. "and (if turned on below) sounds.\n\n"
             .. "Off: nothing is logged. The low-memory warning above has its own switch and works either way. "
@@ -39,7 +39,7 @@ function this.addHangLog(page)
         end,
     })
     hang:createOnOffButton({
-        label = "Watch audio",
+        label = "Include audio in the log",
         description = "Also logs every sound the game starts, music changes, and which mods block or swap sounds "
             .. "(\"BLOCKED by ...\").\n\n"
             .. "This makes the log much bigger. Needs the watch above to be on.",

@@ -187,7 +187,7 @@ event.register(tes3.event.modConfigReady, function()
     })
     page:createOnOffButton({
         label = "Write what it does to MWSE\\logs\\mwcollide.log",
-        description = "Keeps a record of every doubled object hidden or shown again in the log file. Turn off if you "
+        description = "Logs each duplicate that is hidden or restored. Turn off if you "
             .. "don't need it.",
         variable = mwse.mcm.createTableVariable({ id = "log", table = config }),
     })

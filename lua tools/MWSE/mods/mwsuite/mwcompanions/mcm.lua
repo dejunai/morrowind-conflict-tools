@@ -22,7 +22,7 @@ local function slider(parent, id, label, description, min, max, step)
         variable = mwse.mcm.createTableVariable({ id = id, table = config }) })
 end
 
-page:createYesNoButton({ label = "Enable mwcompanions", description = "Master switch. While it is off, none of the options below do anything.",
+page:createYesNoButton({ label = "Enable follower changes", description = "Master switch. While it is off, none of the options below do anything.",
     variable = mwse.mcm.createTableVariable({ id = "enabled", table = config }) })
 
 local move = page:createCategory("Following")
@@ -85,7 +85,7 @@ template:createExclusionsPage({
         .. "birds give theirs follow and escort orders of their own, so they are listed to begin with. The creatures are "
         .. "read from the plugin files when the game starts and when this menu closes (MWSE.log says how many). A "
         .. "creature on the Whitelist page is still a follower. Click a name to move it to the other list.",
-    leftListLabel = "Creatures Never Followers",
+    leftListLabel = "Excluded Plugins",
     rightListLabel = "Plugins",
     variable = mwse.mcm.createTableVariable({ id = "excludedPlugins", table = config }),
     filters = { { label = "Plugins", type = "Plugin" } },

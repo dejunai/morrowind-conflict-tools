@@ -58,3 +58,102 @@ def test_every_suite_settings_page_is_registered():
                 ":register()", "mcm.register(", "registerModConfig(", "mcm.registerMCM(")):
             missing.append(mod.name)
     assert not missing, missing
+
+
+def test_shared_menu_styles_registered_pages_and_preserves_callbacks():
+    import subprocess
+
+    lua = ROOT / "tools" / "luajit" / "luajit.exe"
+    script = r'''
+local ready, registered
+event = { register = function(_, callback) ready = callback end }
+mwse = {
+    registerModConfig = function(name, package) registered = { name, package } end,
+    log = function(message, ...) if message:find("failed") then error(message:format(...)) end end,
+}
+table.size = function(t)
+    local count = 0
+    for _ in pairs(t) do count = count + 1 end
+    return count
+end
+tes3 = { palette = { headerColor = 1 }, uiState = { active = 4 } }
+tes3ui = { getPalette = function(color) return { color, color, color } end }
+local function element(text)
+    local node = { children = {}, text = text, widget = {}, handlers = {} }
+    function node:add(text)
+        local child = element(text)
+        self.children[#self.children + 1] = child
+        return child
+    end
+    function node:createBlock() return self:add() end
+    function node:createLabel(params) return self:add(params.text) end
+    function node:createButton(params) return self:add(params.text) end
+    function node:register(eventName, callback) self.handlers[eventName] = callback end
+    function node:destroyChildren() self.children = {} end
+    function node:getTopLevelMenu() return self end
+    function node:updateLayout() end
+    return node
+end
+
+local manager = dofile(arg[1])
+local function capture(mod, package)
+    local source = "@MWSE/mods/mwsuite/" .. mod .. "/mcm.lua"
+    assert(loadstring("local p = ...; mwse.registerModConfig('Original label', p); return true", source))(package)
+end
+
+local info = {
+    elements = { label = {}, info = {} },
+    postCreate = function(self) self.elements.info.text = "Populated by the original callback" end,
+}
+local category = { elements = { label = {} }, components = { info } }
+local sidebar = { elements = {}, components = {} }
+local hover = { elements = { info = {} } }
+local page = { elements = { mouseOver = hover }, components = { category }, sidebar = sidebar }
+local firstContent, secondContent, saves
+saves = 0
+capture("mwsaveguard", {
+    template = { pages = { page } },
+    onCreate = function(container)
+        firstContent = container
+        category:postCreate()
+        info:postCreate()
+        page:postCreate()
+    end,
+    onClose = function(container) assert(container == firstContent); saves = saves + 1 end,
+    onSearch = function(text) return text == "original description" end,
+})
+capture("mwteleportguard", {
+    onCreate = function(container) secondContent = container end,
+    onClose = function(container) assert(container == secondContent); saves = saves + 1 end,
+})
+for _, mod in ipairs(manager.suite) do
+    if not manager.captured[mod] then capture(mod, { onCreate = function() end }) end
+end
+ready()
+assert(registered[1] == "MW Conflict Tools")
+local combined = registered[2]
+local root = element()
+combined.onCreate(root)
+local tabCount = 0
+for index = 1, #root.children - 1 do
+    for _, tab in ipairs(root.children[index].children) do
+        assert(tab.text and tab.text ~= "Original label")
+        tabCount = tabCount + 1
+    end
+end
+assert(tabCount == 19)
+assert(root.children[1].children[1].widget.state == tes3.uiState.active)
+assert(category.elements.label.font == 0 and category.elements.label.color[1] == 1)
+assert(info.elements.label.font == 0)
+assert(info.elements.info.font == 1 and hover.elements.info.font == 1)
+assert(info.elements.info.text == "Populated by the original callback")
+assert(combined.onSearch("original description"))
+root.children[1].children[2].handlers.mouseClick()
+assert(saves == 1 and secondContent)
+combined.onClose()
+assert(saves == 2)
+'''
+    subprocess.run(
+        [str(lua), "-", str(MODS / "mwmanagermenu" / "main.lua")],
+        input=script, text=True, check=True,
+    )

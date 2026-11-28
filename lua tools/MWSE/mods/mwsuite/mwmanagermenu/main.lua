@@ -12,6 +12,54 @@
 
 local NAME = "MW Conflict Tools"
 local PER_ROW = 4
+-- The game supplies these slots. Font replacers can override them in Morrowind.ini.
+local HEADING_FONT = 0
+local READING_FONT = 1
+
+local tabLabels = {
+    mwsaveguard = "Save Guard", mwteleportguard = "Teleport", mwmouseguard = "Mouse",
+    mwwarnsuppression = "Warnings", mwconsole = "Console", mwpluginpatches = "Patches",
+    mwfloatfix = "Floating Items", mwcollide = "Doubled Objects", mwstranded = "Stranded Objects",
+    mwperformers = "Performers", mwinfoloop = "Dialogue Loops", mwsoundguard = "Sound Guard",
+    mwsoundfix = "Sound Repairs", mwguard = "Guard & Watch", mwexitguard = "Exit Guard",
+    mwquicktoggle = "Quick Keys", mwcustomclasspersistence = "Custom Classes",
+    mwcriminal = "Crime & Locks", mwcompanions = "Companions",
+}
+
+local function styleComponent(component)
+    local previous = component.postCreate
+    component.postCreate = function(self)
+        local elements = self.elements
+        local label = elements.label
+        if label then
+            if self.components or elements.info then
+                label.font = HEADING_FONT
+                if not label.disabled then
+                    label.color = tes3ui.getPalette(tes3.palette.headerColor)
+                end
+            else
+                label.font = READING_FONT
+            end
+        end
+        if elements.info then elements.info.font = READING_FONT end
+        if elements.description then elements.description.font = READING_FONT end
+
+        -- The sidebar builds these two descriptions itself, outside the component list.
+        if elements.mouseOver then
+            elements.mouseOver.elements.info.font = READING_FONT
+        end
+        if self.sidebar and self.description then
+            local view = self.sidebar.elements.subcomponentsContainer
+            local info = view and view:findChild(tes3ui.registerID("Info"))
+            if info then info.font = READING_FONT end
+        end
+        if previous then previous(self) end
+    end
+    for _, child in ipairs(component.components or {}) do
+        styleComponent(child)
+    end
+    if component.sidebar then styleComponent(component.sidebar) end
+end
 
 -- the suite, in tab order (tests/test_unified_menu.py checks this against reference/mwse-lua-guards/mods)
 local SUITE = {
@@ -44,6 +92,11 @@ function mwse.registerModConfig(name, package)
     local mod = registeringMod()
     if mod and isSuite[mod] and type(package) == "table" and not captured[mod] then
         package.name = name
+        if package.template then
+            for _, page in ipairs(package.template.pages) do
+                styleComponent(page)
+            end
+        end
         captured[mod] = package
         return
     end
@@ -52,6 +105,7 @@ end
 
 -- the one entry -----------------------------------------------------------------------------------
 local shown                     -- the suite mod whose page is on screen
+local content                   -- the current tab content
 local root                      -- the menu's container for this entry
 
 local function closeShown(container)
@@ -65,13 +119,14 @@ end
 local build
 local function show(mod)
     if mod == shown then return end
-    closeShown(root)
+    closeShown(content)
     shown = mod
     build()
 end
 
 build = function()
     root:destroyChildren()
+    content = nil
     local row
     local count = 0
     for _, mod in ipairs(SUITE) do
@@ -82,13 +137,17 @@ build = function()
                 row.flowDirection = "left_to_right"
                 row.widthProportional = 1.0
                 row.autoHeight = true
+                row.borderBottom = 3
             end
             count = count + 1
-            local button = row:createButton({ text = package.name or mod })
-            if mod == shown then button.widget.state = 4 end             -- tes3.uiState.active: the open tab
+            local button = row:createButton({ text = tabLabels[mod] })
+            button.font = READING_FONT
+            button.widthProportional = 1.0
+            if mod == shown then button.widget.state = tes3.uiState.active end
             button:register("help", function()
                 local tooltip = tes3ui.createTooltipMenu()
-                tooltip:createLabel({ text = "Open settings for " .. (package.name or mod) .. "." })
+                local label = tooltip:createLabel({ text = "Open " .. (package.name or mod) .. " settings." })
+                label.font = READING_FONT
                 tooltip:updateLayout()
             end)
             button:register("mouseClick", function() show(mod) end)
@@ -100,7 +159,16 @@ build = function()
     body.heightProportional = 1.0
     local package = captured[shown]
     if package and package.onCreate then
-        local ok, err = pcall(package.onCreate, body)
+        local heading = body:createLabel({ text = tabLabels[shown] })
+        heading.font = HEADING_FONT
+        heading.color = tes3ui.getPalette(tes3.palette.headerColor)
+        heading.borderTop = 8
+        heading.borderBottom = 6
+        content = body:createBlock()
+        content.flowDirection = "top_to_bottom"
+        content.widthProportional = 1.0
+        content.heightProportional = 1.0
+        local ok, err = pcall(package.onCreate, content)
         if not ok then mwse.log("[mwmanagermenu] %s's settings page failed: %s", tostring(shown), tostring(err)) end
     end
     local top = root.getTopLevelMenu and root:getTopLevelMenu()
@@ -118,8 +186,9 @@ local combined = {
         end
         build()
     end,
-    onClose = function(container)
-        closeShown(container)
+    onClose = function()
+        closeShown(content)
+        content = nil
         root = nil
     end,
     onSearch = function(text)

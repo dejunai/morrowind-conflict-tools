@@ -9,68 +9,34 @@ local page = template:createSideBarPage({
 
 page:createOnOffButton({
     label = "Enabled",
-    description = "Master switch for every patch on this page. Off: no patch is applied. Restart the game after changing this or turning any patch on or off.",
+    description = "Master switch for patches on all tabs. Off: no patch is applied. Restart the game after changing this or turning any patch on or off.",
     variable = mwse.mcm.createTableVariable({ id = "enabled", table = config }),
 })
 
 local function getStatusText(isActive)
-    return isActive and " [Detected Active]" or " [Not Installed / Inactive]"
+    return isActive and " [Detected]" or " [Not detected]"
 end
 
 page.sidebar:createInfo({
-    text = string.format([[mwpluginpatches unifies targeted compatibility patches and auto-configurations for installed third-party plugins.
-
-Each patch automatically checks whether its target plugin is active in your load order:
-  • If installed & active -> Defaults to ON.
-  • If NOT installed -> Defaults to DISABLED.
-
-Active Plugin Status:
-  • Morrowind Comes Alive: %s
-  • Ebonheart Underworks: %s
-  • Privileges & Services: %s
-  • YARR (Yet Another Race Revamp): %s
-  • Friends & Frens: %s
-  • The Lost Heir: %s
-  • Mabrigash Distribution: %s
-  • Clean Tales of Seyda Neen: %s
-  • Trainer Log: %s
-  • Personal Effects: %s
-  • Animated Containers addons: %s
-  • Watch the Skies: %s
-  • Party Alchemy: %s
-  • Keg Drip: %s
-  • Essential Indicators: %s
-  • Magican't: %s
-  • Ahead of the Classes: %s
-  • Attend Me (MWSE): %s
-  • MWSE Containers Extended: %s
-  • Ruins'n'Relics: %s
-  • HUD Companion Health Bar: %s]],
-    config.isMcaActive() and "Active" or "Not Active",
-    config.isEbonheartUnderworksActive() and "Active" or "Not Active",
-    config.isPAndSActive() and "Active" or "Not Active",
-    config.isYsmirActive() and "Active" or "Not Active",
-    config.isFriendsAndFrensActive() and "Active" or "Not Active",
-    config.isLostHeirActive() and "Active" or "Not Active",
-    config.isMabrDistActive() and "Active" or "Not Active",
-    config.isTalesOfSeydaNeenActive() and "Active" or "Not Active",
-    config.isTrainerLogActive() and "Active" or "Not Active",
-    config.isPersonalEffectsActive() and "Active" or "Not Active",
-    config.isMwcaConsumerActive() and "Active" or "Not Active",
-    config.isWatchTheSkiesInstalled() and "Active" or "Not Active",
-    config.isPartyAlchemyInstalled() and "Active" or "Not Active",
-    config.isKegDripInstalled() and "Active" or "Not Active",
-    config.isEssentialIndicatorsInstalled() and "Active" or "Not Active",
-    config.isMagicantInstalled() and "Active" or "Not Active",
-    config.isAheadOfTheClassesInstalled() and "Active" or "Not Active",
-    config.isAttendMeInstalled() and "Active" or "Not Active",
-    config.isG7ContainersInstalled() and "Active" or "Not Active",
-    config.isRuinesRelicsInstalled() and "Active" or "Not Active",
-    config.isHudCompanionInstalled() and "Active" or "Not Active"),
+    label = "Before changing patches",
+    text = "Each patch works with the mod named in its heading.\n\n"
+        .. "- Detected: the target mod was found.\n"
+        .. "- Not detected: the target mod is missing or inactive.\n"
+        .. "- Restart Morrowind after changing patch settings.",
 })
 
+local function patchPage(label, description)
+    return template:createSideBarPage({ label = label, description = description })
+end
+
+local quests = patchPage("Quests", "Dialogue, quest timing and starting equipment changes. Restart after changing settings.")
+local setups = patchPage("Startup", "Automatic answers and startup message fixes. Restart after changing settings.")
+local interface = patchPage("Interface", "Changes to topics, indicators, menus and console output. Restart after changing settings.")
+local behavior = patchPage("Gameplay", "Harvesting, combat, followers and interactions. Restart after changing settings.")
+local performance = patchPage("Performance", "Reduces repeated work from other mods. Restart after changing settings.")
+
 -- SECTION 1: FRIENDS & FRENS (JIUB COMPANION DELAY)
-local fnfCategory = page:createCategory(string.format("Friends & Frens: Jiub Delayer%s", getStatusText(config.isFriendsAndFrensActive())))
+local fnfCategory = quests:createCategory(string.format("Friends & Frens: Jiub Delayer%s", getStatusText(config.isFriendsAndFrensActive())))
 
 fnfCategory:createYesNoButton({
     label = "Enable Jiub Companion Delayer",
@@ -100,7 +66,7 @@ fnfCategory:createYesNoButton({
     variable = mwse.mcm.createTableVariable({ id = "jiubSyncAppearance", table = config }),
 })
 
-local fnfLoreCategory = page:createCategory(string.format("Friends & Frens: Dialogue%s",
+local fnfLoreCategory = quests:createCategory(string.format("Friends & Frens: Dialogue%s",
     getStatusText(config.isFriendsAndFrensActive())))
 
 fnfLoreCategory:createYesNoButton({
@@ -112,7 +78,7 @@ fnfLoreCategory:createYesNoButton({
 })
 
 -- SECTION 2: THE LOST HEIR
-local lostHeirCategory = page:createCategory(string.format("The Lost Heir: Delayer%s", getStatusText(config.isLostHeirActive())))
+local lostHeirCategory = quests:createCategory(string.format("The Lost Heir: Delayer%s", getStatusText(config.isLostHeirActive())))
 
 lostHeirCategory:createYesNoButton({
     label = "Enable The Lost Heir Delayer",
@@ -121,7 +87,7 @@ lostHeirCategory:createYesNoButton({
 })
 
 -- SECTION 3: PRIVILEGES & SERVICES
-local psCategory = page:createCategory(string.format("Privileges & Services: Guard & Topic Fixes%s", getStatusText(config.isPAndSActive())))
+local psCategory = interface:createCategory(string.format("Privileges & Services: Guard & Topic Fixes%s", getStatusText(config.isPAndSActive())))
 
 psCategory:createYesNoButton({
     label = "Enable Privileges & Services Fixes",
@@ -130,7 +96,7 @@ psCategory:createYesNoButton({
 })
 
 -- SECTION 4: YARR - YSMIR COMBAT SHIELD
-local ysmirCategory = page:createCategory(string.format("YARR: Ysmir Combat Shield Fix%s", getStatusText(config.isYsmirActive())))
+local ysmirCategory = behavior:createCategory(string.format("YARR: Ysmir Combat Shield Fix%s", getStatusText(config.isYsmirActive())))
 
 ysmirCategory:createYesNoButton({
     label = "Enable Dynamic Combat-Only Shield",
@@ -139,7 +105,7 @@ ysmirCategory:createYesNoButton({
 })
 
 -- SECTION 5: MORROWIND COMES ALIVE (MCA)
-local mcaCategory = page:createCategory(string.format("Morrowind Comes Alive: AutoStartup%s", getStatusText(config.isMcaActive())))
+local mcaCategory = setups:createCategory(string.format("Morrowind Comes Alive: AutoStartup%s", getStatusText(config.isMcaActive())))
 
 mcaCategory:createInfo({
     text = "These answers are used, instead of MCA's questions, the first time MCA starts in a save. Changing them "
@@ -160,7 +126,7 @@ mcaCategory:createYesNoButton({
 
 mcaCategory:createDropdown({
     label = "Enable courtesans?",
-    description = "Which of MCA's courtesans appear in taverns.",
+    description = "Choose which courtesans appear in MCA taverns.\n\n- Enable: all.\n- Disable: none.\n- Disable male only: female courtesans only.\n- Disable female only: male courtesans only.",
     options = {
         { label = "Enable", value = "all" },
         { label = "Disable", value = "none" },
@@ -213,7 +179,7 @@ mcaCategory:createDropdown({
 })
 
 -- SECTION 6: EBONHEART UNDERWORKS
-local euCategory = page:createCategory(string.format("Ebonheart Underworks: AutoStartup%s", getStatusText(config.isEbonheartUnderworksActive())))
+local euCategory = setups:createCategory(string.format("Ebonheart Underworks: AutoStartup%s", getStatusText(config.isEbonheartUnderworksActive())))
 
 euCategory:createYesNoButton({
     label = "Enable Silent AutoStartup for Ebonheart Underworks",
@@ -234,7 +200,7 @@ euCategory:createYesNoButton({
 })
 
 -- SECTION 7: MABRIGASH DISTRIBUTION
-local mabrCategory = page:createCategory(string.format("Mabrigash Distribution: Popup Suppression%s", getStatusText(config.isMabrDistActive())))
+local mabrCategory = setups:createCategory(string.format("Mabrigash Distribution: Popup Suppression%s", getStatusText(config.isMabrDistActive())))
 
 mabrCategory:createYesNoButton({
     label = "Suppress 'Distributing Mabrigash' Popup",
@@ -243,7 +209,7 @@ mabrCategory:createYesNoButton({
 })
 
 -- SECTION 11: CLEAN TALES OF SEYDA NEEN
-local talesCategory = page:createCategory(string.format("Clean Tales of Seyda Neen: Dialogue Fix%s",
+local talesCategory = quests:createCategory(string.format("Clean Tales of Seyda Neen: Dialogue Fix%s",
     getStatusText(config.isTalesOfSeydaNeenActive())))
 
 talesCategory:createYesNoButton({
@@ -253,7 +219,7 @@ talesCategory:createYesNoButton({
 })
 
 -- SECTION 12: TRAINER LOG
-local trainerCategory = page:createCategory(string.format("Trainer Log: Auto-Unlock Topics%s",
+local trainerCategory = quests:createCategory(string.format("Trainer Log: Auto-Unlock Topics%s",
     getStatusText(config.isTrainerLogActive())))
 
 trainerCategory:createYesNoButton({
@@ -269,7 +235,7 @@ trainerCategory:createYesNoButton({
 })
 
 -- SECTION 13: GRAPHIC HERBALISM
-local graphicHerbalismCategory = page:createCategory(string.format("Graphic Herbalism: Respawn Delay%s",
+local graphicHerbalismCategory = behavior:createCategory(string.format("Graphic Herbalism: Respawn Delay%s",
     getStatusText(config.isGraphicHerbalismActive())))
 
 graphicHerbalismCategory:createYesNoButton({
@@ -290,7 +256,7 @@ graphicHerbalismCategory:createSlider({
 })
 
 -- SECTION 14: SEYDA NEEN COAST GUARD: CONTRABAND
-local cgCategory = page:createCategory(string.format("Seyda Neen Coast Guard: Contraband%s",
+local cgCategory = quests:createCategory(string.format("Seyda Neen Coast Guard: Contraband%s",
     getStatusText(config.isCoastGuardContrabandActive())))
 
 cgCategory:createYesNoButton({
@@ -349,7 +315,7 @@ cgCategory:createYesNoButton({
 })
 
 
-local topicsCategory = page:createCategory(string.format("UI Expansion: Dialogue Topic Colours%s",
+local topicsCategory = interface:createCategory(string.format("UI Expansion: Dialogue Topic Colours%s",
     getStatusText(config.isUIExpansionActive())))
 
 topicsCategory:createYesNoButton({
@@ -360,7 +326,7 @@ topicsCategory:createYesNoButton({
     variable = mwse.mcm.createTableVariable({ id = "uiExpansionTopicsEnabled", table = config }),
 })
 
-local personalEffectsCategory = page:createCategory(string.format("Personal Effects: Census and Excise%s",
+local personalEffectsCategory = quests:createCategory(string.format("Personal Effects: Census and Excise%s",
     getStatusText(config.isPersonalEffectsActive())))
 
 personalEffectsCategory:createYesNoButton({
@@ -371,7 +337,7 @@ personalEffectsCategory:createYesNoButton({
     variable = mwse.mcm.createTableVariable({ id = "personalEffectsEnabled", table = config }),
 })
 
-local mwcaCategory = page:createCategory(string.format("Animated Containers: MWCA Interop%s",
+local mwcaCategory = behavior:createCategory(string.format("Animated Containers: MWCA Interop%s",
     getStatusText(config.isMwcaConsumerActive())))
 
 mwcaCategory:createYesNoButton({
@@ -383,7 +349,7 @@ mwcaCategory:createYesNoButton({
     variable = mwse.mcm.createTableVariable({ id = "mwcaInteropEnabled", table = config }),
 })
 
-local wtsCategory = page:createCategory(string.format("Watch the Skies: Missing Metadata%s",
+local wtsCategory = setups:createCategory(string.format("Watch the Skies: Missing Metadata%s",
     getStatusText(config.isWatchTheSkiesInstalled())))
 
 wtsCategory:createYesNoButton({
@@ -395,7 +361,7 @@ wtsCategory:createYesNoButton({
     variable = mwse.mcm.createTableVariable({ id = "wtsMetadataLogEnabled", table = config }),
 })
 
-local partyAlchemyCategory = page:createCategory(string.format("Party Alchemy: Module Message%s",
+local partyAlchemyCategory = setups:createCategory(string.format("Party Alchemy: Module Message%s",
     getStatusText(config.isPartyAlchemyInstalled())))
 
 partyAlchemyCategory:createYesNoButton({
@@ -406,7 +372,7 @@ partyAlchemyCategory:createYesNoButton({
     variable = mwse.mcm.createTableVariable({ id = "partyAlchemyModuleBoxEnabled", table = config }),
 })
 
-local kegDripCategory = page:createCategory(string.format("Keg Drip: Refresh Cadence%s",
+local kegDripCategory = performance:createCategory(string.format("Keg Drip: Refresh Cadence%s",
     getStatusText(config.isKegDripInstalled())))
 
 kegDripCategory:createYesNoButton({
@@ -427,7 +393,7 @@ kegDripCategory:createSlider({
     variable = mwse.mcm.createTableVariable({ id = "kegDripIntervalSeconds", table = config }),
 })
 
-local essentialCategory = page:createCategory(string.format("Essential Indicators: Prophecy Warning%s",
+local essentialCategory = interface:createCategory(string.format("Essential Indicators: Prophecy Warning%s",
     getStatusText(config.isEssentialIndicatorsInstalled())))
 
 essentialCategory:createYesNoButton({
@@ -439,7 +405,7 @@ essentialCategory:createYesNoButton({
     variable = mwse.mcm.createTableVariable({ id = "essentialAttackerFilterEnabled", table = config }),
 })
 
-local magicantCategory = page:createCategory(string.format("Magican't: Menu Pause%s",
+local magicantCategory = performance:createCategory(string.format("Magican't: Menu Pause%s",
     getStatusText(config.isMagicantInstalled())))
 
 magicantCategory:createYesNoButton({
@@ -451,7 +417,7 @@ magicantCategory:createYesNoButton({
     variable = mwse.mcm.createTableVariable({ id = "magicantMenuGuardEnabled", table = config }),
 })
 
-local aotcCategory = page:createCategory(string.format("Ahead of the Classes: Starting Gear%s",
+local aotcCategory = quests:createCategory(string.format("Ahead of the Classes: Starting Gear%s",
     getStatusText(config.isAheadOfTheClassesInstalled())))
 
 aotcCategory:createYesNoButton({
@@ -464,7 +430,7 @@ aotcCategory:createYesNoButton({
     variable = mwse.mcm.createTableVariable({ id = "aotcEquipOnceEnabled", table = config }),
 })
 
-local attendMeCategory = page:createCategory(string.format("Attend Me: Fewer Eye Rays%s",
+local attendMeCategory = performance:createCategory(string.format("Attend Me: Fewer Eye Rays%s",
     getStatusText(config.isAttendMeInstalled())))
 
 attendMeCategory:createYesNoButton({
@@ -486,7 +452,7 @@ attendMeCategory:createYesNoButton({
     variable = mwse.mcm.createTableVariable({ id = "attendMeRecruitLabelEnabled", table = config }),
 })
 
-local g7Category = page:createCategory(string.format("MWSE Containers Extended: Linked Containers%s",
+local g7Category = performance:createCategory(string.format("MWSE Containers Extended: Linked Containers%s",
     getStatusText(config.isG7ContainersInstalled())))
 
 g7Category:createYesNoButton({
@@ -498,7 +464,7 @@ g7Category:createYesNoButton({
     variable = mwse.mcm.createTableVariable({ id = "g7ContainersLinkCacheEnabled", table = config }),
 })
 
-local ruinesCategory = page:createCategory(string.format("Ruins'n'Relics: Old Journal%s",
+local ruinesCategory = quests:createCategory(string.format("Ruins'n'Relics: Old Journal%s",
     getStatusText(config.isRuinesRelicsInstalled())))
 
 ruinesCategory:createYesNoButton({
@@ -512,7 +478,7 @@ ruinesCategory:createYesNoButton({
     variable = mwse.mcm.createTableVariable({ id = "ruinesRelicsJournalEnabled", table = config }),
 })
 
-local hudCategory = page:createCategory(string.format("HUD Companion Health Bar: Same Blacklist as mwcompanions%s",
+local hudCategory = behavior:createCategory(string.format("HUD Companion Health Bar: Same Blacklist as mwcompanions%s",
     getStatusText(config.isHudCompanionInstalled())))
 
 hudCategory:createYesNoButton({
@@ -526,7 +492,7 @@ hudCategory:createYesNoButton({
     variable = mwse.mcm.createTableVariable({ id = "hudCompanionMirrorEnabled", table = config }),
 })
 
-local voicesCategory = page:createCategory(string.format("Voices of Vvardenfell: Console%s",
+local voicesCategory = interface:createCategory(string.format("Voices of Vvardenfell: Console%s",
     getStatusText(config.isAiVoicesActive())))
 
 voicesCategory:createYesNoButton({
@@ -536,7 +502,7 @@ voicesCategory:createYesNoButton({
     variable = mwse.mcm.createTableVariable({ id = "aiVoicesConsoleEnabled", table = config }),
 })
 
-local instrumentCategory = page:createCategory(string.format("Bardic Inspiration: Musical Instruments%s",
+local instrumentCategory = behavior:createCategory(string.format("Bardic Inspiration: Musical Instruments%s",
     getStatusText(config.isBardicInspirationActive())))
 
 instrumentCategory:createYesNoButton({

@@ -31,4 +31,5 @@ include docs/**
 exclude docs/dev/**                     # Lua guide, off-layout spec and the Lua repair log: development only
 exclude docs/CHANGES.md                 # local changelog, not part of the package
 include README.md                       # stays at the root, as on GitHub
+include mwsuite-README.MD
 include LICENSE
