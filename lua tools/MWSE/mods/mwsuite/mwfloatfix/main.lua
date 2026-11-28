@@ -864,7 +864,7 @@ end
 event.register(tes3.event.save, function()
     if not configDirty then return end
     configDirty = false
-    mwse.saveConfig(CONFIG_NAME, config)
+    timer.delayOneFrame(function() mwse.saveConfig(CONFIG_NAME, config) end, timer.real)   -- not while the game saves
 end)
 
 -- Mod Config menu ---------------------------------------------------------------

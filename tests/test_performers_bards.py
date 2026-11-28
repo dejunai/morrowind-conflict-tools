@@ -22,6 +22,10 @@ event = {
   unregister = function(name, fn)
     for i = #(handlers[name] or {}), 1, -1 do if handlers[name][i] == fn then table.remove(handlers[name], i) end end
   end,
+  isRegistered = function(name, fn)
+    for _, h in ipairs(handlers[name] or {}) do if h == fn then return true end end
+    return false
+  end,
 }
 local function fire(name, e)
   local copy = {}
@@ -123,6 +127,10 @@ event = {
   unregister = function(name, fn, opts)
     if key(opts) then if filtered[name] then filtered[name][key(opts)] = nil end return end
     for i = #(handlers[name] or {}), 1, -1 do if handlers[name][i] == fn then table.remove(handlers[name], i) end end
+  end,
+  isRegistered = function(name, fn)
+    for _, h in ipairs(handlers[name] or {}) do if h == fn then return true end end
+    return false
   end,
 }
 local function fire(name, e)
@@ -234,6 +242,10 @@ event = {
   end,
   unregister = function(name, fn)
     for i = #(handlers[name] or {}), 1, -1 do if handlers[name][i].fn == fn then table.remove(handlers[name], i) end end
+  end,
+  isRegistered = function(name, fn)
+    for _, h in ipairs(handlers[name] or {}) do if h.fn == fn then return true end end
+    return false
   end,
 }
 local function fire(name, e)

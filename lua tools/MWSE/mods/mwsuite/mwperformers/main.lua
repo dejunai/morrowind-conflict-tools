@@ -542,7 +542,9 @@ local function onMenuDialogActivated(e)
     quietBard = tes3.makeSafeObjectHandle(ref)
     skipScriptFrame(ref)                 -- first, or the script starts the next song
     tes3.removeSound({ reference = ref })
-    event.register(tes3.event.enterFrame, keepQuiet)
+    if not event.isRegistered(tes3.event.enterFrame, keepQuiet) then        -- MWSE logs a duplicate as an error
+        event.register(tes3.event.enterFrame, keepQuiet)
+    end
     log("%s: singing paused for the dialogue", describe(ref))
     beginAnimation(ref)                  -- before Animated Dialogue (priority), so it starts from the plain animation
 end
