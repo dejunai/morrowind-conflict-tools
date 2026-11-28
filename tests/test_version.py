@@ -9,7 +9,6 @@ import pytest
 
 import mwdialog_version
 import mwdialog_report as MR
-import release
 
 ROOT = Path(__file__).resolve().parents[1]
 TOOLS = ["mwdialog_check.py", "vortex_tidy.py", "mwdialog_luafix.py", "mwdialog_paths.py"]
@@ -36,6 +35,7 @@ def test_pack_report_summary_includes_version():
 
 
 def test_release_py_refuses_a_mismatched_version():
+    release = pytest.importorskip("release")
     with pytest.raises(SystemExit) as exc:
         release.main(["v9.9-beta"])
     assert "does not match __version__" in str(exc.value)
