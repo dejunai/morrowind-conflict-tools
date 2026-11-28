@@ -12,8 +12,8 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 
 * **Author**: Tauer
 * **Files**:
-  * [nodeResolver.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/tauer/animated-dialogue/services/nodes/nodeResolver.lua#L11-L22)
-  * [actorPoseBlender.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/tauer/animated-dialogue/services/actors/actorPoseBlender.lua#L58-L72)
+  * `Data Files\MWSE\mods\tauer\animated-dialogue\services\nodes\nodeResolver.lua` (lines 11–22)
+  * `Data Files\MWSE\mods\tauer\animated-dialogue\services\actors\actorPoseBlender.lua` (lines 58–72)
 * **Bugs**:
   1. **Cyclic Controller Infinite Loop**: When traversing scene nodes in `nodeResolver.lua`, cyclic controller parent/child links caused `while controller do` to enter an infinite loop and freeze the process.
   2. **180° Actor Facing Flip on Dialogue Close**: During dialogue exit transition, `actorPoseBlender:capture()` traversed all bones starting with `Bip` and slerped their rotations back to vanilla idle poses. Blending root transform bones (`Bip01`, `Bip01 NonAccum`, `Bip01 Footsteps`, `Root Bone`) caused quaternion antipodal flips and desynchronized the actor's orientation from Morrowind's native facing, making NPCs (such as Sellus Gravius) abruptly snap 180° away.
@@ -26,7 +26,7 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 ## 2. Keg Drip
 
 * **Author**: Melchior Dahrk and Greatness7 (MWSE Lua by Greatness7). [Keg Drip](https://www.nexusmods.com/morrowind/mods/47903)
-* **File**: [main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/KegDrip/main.lua#L130-L240)
+* **File**: `Data Files\MWSE\mods\KegDrip\main.lua` (lines 130–240)
 * **Bugs**:
   1. Raycast direction vector syntax used `-1 * up` instead of `up * -1`, which can throw metatable operation errors in certain vector math versions.
   2. Raycasting and puddle calculations polled unthrottled during `menuMode`, consuming CPU while the game was paused.
@@ -41,7 +41,7 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 ## 3. Small QoL Improvements
 
 * **Author**: Spammer
-* **File**: [main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/Spammer/QoL%20Improvements/main.lua#L63-L110)
+* **File**: `Data Files\MWSE\mods\Spammer\QoL Improvements\main.lua` (lines 63–110)
 * **Bugs**:
   1. `equip` and `equipped` event handlers executed without verifying if the equipping actor was `tes3.player`, attempting to run player-only UI notifications and magic equipping logic on NPCs.
   2. If a scroll or on-use enchanted item was consumed or moved before the one-frame delayed timer fired, `tes3.mobilePlayer:equipMagic()` was called with an invalid/nil item, triggering an unhandled Lua exception.
@@ -54,7 +54,7 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 ## 4. Essential Indicators
 
 * **Author**: Anumaril21. [Essential Indicators](https://www.nexusmods.com/morrowind/mods/48267)
-* **File**: [main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/Essential%20Indicators/main.lua#L72-L195)
+* **File**: `Data Files\MWSE\mods\Essential Indicators\main.lua` (lines 72–195)
 * **Bugs**:
   1. `tes3.getPlayerCell()` returns `nil` during certain cell transitions and load screens; iterating its references threw `attempt to index a nil value`.
   2. `onDamage` hook displayed the prophecy severance messagebox for any damage event—including non-lethal hits, NPC infighting, or environmental damage—and spammed messages repeatedly.
@@ -71,7 +71,7 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 ## 5. Companion Leveler
 
 * **Author**: Kleidium. [Companion Leveler](https://www.nexusmods.com/morrowind/mods/51760)
-* **File**: [mcm.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/companionLeveler/mcm.lua#L436-L530)
+* **File**: `Data Files\MWSE\mods\companionLeveler\mcm.lua` (lines 436–530)
 * **Bug**: EasyMCM sliders under the "Attribute Modifiers" category failed to render track elements properly and collapsed to zero width on certain screen resolutions and UI scalings.
 * **Fix**: Added a `postCreate = fixSlider` callback for each attribute modifier slider, enforcing `minWidth = 180`, ensuring child element visibility, and synchronizing widget values during layout.
 
@@ -80,16 +80,16 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 ## 6. Character Sound Overhaul
 
 * **Author**: Anumaril21. [Character Sound Overhaul](https://www.nexusmods.com/morrowind/mods/49654)
-* **File**: [interop.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/Character%20Sound%20Overhaul/interop.lua#L80-L98)
+* **File**: `Data Files\MWSE\mods\Character Sound Overhaul\interop.lua` (lines 80–98)
 * **Bug**: `this.addSoundData` logged every individual sound registration via `mwse.log()`, dumping over 20,000 lines into `MWSE.log` during game launch and pushing other mod logs out of buffer.
-* **Fix**: Redirected sound registrations into a separate dedicated log file ([Data Files/MWSE/logs/CSO_soundData.log](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/logs/CSO_soundData.log)).
+* **Fix**: Redirected sound registrations into a separate dedicated log file (`Data Files\MWSE\logs\CSO_soundData.log`).
 
 ---
 
 ## 7. Elemental Effects
 
 * **Author**: Anumaril21. [Elemental Effects](https://www.nexusmods.com/morrowind/mods/49799)
-* **File**: [main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/Elemental%20Effects/main.lua#L210-L250)
+* **File**: `Data Files\MWSE\mods\Elemental Effects\main.lua` (lines 210–250)
 * **Bug**: When spell projectiles expired or hit non-actor objects, accessing `e.target.data.ee` without verifying target existence produced nil-indexing errors.
 * **Fix**: Added guard conditions verifying `e.target` and `e.target.data` prior to updating visual shader properties.
 
@@ -98,7 +98,7 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 ## 8. Syanide's Magic Lantern Lights
 
 * **Author**: Syanide
-* **File**: [main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/Syanide/MagicLanternLights/main.lua#L399-L426)
+* **File**: `Data Files\MWSE\mods\Syanide\MagicLanternLights\main.lua` (lines 399–426)
 * **Bug**: OAAB glowbug variants (`mwse_oaab_glwbug_*`) and buglamps were referenced in lantern tables but lacked fallback mesh path resolution in `updateLanternNode()`, passing nil meshes to the node attacher.
 * **Fix**: Explicitly mapped mesh file paths for OAAB glowbug jars and vanilla buglamp variants.
 
@@ -107,7 +107,7 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 ## 9. Let There Be Darkness
 
 * **Author**: TES3 Community. [Let There Be Darkness](https://www.nexusmods.com/morrowind/mods/47912)
-* **File**: [main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/RFD/LetThereBeDarkness/main.lua#L143-L150)
+* **File**: `Data Files\MWSE\mods\RFD\LetThereBeDarkness\main.lua` (lines 143–150)
 * **Bug**: Attempted to evaluate cell light levels and display configuration menus before `tes3.player` or active cells were fully instantiated during game initialization.
 * **Fix**: Added `if tes3.player == nil then return end` guard on startup hooks.
 
@@ -116,7 +116,7 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 ## 10. Sophisticated Save System
 
 * **Author**: NullCascade
-* **File**: [main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/Sophisticated%20Save%20System/main.lua#L203-L210)
+* **File**: `Data Files\MWSE\mods\Sophisticated Save System\main.lua` (lines 203–210)
 * **Bug**: In `onSimulate()`, when autosaves were queued via `needToSave = true`, SSS dispatched `tes3.saveGame({ file = "autosave" })` without clearing `needToSave` upfront, relying on its downstream `onSave` handler (priority 0) to reset it. If any higher-priority save event handler or validator (such as `mwsaveguard`, priority 10000) deferred, blocked, or claimed the save, `onSave` never ran. As a consequence, `needToSave` remained `true` indefinitely, causing SSS to repeatedly invoke `tes3.saveGame()` on every single frame, locking game progress bars at 50% and causing engine access violations.
 * **Fix**: In `onSimulate()`, explicitly set `needToSave = false` immediately before calling `tes3.saveGame({ file = "autosave" })`.
 
@@ -125,7 +125,7 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 ## 11. Companion Sneak (Inspector UI)
 
 * **Author**: Morrowind Conflict Tools (`mwcriminal` inspector UI).
-* **File**: [inspectorUI.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwsuite/mwcriminal/inspectorUI.lua#L292-L340)
+* **File**: `Data Files\MWSE\mods\mwsuite\mwcriminal\inspectorUI.lua` (lines 292–340)
 * **Bug**: Invoked `inputBorder.marginRight = 8` and `clearBtn.marginRight = 8` during search-bar UI construction. `tes3uiElement` does not define `marginRight` (only `borderRight`), throwing `sol: cannot set (new_index) into this object: no defined new_index operation on usertype`, which corrupted the UI element tree and caused engine hangs on game exit.
 * **Fix**: Replaced invalid `marginRight` calls with `borderRight = 8`.
 
@@ -134,7 +134,7 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 ## 12. The Doors of Oblivion
 
 * **Author**: Ashstaar, as credited on [The Doors of Oblivion release page](https://www.nexusmods.com/morrowind/mods/44398).
-* **File**: [Tx_metal_strip_02.tga](file:///g:/Vortex%20Mods/morrowind/The%20Doors%20of%20Oblivion%201.4-44398-1-4/textures/Tx_metal_strip_02.tga)
+* **File**: `<Vortex staging>\The Doors of Oblivion 1.4-44398-1-4\textures\Tx_metal_strip_02.tga`
 * **Bug**: Shipped an obsolete 12KB `Tx_metal_strip_02.tga` filled with near-zero black pixels (RGB 21, 25, 26). Because the Morrowind engine prioritizes loose `.tga` matches over `.dds` textures, this file crushed textures on every model referencing `Tx_metal_strip_02` (such as the standard common chest `contain_com_chest_02.nif`), overriding installed 2K MET / Articus / Vurt `.dds` replacements and rendering chests completely black in-game.
 * **Fix**: Moved `Tx_metal_strip_02.tga` to `Off/textures/` and pruned the deployed file from `Data Files/Textures/`, allowing the high-definition `tx_metal_strip_02.dds` texture to load as intended.
 
@@ -144,8 +144,8 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 
 * **Authors**: Stuporstar and Greatness7 ([Graphic Herbalism MWSE/OpenMW](https://www.nexusmods.com/morrowind/mods/46599)), RogiVagel ([Graphic Herbalism ReVisited](https://www.nexusmods.com/morrowind/mods/52666)), and Kynesifnar ([Harvest Lights MWSE Edition](https://www.nexusmods.com/morrowind/mods/57276)).
 * **Files**:
-  * [main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/graphicHerbalism/main.lua)
-  * [main.lua (Patch Staging)](file:///G:/Vortex%20Mods/morrowind/Graphic%20Herbalism%20-%20Ultimate%20Override%20Patch/MWSE/mods/graphicHerbalism/main.lua)
+  * `Data Files\MWSE\mods\graphicHerbalism\main.lua`
+  * `<Vortex staging>\Graphic Herbalism - Ultimate Override Patch\MWSE\mods\graphicHerbalism\main.lua` (Patch Staging)
 * **Bugs**:
   1. Flora without dedicated `HerbalismSwitch` NIFs (unpatched plants, custom landmass flora from Tamriel Rebuilt, Project Cyrodiil, SHOTN, or mods lacking switch models) failed to visually change when picked because `updateHerbalismSwitch()` returned early on missing `switchNode`, leaving picked flora models unaltered.
   2. In `updateHerbalismSwitch()`, changes to `switchNode.switchIndex` were made without invoking `sceneNode:update()`, preventing immediate NetImmerse bounding box and visible subtree recalculations.
@@ -159,7 +159,7 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
   2. Enhanced switch indexing: resolves target children by name (`HARVESTED`/`PICKED`/`NORMAL`/`SPOILED`) with index clamping, unsets `appCulled`, and executes `sceneNode:update()`.
   3. Added `event.trigger("containerClosed", { reference = ref })` inside `onActivate()` so `HarvestLights` immediately disables associated light sources when glowing flora is picked.
   4. Guarded `onActivate` and `onTooltipDrawn` against harvested flora using both `ref.data.GH` and `ref.sceneNode.appCulled`.
-  5. Assembled all 816 validated modifying NIFs (base game, DLCs, glowing mushrooms, smoothed marshmerrow, and landmass flora) and 36 associated high-quality textures into a unified Vortex staging override package at [Graphic Herbalism - Ultimate Override Patch](file:///G:/Vortex%20Mods/morrowind/Graphic%20Herbalism%20-%20Ultimate%20Override%20Patch).
+  5. Assembled all 816 validated modifying NIFs (base game, DLCs, glowing mushrooms, smoothed marshmerrow, and landmass flora) and 36 associated high-quality textures into a unified Vortex staging override package at `<Vortex staging>\Graphic Herbalism - Ultimate Override Patch`.
   6. Added a `referenceActivated` event listener to apply `updateHerbalismSwitch(ref, ref.data.GH)` the moment any flora's 3D scene node is attached. Refactored `onCellChanged` to check `if day == nil or today > day` with string cell keys, ensuring Day 0 initialization and cell transitions always execute.
 
 ---
@@ -167,7 +167,7 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 ## 14. Census & Excise Door Guard Facing Lock
 
 * **Credits**: Bethesda Softworks (base game) and Morrowind Conflict Tools (`personalEffectsFix.lua`).
-* **File**: [personalEffectsFix.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwpluginpatches/patches/personalEffectsFix.lua)
+* **File**: `Data Files\MWSE\mods\mwpluginpatches\patches\personalEffectsFix.lua`
 * **Bug**: In `Seyda Neen, Census and Excise Office`, the doorway guard (`chargen door guard`, Ganciele Douar, Ref 172857) has an `AI_Wander(0)` package. When the player walks past him towards the hallway door (`CharGen Door Hall` at (258, 255)), or triggers his voice greeting (`CharGenDoorGuardTalker`), the engine AI turns his body North towards the wall and doorway. Because distance is 0, the actor has no wander waypoints to return to, permanently freezing his orientation facing into the wooden pillar/wall across game sessions and save reloads.
 * **Fix**: Added `restoreDoorGuardFacing()` in `personalEffectsFix.lua` that restores his orientation to `facing = math.pi` (180 degrees, pointing South directly into the room towards Socucius Ergalla's desk and the dock entrance). Automatically enforced on cell load/transition, periodic cell heartbeat, and upon exiting dialogue with the guard.
 
@@ -177,9 +177,9 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 
 * **Credits**: abot (MWSE Plain Paper Fix) and Morrowind Conflict Tools (`mwsaveguard` and `personalEffectsFix.lua`).
 * **Files**:
-  - [mwsaveguard/main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwsuite/mwsaveguard/main.lua)
-  - [personalEffectsFix.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwpluginpatches/patches/personalEffectsFix.lua)
-  - [Plain Paper Fix/main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/abot/Plain%20Paper%20Fix/main.lua)
+  - `Data Files\MWSE\mods\mwsuite\mwsaveguard\main.lua`
+  - `Data Files\MWSE\mods\mwpluginpatches\patches\personalEffectsFix.lua`
+  - `Data Files\MWSE\mods\abot\Plain Paper Fix\main.lua`
 * **Bug**:
   1. In Morrowind, save game progress 0–50% serializes player stats and global data; at 50%, the engine enters `RecordsHandler::saveGame2` -> `Cell_static::saveReference` to serialize cell entities and placed references.
   2. Calling `mwscript.setDelete({ reference = ref })` or `ref:delete()` on placed interior cell references (such as `sc_paper plain` Ref 0x0104EA44 in `Seyda Neen, Census and Excise Office` by `Plain Paper Fix`, or duplicate actors by `mwsaveguard`) deallocates reference memory and attachments while the reference remains in the cell's active reference list. Subsequent engine allocations (such as `DialogueInfo` instances during conversations with Sellus Gravius or Census guards) reuse that freed heap address. During save serialization at 50%, `Cell_static::saveReference+0x288` attempts to serialize ExtraData type 6 (`ExtraScriptVariables`), dereferencing the reused pointer as a script object and crashing with `EXCEPTION_ACCESS_VIOLATION (C0000005)`.
@@ -195,13 +195,13 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 
 * **Author**: Morrowind Conflict Tools (`mwcustomclasspersistence`).
 * **Files**:
-  - [mwcustomclasspersistence/main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwsuite/mwcustomclasspersistence/main.lua)
-  - [savedCustomClasses.json](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/config/savedCustomClasses.json)
+  - `Data Files\MWSE\mods\mwsuite\mwcustomclasspersistence\main.lua`
+  - `Data Files\MWSE\config\savedCustomClasses.json`
 * **Bug**:
   1. Custom classes created in character generation (`MenuCreateClass`) were not persisting to `savedCustomClasses.json` because the mod attempted to read `tes3.player.object.class` with a 1-frame delay upon clicking OK in `MenuCreateClass`. In Morrowind, clicking OK in `MenuCreateClass` transitions to `MenuStatReview`, and the class is not finalized on `tes3.player.object.class` until `MenuStatReview` is accepted or chargen concludes. The single-frame check failed, leaving `savedCustomClasses.json` uncreated and empty.
   2. When opening `MenuChooseClass` ("Pick from a list"), `mwcustomclasspersistence` did not reload saved classes from disk, failed to show any previously created custom classes, and lacked hooks to update `MenuStatReview` or recalculate starting attributes, skills, and derived stats (Health, Magicka, Fatigue) when selecting a custom class.
 * **Fix**:
-  1. Extracted the user's custom class **"Outlander"** (Combat specialization, Strength/Agility attributes, Major skills: Alchemy, Athletics, Restoration, Marksman, Mercantile; Minor skills: Armorer, Medium Armor, Sneak, Long Blade, Security) directly from recent save data and created [savedCustomClasses.json](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/config/savedCustomClasses.json).
+  1. Extracted the user's custom class **"Outlander"** (Combat specialization, Strength/Agility attributes, Major skills: Alchemy, Athletics, Restoration, Marksman, Mercantile; Minor skills: Armorer, Medium Armor, Sneak, Long Blade, Security) directly from recent save data and created `Data Files\MWSE\config\savedCustomClasses.json`.
   2. Overhauled `mwcustomclasspersistence/main.lua`:
      - Dynamically reloads `savedCustomClasses.json` every time `MenuChooseClass` opens.
      - Injects custom classes under a styled "--- Custom Classes ---" header in `MenuChooseClass_ClassScroll`.
@@ -216,9 +216,9 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 
 * **Credits**: XmirroR ([original Plain Paper Fix](https://www.nexusmods.com/morrowind/mods/52309?tab=files)), abot (the separate [MWSE Plain Paper Fix](https://www.nexusmods.com/morrowind/mods/47735)), and Morrowind Conflict Tools (the `mwplainpaperfix` reimplementation documented here).
 * **Files**:
-  - [mwplainpaperfix/main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwplainpaperfix/main.lua)
-  - [mwplainpaperfix/mcm.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwplainpaperfix/mcm.lua)
-  - [mwplainpaperfix.json](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/config/mwplainpaperfix.json)
+  - `Data Files\MWSE\mods\mwplainpaperfix\main.lua`
+  - `Data Files\MWSE\mods\mwplainpaperfix\mcm.lua`
+  - `Data Files\MWSE\config\mwplainpaperfix.json`
 * **Features & Architecture**:
   1. Modern reimplementation of XmirroR's original Plain Paper Fix.
   2. Full interactive MCM menu under **Plain Paper Fix**:
@@ -234,16 +234,16 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 
 * **Credits**: Merlord ([Accidental Theft Protection](https://www.nexusmods.com/morrowind/mods/48264)) and Morrowind Conflict Tools (the `mwpluginpatches` compatibility patch).
 * **Files**:
-  - [noAccidentalTheftBookFix.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwpluginpatches/patches/noAccidentalTheftBookFix.lua)
-  - [mwpluginpatches/config.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwsuite/mwpluginpatches/config.lua)
-  - [mwpluginpatches/main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwsuite/mwpluginpatches/main.lua)
-  - [mwpluginpatches/mcm.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwsuite/mwpluginpatches/mcm.lua)
-  - [noAccidentalTheft.json](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/config/noAccidentalTheft.json)
+  - `Data Files\MWSE\mods\mwpluginpatches\patches\noAccidentalTheftBookFix.lua`
+  - `Data Files\MWSE\mods\mwsuite\mwpluginpatches\config.lua`
+  - `Data Files\MWSE\mods\mwsuite\mwpluginpatches\main.lua`
+  - `Data Files\MWSE\mods\mwsuite\mwpluginpatches\mcm.lua`
+  - `Data Files\MWSE\config\noAccidentalTheft.json`
 * **Bug / Limitation**:
   `accidentalTheftProtection` blocks activating ANY owned world object unless the player is actively sneaking. This prevented players from opening and reading owned books, letters, notes, and documents in the world without sneaking first, even if they had no intention of stealing them.
 * **Fix & Architecture**:
   1. Synchronized all 8,474 book IDs across loaded plugins into `noAccidentalTheft.json`'s `blacklist` table so `accidentalTheftProtection` permits activating them to read without sneaking.
-  2. Created [noAccidentalTheftBookFix.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwpluginpatches/patches/noAccidentalTheftBookFix.lua) in `mwpluginpatches`:
+  2. Created `Data Files\MWSE\mods\mwpluginpatches\patches\noAccidentalTheftBookFix.lua` in `mwpluginpatches`:
      - Tracks when an owned book or scroll is activated while standing (not sneaking).
      - When `MenuBook` or `MenuScroll` opens for an owned document while standing, the **Take** button (`MenuBook_button_take` / `MenuBook_PickupButton`) is automatically disabled, greyed out (`alpha = 0.35`), given a red tint (`negative_color`), and blocked from mouse clicks or hotkeys with an informational alert and hover tooltip ("Owned: Must sneak to take").
      - If the player is actively sneaking when activating the owned book, the Take button remains fully enabled to allow intentional theft with standard crime checks.
@@ -255,8 +255,8 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 
 * **Author**: Morrowind Conflict Tools (`personalEffectsFix.lua` and `noAccidentalTheftBookFix.lua`).
 * **Files**:
-  - [personalEffectsFix.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwpluginpatches/patches/personalEffectsFix.lua)
-  - [noAccidentalTheftBookFix.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwpluginpatches/patches/noAccidentalTheftBookFix.lua)
+  - `Data Files\MWSE\mods\mwpluginpatches\patches\personalEffectsFix.lua`
+  - `Data Files\MWSE\mods\mwpluginpatches\patches\noAccidentalTheftBookFix.lua`
 * **Bug**:
   1. In `personalEffectsFix.lua`, `restoreSellusFacing()` and `restoreDoorGuardFacing()` were registered to run on `loaded` via `schedulePurge()`. When starting a New Game, the player spawns in the `Imperial Prison Ship` tutorial cell, while `chargen captain` (Sellus Gravius) resides in `Seyda Neen, Census and Excise Office`. Calling `captain:updateSceneGraph()` while the actor's cell is unloaded and its `sceneNode` is `nil` dereferenced a null scene node pointer inside Morrowind's native `sg_setLocalRotationMatrix+0x19`, causing an instant crash to desktop (`EXCEPTION_ACCESS_VIOLATION 0xC0000005`) right after the intro BIK finishes.
   2. Additionally, in `noAccidentalTheftBookFix.lua`, `syncBlacklistWithBooks()` was invoked synchronously inside `initialized`, when `tes3.dataHandler.nonDynamicData.books` had not yet been loaded by the engine.
@@ -271,7 +271,7 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 ## 20. MWSE ExtraDataList Node Corruption CTD on Bread Pickup (`ScriptRecord::execute+0x24`)
 
 * **Author**: Morrowind Conflict Tools (`mwsaveguard`).
-* **File**: [mwsaveguard/main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwsuite/mwsaveguard/main.lua)
+* **File**: `Data Files\MWSE\mods\mwsuite\mwsaveguard\main.lua`
 * **Bug**:
   In `mwsaveguard/main.lua`, `sanitizeCellReferences()` called `ref.attachments.variables = nil` on cell references lacking scripts. In MWSE / Morrowind's C++ data structures, assigning `nil` to `ref.attachments.variables` does not cleanly unlink the `ExtraScriptVariables` node in the engine's `ExtraDataList`. Instead, it leaves an unlinked dangling pointer (`0x00000074`). When the player subsequently picked up an item (such as `ingred_bread_01`), the engine invoked `DataHandler::executeReferenceScripts` to traverse cell references and execute scripts, encountering `0x74` as a script pointer and immediately crashing with `EXCEPTION_ACCESS_VIOLATION` in `ScriptRecord::execute+0x24`.
 * **Fix**:
@@ -282,7 +282,7 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 ## 21. Custom Class Persistence UI IDs & `getStatistic` Nil Exception
 
 * **Author**: Morrowind Conflict Tools (`mwcustomclasspersistence`).
-* **File**: [mwcustomclasspersistence/main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwsuite/mwcustomclasspersistence/main.lua)
+* **File**: `Data Files\MWSE\mods\mwsuite\mwcustomclasspersistence\main.lua`
 * **Bug**:
   1. `applyCustomClassToPlayer()` called `tes3.getStatistic({ reference = tes3.player, ... })`. `tes3.getStatistic` does not exist in MWSE (statistics are read directly from `tes3.mobilePlayer.attributes[id+1].base` and `tes3.mobilePlayer.skills[id+1].base`), throwing `attempt to call field 'getStatistic' (a nil value)` at line 137 and aborting stat calculations.
   2. In `displayCustomClassInChooseMenu()`, element lookups passed raw string identifiers (e.g. `menu:findChild("MenuChooseClass_SelectedText")`) instead of registered integer IDs via `tes3ui.registerID()`. As a result, all lookups returned `nil`, leaving the right-hand details pane in the Choose Class menu blank or showing previous class details instead of the selected custom class ("Outlander").
@@ -297,7 +297,7 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 ## 22. Accidental Theft Protection - Book Take Icon & Kezyma UI Reddening
 
 * **Credits**: Morrowind Conflict Tools (the `mwpluginpatches` compatibility patch for Merlord's [Accidental Theft Protection](https://www.nexusmods.com/morrowind/mods/48264)).
-* **File**: [noAccidentalTheftBookFix.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwpluginpatches/patches/noAccidentalTheftBookFix.lua)
+* **File**: `Data Files\MWSE\mods\mwpluginpatches\patches\noAccidentalTheftBookFix.lua`
 * **Bug**:
   In `handleBookUI()`, `menu:findChild("MenuBook_button_take")` passed raw string literals to `findChild`, which expects an integer ID. Consequently, `takeBtn` returned `nil`, and the Take button (including Kezyma UI's replacement hand icon) was not disabled or tinted red when reading owned books while standing.
 * **Fix**:
@@ -309,7 +309,7 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 ## 25. MWSE Core MCM ExclusionsPage Destroyed Element Access (`toggleFiltered` & `resetToDefault`)
 
 * **Authors**: [MWSE contributors](https://github.com/MWSE/MWSE).
-* **File**: [exclusionspage.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/core/mcm/components/pages/exclusionspage.lua#L82-L91)
+* **File**: `Data Files\MWSE\core\mcm\components\pages\exclusionspage.lua` (lines 82–91)
 * **Bug**:
   In `exclusionspage.lua`, both `resetToDefault()` (line 88) and `toggleFiltered()` (line 226) attempted to destroy and recreate the exclusions page layout with:
   ```lua
@@ -327,7 +327,7 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 ## 26. More Console Commands (MCC) Duplicate Command Registration in `mweffectinspector`
 
 * **Credits**: JosephMcKean ([More Console Commands](https://www.nexusmods.com/morrowind/mods/52500)) and Morrowind Conflict Tools (`mweffectinspector`, where the duplicate registration occurred).
-* **File**: [mweffectinspector/main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwsuite/mweffectinspector/main.lua#L49-L78)
+* **File**: `Data Files\MWSE\mods\mwsuite\mweffectinspector\main.lua` (lines 49–78)
 * **Bug**:
   `tryRegisterWithMCC()` was invoked both during `onInitialized` and registered as a listener on the `command:register` event. Because `mweffectinspector` initializes before MCC (priority 0 vs priority -999), the first call registered `showeffects` and `cleareffects`. When MCC subsequently initialized and triggered `command:register`, `tryRegisterWithMCC()` executed a second time, triggering MCC's error log in `data.lua`:
   `[More Console Commands | data.lua:908 | ERROR] Attempt to create existing command ... Use modify() instead.`
@@ -341,7 +341,7 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 ## 27. Unthrottled Per-Frame Achievement Evaluation in `sb_achievements`
 
 * **Author**: Safebox - Pirate, as credited on the [achievement framework release page](https://www.nexusmods.com/morrowind/mods/51081).
-* **File**: [sb_achievements/main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/sb_achievements/main.lua#L35-L42)
+* **File**: `Data Files\MWSE\mods\sb_achievements\main.lua` (lines 35–42)
 * **Bug**:
   `enterFrameCallback` ran unthrottled on every single render frame (60–80x/sec). On every frame, it looped over all registered achievements and executed their Lua condition and progress functions, consuming ~1 ms/frame average CPU and producing micro-stutter spikes up to 50 ms.
 * **Fix**:
@@ -352,7 +352,7 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 ## 28. Unthrottled Per-Frame Flora Raycasting in `tew/AURA` (`florasounds.lua`)
 
 * **Authors**: tewlwolow and stanliqubit. [AURA](https://www.nexusmods.com/morrowind/mods/48255)
-* **File**: [tew/aura/misc/florasounds.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/tew/aura/misc/florasounds.lua#L93-L115)
+* **File**: `Data Files\MWSE\mods\tew\aura\misc\florasounds.lua` (lines 93–115)
 * **Bug**:
   `playFlora` ran on `simulate` (every frame), executing a downwards `tes3.rayTest` with `useModelCoordinates = true` even when the player was completely stationary or walking over non-vegetation surfaces. This raycast consumed ~1 ms of frame time (~1,250 ms CPU time per 30 seconds).
 * **Fix**:
@@ -365,7 +365,7 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 ## 29. False-Positive Recovery Fade in `mwpluginpatches` (`psguardfix.lua`)
 
 * **Credits**: Arci (Arcimaestro Antares, [Privileges and Services](https://www.nexusmods.com/morrowind/mods/50403)) and Morrowind Conflict Tools (`psguardfix.lua`, where the false positive occurred).
-* **File**: [mwpluginpatches/patches/psguardfix.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwpluginpatches/patches/psguardfix.lua#L119-L162)
+* **File**: `Data Files\MWSE\mods\mwpluginpatches\patches\psguardfix.lua` (lines 119–162)
 * **Bug**:
   `psguardfix` monitored P&S scripts (`ABM_ll_DetectPCCrimeScript`, `ABM_PutItBackScript`) which are triggered by ambient NPC voice/trespass evaluations. When an evaluation passed with no crime detected, the script stopped naturally without ever invoking `FadeOut`. However, `psguardfix` assumed that *any* script termination with no guard present meant the screen was stuck black, erroneously triggering `fadeBackIn()` and logging misleading recovery messages.
 * **Fix**:
@@ -377,10 +377,10 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 
 * **Credits**: Kleidium ([Companion Leveler](https://www.nexusmods.com/morrowind/mods/51760)), Pirate ([HUD Companion Health Bar](https://www.nexusmods.com/morrowind/mods/60242)), drekar51 ([Attend Me Expanded MWSE](https://www.nexusmods.com/morrowind/mods/60810)), and Morrowind Conflict Tools (the former `mwcompanionsneak`, now part of `mwcriminal`).
 * **Files**:
-  - [companionLeveler/functions/common.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/companionLeveler/functions/common.lua#L522-L548)
-  - [Pirate/HUD Companion Health Bar/main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/Pirate/HUD%20Companion%20Health%20Bar/main.lua#L85-L108)
-  - [AttendMeMWSE/followers.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/AttendMeMWSE/followers.lua#L17-L38)
-  - [mwcriminal/core.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwsuite/mwcriminal/core.lua#L203-L206)
+  - `Data Files\MWSE\mods\companionLeveler\functions\common.lua` (lines 522–548)
+  - `Data Files\MWSE\mods\Pirate\HUD Companion Health Bar\main.lua` (lines 85–108)
+  - `Data Files\MWSE\mods\AttendMeMWSE\followers.lua` (lines 17–38)
+  - `Data Files\MWSE\mods\mwsuite\mwcriminal\core.lua` (lines 203–206)
 * **Bug**:
   When sneaking near a guard, `MoreAttentiveGuards` (`celediel/MoreAttentiveGuards/sneak.lua`) assigns the guard a temporary `tes3.aiPackage.follow` targeting the player while inspecting them. Because `companionLeveler`, `HUD Companion Health Bar`, and `AttendMeMWSE` only checked for a follow package targeting the player without verifying `obj.isGuard` or guard class/script:
   1. `companionLeveler` added the guard to `npcTable()`, initialized blank companion mod data on the guard reference, and logged `Companion Mod Data not found, setting to base Mod Data values` / `NPC Mod Data not found, setting to base Mod Data values`.
@@ -393,7 +393,7 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 ## 31. Multi-Monitor Secondary Screen Scroll Bleed in `mwmouseguard` (`main.lua`)
 
 * **Author**: Morrowind Conflict Tools (`mwmouseguard`).
-* **File**: [mwmouseguard/main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mwsuite/mwmouseguard/main.lua#L37-L145)
+* **File**: `Data Files\MWSE\mods\mwsuite\mwmouseguard\main.lua` (lines 37–145)
 * **Bug**:
   `mwmouseguard` set the Win32 `ClipCursor` rectangle to `[0, 0, width, height]`. Because Win32 `ClipCursor` bounds are inclusive (`left <= x <= right`), the cursor was allowed to sit at `x = width`. In dual-monitor setups, `x = width` is the very first pixel column of the adjacent monitor, causing Windows 10/11 "Scroll inactive windows when hovering" to route `WM_MOUSEWHEEL` to the second screen. Furthermore, Windows automatically clears `ClipCursor` on window activation shifts, notifications, or modal dialogs; `mwmouseguard` used a one-shot latch (`if not isClipped or fg ~= cachedHwnd`) and never reclipped once Windows reset the clip.
 * **Fix**:
@@ -406,10 +406,10 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 ## 33. BSAPack Exclusion List, Unprocessable Asset Guard, & Progress Prompts
 
 * **Files**:
-  - [bsapack.cpp](file:///k:/Downloads/Browser/bsapack%20source/bsapack.cpp)
-  - [bsapack.h](file:///k:/Downloads/Browser/bsapack%20source/bsapack.h)
-  - [bsapack.dej.exe (build directory)](file:///k:/Downloads/Browser/bsapack%20source/bsapack.dej.exe)
-  - [bsapack.dej.exe (conflict-tools tools)](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/conflict-tools/tools/bsapack.dej.exe)
+  - `<downloads>\bsapack source\bsapack.cpp`
+  - `<downloads>\bsapack source\bsapack.h`
+  - `<downloads>\bsapack source\bsapack.dej.exe` (build directory)
+  - `conflict-tools\tools\bsapack.dej.exe` (conflict-tools tools)
 * **Feature & Fix**:
   1. **Exclusion List Support (`-exclude <file>`)**:
      - Added `-exclude <file>` / `--exclude <file>` / `-exclude=<file>` flag (with `-except` maintained as an alias):
@@ -431,7 +431,7 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 ## 34. `altvadder\splash` CTD on `MenuLoading` `updateLayout` (`EXCEPTION_ACCESS_VIOLATION 0xC0000005`)
 
 * **Author**: Altvadder. [Regional Splashscreens (MWSE)](https://www.nexusmods.com/morrowind/mods/58512)
-* **File**: [altvadder\splash\main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/altvadder/splash/main.lua#L110-L360)
+* **File**: `Data Files\MWSE\mods\altvadder\splash\main.lua` (lines 110–360)
 * **Bug**:
   1. `altvadder\splash` intercepts `MenuLoading` via `uiActivated`. Inside `uiActivated`, it called `menu:createImage({ path = chosen })` for uncompressed high-resolution splash `.tga` files (e.g. `Morrowind.tga`, 2048x1024, ~8.4 MB uncompressed D3D surface) followed immediately by a synchronous `menu:updateLayout()`.
   2. In 32-bit Morrowind (4.00 GiB virtual address space limit), when virtual memory usage reaches 95-98% (here 3.94 GiB / 98.62%), contiguous memory is completely fragmented. D3D/NetImmerse's texture allocation fails and returns NULL. NetImmerse dereferences the pointer during `updateLayout`, triggering a fatal `EXCEPTION_ACCESS_VIOLATION (0xC0000005)`. Because hardware access violations are OS-level structured exceptions, Lua's `pcall` cannot catch or prevent the process from crashing.
@@ -449,9 +449,9 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 
 * **Credits**: [MWSE contributors](https://github.com/MWSE/MWSE) (`ExclusionsPage.lua`) and Merlord ([Accidental Theft Protection](https://www.nexusmods.com/morrowind/mods/48264)).
 * **Files**:
-  - [ExclusionsPage.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/core/mcm/components/pages/ExclusionsPage.lua#L20-L245)
-  - [accidentalTheftProtection\main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mer/accidentalTheftProtection/main.lua#L1-L70)
-  - [noAccidentalTheft.json](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/config/noAccidentalTheft.json)
+  - `Data Files\MWSE\core\mcm\components\pages\ExclusionsPage.lua` (lines 20–245)
+  - `Data Files\MWSE\mods\mer\accidentalTheftProtection\main.lua` (lines 1–70)
+  - `Data Files\MWSE\config\noAccidentalTheft.json`
 * **Bug**:
   1. In MWSE's `ExclusionsPage.lua`, selecting any category with thousands of items (such as "Books" with 8,474+ objects across base game, Tamriel Rebuilt, OAAB, etc.) looped across all items and called `list:createTextSelect` for every single item without any limit or virtualization.
   2. Creating 8,474+ native C++ UI elements simultaneously in a single scrollable container exhausted the 32-bit heap (virtual memory reached 3.98 GiB / 99.41%), failing with Windows error `0x80070008` ("Not enough memory resources are available to process this command") and an immediate `EXCEPTION_ACCESS_VIOLATION (0xC0000005)` crash to desktop.
@@ -471,13 +471,13 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 
 * **Authors**: [MWSE contributors](https://github.com/MWSE/MWSE).
 * **Files**:
-  - [initialize.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/core/initialize.lua#L235-L830)
-  - [mcm\main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/core/mcm/main.lua#L45-L215)
-  - [Template.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/core/mcm/components/templates/Template.lua#L150-L345)
-  - [ConfigVariable.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/core/mcm/variables/ConfigVariable.lua#L10-L40)
-  - [TableVariable.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/core/mcm/variables/TableVariable.lua#L10-L27)
-  - [Dropdown.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/core/mcm/components/settings/Dropdown.lua#L15-L85)
-  - [CycleButton.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/core/mcm/components/settings/CycleButton.lua#L15-L25)
+  - `Data Files\MWSE\core\initialize.lua` (lines 235–830)
+  - `Data Files\MWSE\core\mcm\main.lua` (lines 45–215)
+  - `Data Files\MWSE\core\mcm\components\templates\Template.lua` (lines 150–345)
+  - `Data Files\MWSE\core\mcm\variables\ConfigVariable.lua` (lines 10–40)
+  - `Data Files\MWSE\core\mcm\variables\TableVariable.lua` (lines 10–27)
+  - `Data Files\MWSE\core\mcm\components\settings\Dropdown.lua` (lines 15–85)
+  - `Data Files\MWSE\core\mcm\components\settings\CycleButton.lua` (lines 15–25)
 * **Bug**:
   1. `json.loadfile` opened files in Windows text mode (`"r"`), risking premature truncation on Ctrl-Z (`0x1A`), did not strip UTF-8 BOM (`\xEF\xBB\xBF`), and did not wrap `json.decode` in `pcall`. Any invalid byte (such as Windows-1252 high bytes `0x91-0x94` from Morrowind record text) or trailing comma caused unhandled parse aborts.
   2. `json.savefile` and `toml.saveFile` used raw `assert(io.open(...))`. If parent directories did not exist or permissions failed, Lua threw an unhandled crash. Furthermore, `json.savefile` appended `.json` unconditionally, creating `.json.json` when callers included an extension.
@@ -498,9 +498,9 @@ This log records genuine bugs in third-party MWSE Lua mods that have been repair
 
 * **Credits**: Merlord ([Accidental Theft Protection](https://www.nexusmods.com/morrowind/mods/48264)) and the OAAB team (tavern door record).
 * **Files**:
-  - [main.lua](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/MWSE/mods/mer/accidentalTheftProtection/main.lua)
-  - [main.lua (Vortex Staging)](file:///G:/Vortex%20Mods/morrowind/Accidental%20Theft%20Protection-48264-1-0-1-1590981508/MWSE/mods/mer/accidentalTheftProtection/main.lua)
-  - [Seyda Neen - Damp Little Squat - unshabby.ESP](file:///g:/Program%20Files/Steam/steamapps/common/Morrowind/Data%20Files/Seyda%20Neen%20-%20Damp%20Little%20Squat%20-%20unshabby.ESP)
+  - `Data Files\MWSE\mods\mer\accidentalTheftProtection\main.lua`
+  - `<Vortex staging>\Accidental Theft Protection-48264-1-0-1-1590981508\MWSE\mods\mer\accidentalTheftProtection\main.lua`
+  - `Data Files\Seyda Neen - Damp Little Squat - unshabby.ESP`
 * **Bug**:
   1. `accidentalTheftProtection` intercepted the `activate` event for all references lacking player ownership (`not tes3.hasOwnershipAccess{target = e.target}`). Because it did not filter by object type, any owned door reference (such as the interior exit door in Seyda Neen Lighthouse owned by Thavere Vedrano) unconditionally returned `false` unless the player was sneaking, trapping the player inside interiors and requiring sneaking to leave buildings.
   2. In `Seyda Neen - Damp Little Squat - unshabby.ESP`, the exterior doors leading to public establishments—The Dirty Anchor (FRMR 20) and The Glass Parrot (FRMR 21, 22)—erroneously retained `ANAM: indrele rathryon` from copied shack references. Although the doors were unlocked (`INTV: 0`), UI Expansion flagged them as "Owner: Indrele Rathryon" with red activation crosshairs, and `accidentalTheftProtection` dropped activation clicks without sneaking, giving the appearance of being locked in broad daylight.
