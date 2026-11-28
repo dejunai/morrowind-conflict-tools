@@ -89,8 +89,10 @@ function actor(id, opts)
   local script
   if opts.companion then script = { id = "s", context = { companion = 0 } } end
   local obj = { id = id, objectType = opts.creature and tes3.objectType.creature or tes3.objectType.npc,
-    isGuard = opts.guard, script = opts.script or script }
-  local ref = { id = id, baseObject = obj, object = obj, data = opts.data or {}, cell = opts.cell or town,
+    script = opts.script or script }
+  -- as in MWSE: isGuard is on the actor's instance (ref.object, mobile.object), never on the base record
+  local inst = setmetatable({ isGuard = opts.guard }, { __index = obj })
+  local ref = { id = id, baseObject = obj, object = inst, data = opts.data or {}, cell = opts.cell or town,
     position = opts.position or vec(100, 0, 0), attachments = { variables = { script = script and {} or nil } } }
   if script then
     if opts.creature then
@@ -110,6 +112,7 @@ function actor(id, opts)
   mob.aiPlanner = { getActivePackage = function() return mob.package end }
   function mob:stopCombat() self.inCombat = false; self.stopped = true end
   function mob:startCombat(t) self.inCombat = true; self.fighting = t end
+  mob.object = inst
   ref.mobile = mob
   tes3.refs[id] = ref
   return mob
@@ -142,6 +145,12 @@ check(core.followerKind(actor("pilgrim", { package = "escort" })) == 0, "escort 
 check(core.isEscort(tes3.refs.pilgrim.mobile), "but is an escort")
 check(core.followerKind(actor("other", { package = "follow", target = {} })) == 0, "following someone else")
 check(core.followerKind(actor("watch", { package = "follow", guard = true })) == 0, "guards on a temporary follow")
+local magged = actor("magged", { package = "follow" })     -- More Attentive Guards' interop names its follower
+package.loaded["celediel.MoreAttentiveGuards.interop"] = { getGuardFollower = function() return magged end }
+check(core.followerKind(magged) == 0, "the guard More Attentive Guards has following a sneaking player")
+package.loaded["celediel.MoreAttentiveGuards.interop"] = { getGuardFollower = function() return nil end }
+check(core.followerKind(magged) == 1, "once it lets go (no follower), the same NPC is judged as any other")
+package.loaded["celediel.MoreAttentiveGuards.interop"] = nil
 check(core.followerKind(actor("imperial guard", { package = "follow" })) == 0, "blacklisted id")
 check(core.followerKind(actor("ab01trout9", { package = "follow", creature = true })) == 0,
       "a creature the excluded plugin defines (read from the file)")

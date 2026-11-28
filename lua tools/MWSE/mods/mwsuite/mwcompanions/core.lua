@@ -54,10 +54,19 @@ function core.companionVar(ref)
     return ok2 and value or nil
 end
 
---- guards follow the player for a while when MoreAttentiveGuards has them watch a sneaking player
+--- a guard is never a follower: any guard a follow package puts behind the player, and the one More Attentive
+--- Guards has following a sneaking player. isGuard is a field of the actor's instance (tes3npcInstance, its mobile's
+--- object), not of the base record: ref.baseObject.isGuard is always nil.
+local function instanceIsGuard(ref)
+    local ok, yes = pcall(function()
+        local inst = (ref.mobile and ref.mobile.object) or ref.object
+        return inst ~= nil and inst.isGuard == true
+    end)
+    return ok and yes
+end
+
 function core.isGuard(ref)
-    local obj = ref.baseObject
-    if obj.isGuard then return true end
+    if instanceIsGuard(ref) then return true end
     local mag = package.loaded["celediel.MoreAttentiveGuards.interop"]
     if mag and mag.getGuardFollower then
         local ok, g = pcall(mag.getGuardFollower)
@@ -121,6 +130,41 @@ function core.rebuildPluginLists()
     end
     mwse.log("[mwcompanions] %d creature(s) from %d excluded plugin(s) are never followers", count, plugins)
     return count
+end
+
+-- interop (mwpluginpatches' HUD Companion Health Bar mirror): the lists, read and changed by id ---------------------
+local function dropAnyCase(t, id)
+    for k in pairs(t) do
+        if lower(k) == id then t[k] = nil end
+    end
+end
+
+--- {lower-case id = true} of every actor that is never a follower: the blacklist and the excluded plugins'
+--- creatures, less the whitelist
+function core.neverFollowers()
+    local out = {}
+    for id, on in pairs(config.blacklist) do if on then out[lower(id)] = true end end
+    for id in pairs(pluginCreatures) do out[id] = true end
+    for id, on in pairs(config.whitelist) do if on then out[lower(id)] = nil end end
+    return out
+end
+
+--- id is never a follower (it goes on the blacklist, and off the whitelist)
+function core.exclude(id)
+    id = lower(id)
+    dropAnyCase(config.whitelist, id)
+    config.blacklist[id] = true
+end
+
+--- id may be a follower again: off the blacklist, and on the whitelist when an excluded plugin defines it
+function core.include(id)
+    id = lower(id)
+    dropAnyCase(config.blacklist, id)
+    if pluginCreatures[id] then config.whitelist[id] = true end
+end
+
+function core.saveLists()
+    mwse.saveConfig("mwcompanions", config)
 end
 
 --- never a follower: on the whitelist -> no; on the blacklist, or a creature an excluded plugin defines -> yes

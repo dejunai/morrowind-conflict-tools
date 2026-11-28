@@ -26,6 +26,7 @@ local attendMeRays = require("mwpluginpatches.patches.attendMeRays")
 local attendMeRecruitLabel = require("mwpluginpatches.patches.attendMeRecruitLabel")
 local g7ContainersLinkCache = require("mwpluginpatches.patches.g7ContainersLinkCache")
 local ruinesRelicsJournal = require("mwpluginpatches.patches.ruinesRelicsJournal")
+local hudCompanionMirror = require("mwpluginpatches.patches.hudCompanionMirror")
 
 -- OAAB and Garden of Dreams call include("MWCA.interop") at file scope when their
 -- main.lua is loaded. That is after this file (load-priority 4500) and before
@@ -122,6 +123,10 @@ local function onInitialized()
     if config.aotcEquipOnceEnabled and config.isAheadOfTheClassesInstalled() then
         local ok, err = pcall(aheadOfTheClassesEquip.init)
         if not ok then mwse.log("[mwpluginpatches] Ahead of the Classes intercept failed to start: %s", tostring(err)) end
+    end
+    if config.hudCompanionMirrorEnabled and config.isHudCompanionInstalled() then
+        local ok, err = pcall(hudCompanionMirror.init)
+        if not ok then mwse.log("[mwpluginpatches] HUD Companion Health Bar mirror failed to start: %s", tostring(err)) end
     end
 
     mwse.log("[mwpluginpatches] Unified plugin compatibility patches initialized.")

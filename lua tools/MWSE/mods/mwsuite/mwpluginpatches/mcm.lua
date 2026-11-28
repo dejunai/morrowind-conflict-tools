@@ -44,7 +44,8 @@ Active Plugin Status:
   • Ahead of the Classes: %s
   • Attend Me (MWSE): %s
   • MWSE Containers Extended: %s
-  • Ruins'n'Relics: %s]],
+  • Ruins'n'Relics: %s
+  • HUD Companion Health Bar: %s]],
     config.isMcaActive() and "Active" or "Not Active",
     config.isEbonheartUnderworksActive() and "Active" or "Not Active",
     config.isPAndSActive() and "Active" or "Not Active",
@@ -64,7 +65,8 @@ Active Plugin Status:
     config.isAheadOfTheClassesInstalled() and "Active" or "Not Active",
     config.isAttendMeInstalled() and "Active" or "Not Active",
     config.isG7ContainersInstalled() and "Active" or "Not Active",
-    config.isRuinesRelicsInstalled() and "Active" or "Not Active"),
+    config.isRuinesRelicsInstalled() and "Active" or "Not Active",
+    config.isHudCompanionInstalled() and "Active" or "Not Active"),
 })
 
 -- SECTION 1: FRIENDS & FRENS (JIUB COMPANION DELAY)
@@ -508,6 +510,20 @@ ruinesCategory:createYesNoButton({
         .. "in the inventory with no message. It is placed once per character. Its files are not edited. Off unless "
         .. "Ruins'n'Relics is installed. Needs a restart.",
     variable = mwse.mcm.createTableVariable({ id = "ruinesRelicsJournalEnabled", table = config }),
+})
+
+local hudCategory = page:createCategory(string.format("HUD Companion Health Bar: Same Blacklist as mwcompanions%s",
+    getStatusText(config.isHudCompanionInstalled())))
+
+hudCategory:createYesNoButton({
+    label = "Mirror mwcompanions' Never-Followers List",
+    description = "abot's water life and birds follow you on scripts of their own, so HUD Companion Health Bar shows "
+        .. "a health bar for them; mwcompanions already knows they are never followers. With this on, the two lists stay "
+        .. "the same: what you add to or take off HUD Companion Health Bar's blacklist is added to or taken off "
+        .. "mwcompanions' list, and what mwcompanions excludes (its Excluded Plugins, Blacklist and Whitelist pages) is "
+        .. "put on or taken off HUD Companion Health Bar's blacklist. They sync when a game loads and when you leave the "
+        .. "menus. Its files are not edited. Off unless HUD Companion Health Bar is installed. Needs a restart.",
+    variable = mwse.mcm.createTableVariable({ id = "hudCompanionMirrorEnabled", table = config }),
 })
 
 local voicesCategory = page:createCategory(string.format("Voices of Vvardenfell: Console%s",

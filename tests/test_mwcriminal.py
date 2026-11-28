@@ -433,8 +433,9 @@ check(activate(other) == nil, "nothing happens while the master switch is off")
 def test_detection():
     run(r'''
 local function mobile(opts)
-  local ref = { object = { id = opts.id or "x", isGuard = opts.guard }, data = {} }
-  ref.object.objectType = tes3.objectType.npc
+  -- as in MWSE: isGuard is on the actor's instance, never on the base record
+  local base = { id = opts.id or "x", objectType = tes3.objectType.npc }
+  local ref = { baseObject = base, object = setmetatable({ isGuard = opts.guard }, { __index = base }), data = {} }
   return { reference = ref, actorType = opts.creature and tes3.actorType.creature or tes3.actorType.npc,
     hostileActors = opts.hostile and { { reference = tes3.player } } or {},
     inCombat = opts.hostile,

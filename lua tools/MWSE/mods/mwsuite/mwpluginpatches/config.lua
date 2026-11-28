@@ -145,6 +145,11 @@ function config.isRuinesRelicsInstalled()
     return (lfs and lfs.fileexists and lfs.fileexists("Data Files/MWSE/mods/Ruines'n'relics/main.lua")) or false
 end
 
+function config.isHudCompanionInstalled()
+    return (lfs and lfs.fileexists and lfs.fileexists("Data Files/MWSE/mods/Pirate/HUD Companion Health Bar/main.lua"))
+        or false
+end
+
 -- true when a mod's Lua file (path under Data Files/MWSE/mods) contains text; used to see an old luafix edit
 -- ("-- local fix (KPn)") so an intercept doing the same job stands down. Read only, once per intercept at start.
 function config.modFileHas(relativePath, text)
@@ -276,6 +281,9 @@ local function getDynamicDefaults()
 
         -- Ruins'n'Relics: no "old journal" pop-up at new game; the book lies on the table in the Census and Excise Office
         ruinesRelicsJournalEnabled = config.isRuinesRelicsInstalled(),
+
+        -- HUD Companion Health Bar: its blacklist and mwcompanions' never-followers list kept the same
+        hudCompanionMirrorEnabled = config.isHudCompanionInstalled(),
     }
 end
 

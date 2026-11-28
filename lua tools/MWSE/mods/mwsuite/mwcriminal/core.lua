@@ -265,9 +265,14 @@ local function isCreature(actor, ref)
         or (ref.object and ref.object.objectType == tes3.objectType.creature)
 end
 
+-- isGuard is a field of the actor's instance (tes3npcInstance: its mobile's object, or ref.object), not of the base
+-- record, where it is always nil
 local function isGuard(ref)
-    local obj = ref.baseObject or ref.object
-    return obj and obj.isGuard == true
+    local ok, yes = pcall(function()
+        local inst = (ref.mobile and ref.mobile.object) or ref.object
+        return inst ~= nil and inst.isGuard == true
+    end)
+    return ok and yes
 end
 
 local function followsPlayer(mobile)
