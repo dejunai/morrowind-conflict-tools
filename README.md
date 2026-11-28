@@ -415,7 +415,7 @@ Unlike crude regex-based matchers, `mwdialog_luafix.py` uses a pure-Python lexic
 
 ## MWSE Suite (CR-18)
 
-For the in-game menus and what their settings do, see the [Lua suite guide](mwsuite-README.MD).
+For the in-game menus and what their settings do, see the [Lua suite guide](docs/mwsuite-README.MD).
 
 The first-party MWSE modules live in `lua tools\MWSE\mods\mwsuite\` (with their `*-metadata.toml` files, `ownmods.json`, and `MWSE\config\mwguard.json`) and are deployed to `Data Files` by `--play` (and by MWManager). luafix reads the first-party list from `Data Files\MWSE\mods\mwsuite\ownmods.json` (schema `{"version": 1, "ownMods": [...]}`) and falls back to a built-in copy, with a warning, if that file is missing from a deployed mwsuite folder. It leaves those mods (and any `exemptMods`) alone unless `--include-own` (then only A1-A5 and F1). See [MORE_INFO.md](docs/MORE_INFO.md#13-mwse-suite-notes-cr-18) for the module list. Recent suite logging and memory-safety work includes:
 

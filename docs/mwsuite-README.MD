@@ -4,7 +4,7 @@ Morrowind Conflict Tools started as a scripted dialogue repair utility. It now s
 
 ## Getting to the settings
 
-- Start the game through the project's [normal setup and launch workflow](README.md). The launch workflow brings the Lua suite into Data Files.
+- Start the game through the project's [normal setup and launch workflow](../README.md). The launch workflow brings the Lua suite into Data Files.
 - Open **Options → Mod Config → MW Conflict Tools**. Use the main tabs to select a module. If the module has more than one page, its own tabs appear below.
 - Hover over a setting or button for its explanation. Settings are saved as you leave a module or close the menu. If a setting asks for a restart, exit Morrowind and start it again.
 - Use the module's main switch to turn on its features, then choose the individual changes you want. If an existing mod already does the same job, check the in-game description before letting both handle it.
